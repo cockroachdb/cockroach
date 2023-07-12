@@ -1247,4 +1247,62 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 4"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+subtest subquery_in_inner_apply_join_plan
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS xy;"}
+Query {"String": "CREATE TABLE xy (x INT, y INT);"}
+Query {"String": "INSERT INTO xy VALUES (1, 1), (2, 2);"}
+Parse {"Name": "q1", "Query": "SELECT * FROM xy JOIN LATERAL (SELECT * FROM (VALUES (x), ((SELECT y FROM xy LIMIT 1))) v(a)) foo ON y = a;"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"},{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"},{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"2"},{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 subtest end
