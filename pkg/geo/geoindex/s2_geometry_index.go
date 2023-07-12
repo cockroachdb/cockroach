@@ -277,6 +277,11 @@ func (s *s2GeometryIndex) DFullyWithin(
 
 // Converts to geom.T and clips to the rectangle bounds of the index.
 func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool, error) {
+	// Anything with a NaN coordinate should be marked as clipped.
+	if bbox := g.BoundingBoxRef(); bbox != nil && (math.IsNaN(bbox.LoX) || math.IsNaN(bbox.HiX) ||
+		math.IsNaN(bbox.LoY) || math.IsNaN(bbox.HiY)) {
+		return nil, true, nil
+	}
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return nil, false, err
