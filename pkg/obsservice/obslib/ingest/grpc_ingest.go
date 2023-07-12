@@ -16,7 +16,6 @@ import (
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // EventIngester implements the OTLP Logs gRPC service, accepting connections
@@ -54,7 +53,7 @@ func (e *EventIngester) Export(
 	ctx context.Context, request *logspb.ExportLogsServiceRequest,
 ) (*logspb.ExportLogsServiceResponse, error) {
 	if err := e.unpackAndConsumeEvents(ctx, request); err != nil {
-		log.Errorf(ctx, "error consuming events: %v", err)
+		log.Errorf(ctx, "consuming events: %v", err)
 		return nil, err
 	}
 	return &logspb.ExportLogsServiceResponse{}, nil
@@ -66,16 +65,18 @@ func (e *EventIngester) unpackAndConsumeEvents(
 	ctx context.Context, request *logspb.ExportLogsServiceRequest,
 ) error {
 	ingestTime := e.timeSource.Now()
-	var retErr error = nil
 	for _, resource := range request.ResourceLogs {
 		for _, scopeLogs := range resource.ScopeLogs {
 			for _, logRecord := range scopeLogs.LogRecords {
 				transformed := transform.LogRecordToEvent(ingestTime, resource.Resource, scopeLogs.Scope, logRecord)
+				// Consume the event, but we don't want to return errors back to the client
+				// if we fail to consume just some events that are part of the batch. Log
+				// instead.
 				if err := e.consumer.Consume(ctx, transformed); err != nil {
-					retErr = errors.CombineErrors(retErr, err)
+					log.Errorf(ctx, "ingesting event. err = %v, event = %v", err, transformed)
 				}
 			}
 		}
 	}
-	return retErr
+	return nil
 }
