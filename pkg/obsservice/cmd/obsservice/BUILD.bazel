@@ -7,9 +7,12 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/obsservice/obslib",
         "//pkg/obsservice/obslib/httpproxy",
         "//pkg/obsservice/obslib/ingest",
         "//pkg/obsservice/obslib/obsutil",
+        "//pkg/obsservice/obslib/router",
+        "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/ui/distoss",
         "//pkg/util/log",
