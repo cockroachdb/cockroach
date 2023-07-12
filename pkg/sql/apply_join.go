@@ -277,6 +277,13 @@ func runPlanInsidePlan(
 	)
 	defer recv.Release()
 
+	plannerCopy := *params.p
+	// "Pausable portal" execution model is only applicable to the outer
+	// statement since we actually need to execute all inner plans to completion
+	// before we can produce any "outer" rows to be returned to the client, so
+	// we make sure to unset pausablePortal field on the planner.
+	plannerCopy.pausablePortal = nil
+
 	if len(plan.subqueryPlans) != 0 {
 		// We currently don't support cases when both the "inner" and the
 		// "outer" plans have subqueries due to limitations of how we're
@@ -290,14 +297,8 @@ func runPlanInsidePlan(
 		// Right now curPlan.subqueryPlans are the subqueries from the "outer"
 		// plan (and we know there are none given the check above). If parts of
 		// the "inner" plan refer to the subqueries, we know that they must
-		// refer to the "inner" subqueries. To allow for that to happen we have
-		// to manually replace the subqueries on the planner's curPlan and
-		// restore the original state before exiting.
-		oldSubqueries := params.p.curPlan.subqueryPlans
-		params.p.curPlan.subqueryPlans = plan.subqueryPlans
-		defer func() {
-			params.p.curPlan.subqueryPlans = oldSubqueries
-		}()
+		// refer to the "inner" subqueries.
+		plannerCopy.curPlan.subqueryPlans = plan.subqueryPlans
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
@@ -305,7 +306,7 @@ func runPlanInsidePlan(
 		defer subqueryResultMemAcc.Close(ctx)
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
-			params.p,
+			&plannerCopy,
 			params.extendedEvalCtx.copy,
 			plan.subqueryPlans,
 			recv,
@@ -319,11 +320,6 @@ func runPlanInsidePlan(
 
 	// Make a copy of the EvalContext so it can be safely modified.
 	evalCtx := params.p.ExtendedEvalContextCopy()
-	plannerCopy := *params.p
-	// If we reach this part when re-executing a pausable portal, we won't want to
-	// resume the flow bound to it. The inner-plan should have its own lifecycle
-	// for its flow.
-	plannerCopy.pausablePortal = nil
 	distributePlan := getPlanDistribution(
 		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
 		plannerCopy.SessionData().DistSQLMode, plan.main,
