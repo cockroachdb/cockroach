@@ -1169,7 +1169,6 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges pagination", func(t *testing.T) {
-		skip.UnderStressWithIssue(t, 92382)
 		ctx := context.Background()
 		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit: 1,
@@ -1180,6 +1179,28 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 			require.Len(t, ranges.Ranges, 1)
 		}
 
+		// Note: This is a 22.2 compatible work around for the
+		// flake fix introduced in #99054.
+		// In 22.2, crdb_internal.ranges is not yet compatible with
+		// secondary tenants, so instead we rely on TenantRanges
+		// itself with the `limit` param omitted. The method is the same:
+		// We count the number of ranges belonging to the tenant and only proceed
+		// when we know there are enough ranges for subsequent calls
+		// with pagination to succeed.
+		testutils.SucceedsSoon(t, func() error {
+			res, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
+			require.NoError(t, err)
+			require.Equal(t, 1, len(res.RangesByLocality))
+			for k := range res.RangesByLocality {
+				rangeCount := len(res.RangesByLocality[k].Ranges)
+				if rangeCount < 3 {
+					return errors.Newf("expected >= 3 ranges, got %d", rangeCount)
+				}
+			}
+			return nil
+		})
+
+		// We can proceed now that we know there are at least 3 ranges.
 		resp2, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit:  1,
 			Offset: resp1.Next,
