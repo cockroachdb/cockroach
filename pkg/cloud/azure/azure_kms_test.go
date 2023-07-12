@@ -14,13 +14,16 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -109,5 +112,38 @@ func TestEncryptDecryptAzure(t *testing.T) {
 			Settings:         azureKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
+	})
+
+	t.Run("implicit file auth", func(t *testing.T) {
+		redactedParams := make(url.Values)
+		for k, v := range params {
+			redactedParams[k] = v
+		}
+		redactedParams.Del(AzureClientIDParam)
+		redactedParams.Del(AzureClientSecretParam)
+		redactedParams.Del(AzureTenantIDParam)
+		redactedParams.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+
+		kmsEnv := &cloud.TestKMSEnv{
+			Settings:         azureKMSTestSettings,
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+		}
+
+		cleanup := envutil.TestSetEnv(t, "AZURE_CLIENT_ID", "")
+		defer cleanup()
+
+		uri := fmt.Sprintf("azure-kms:///%s/%s?%s", cfg.keyName, cfg.keyVersion, redactedParams.Encode())
+		cloud.CheckNoKMSAccess(t, uri, kmsEnv)
+
+		tmpDir, cleanup2 := testutils.TempDir(t)
+		defer cleanup2()
+
+		credFile := path.Join(tmpDir, "credentials.json")
+		require.NoError(t, writeAzureCredentialsFile(credFile, cfg.tenantID, cfg.clientID, cfg.clientSecret))
+
+		cleanup3 := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
+		defer cleanup3()
+
+		cloud.KMSEncryptDecrypt(t, uri, kmsEnv)
 	})
 }
