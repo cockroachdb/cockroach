@@ -790,7 +790,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		defer crdbConn.Close()
 
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "10.11.12.13:80", serverAddress)
@@ -800,7 +800,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		)()
 
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "10.11.12.13:80")
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.NoError(t, err)
 		defer conn.Close()
 
@@ -823,7 +823,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "!@#$::")
 		defer sa.Close()
 
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.Error(t, err)
 		require.Regexp(t, "invalid address format", err)
 		require.False(t, isRetriableConnectorError(err))
@@ -836,7 +836,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		defer crdbConn.Close()
 
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "10.11.12.13:1234", serverAddress)
@@ -845,7 +845,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 			},
 		)()
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "10.11.12.13:1234")
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.NoError(t, err)
 		defer conn.Close()
 
@@ -863,7 +863,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 	t.Run("failed to dial with non-transient error", func(t *testing.T) {
 		c := &connector{StartupMsg: &pgproto3.StartupMessage{}}
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "127.0.0.1:1234", serverAddress)
@@ -874,7 +874,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.1:1234")
 		defer sa.Close()
 
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.EqualError(t, err, "foo")
 		require.False(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)
@@ -883,7 +883,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 	t.Run("failed to dial with transient error", func(t *testing.T) {
 		c := &connector{StartupMsg: &pgproto3.StartupMessage{}}
 		defer testutils.TestingHook(&BackendDial,
-			func(msg *pgproto3.StartupMessage, serverAddress string,
+			func(ctx context.Context, msg *pgproto3.StartupMessage, serverAddress string,
 				tlsConfig *tls.Config) (net.Conn, error) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "127.0.0.2:4567", serverAddress)
@@ -894,7 +894,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.2:4567")
 		defer sa.Close()
 
-		conn, err := c.dialSQLServer(sa)
+		conn, err := c.dialSQLServer(ctx, sa)
 		require.EqualError(t, err, "codeBackendDown: bar")
 		require.True(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)
