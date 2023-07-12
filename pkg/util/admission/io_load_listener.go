@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -82,6 +83,14 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	"admission.l0_sub_level_count_overload_threshold",
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
+
+// L0CompactionAlpha is the exponential smoothing term used when measuring L0
+// compactions, which in turn is used to generate IO tokens.
+var L0CompactionAlpha = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"admission.l0_compacted_alpha",
+	"exponential smoothing term used when measuring L0 compactions to generate IO tokens",
+	0.5, settings.PositiveFloat)
 
 // Experimental observations:
 //   - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
@@ -163,6 +172,9 @@ type ioLoadListener struct {
 	adjustTokensResult
 	perWorkTokenEstimator storePerWorkTokenEstimator
 	diskBandwidthLimiter  diskBandwidthLimiter
+
+	l0CompactedBytes *metric.Counter
+	l0TokensProduced *metric.Counter
 }
 
 type ioLoadListenerState struct {
@@ -590,7 +602,7 @@ type adjustTokensAuxComputations struct {
 
 // adjustTokensInner is used for computing tokens based on compaction and
 // flush bottlenecks.
-func (*ioLoadListener) adjustTokensInner(
+func (io *ioLoadListener) adjustTokensInner(
 	ctx context.Context,
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
@@ -623,9 +635,11 @@ func (*ioLoadListener) adjustTokensInner(
 		// bytes (gauge).
 		intL0CompactedBytes = 0
 	}
-	const alpha = 0.5
+	io.l0CompactedBytes.Inc(intL0CompactedBytes)
+
 	// Compaction scheduling can be uneven in prioritizing L0 for compactions,
 	// so smooth out what is being removed by compactions.
+	alpha := L0CompactionAlpha.Get(&io.settings.SV)
 	smoothedIntL0CompactedBytes := int64(alpha*float64(intL0CompactedBytes) + (1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
 
 	// Flush tokens:
@@ -863,6 +877,9 @@ func (*ioLoadListener) adjustTokensInner(
 		totalNumByteTokens = numFlushTokens
 		tokenKind = flushTokenKind
 	}
+
+	io.l0TokensProduced.Inc(totalNumByteTokens)
+
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
 		ioLoadListenerState: ioLoadListenerState{

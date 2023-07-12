@@ -55,6 +55,9 @@ type StoreGrantCoordinators struct {
 	kvIOTokensAvailable             *metric.Gauge
 	kvIOTokensTookWithoutPermission *metric.Counter
 	kvIOTotalTokensTaken            *metric.Counter
+	kvIOTotalTokensReturned         *metric.Counter
+	l0CompactedBytes                *metric.Counter
+	l0TokensProduced                *metric.Counter
 
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics *WorkQueueMetrics
@@ -165,11 +168,12 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		// Setting tokens to unlimited is defensive. We expect that
 		// pebbleMetricsTick and allocateIOTokensTick will get called during
 		// initialization, which will also set these to unlimited.
-		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
-		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
-		availableTokensMetrics:          sgc.kvIOTokensAvailable,
-		tookWithoutPermissionMetric:     sgc.kvIOTokensTookWithoutPermission,
-		totalTokensTaken:                sgc.kvIOTotalTokensTaken,
+		startingIOTokens:                   unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
+		ioTokensExhaustedDurationMetric:    sgc.kvIOTokensExhaustedDuration,
+		availableTokensMetric:              sgc.kvIOTokensAvailable,
+		tokensTakenWithoutPermissionMetric: sgc.kvIOTokensTookWithoutPermission,
+		tokensTakenMetric:                  sgc.kvIOTotalTokensTaken,
+		tokensReturnedMetric:               sgc.kvIOTotalTokensReturned,
 	}
 	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
@@ -212,6 +216,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
 		kvGranter:             kvg,
+		l0CompactedBytes:      sgc.l0CompactedBytes,
+		l0TokensProduced:      sgc.l0TokensProduced,
 	}
 	return coord
 }
@@ -465,7 +471,10 @@ func makeStoresGrantCoordinators(
 		kvIOTokensExhaustedDuration:     metrics.KVIOTokensExhaustedDuration,
 		kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
 		kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
+		kvIOTotalTokensReturned:         metrics.KVIOTotalTokensReturned,
 		kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
+		l0CompactedBytes:                metrics.L0CompactedBytes,
+		l0TokensProduced:                metrics.L0TokensProduced,
 		workQueueMetrics:                storeWorkQueueMetrics,
 		onLogEntryAdmitted:              onLogEntryAdmitted,
 		knobs:                           knobs,
@@ -1010,7 +1019,10 @@ type GrantCoordinatorMetrics struct {
 	KVIOTokensExhaustedDuration     *metric.Counter
 	KVIOTokensTookWithoutPermission *metric.Counter
 	KVIOTotalTokensTaken            *metric.Counter
+	KVIOTotalTokensReturned         *metric.Counter
 	KVIOTokensAvailable             *metric.Gauge
+	L0CompactedBytes                *metric.Counter
+	L0TokensProduced                *metric.Counter
 	SQLLeafStartUsedSlots           *metric.Gauge
 	SQLRootStartUsedSlots           *metric.Gauge
 }
@@ -1032,7 +1044,10 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		SQLRootStartUsedSlots:           metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
 		KVIOTokensTookWithoutPermission: metric.NewCounter(kvIONumIOTokensTookWithoutPermission),
 		KVIOTotalTokensTaken:            metric.NewCounter(kvIOTotalTokensTaken),
+		KVIOTotalTokensReturned:         metric.NewCounter(kvIOTotalTokensReturned),
 		KVIOTokensAvailable:             metric.NewGauge(kvIOTokensAvailable),
+		L0CompactedBytes:                metric.NewCounter(l0CompactedBytes),
+		L0TokensProduced:                metric.NewCounter(l0TokensProduced),
 	}
 	return m
 }
