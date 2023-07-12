@@ -29,6 +29,7 @@ const ts: TimeScale = {
   key: "Custom",
 };
 const mockSetTimeScale = jest.fn();
+const requestTime = moment();
 
 function generateDiagnosticsRequest(
   extendObject: Partial<StatementDiagnosticsReport> = {},
@@ -57,9 +58,9 @@ describe("DiagnosticsView", () => {
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            hasData={false}
             diagnosticsReports={[]}
             dismissAlertMessage={() => {}}
+            requestTime={undefined}
             currentScale={ts}
             onChangeTimeScale={mockSetTimeScale}
           />
@@ -88,7 +89,7 @@ describe("DiagnosticsView", () => {
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            hasData={true}
+            requestTime={undefined}
             diagnosticsReports={diagnosticsRequests}
             dismissAlertMessage={() => {}}
             currentScale={ts}
@@ -122,10 +123,10 @@ describe("DiagnosticsView", () => {
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            hasData={true}
             diagnosticsReports={diagnosticsRequests}
             dismissAlertMessage={() => {}}
             currentScale={ts}
+            requestTime={requestTime}
             onChangeTimeScale={mockSetTimeScale}
           />
         </TestStoreProvider>,
@@ -146,10 +147,10 @@ describe("DiagnosticsView", () => {
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            hasData={true}
             diagnosticsReports={diagnosticsRequests}
             dismissAlertMessage={() => {}}
             currentScale={ts}
+            requestTime={requestTime}
             onChangeTimeScale={mockSetTimeScale}
           />
         </TestStoreProvider>,
