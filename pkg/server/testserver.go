@@ -640,8 +640,10 @@ func (ts *TestServer) Start(ctx context.Context) error {
 		// If the server requests a shutdown, do that simply by stopping the
 		// stopper.
 		select {
-		case <-ts.Server.ShutdownRequested():
-			ts.Stopper().Stop(ts.Server.AnnotateCtx(context.Background()))
+		case req := <-ts.Server.ShutdownRequested():
+			shutdownCtx := ts.Server.AnnotateCtx(context.Background())
+			log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+			ts.Stopper().Stop(shutdownCtx)
 		case <-ts.Stopper().ShouldQuiesce():
 		}
 	}()
@@ -1164,8 +1166,10 @@ func (ts *TestServer) StartTenant(
 		// If the server requests a shutdown, do that simply by stopping the
 		// tenant's stopper.
 		select {
-		case <-sw.ShutdownRequested():
-			stopper.Stop(sw.AnnotateCtx(context.Background()))
+		case req := <-sw.ShutdownRequested():
+			shutdownCtx := sw.AnnotateCtx(context.Background())
+			log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+			stopper.Stop(shutdownCtx)
 		case <-stopper.ShouldQuiesce():
 		}
 	}()
