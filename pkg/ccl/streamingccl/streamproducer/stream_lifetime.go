@@ -64,7 +64,7 @@ func startReplicationProducerJob(
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
 	}
-	deprecatedSpansToProtect := roachpb.Spans{*makeTenantSpan(tenantID)}
+	deprecatedSpansToProtect := roachpb.Spans{makeTenantSpan(tenantID)}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
@@ -236,12 +236,7 @@ func getReplicationStreamSpec(
 	if !ok {
 		return nil, errors.Errorf("job with id %d is not a replication stream job", streamID)
 	}
-	replicatedSpans := details.Spans
-	spans := make([]roachpb.Span, 0, len(replicatedSpans))
-	for _, span := range replicatedSpans {
-		spans = append(spans, *span)
-	}
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, details.Spans)
 	if err != nil {
 		return nil, err
 	}
