@@ -462,9 +462,9 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 105956)
+	//skip.WithIssue(t, 105956)
 
-	skip.UnderRace(t, "takes too long with multiple nodes")
+	//skip.UnderRace(t, "takes too long with multiple nodes")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
@@ -711,7 +711,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 106451)
+	//skip.WithIssue(t, 106451)
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
