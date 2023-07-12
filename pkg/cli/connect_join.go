@@ -35,10 +35,12 @@ import (
 const nodeJoinTimeout = 1 * time.Minute
 
 var connectJoinCmd = &cobra.Command{
-	Use:   "join <join-token>",
-	Short: "request the TLS certs for a new node from an existing node",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  clierrorplus.MaybeDecorateError(runConnectJoin),
+	Use:    "join <join-token>",
+	Short:  "request the TLS certs for a new node from an existing node",
+	Long:   `THIS COMMAND IS EXPERIMENTAL.`,
+	Args:   cobra.MinimumNArgs(1),
+	RunE:   clierrorplus.MaybeDecorateError(runConnectJoin),
+	Hidden: true,
 }
 
 func requestPeerCA(

@@ -111,7 +111,7 @@ To initialize the cluster, use 'cockroach init'.
 // startSingleNodeCmd starts a node by initializing the stores.
 var startSingleNodeCmd = &cobra.Command{
 	Use:   "start-single-node",
-	Short: "start a single-node cluster",
+	Short: "start a single-node cluster\n",
 	Long: `
 Start a CockroachDB node, which will export data from one or more
 storage devices, specified via --store flags.

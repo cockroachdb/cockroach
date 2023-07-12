@@ -37,8 +37,12 @@ var connectCmd = &cobra.Command{
 	Use:   "connect [command]",
 	Short: "Create certificates for securely connecting with clusters\n",
 	Long: `
-Bootstrap security certificates for connecting to new or existing clusters.`,
-	RunE: UsageAndErr,
+Bootstrap security certificates for connecting to new or existing clusters.
+
+THIS COMMAND IS EXPERIMENTAL.
+`,
+	RunE:   UsageAndErr,
+	Hidden: true,
 }
 
 func init() {
@@ -53,9 +57,12 @@ var connectInitCmd = &cobra.Command{
 	Long: `
 Connects to other nodes and negotiates an initialization bundle for use with
 secure inter-node connections.
+
+THIS COMMAND IS EXPERIMENTAL.
 `,
-	Args: cobra.NoArgs,
-	RunE: clierrorplus.MaybeDecorateError(runConnectInit),
+	Args:   cobra.NoArgs,
+	RunE:   clierrorplus.MaybeDecorateError(runConnectInit),
+	Hidden: true,
 }
 
 // runConnectInit connects to other nodes and negotiates an initialization bundle
