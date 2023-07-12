@@ -119,7 +119,6 @@
     "chai": "^4.1.0",
     "chalk": "^1.1.3",
     "copy-webpack-plugin": "^4.5.1",
-    "core-js": "^3.0.1",
     "css-loader": "^3.4.0",
     "d3": "<4.0.0",
     "d3-geo-projection": "^2.5.0",
