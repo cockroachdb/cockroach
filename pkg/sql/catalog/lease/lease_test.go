@@ -1004,7 +1004,7 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	//
 	// In order to mitigate that push, we increase the target_duration when the
 	// test is run under race.
-	if util.RaceEnabled {
+	if util.RaceEnabled || skip.Stress() {
 		_, err := sqlDB.Exec(
 			"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '120s'")
 		require.NoError(t, err)
@@ -1181,6 +1181,14 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// index) and clear the index keys.
 	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
+	}
+
+	// Reset closed timestamp so that deleted keys can be GC'ed within the
+	// SucceedSoon window.
+	if util.RaceEnabled || skip.Stress() {
+		_, err := sqlDB.Exec(
+			"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '3s'")
+		require.NoError(t, err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
