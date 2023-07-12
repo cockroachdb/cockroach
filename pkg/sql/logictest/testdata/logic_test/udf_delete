@@ -300,3 +300,5 @@ SELECT * FROM u_a;
 ----
 1  a  10
 2  b  20
+
+subtest end
