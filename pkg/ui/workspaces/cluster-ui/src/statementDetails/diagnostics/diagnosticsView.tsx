@@ -32,6 +32,11 @@ import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import { DATE_FORMAT_24_TZ } from "../../util";
 import { Timestamp } from "../../timestamp";
 import moment from "moment-timezone";
+import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
+import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
+import classNames from "classnames/bind";
+
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 export interface DiagnosticsViewStateProps {
   hasData: boolean;
@@ -243,6 +248,11 @@ export class DiagnosticsView extends React.Component<
       currentScale,
     );
 
+    const undisplayedActiveReports = diagnosticsReports.filter(
+      report =>
+        !report.completed && !dataSource.find(data => data.id === report.id),
+    );
+
     if (!hasData) {
       return (
         <>
@@ -252,6 +262,12 @@ export class DiagnosticsView extends React.Component<
             setTimeScale={onChangeTimeScale}
             className={cx("timescale-small", "margin-bottom")}
           />
+          <p className={timeScaleStylesCx("time-label", "label-margin")}>
+            Showing statement diagnostics from{" "}
+            <span className={timeScaleStylesCx("bold")}>
+              <FormattedTimescale ts={currentScale} />
+            </span>
+          </p>
           <SummaryCard>
             <EmptyDiagnosticsView {...this.props} />
           </SummaryCard>
@@ -282,6 +298,18 @@ export class DiagnosticsView extends React.Component<
             </Button>
           )}
         </div>
+        <div className={timeScaleStylesCx("time-label", "label-margin")}>
+          Showing statement diagnostics from{" "}
+          <span className={timeScaleStylesCx("bold")}>
+            <FormattedTimescale ts={currentScale} />
+          </span>
+        </div>
+        {undisplayedActiveReports.length > 0 && (
+          <p>
+            Active statement diagnostics requests not displayed in time window:{" "}
+            <em>{undisplayedActiveReports.length}</em>
+          </p>
+        )}
         <SortedTable
           data={dataSource}
           columns={this.columns}
