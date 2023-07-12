@@ -86,13 +86,12 @@ var (
 		MaxRetries:     80,
 	}
 
-	v231 = func() *version.Version {
-		v, err := version.Parse("v23.1.0")
-		if err != nil {
-			panic(fmt.Sprintf("failure parsing version: %v", err))
-		}
-		return v
-	}()
+	v231 = version.MustParse("v23.1.0")
+
+	// minSupportedRestoreVersion is the version before which we do not
+	// attempt to restore backups taken in mixed-version as they might
+	// fail for known reasons. For more details, see #105900.
+	minSupportedRestoreVersion = version.MustParse("v22.2.9")
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -178,11 +177,10 @@ func sanitizeVersionForBackup(v string) string {
 	return invalidVersionRE.ReplaceAllString(clusterupgrade.VersionMsg(v), "")
 }
 
-// hasInternalSystemJobs returns true if the cluster is expected to
-// have the `crdb_internal.system_jobs` vtable in the mixed-version
-// context passed. If so, it should be used instead of `system.jobs`
-// when querying job status.
-func hasInternalSystemJobs(tc *mixedversion.Context) bool {
+// lowestMixedVersion returns the lowest binary version running in a
+// mixedversion cluster. It takes into account upgrade and downgrade
+// scenarios.
+func lowestMixedVersion(tc *mixedversion.Context) *version.Version {
 	lowestVersion := tc.FromVersion // upgrades
 	if tc.FromVersion == clusterupgrade.MainVersion {
 		lowestVersion = tc.ToVersion // downgrades
@@ -190,11 +188,16 @@ func hasInternalSystemJobs(tc *mixedversion.Context) bool {
 
 	// Add 'v' prefix expected by `version` package.
 	lowestVersion = "v" + lowestVersion
-	sv, err := version.Parse(lowestVersion)
-	if err != nil {
-		panic(fmt.Errorf("internal error: test context version (%s) expected to be parseable: %w", lowestVersion, err))
-	}
-	return sv.AtLeast(v231)
+	return version.MustParse(lowestVersion)
+}
+
+// hasInternalSystemJobs returns true if the cluster is expected to
+// have the `crdb_internal.system_jobs` vtable in the mixed-version
+// context passed. If so, it should be used instead of `system.jobs`
+// when querying job status.
+func hasInternalSystemJobs(tc *mixedversion.Context) bool {
+	lowestV := lowestMixedVersion(tc)
+	return lowestV.AtLeast(v231)
 }
 
 func aostFor(timestamp string) string {
@@ -1887,6 +1890,19 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 ) error {
 	v := clusterupgrade.VersionMsg(version)
 	l.Printf("%s: verifying %s", v, collection.name)
+
+	// If we are attempting to verify a restore in mixed-version or in a
+	// predecessor version, we ensure that the predecessor version is at
+	// least `minSupportedRestoreVersion` before proceeding.
+	//
+	// Note that `version` will only be `clusterupgrade.MainVersion` at
+	// the end of the upgrade, when we are verifying all backups on a
+	// cluster comprised only of nodes running the current version.
+	lowestV := lowestMixedVersion(h.Context())
+	if version != clusterupgrade.MainVersion && !lowestV.AtLeast(minSupportedRestoreVersion) {
+		l.Printf("skipping restore because %s < %s", lowestV, minSupportedRestoreVersion)
+		return nil
+	}
 
 	// Defaults for the database where the backup will be restored,
 	// along with the expected names of the tables after restore.
