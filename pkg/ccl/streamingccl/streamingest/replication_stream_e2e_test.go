@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -715,15 +716,13 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 106451)
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 1
-	args.DestNumNodes = 1
+	args.MultitenantSingleClusterNumNodes = 1
 
 	retryErrorChan := make(chan error)
 	turnOffReplanning := make(chan struct{})
+	var alreadyReplanned atomic.Bool
 
 	// Track the number of unique addresses that we're connected to.
 	clientAddresses := make(map[string]struct{})
@@ -735,17 +734,18 @@ func TestStreamingAutoReplan(t *testing.T) {
 			clientAddresses[addr] = struct{}{}
 		},
 		AfterRetryIteration: func(err error) {
-			if err != nil {
+
+			if err != nil && !alreadyReplanned.Load() {
 				retryErrorChan <- err
 				<-turnOffReplanning
+				alreadyReplanned.Swap(true)
 			}
 		},
 	}
-
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+	// Don't allow for replanning until the new nodes and scattered table have been created.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
 
 	// Begin the job on a single source node.
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -755,13 +755,15 @@ func TestStreamingAutoReplan(t *testing.T) {
 	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 	require.Equal(t, len(clientAddresses), 1)
 
-	// Add 2 source nodes to enable full replication.
 	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
 	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
 	require.NoError(t, c.SrcCluster.WaitForFullReplication())
 
 	replicationtestutils.CreateScatteredTable(t, c, 3)
-	require.NoError(t, c.SrcCluster.WaitForFullReplication())
+
+	// Configure the ingestion job to replan eagerly.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
 
 	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
 	require.Error(t, <-retryErrorChan, sql.ErrPlanChanged)
@@ -785,9 +787,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	// nodes participate from the src cluster. This potentially occurs because cpu
 	// contention renders a test server "unhealthy". In general, running two
 	// multinode 2 clusters makes everything messy.
-	if !skip.Stress() {
-		require.Greater(t, len(clientAddresses), 1)
-	}
+	require.Greater(t, len(clientAddresses), 1)
 }
 
 // TestProtectedTimestampManagement tests the active protected
