@@ -296,10 +296,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	// cancels everything controlled by the stopper.
 	defer c.Close(ctx)
 
-	// Also ensure the context gets canceled when the stopper
-	// terminates above.
-	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
-
 	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
 		return s.RunLocalSQL(ctx,
 			func(ctx context.Context, ie *sql.InternalExecutor) error {
@@ -309,6 +305,12 @@ func TestTransientClusterMultitenant(t *testing.T) {
 			})
 	}))
 
+	// Also ensure the context gets canceled when the stopper
+	// terminates above.
+	var cancel func()
+	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+
 	for i := 0; i < demoCtx.NumNodes; i++ {
 		url, err := c.getNetworkURLForServer(ctx, i,
 			true /* includeAppName */, true /* isTenant */)
@@ -316,12 +318,12 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		sqlConnCtx := clisqlclient.Context{}
 		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
 		defer func() {
-			if err := conn.Close(); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, conn.Close())
 		}()
 
-		// Create a table on each tenant to make sure that the tenants are separate.
-		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
+		require.NoError(t, conn.Exec(ctx, "CREATE TABLE a (a int PRIMARY KEY)"))
+
+		log.Infof(ctx, "test succeeded")
+		t.Log("test succeeded")
 	}
 }
