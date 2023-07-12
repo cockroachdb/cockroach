@@ -1969,7 +1969,7 @@ func (mvb *mixedVersionBackup) resetCluster(
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
-	cockroachPath := clusterupgrade.BinaryPathFromVersion(version)
+	cockroachPath := clusterupgrade.BinaryPathForVersion(mvb.t, version)
 	return clusterupgrade.StartWithSettings(
 		ctx, l, mvb.cluster, mvb.roachNodes, option.DefaultStartOptsNoBackups(),
 		install.BinaryOption(cockroachPath), install.SecureOption(true),
