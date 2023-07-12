@@ -118,7 +118,8 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		st,
 	)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	logReg := metric.NewRegistry()
+	recorder.AddNode(reg1, logReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	nodeDescTenant := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(7),
@@ -137,7 +138,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		stTenant,
 	)
-	recorderTenant.AddNode(regTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorderTenant.AddNode(regTenant, logReg, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// ========================================
 	// Verify that the recorder exports metrics for tenants as text.
@@ -150,6 +151,10 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	g2 := metric.NewGauge(metric.Metadata{Name: "some_metric"})
 	regTenant.AddMetric(g2)
 	g2.Update(456)
+
+	c1 := metric.NewCounter(metric.Metadata{Name: "some_log_metric"})
+	logReg.AddMetric(c1)
+	c1.Inc(2)
 
 	recorder.AddTenantRegistry(tenantID, regTenant)
 
@@ -208,6 +213,16 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				{
 					TimestampNanos: manual.Now().UnixNano(),
 					Value:          float64(123),
+				},
+			},
+		},
+		{
+			Name:   "cr.node.some_log_metric",
+			Source: "7",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(2),
 				},
 			},
 		},
@@ -435,7 +450,8 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, manual, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	logReg := metric.NewRegistry()
+	recorder.AddNode(reg1, logReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
@@ -464,6 +480,12 @@ func TestMetricsRecorder(t *testing.T) {
 		{
 			reg:    reg1,
 			prefix: "two.",
+			source: 1,
+			isNode: true,
+		},
+		{
+			reg:    logReg,
+			prefix: "log.",
 			source: 1,
 			isNode: true,
 		},
