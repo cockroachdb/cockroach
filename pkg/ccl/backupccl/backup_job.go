@@ -559,7 +559,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		initialDetails := details
 		if err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			backupDetails, m, err := getBackupDetailAndManifest(
-				ctx, p.ExecCfg(), txn, details, p.User(), backupDest,
+				ctx, p.ExecCfg(), txn, initialDetails, p.User(), backupDest,
 			)
 			if err != nil {
 				return err
