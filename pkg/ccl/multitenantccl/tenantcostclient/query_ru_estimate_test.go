@@ -23,6 +23,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -74,6 +75,13 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: tenantID,
 		Settings: st,
+		TestingKnobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				// We disable the randomization of some batch sizes because with
+				// some low values the test takes much longer.
+				ForceProductionValues: true,
+			},
+		},
 	})
 	defer tenant1.Stopper().Stop(ctx)
 	defer tenantDB1.Close()
@@ -87,7 +95,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	}
 	testCases := []testCase{
 		{ // Insert statement
-			sql:   "INSERT INTO abcd (SELECT t%2, t%3, t, -t FROM generate_series(1,50000) g(t))",
+			sql:   "INSERT INTO abcd (SELECT t%2, t%3, t, -t FROM generate_series(1,20000) g(t))",
 			count: 1,
 		},
 		{ // Point query
