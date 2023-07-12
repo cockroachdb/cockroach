@@ -1427,47 +1427,36 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 	}
 }
 
-type inProgressChecker func(context context.Context, ip inProgressState) error
-
-// inProgressState holds state about an in-progress backup or restore
-// for use in inProgressCheckers.
-type inProgressState struct {
-	*gosql.DB
-	backupTableID uint32
-	dir, name     string
+func jobFractionCompleted(t *testing.T, sqlDB *sqlutils.SQLRunner, jobID jobspb.JobID) float32 {
+	t.Helper()
+	var progress float32
+	sqlDB.QueryRow(t,
+		`SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
+		jobID,
+	).Scan(&progress)
+	return progress
 }
 
-func (ip inProgressState) latestJobID() (jobspb.JobID, error) {
-	var id jobspb.JobID
-	if err := ip.QueryRow(
-		`SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
-	).Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
+// TestBackupJobUpdatesProgress tests that ExportRequest issued during the
+// backup cause the backup job progress to be incrementally updated. This test
+// is reliant on us sending at least 6 ExportRequests. This is guaranteed
+// because we backup >6 system tables, each on its own range. If this assumption
+// were to change, we could insert manual splits to a test table.
+func TestBackupJobUpdatesProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.TestingSetProgressThresholds()()
 
-// checkInProgressBackupRestore will run a backup and restore, pausing each
-// approximately halfway through to run either `checkBackup` or `checkRestore`.
-func checkInProgressBackupRestore(
-	t testing.TB, checkBackup inProgressChecker, checkRestore inProgressChecker,
-) {
-	var allowResponse chan struct{}
-	var exportSpanCompleteCh chan struct{}
+	blockCh := make(chan struct{})
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterExportingSpanEntry: func(_ context.Context, res *kvpb.ExportResponse) {
-					<-allowResponse
-					// If ResumeSpan is set to nil, it means that we have completed
-					// exporting a span and the job will update its fraction progressed.
-					if res.ResumeSpan == nil {
-						<-exportSpanCompleteCh
+				RunAfterExportingSpanEntry: func(ctx context.Context, resp *kvpb.ExportResponse) {
+					select {
+					case <-blockCh:
+					case <-ctx.Done():
 					}
-				},
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
-					<-allowResponse
 				},
 			},
 		},
@@ -1475,129 +1464,55 @@ func checkInProgressBackupRestore(
 	}
 	params.ServerArgs.Knobs = knobs
 
-	const numAccounts = 100
-
-	ctx := context.Background()
-	_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts,
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0,
 		InitManualReplication, params)
-	conn := sqlDB.DB.(*gosql.DB)
-	defer cleanup()
-
-	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-	// the small test-case will get entirely buffered/merged by small-file merging
+	defer cleanupFn()
+	// The small test-case will get entirely buffered/merged by small-file merging
 	// and not report any progress in the meantime unless it is disabled.
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1'`)
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `BACKUP INTO 'userfile:///foo' WITH detached`).Scan(&jobID)
+	jobutils.WaitForJobToRun(t, sqlDB, jobID)
 
-	// Ensure that each node has at least one leaseholder. (These splits were
-	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
-	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
-	// changes happening.
-	for _, stmt := range []string{
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 30)`,
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 80)`,
-	} {
-		testutils.SucceedsSoon(t, func() error {
-			_, err := sqlDB.DB.ExecContext(ctx, stmt)
-			return err
-		})
-	}
+	// Defer asserting that the job updates its progress to 1 on completion.
+	defer func() {
+		close(blockCh)
+		jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+		require.Equal(t, float32(1), jobFractionCompleted(t, sqlDB, jobID))
+	}()
 
-	var totalExpectedBackupRequests int
-	// mergedRangeQuery calculates the number of spans we expect PartitionSpans to
-	// produce. It merges contiguous ranges on the same node.
-	// It sorts ranges by start_key and counts the number of times the
-	// lease_holder changes by comparing against the previous row's lease_holder.
-	mergedRangeQuery := `
-WITH
-	ranges
-		AS (
-			SELECT
-				start_key,
-				lag(lease_holder) OVER (ORDER BY start_key)
-					AS prev_lease_holder,
-				lease_holder
-			FROM
-				[SHOW RANGES FROM TABLE data.bank WITH DETAILS]
-		)
-SELECT
-	count(*)
-FROM
-	ranges
-WHERE
-	lease_holder != prev_lease_holder
-	OR prev_lease_holder IS NULL;
-`
+	// Allow a few requests to go through.
+	blockCh <- struct{}{}
+	blockCh <- struct{}{}
+	blockCh <- struct{}{}
 
-	sqlDB.QueryRow(t, mergedRangeQuery).Scan(&totalExpectedBackupRequests)
-
-	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
-
-	do := func(query string, check inProgressChecker) {
-		t.Logf("checking query %q", query)
-
-		var totalExpectedResponses int
-		if strings.Contains(query, "BACKUP") {
-			exportSpanCompleteCh = make(chan struct{})
-			// totalExpectedBackupRequests takes into account the merging that backup
-			// does of co-located ranges. It is the expected number of ExportRequests
-			// backup issues. DistSender will still split those requests to different
-			// ranges on the same node. Each range will write a file, so the number of
-			// SST files this backup will write is `backupRestoreDefaultRanges` .
-			totalExpectedResponses = totalExpectedBackupRequests
-		} else if strings.Contains(query, "RESTORE") {
-			// We expect restore to process each file in the backup individually.
-			// SST files are written per-range in the backup. So we expect the
-			// restore to process #(ranges) that made up the original table.
-			totalExpectedResponses = backupRestoreDefaultRanges
-		} else {
-			t.Fatal("expected query to be either a backup or restore")
+	var fractionCompleted float32
+	testutils.SucceedsSoon(t, func() error {
+		fractionCompleted = jobFractionCompleted(t, sqlDB, jobID)
+		if fractionCompleted < 0.01 || fractionCompleted > 0.99 {
+			return errors.Newf(
+				"expected progress to be in range [0.01, 0.99] but got %f",
+				fractionCompleted,
+			)
 		}
-		jobDone := make(chan error)
-		allowResponse = make(chan struct{}, totalExpectedResponses)
+		return nil
+	})
 
-		go func() {
-			_, err := conn.Exec(query, localFoo)
-			jobDone <- err
-		}()
+	// Allow some more requests to go through.
+	blockCh <- struct{}{}
+	blockCh <- struct{}{}
+	blockCh <- struct{}{}
 
-		// Allow half the total expected responses to proceed.
-		for i := 0; i < totalExpectedResponses/2; i++ {
-			allowResponse <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		newFractionCompleted := jobFractionCompleted(t, sqlDB, jobID)
+		if newFractionCompleted <= fractionCompleted {
+			return errors.Newf(
+				"expected progress to have progressed %f <= %f",
+				newFractionCompleted, fractionCompleted,
+			)
 		}
-
-		// Due to ExportRequest pagination, in the case of backup, we want to wait
-		// until an entire span has been exported before checking job progress.
-		if strings.Contains(query, "BACKUP") {
-			exportSpanCompleteCh <- struct{}{}
-			close(exportSpanCompleteCh)
-		}
-		err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
-			return check(ctx, inProgressState{
-				DB:            conn,
-				backupTableID: backupTableID,
-				dir:           dir,
-				name:          "foo",
-			})
-		})
-
-		// Close the channel to allow all remaining responses to proceed. We do this
-		// even if the above retry.ForDuration failed, otherwise the test will hang
-		// forever.
-		close(allowResponse)
-
-		if err := <-jobDone; err != nil {
-			t.Fatalf("%q: %+v", query, err)
-		}
-
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	do(`BACKUP DATABASE data INTO $1`, checkBackup)
-	do(`RESTORE data.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb')`, checkRestore)
+		return nil
+	})
 }
 
 // TestRestoreCheckpointing checks that progress persists to the job record
@@ -1624,20 +1539,28 @@ func TestRestoreCheckpointing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
 
-	// totalEntries represents the number of entries to appear in the persisted frontier.
-	totalEntries := 7
-	entriesBeforePause := 4
-	entriesCount := 0
-	var alreadyPaused atomic.Bool
-	postResumeCount := 0
+	var (
+		// totalEntries represents the number of entries to
+		// appear in the persisted frontier.
+		totalEntries       = 7
+		entriesBeforePause = 4
+
+		mu struct {
+			syncutil.Mutex
+			entriesCount    int
+			postResumeCount int
+		}
+
+		alreadyPaused atomic.Bool
+	)
+
 	blockDBRestore := make(chan struct{})
 	waitForProgress := make(chan struct{})
-	var mu syncutil.Mutex
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
+				RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) {
 					//  Because the restore processor has several workers that
 					//  concurrently send addsstable requests and because all workers will
 					//  wait on the lock below, when one flush gets blocked on the
@@ -1651,13 +1574,16 @@ func TestRestoreCheckpointing(t *testing.T) {
 					wasPausedBeforeWaiting := alreadyPaused.Load()
 					mu.Lock()
 					defer mu.Unlock()
-					if entriesCount == entriesBeforePause {
+					if mu.entriesCount == entriesBeforePause {
 						close(waitForProgress)
-						<-blockDBRestore
+						select {
+						case <-blockDBRestore:
+						case <-ctx.Done():
+						}
 					}
-					entriesCount++
+					mu.entriesCount++
 					if wasPausedBeforeWaiting {
-						postResumeCount++
+						mu.postResumeCount++
 					}
 				},
 			},
@@ -1695,6 +1621,16 @@ func TestRestoreCheckpointing(t *testing.T) {
 
 	// Pause the job after some progress has been logged.
 	<-waitForProgress
+	testutils.SucceedsSoon(t, func() error {
+		fractionCompleted := jobFractionCompleted(t, sqlDB, jobID)
+		if fractionCompleted < 0.01 || fractionCompleted > 0.99 {
+			return errors.Newf(
+				"expected progress to be in range [0.01, 0.99] but got %f",
+				fractionCompleted,
+			)
+		}
+		return nil
+	})
 
 	// To ensure that progress gets persisted, sleep well beyond the test only job update interval.
 	time.Sleep(time.Second)
@@ -1705,7 +1641,9 @@ func TestRestoreCheckpointing(t *testing.T) {
 	// to be 1 completed persisted span most of the time. Occasionally, two
 	// disjoint spans may be persisted if the required spans are processed out of
 	// order; i.e. table 5's span gets processed before table 4's.
-	require.Equal(t, entriesBeforePause, entriesCount)
+	mu.Lock()
+	require.Equal(t, entriesBeforePause, mu.entriesCount)
+	mu.Unlock()
 
 	close(blockDBRestore)
 	alreadyPaused.Store(true)
@@ -1714,39 +1652,9 @@ func TestRestoreCheckpointing(t *testing.T) {
 
 	// Ensure that no persisted work was repeated on resume and that all work was persisted.
 	checkPersistedSpanLength(1)
-	require.Equal(t, totalEntries-entriesBeforePause, postResumeCount)
-}
-
-func TestBackupRestoreSystemJobsProgress(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68571, "flaky test")
-	defer log.Scope(t).Close(t)
-	defer jobs.TestingSetProgressThresholds()()
-
-	skip.UnderStressRace(t, "test takes too long to run under stressrace")
-
-	checkFraction := func(ctx context.Context, ip inProgressState) error {
-		jobID, err := ip.latestJobID()
-		if err != nil {
-			return err
-		}
-		var fractionCompleted float32
-		if err := ip.QueryRow(
-			`SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
-			jobID,
-		).Scan(&fractionCompleted); err != nil {
-			return err
-		}
-		if fractionCompleted < 0.01 || fractionCompleted > 0.99 {
-			return errors.Errorf(
-				"expected progress to be in range [0.01, 0.99] but got %f",
-				fractionCompleted,
-			)
-		}
-		return nil
-	}
-
-	checkInProgressBackupRestore(t, checkFraction, checkFraction)
+	mu.Lock()
+	require.Equal(t, totalEntries-entriesBeforePause, mu.postResumeCount)
+	mu.Unlock()
 }
 
 func createAndWaitForJob(
