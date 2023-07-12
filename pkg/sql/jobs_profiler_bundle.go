@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -40,10 +41,11 @@ func (p *planner) RequestExecutionDetails(ctx context.Context, jobID jobspb.JobI
 			clusterversion.V23_1.String())
 	}
 
-	e := MakeJobProfilerExecutionDetailsBuilder(execCfg.InternalDB, jobID)
+	e := MakeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID)
 	// TODO(adityamaru): When we start collecting more information we can consider
 	// parallelize the collection of the various pieces.
 	e.addDistSQLDiagram(ctx)
+	e.addLabelledGoroutines(ctx)
 
 	return nil
 }
@@ -51,6 +53,7 @@ func (p *planner) RequestExecutionDetails(ctx context.Context, jobID jobspb.JobI
 // ExecutionDetailsBuilder can be used to read and write execution details corresponding
 // to a job.
 type ExecutionDetailsBuilder struct {
+	srv   serverpb.SQLStatusServer
 	db    isql.DB
 	jobID jobspb.JobID
 }
@@ -156,12 +159,33 @@ func (e *ExecutionDetailsBuilder) ReadExecutionDetail(
 
 // MakeJobProfilerExecutionDetailsBuilder returns an instance of an ExecutionDetailsBuilder.
 func MakeJobProfilerExecutionDetailsBuilder(
-	db isql.DB, jobID jobspb.JobID,
+	srv serverpb.SQLStatusServer, db isql.DB, jobID jobspb.JobID,
 ) ExecutionDetailsBuilder {
 	e := ExecutionDetailsBuilder{
-		db: db, jobID: jobID,
+		srv: srv, db: db, jobID: jobID,
 	}
 	return e
+}
+
+// addLabelledGoroutines collects and persists goroutines from all nodes in the
+// cluster that have a pprof label tying it to the job whose execution details
+// are being collected.
+func (e *ExecutionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
+	profileRequest := serverpb.ProfileRequest{
+		NodeId:      "all",
+		Type:        serverpb.ProfileRequest_GOROUTINE,
+		Labels:      true,
+		LabelFilter: fmt.Sprintf("%d", e.jobID),
+	}
+	resp, err := e.srv.Profile(ctx, &profileRequest)
+	if err != nil {
+		log.Errorf(ctx, "failed to collect goroutines for job %d: %+v", e.jobID, err.Error())
+		return
+	}
+	filename := fmt.Sprintf("goroutines.%s.txt", timeutil.Now().Format("20060102_150405.00"))
+	if err := e.WriteExecutionDetail(ctx, filename, resp.Data); err != nil {
+		log.Errorf(ctx, "failed to write goroutine for job %d: %+v", e.jobID, err.Error())
+	}
 }
 
 // addDistSQLDiagram generates and persists a `distsql.<timestamp>.html` file.
