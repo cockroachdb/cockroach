@@ -124,6 +124,7 @@ SELECT f5(count(a)) FROM t3;
 ----
 1
 
+
 subtest constraints
 
 statement ok
@@ -151,7 +152,11 @@ SELECT f_check1(0.5);
 statement error pq: failed to satisfy CHECK constraint \(x >= 1:::DECIMAL\)
 SELECT f_check1(0);
 
-# subtest generated_as_identity
+
+subtest end
+
+subtest generated_as_identity
+
 statement ok
 CREATE TABLE generated_as_id_t (
   a INT UNIQUE,
@@ -192,6 +197,8 @@ SELECT * FROM generated_as_id_t ORDER BY a;
 9  6  2
 
 
+subtest end
+
 subtest repro_103693
 
 statement ok
@@ -211,3 +218,5 @@ query I
 SELECT f_103693(k2, v2) FROM t1_103693 INNER LOOKUP JOIN t2_103693 ON k1 = k2;
 ----
 1
+
+subtest end

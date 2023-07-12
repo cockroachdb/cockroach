@@ -2152,11 +2152,25 @@ func TestTenantLogic_udf_insert(
 	runLogicTest(t, "udf_insert")
 }
 
+func TestTenantLogic_udf_observability(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_observability")
+}
+
 func TestTenantLogic_udf_oid_ref(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_oid_ref")
+}
+
+func TestTenantLogic_udf_options(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_options")
 }
 
 func TestTenantLogic_udf_plpgsql(
@@ -2166,11 +2180,32 @@ func TestTenantLogic_udf_plpgsql(
 	runLogicTest(t, "udf_plpgsql")
 }
 
+func TestTenantLogic_udf_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_privileges")
+}
+
 func TestTenantLogic_udf_record(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_record")
+}
+
+func TestTenantLogic_udf_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_regressions")
+}
+
+func TestTenantLogic_udf_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_schema_change")
 }
 
 func TestTenantLogic_udf_setof(
@@ -2185,6 +2220,20 @@ func TestTenantLogic_udf_star(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_star")
+}
+
+func TestTenantLogic_udf_subquery(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_subquery")
+}
+
+func TestTenantLogic_udf_unsupported(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_unsupported")
 }
 
 func TestTenantLogic_udf_update(

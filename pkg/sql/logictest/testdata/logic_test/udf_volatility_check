@@ -34,6 +34,7 @@ CREATE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$
   WHERE b = 1 + random()
 $$;
 
+
 subtest replace_func_volatility
 
 statement ok
@@ -68,6 +69,8 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$
   WHERE b = 1 + random()
 $$;
 
+subtest end
+
 subtest alter_func_volatility
 
 statement ok
@@ -96,3 +99,5 @@ ALTER FUNCTION f STABLE
 
 statement error pq: volatile statement not allowed in immutable function: SELECT random\(\)::INT8
 ALTER FUNCTION f IMMUTABLE
+
+subtest end
