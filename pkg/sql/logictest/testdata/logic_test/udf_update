@@ -151,7 +151,9 @@ SELECT f_check1(0.5);
 statement error pq: failed to satisfy CHECK constraint \(x >= 1:::DECIMAL\)
 SELECT f_check1(0);
 
-# subtest generated_as_identity
+
+subtest generated_as_identity
+
 statement ok
 CREATE TABLE generated_as_id_t (
   a INT UNIQUE,

@@ -393,3 +393,159 @@ ORDER BY
 ----
 (a) foo
 (a) bar
+
+
+subtest implicit_record_types
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION imp_const_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')
+$$
+
+query TBT
+SELECT imp_const_tup(), (11,22,'b')::imp = imp_const_tup(), pg_typeof(imp_const_tup())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')::imp
+$$
+
+query TBT
+SELECT imp_const_cast(), (11,22,'b')::imp = imp_const_cast(), pg_typeof(imp_const_cast())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11 AS k, 22 AS a, 'b' AS b
+$$
+
+query TBT
+SELECT imp_const(), (11,22,'b')::imp = imp_const(), pg_typeof(imp_const())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_unnamed() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11, 22, 'b'
+$$
+
+query TBT
+SELECT imp_const_unnamed(), (11,22,'b')::imp = imp_const_unnamed(), pg_typeof(imp_const_unnamed())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup()) is omitted because we get different
+# results for different configurations, due to #58252.
+query TB
+SELECT imp_tup(), (1,2,'a')::imp = imp_tup()
+----
+(1,2,a)  true
+
+statement ok
+CREATE FUNCTION imp() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp
+$$
+
+query TBT
+SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
+----
+(1,2,a)  true  imp
+
+statement ok
+CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+  SELECT * FROM imp
+$$
+
+query TBT
+SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+----
+(1,2,a)  true  imp
+
+statement ok
+INSERT INTO imp VALUES (100, 200, 'z')
+
+statement ok
+CREATE FUNCTION imp_tup_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp ORDER BY b DESC
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations, due to #58252.
+query TB
+SELECT imp_tup_ordered(), (100,200,'z')::imp = imp_tup_ordered()
+----
+(100,200,z)  true
+
+statement ok
+CREATE FUNCTION imp_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp ORDER BY b DESC
+$$
+
+query TBT
+SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered(), pg_typeof(imp_ordered())
+----
+(100,200,z)  true  imp
+
+statement ok
+CREATE FUNCTION imp_identity(i imp) RETURNS imp LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+query TT
+SELECT imp_identity((1,2,'a')), imp_identity((1,2,'a')::imp)
+----
+(1,2,a)  (1,2,a)
+
+statement ok
+CREATE FUNCTION imp_a(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT (i).a
+$$
+
+query II
+SELECT imp_a((1,2,'a')), imp_a((1,2,'a')::imp)
+----
+2  2
+
+statement ok
+CREATE FUNCTION imp_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2, 3)
+$$
+
+query TBT
+SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
+----
+(1,2,3)  true  imp
+
+statement error return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2)
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a FROM imp
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b::INT FROM imp
+$$
+
+statement error pgcode 42P13 return type mismatch in function declared to return int
+CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT i
+$$
