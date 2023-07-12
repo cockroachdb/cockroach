@@ -183,7 +183,7 @@ message StreamIngestionProgress {
 
 message StreamReplicationDetails {
   // Key spans we are replicating
-  repeated roachpb.Span spans = 1;
+  repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
 
   // ID of the protected timestamp record that protects the above spans
   bytes protected_timestamp_record_id = 2 [
