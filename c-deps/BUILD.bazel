@@ -122,17 +122,20 @@ cmake(
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Windows",
+            "BUILD_GEOSOP": "OFF",
         },
         "@io_bazel_rules_go//go/platform:darwin": {
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Darwin",
+            "BUILD_GEOSOP": "OFF",
         },
         "//conditions:default": {
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
+            "BUILD_GEOSOP": "OFF",
         },
     }),
     data = select({
@@ -181,21 +184,21 @@ cmake(
     }),
     postfix_script = "mkdir -p libgeos/lib\n" + select({
         "//build/toolchains:is_cross_macos": (
-            "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "cp -L lib/libgeos.3.11.2.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
             "PREFIX=$($OTOOL -D $INSTALLDIR/lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)\n" +
-            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
+            "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.11.2.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
             "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n" +
-            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.8.1.dylib @rpath/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
+            "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.11.2.dylib @rpath/libgeos.3.11.2.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
         ),
-        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib",
+        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.11.2.dylib $INSTALLDIR/lib/libgeos.dylib",
         "@io_bazel_rules_go//go/platform:windows": "",
         "//build/toolchains:is_cross_linux": (
-            "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so\n" +
+            "cp -L lib/libgeos.so.3.11.2 $INSTALLDIR/lib/libgeos.so\n" +
             "patchelf --set-rpath /usr/local/lib/cockroach/ $INSTALLDIR/lib/libgeos_c.so\n" +
             "patchelf --set-soname libgeos.so $INSTALLDIR/lib/libgeos.so\n" +
-            "patchelf --replace-needed libgeos.so.3.8.1 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
+            "patchelf --replace-needed libgeos.so.3.11.2 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
         ),
-        "//conditions:default": "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so",
+        "//conditions:default": "cp -L lib/libgeos.so.3.11.2 $INSTALLDIR/lib/libgeos.so",
     }),
     targets = ["geos_c"],
     visibility = ["//visibility:public"],
