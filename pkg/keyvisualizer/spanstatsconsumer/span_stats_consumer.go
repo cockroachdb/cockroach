@@ -65,8 +65,7 @@ func (s *SpanStatsConsumer) UpdateBoundaries(ctx context.Context) error {
 func (s *SpanStatsConsumer) GetSamples(ctx context.Context) error {
 	mostRecentSampleTime, err := keyvisstorage.MostRecentSampleTime(ctx, s.ie)
 	if err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(
-			err, "read most recent sample time failed"))
+		return err
 	}
 
 	samplesRes, err := s.kvAccessor.GetSamples(ctx, mostRecentSampleTime)
@@ -74,12 +73,7 @@ func (s *SpanStatsConsumer) GetSamples(ctx context.Context) error {
 		return err
 	}
 
-	if err := keyvisstorage.WriteSamples(ctx, s.ie, samplesRes.Samples); err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(
-			err, "write samples failed"))
-	}
-
-	return nil
+	return keyvisstorage.WriteSamples(ctx, s.ie, samplesRes.Samples)
 }
 
 // maybeAggregateBoundaries aggregates boundaries if len(boundaries) <= max.
