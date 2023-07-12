@@ -109,23 +109,21 @@ func emitResolvedTimestamp(
 }
 
 // createProtectedTimestampRecord will create a record to protect the spans for
-// this changefeed at the resolved timestamp. The progress struct will be
-// updated to refer to this new protected timestamp record.
+// this changefeed at the resolved timestamp.
 func createProtectedTimestampRecord(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	jobID jobspb.JobID,
 	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
-	progress *jobspb.ChangefeedProgress,
 ) *ptpb.Record {
-	progress.ProtectedTimestampRecord = uuid.MakeV4()
+	ptsID := uuid.MakeV4()
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeTargetToProtect(targets)
 
-	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", progress.ProtectedTimestampRecord, resolved)
+	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
+		ptsID, int64(jobID), resolved, deprecatedSpansToProtect,
 		jobsprotectedts.Jobs, targetToProtect)
 }
 
