@@ -1,0 +1,242 @@
+subtest subquery
+
+statement ok
+CREATE TABLE sub_all (a INT);
+INSERT INTO sub_all VALUES (1), (2), (3), (4), (5), (6)
+
+statement ok
+CREATE TABLE sub_odd (a INT);
+INSERT INTO sub_odd VALUES (1), (3), (5)
+
+# UDF with an uncorrelated subquery.
+statement ok
+CREATE FUNCTION sub_max_odd() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE a = (SELECT max(a) FROM sub_odd)
+$$
+
+query II
+SELECT a, sub_max_odd() FROM sub_all WHERE a = sub_max_odd()
+----
+5  5
+
+# Subqueries inside and outside a UDF are supported.
+query I rowsort
+SELECT a FROM sub_all WHERE sub_max_odd() = (SELECT max(a) FROM sub_odd)
+----
+1
+2
+3
+4
+5
+6
+
+# UDF with subquery where ordering must be preserved.
+statement ok
+CREATE FUNCTION sub_max_odd_with_order_by() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE a = (SELECT a FROM sub_odd ORDER BY a DESC LIMIT 1)
+$$
+
+query I
+SELECT sub_max_odd_with_order_by()
+----
+5
+
+# UDF with a subquery correlated with an input parameter.
+statement ok
+CREATE FUNCTION sub_prev_odd(i INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE a = (SELECT max(a) FROM sub_odd WHERE a < i)
+$$
+
+query II rowsort
+SELECT a, sub_prev_odd(a) FROM sub_all
+----
+1  NULL
+2  1
+3  1
+4  3
+5  3
+6  5
+
+# UDF with a correlated subquery.
+statement ok
+CREATE FUNCTION sub_is_odd(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT true FROM sub_all
+  WHERE EXISTS (SELECT 1 FROM sub_odd where sub_odd.a = sub_all.a)
+    AND a = i
+$$
+
+query IB rowsort
+SELECT a, sub_is_odd(a) FROM sub_all WHERE sub_is_odd(a) OR sub_is_odd(a) IS NULL
+----
+1  true
+2  NULL
+3  true
+4  NULL
+5  true
+6  NULL
+
+# UDF with an uncorrelated EXISTS.
+statement ok
+CREATE FUNCTION sub_first() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE EXISTS (SELECT a FROM sub_odd) ORDER BY a LIMIT 1
+$$
+
+query II rowsort
+SELECT sub_first(), a FROM sub_all
+----
+1  1
+1  2
+1  3
+1  4
+1  5
+1  6
+
+# UDF with a correlated EXISTS.
+statement ok
+CREATE FUNCTION sub_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE CASE
+    WHEN a > 1 THEN EXISTS (SELECT 0 FROM sub_odd WHERE sub_odd.a = sub_all.a+1)
+    ELSE false
+  END
+  ORDER BY a LIMIT 1
+$$
+
+query II rowsort
+SELECT a, sub_two() FROM sub_all
+----
+1  2
+2  2
+3  2
+4  2
+5  2
+6  2
+
+subtest end
+
+subtest any_subquery
+
+statement ok
+CREATE TABLE any_tab (
+  a INT,
+  b INT
+)
+
+statement ok
+CREATE FUNCTION any_fn(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT i = ANY(SELECT a FROM any_tab)
+$$
+
+statement ok
+CREATE FUNCTION any_fn_lt(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT i < ANY(SELECT a FROM any_tab)
+$$
+
+statement ok
+CREATE FUNCTION any_fn_tuple(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT (i, j) = ANY(SELECT a, b FROM any_tab)
+$$
+
+# If the subquery returns no rows, the result should always be false.
+query BBB
+SELECT any_fn(1), any_fn(4), any_fn(NULL::INT)
+----
+false  false  false
+
+query BBB
+SELECT any_fn_lt(1), any_fn_lt(4), any_fn_lt(NULL::INT)
+----
+false  false  false
+
+query BBB
+SELECT any_fn_tuple(1, 10), any_fn_tuple(1, 20), any_fn_tuple(NULL::INT, NULL::INT)
+----
+false  false  false
+
+statement ok
+INSERT INTO any_tab VALUES (1, 10), (3, 30)
+
+query BBB
+SELECT any_fn(1), any_fn(4), any_fn(NULL::INT)
+----
+true  false  NULL
+
+query BBB
+SELECT any_fn_lt(1), any_fn_lt(4), any_fn_lt(NULL::INT)
+----
+true  false  NULL
+
+query BBB
+SELECT any_fn_tuple(1, 10), any_fn_tuple(1, 20), any_fn_tuple(NULL::INT, NULL::INT)
+----
+true  false  NULL
+
+statement ok
+INSERT INTO any_tab VALUES (NULL, NULL)
+
+query BBB
+SELECT any_fn(1), any_fn(4), any_fn(NULL::INT)
+----
+true  NULL  NULL
+
+query BBB
+SELECT any_fn_lt(1), any_fn_lt(4), any_fn_lt(NULL::INT)
+----
+true  NULL  NULL
+
+query BBB
+SELECT any_fn_tuple(1, 10), any_fn_tuple(1, 20), any_fn_tuple(NULL::INT, NULL::INT)
+----
+true  NULL  NULL
+
+statement ok
+CREATE FUNCTION any_fn2(i INT) RETURNS SETOF INT LANGUAGE SQL AS $$
+  SELECT b FROM (VALUES (1), (2), (3), (NULL)) v(b)
+  WHERE b = ANY (SELECT a FROM any_tab WHERE a <= i)
+$$
+
+query I
+SELECT any_fn2(2)
+----
+1
+
+query I rowsort
+SELECT any_fn2(3)
+----
+1
+3
+
+subtest end
+
+subtest all_subquery
+
+statement ok
+CREATE TABLE all_tab (a INT)
+
+statement ok
+CREATE FUNCTION all_fn(i INT) RETURNS BOOL LANGUAGE SQL AS $$
+  SELECT i = ALL(SELECT a FROM all_tab)
+$$
+
+# If the subquery returns no rows, the result should always be true.
+query BBB
+SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
+----
+true  true  true
+
+statement ok
+INSERT INTO all_tab VALUES (1), (1);
+
+query BBB
+SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
+----
+true  false  NULL
+
+statement ok
+INSERT INTO all_tab VALUES (NULL);
+
+query BBB
+SELECT all_fn(1), all_fn(2), all_fn(NULL::INT)
+----
+NULL  false  NULL
+
+subtest end

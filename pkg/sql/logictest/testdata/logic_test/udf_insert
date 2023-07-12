@@ -164,6 +164,8 @@ SELECT count(*) FROM t_multi WHERE a = 42;
 ----
 0
 
+subtest end
+
 subtest schema_changes
 
 statement ok
@@ -241,6 +243,8 @@ SELECT f_record(6);
 ----
 (6)
 
+subtest end
+
 subtest constraints
 
 statement ok
@@ -258,3 +262,5 @@ $$ LANGUAGE SQL;
 
 statement error pq: failed to satisfy CHECK constraint \(b > 1:::INT8\)
 SELECT f_checkb();
+
+subtest end

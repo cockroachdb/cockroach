@@ -98,6 +98,8 @@ SELECT * FROM t_ocdn
 6  6  2
 7  7  7
 
+subtest end
+
 subtest on_conflict_do_update
 
 statement ok
@@ -127,6 +129,8 @@ SELECT f_ocdu(1,4,6);
 statement error pq: duplicate key value violates unique constraint \"t_ocdu_b_key\"
 SELECT f_ocdu(2,4,6);
 
+
+subtest end
 
 subtest upsert
 
@@ -162,6 +166,8 @@ SELECT f_upsert_2vals(1,9,2,8);
 (1,9)
 (2,8)
 
+
+subtest end
 
 subtest constraints
 
@@ -230,3 +236,5 @@ SELECT f_check_colerr_vals(NULL, 'ab')
 
 statement error value too long for type CHAR\(3\)
 SELECT f_check_colerr_vals(NULL, 'abcd')
+
+subtest end
