@@ -261,7 +261,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 	// This test is too slow to complete under the race detector, sometimes.
 	skip.UnderRace(t)
-	skip.WithIssue(t, 96162)
 
 	defer TestingForceRandomizeDemoPorts()()
 
@@ -296,12 +295,13 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	defer c.Close(ctx)
 
 	require.NoError(t, c.generateCerts(ctx, certsDir))
+	require.NoError(t, c.Start(ctx))
 
 	// Also ensure the context gets canceled when the stopper
 	// terminates above.
-	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
-
-	require.NoError(t, c.Start(ctx))
+	var cancel func()
+	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
 
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,
@@ -310,12 +310,13 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		sqlConnCtx := clisqlclient.Context{}
 		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
 		defer func() {
-			if err := conn.Close(); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, conn.Close())
 		}()
 
 		// Create a table on each tenant to make sure that the tenants are separate.
-		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
+		require.NoError(t, conn.Exec(ctx, "CREATE TABLE a (a int PRIMARY KEY)"))
+
+		log.Infof(ctx, "test succeeded")
+		t.Log("test succeeded")
 	})
 }
