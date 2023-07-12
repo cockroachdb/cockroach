@@ -3140,3 +3140,46 @@ project
       └── aggregations
            └── const-agg [as=c2:2, outer=(2)]
                 └── c2:2
+
+# Regression test for #106678 - sort the output of a top-k operator when the
+# top-k ordering is a prefix of the required ordering.
+exec-ddl
+CREATE TABLE t106678 (a INT, b INT);
+----
+
+# There should be a segmented sort on top of the top-k operator.
+opt
+SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b;
+----
+sort (segmented)
+ ├── columns: a:1 b:2
+ ├── cardinality: [0 - 3]
+ ├── ordering: +1,+2
+ └── top-k
+      ├── columns: a:1 b:2
+      ├── internal-ordering: +1
+      ├── k: 3
+      ├── cardinality: [0 - 3]
+      ├── ordering: +1
+      └── scan t106678
+           └── columns: a:1 b:2
+
+# The top limit should become a top-k as well, since the inner top-k does not
+# provide an ordering on (a, b).
+opt
+SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b LIMIT 1
+----
+top-k
+ ├── columns: a:1 b:2
+ ├── internal-ordering: +1,+2
+ ├── k: 1
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── top-k
+      ├── columns: a:1 b:2
+      ├── internal-ordering: +1
+      ├── k: 3
+      ├── cardinality: [0 - 3]
+      └── scan t106678
+           └── columns: a:1 b:2
