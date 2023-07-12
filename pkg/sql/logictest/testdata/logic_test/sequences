@@ -2325,3 +2325,71 @@ SELECT nextval('customer_seq_check_cache_and_bounds_3')
 
 statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_3" \(12\)
 SELECT nextval('customer_seq_check_cache_and_bounds_3')
+
+subtest pg_sequence_last_value
+
+statement ok
+CREATE SEQUENCE seq_test_last_value START WITH 2 INCREMENT BY 3
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value'::regclass)
+----
+NULL
+
+query I
+SELECT nextval('seq_test_last_value')
+----
+2
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value'::regclass)
+----
+2
+
+query I
+SELECT nextval('seq_test_last_value')
+----
+5
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value'::regclass)
+----
+5
+
+statement ok
+CREATE SEQUENCE seq_test_last_value_cached START WITH 1 INCREMENT BY 2 CACHE 5
+
+query I
+SELECT pg_sequence_last_value('seq_test_last_value_cached'::regclass)
+----
+NULL
+
+query I
+SELECT nextval('seq_test_last_value_cached')
+----
+1
+
+# Matches PostgreSQL behavior for cached sequences.
+query I
+SELECT pg_sequence_last_value('seq_test_last_value_cached'::regclass)
+----
+9
+
+query I
+SELECT nextval('seq_test_last_value_cached')
+----
+3
+
+# Matches PostgreSQL behavior for cached sequences.
+query I
+SELECT pg_sequence_last_value('seq_test_last_value_cached'::regclass)
+----
+9
+
+statement error relation \"\[123456\]\" does not exist
+SELECT pg_sequence_last_value(123456)
+
+statement error pgcode 42809 \"test.public.multiple_seq_test_tbl\" is not a sequence
+SELECT pg_sequence_last_value('multiple_seq_test_tbl'::regclass)
+
+subtest end
