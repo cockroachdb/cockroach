@@ -347,6 +347,32 @@ func (p *planner) SetSequenceValueByID(
 	return nil
 }
 
+// GetLastSequenceValueByID implements the eval.SequenceOperators interface.
+func (p *planner) GetLastSequenceValueByID(
+	ctx context.Context, seqID uint32,
+) (val int64, wasCalled bool, err error) {
+	descriptor, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(seqID))
+	if err != nil {
+		return 0, false, err
+	}
+	seqName, err := p.getQualifiedTableName(ctx, descriptor)
+	if err != nil {
+		return 0, false, err
+	}
+	if !descriptor.IsSequence() {
+		return 0, false, sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
+	}
+	val, err = getSequenceValueFromDesc(ctx, p.txn, p.execCfg.Codec, descriptor)
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Before using for the first time, sequenceValue will be:
+	// opts.Start - opts.Increment.
+	opts := descriptor.GetSequenceOpts()
+	return val, val != opts.Start-opts.Increment, nil
+}
+
 // MakeSequenceKeyVal returns the key and value of a sequence being set
 // with newVal.
 func MakeSequenceKeyVal(

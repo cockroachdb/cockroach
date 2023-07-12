@@ -2428,6 +2428,7 @@ var builtinOidsArray = []string{
 	2455: `crdb_internal.repair_catalog_corruption(descriptor_id: int, corruption: string) -> bool`,
 	2456: `crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) -> jsonb`,
 	2457: `crdb_internal.request_job_execution_details(jobID: int) -> bool`,
+	2458: `pg_sequence_last_value(sequence_oid: oid) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

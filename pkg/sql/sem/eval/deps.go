@@ -568,6 +568,11 @@ type SequenceOperators interface {
 	// `newVal + seqOpts.Increment`.
 	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
 	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
+
+	// GetLastSequenceValueByID returns the last value returned by the sequence,
+	// not specific to any session. It also returns a flag to indicate if the
+	// sequence has been called before.
+	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
 // ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
