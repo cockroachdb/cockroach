@@ -215,7 +215,7 @@ func TestSimplifyGEOS(t *testing.T) {
 		{
 			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
 			tolerance: 3,
-			expected:  "POLYGON ((5 7, 16 11, 18 7, 2 5, 5 7))",
+			expected:  "POLYGON ((5 7, 2 5, 18 7, 16 11, 5 7))",
 		},
 		{
 			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
@@ -244,7 +244,7 @@ func TestSimplifyGEOS(t *testing.T) {
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
 
-			require.Equal(t, expected, ret)
+			requireGeomEqual(t, expected, ret)
 		})
 	}
 }
@@ -312,7 +312,7 @@ func TestIntersection(t *testing.T) {
 		b        geo.Geometry
 		expected geo.Geometry
 	}{
-		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))")},
+		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))")},
 		{geo.MustParseGeometry("LINESTRING EMPTY"), geo.MustParseGeometry("POINT(5 5)"), geo.MustParseGeometry("LINESTRING EMPTY")},
 		{geo.MustParseGeometry("POINT(5 5)"), geo.MustParseGeometry("LINESTRING EMPTY"), geo.MustParseGeometry("LINESTRING EMPTY")},
 		{rightRect, rightRectPoint, rightRectPoint},
@@ -323,7 +323,7 @@ func TestIntersection(t *testing.T) {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
 			g, err := Intersection(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			requireGeomEqual(t, tc.expected, g)
 		})
 	}
 
@@ -339,17 +339,17 @@ func TestUnion(t *testing.T) {
 		b        geo.Geometry
 		expected geo.Geometry
 	}{
-		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))")},
-		{rightRect, rightRectPoint, geo.MustParseGeometry("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))")},
+		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))")},
+		{rightRect, rightRectPoint, geo.MustParseGeometry("POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))")},
 		{rightRectPoint, rightRectPoint, rightRectPoint},
-		{leftRect, rightRect, geo.MustParseGeometry("POLYGON ((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))")},
+		{leftRect, rightRect, geo.MustParseGeometry("POLYGON ((-1 0, -1 1, 0 1, 1 1, 1 0, 0 0, -1 0))")},
 	}
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
 			g, err := Union(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			requireGeomEqual(t, tc.expected, g)
 		})
 	}
 
@@ -366,16 +366,16 @@ func TestSymDifference(t *testing.T) {
 		expected geo.Geometry
 	}{
 		{rightRect, rightRect, emptyRect},
-		{leftRect, rightRect, geo.MustParseGeometry("POLYGON((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))")},
-		{leftRect, overlappingRightRect, geo.MustParseGeometry("MULTIPOLYGON(((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0)), ((0 0, 0 1, 1 1, 1 0, 0 0)))")},
-		{rightRect, rightRectPoint, geo.MustParseGeometry("POLYGON((0 0, 0 1, 1 1, 1 0, 0 0))")},
+		{leftRect, rightRect, geo.MustParseGeometry("POLYGON ((-1 0, -1 1, 0 1, 1 1, 1 0, 0 0, -1 0))")},
+		{leftRect, overlappingRightRect, geo.MustParseGeometry("MULTIPOLYGON (((-1 0, -1 1, -0.1 1, -0.1 0, -1 0)), ((0 1, 1 1, 1 0, 0 0, 0 1)))")},
+		{rightRect, rightRectPoint, geo.MustParseGeometry("POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))")},
 	}
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
 			g, err := SymDifference(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			requireGeomEqual(t, tc.expected, g)
 		})
 	}
 
@@ -465,7 +465,7 @@ func TestUnaryUnion(t *testing.T) {
 		{
 			"multipolygon to dissolve",
 			geo.MustParseGeometry("MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))"),
-			geo.MustParseGeometry("MULTIPOLYGON(((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)),((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)))"),
+			geo.MustParseGeometry("MULTIPOLYGON (((-1 -2, -2 -2, -2 -1, -1 -1, -1 -2)), ((0 4, 4 4, 4 0, 0 0, 0 4), (2 1, 2 2, 1 2, 1 1, 2 1)))"),
 		},
 		{
 			"geometry collection of different types",
@@ -475,14 +475,14 @@ func TestUnaryUnion(t *testing.T) {
 		{
 			"geometry collection with duplicates",
 			geo.MustParseGeometry("GEOMETRYCOLLECTION(POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)),POLYGON((0 0, 1 0, 1 1, 0 1, 0 0)))"),
-			geo.MustParseGeometry("POLYGON((1 0,0 0,0 1,1 1,1 0))"),
+			geo.MustParseGeometry("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := UnaryUnion(tt.arg)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			requireGeomEqual(t, tt.want, got)
 		})
 	}
 }
