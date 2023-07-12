@@ -141,16 +141,16 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This is slow under race as it starts a 9-node cluster which
+	// This is slow under race and deadlock as it starts a 9-node cluster which
 	// has a very high simulated latency between each node.
 	skip.UnderRace(t)
-
-	skip.WithIssue(t, 102115, "flaky test")
+	skip.UnderDeadlock(t)
 
 	demoCtx := newDemoCtx()
 	// Set up an empty 9-node cluster with simulated latencies.
 	demoCtx.SimulateLatency = true
 	demoCtx.NumNodes = 9
+	demoCtx.Localities = defaultLocalities
 
 	certsDir := t.TempDir()
 
@@ -186,11 +186,21 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		return s.RunLocalSQL(ctx,
 			func(ctx context.Context, ie *sql.InternalExecutor) error {
 				_, err := ie.Exec(
-					ctx, "admin-user", nil,
+					ctx, "create-admin-user", nil,
 					fmt.Sprintf("CREATE USER %s WITH PASSWORD $1", adminUser),
 					adminPassword,
 				)
-				return err
+				if err != nil {
+					return err
+				}
+				_, err = ie.Exec(
+					ctx, "grant-admin-user", nil,
+					fmt.Sprintf("GRANT ADMIN TO %s", adminUser),
+				)
+				if err != nil {
+					return err
+				}
+				return nil
 			})
 	}))
 
