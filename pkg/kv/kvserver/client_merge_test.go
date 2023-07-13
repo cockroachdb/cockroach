@@ -4722,10 +4722,6 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 		t.Run(subtest.name, func(t *testing.T) {
 			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, dbName, "kv", numNodes)
 			defer tc.Stopper().Stop(ctx)
-			// We're controlling merge queue operation via
-			// `store.SetMergeQueueActive`, so enable the cluster setting here.
-			_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled=true`)
-			require.NoError(t, err)
 
 			store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(1)
 			require.Nil(t, err)
