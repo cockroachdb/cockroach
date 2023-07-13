@@ -19,9 +19,10 @@ import { TestStoreProvider } from "src/test-utils";
 import { StatementDiagnosticsReport } from "../../api";
 import moment from "moment-timezone";
 import { SortedTable } from "src/sortedtable";
+import { TimeScale } from "src/timeScaleDropdown";
 
 const activateDiagnosticsRef = { current: { showModalFor: jest.fn() } };
-const ts = {
+const ts: TimeScale = {
   windowSize: moment.duration(20, "day"),
   sampleSize: moment.duration(5, "minutes"),
   fixedWindowEnd: moment.utc("2023.01.5"),
