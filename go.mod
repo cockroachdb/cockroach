@@ -430,6 +430,6 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 // Take etcd-io/raft from the branch corresponding to release-23.1 in our fork.
-replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20230615130413-b160e656b5ae
+replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20230713102459-53e0e3664cb0
 
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
