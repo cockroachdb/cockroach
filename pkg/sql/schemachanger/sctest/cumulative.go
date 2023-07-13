@@ -1706,6 +1706,10 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 						},
 					}, true /*down level*/)
 					tdb := sqlutils.MakeSQLRunner(db)
+					// Use shorter liveness heartbeat interval and longer liveness ttl to
+					// avoid errors caused by refused connections.
+					tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'`)
+					tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.ttl = '120s'`)
 
 					// Wait for the schema changer job to hit desired stage, pause the job,
 					// perform a cluster upgrade, and resume the job.
