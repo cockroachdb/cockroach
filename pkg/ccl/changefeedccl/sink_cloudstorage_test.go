@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/stretchr/testify/require"
 )
@@ -747,4 +748,46 @@ func TestCloudStorageSink(t *testing.T) {
 			"w1\n",
 		}, slurpDir(t))
 	})
+
+	// Verify no goroutines leaked when using compression.
+	testWithAndWithoutAsyncFlushing(t, `no goroutine leaks with compression`, func(t *testing.T) {
+		before := opts.Compression
+		// Compression codecs include buffering that interferes with other tests,
+		// e.g. the bucketing test that configures very small flush sizes.
+		defer func() {
+			opts.Compression = before
+		}()
+
+		topic := makeTopic(`t1`)
+
+		for _, compression := range []string{"gzip", "zstd"} {
+			opts.Compression = compression
+			t.Run("compress="+stringOrDefault(compression, "none"), func(t *testing.T) {
+				timestampOracle := explicitTimestampOracle(ts(1))
+				s, err := makeCloudStorageSink(
+					ctx, sinkURI(t, unlimitedFileSize), 1, settings, opts,
+					timestampOracle, externalStorageFromURI, user, nil, nil,
+				)
+				require.NoError(t, err)
+
+				rng, _ := randutil.NewPseudoRand()
+				data := randutil.RandBytes(rng, 1024)
+				// Write few megs worth of data.
+				for n := 0; n < 20; n++ {
+					eventTS := ts(int64(n + 1))
+					require.NoError(t, s.EmitRow(ctx, topic, noKey, data, eventTS, eventTS, zeroAlloc))
+				}
+
+				// Close the sink.  That's it -- we rely on leaktest detector to determine
+				// if the underlying compressor leaked go routines.
+				require.NoError(t, s.Close())
+			})
+		}
+	})
+}
+
+type explicitTimestampOracle hlc.Timestamp
+
+func (o explicitTimestampOracle) inclusiveLowerBoundTS() hlc.Timestamp {
+	return hlc.Timestamp(o)
 }

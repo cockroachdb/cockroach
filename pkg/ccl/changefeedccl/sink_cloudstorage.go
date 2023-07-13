@@ -816,9 +816,27 @@ func (f *cloudStorageSinkFile) flushToStorage(
 }
 
 // Close implements the Sink interface.
-func (s *cloudStorageSink) Close() error {
+func (s *cloudStorageSink) Close() (err error) {
+	// Close any codecs we might have in use and collect the first error if any
+	// (other errors are ignored because they are likely going to be the same ones,
+	// though based on the current compression implementation, the close method
+	// should not return an error).
+	// Codecs need to be closed because of the klauspost compression library implementation
+	// details where it spins up go routines to perform compression in parallel.
+	// Those go routines are cleaned up when the compression codec is closed.
+	s.files.Ascend(func(i btree.Item) (wantMore bool) {
+		f := i.(*cloudStorageSinkFile)
+		if f.codec != nil {
+			cErr := f.codec.Close()
+			if err == nil {
+				err = cErr
+			}
+		}
+		return true
+	})
 	s.files = nil
-	err := s.waitAsyncFlush(context.Background())
+
+	err = errors.CombineErrors(err, s.waitAsyncFlush(context.Background()))
 	close(s.asyncFlushCh) // signal flusher to exit.
 	err = errors.CombineErrors(err, s.flushGroup.Wait())
 	return errors.CombineErrors(err, s.es.Close())
