@@ -624,10 +624,10 @@ type lockTable interface {
 	// evaluation of this request. It adds the lock and enqueues this requester
 	// in its wait-queue. It is required that request evaluation discover such
 	// locks before acquiring its own locks, since the request needs to repeat
-	// ScanAndEnqueue. When consultFinalizedTxnCache=true, and the transaction
-	// holding the lock is finalized, the lock is not added to the lock table
-	// and instead tracked in the list of locks to resolve in the
-	// lockTableGuard.
+	// ScanAndEnqueue. When consultTxnStatusCache=true, and the transaction
+	// holding the lock is known to be pushed or finalized, the lock is not added
+	// to the lock table and instead tracked in the list of locks to resolve in
+	// the lockTableGuard.
 	//
 	// The lease sequence is used to detect lease changes between the when
 	// request that found the lock started evaluating and when the discovered
@@ -644,7 +644,7 @@ type lockTable interface {
 	// true) or whether it was ignored because the lockTable is currently
 	// disabled (false).
 	AddDiscoveredLock(
-		intent *roachpb.Intent, seq roachpb.LeaseSequence, consultFinalizedTxnCache bool,
+		intent *roachpb.Intent, seq roachpb.LeaseSequence, consultTxnStatusCache bool,
 		guard lockTableGuard) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
@@ -718,11 +718,12 @@ type lockTable interface {
 	//     txn.WriteTimestamp.
 	UpdateLocks(*roachpb.LockUpdate) error
 
-	// TransactionIsFinalized informs the lock table that a transaction is
-	// finalized. This is used by the lock table in a best-effort manner to avoid
-	// waiting on locks of finalized transactions and telling the caller via
-	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
-	TransactionIsFinalized(*roachpb.Transaction)
+	// PushedTransactionUpdated informs the lock table that a transaction has been
+	// pushed and is either finalized or has been moved to a higher timestamp.
+	// This is used by the lock table in a best-effort manner to avoid waiting on
+	// locks of finalized or pushed transactions and telling the caller via
+	// lockTableGuard.ResolveBeforeScanning to resolve a batch of intents.
+	PushedTransactionUpdated(*roachpb.Transaction)
 
 	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
 	QueryLockTableState(span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
