@@ -40,6 +40,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util",
+        "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
@@ -49,6 +50,7 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
