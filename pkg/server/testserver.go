@@ -298,7 +298,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TempStorageConfig.Settings = st
 	}
 
-	cfg.DisableDefaultTestTenant = params.DefaultTestTenant == base.TestTenantDisabled
+	// TODO(#76378): Review this assignment to ensure it does not interfere with randomization.
+	cfg.DisableDefaultTestTenant = params.DefaultTestTenant.TestTenantAlwaysDisabled()
 
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
@@ -551,7 +552,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 
 	// If the flag has been set to disable the default test tenant, don't start
 	// it here.
-	if ts.params.DefaultTestTenant == base.TestTenantDisabled || ts.cfg.DisableDefaultTestTenant {
+	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() || ts.cfg.DisableDefaultTestTenant {
 		return nil
 	}
 

@@ -1384,11 +1384,15 @@ func (t *logicTest) newCluster(
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
 	defaultTestTenant := t.cfg.DefaultTestTenant
-	if defaultTestTenant == base.TestTenantEnabled {
+	if defaultTestTenant.TestTenantAlwaysEnabled() {
 		// If the test tenant is explicitly enabled then `logic test` will handle
 		// the creation of a configured test tenant, thus for this case we disable
 		// the implicit creation of the default test tenant.
-		defaultTestTenant = base.TestTenantDisabled
+		//
+		// TODO(#76378): This conditional is naive - what does it expect to do
+		// when the probabilistic behavior is enabled? Investigate what this
+		// was built for, and use a better conditional instead.
+		defaultTestTenant = base.DeprecatedTestTenantDisabled
 	}
 
 	params := base.TestClusterArgs{
@@ -1419,9 +1423,13 @@ func (t *logicTest) newCluster(
 	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
-	if cfg.DefaultTestTenant == base.TestTenantEnabled {
+	if cfg.DefaultTestTenant.TestTenantAlwaysEnabled() {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
+		//
+		// TODO(#76378): This conditional is naive - what does it expect to do
+		// if probabilistic configuration is requested? In that case
+		// if a secondary tenant is created, it won't set the proper replication mode.
 		params.ReplicationMode = base.ReplicationAuto
 	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
@@ -1489,7 +1497,12 @@ func (t *logicTest) newCluster(
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.DefaultTestTenant == base.TestTenantEnabled {
+	if cfg.DefaultTestTenant.TestTenantAlwaysEnabled() {
+		// TODO(#76378): What's going here? It looks like this code is
+		// trying to "take over" the conditional decision made by
+		// serverutils.StartServer. Is that what we want? Also this code
+		// seems redundant with what 'cockroach demo' does. Maybe we want
+		// to share the code?
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			settings := makeClusterSettings(false /* forSystemTenant */)
@@ -1552,7 +1565,7 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	if cfg.DefaultTestTenant == base.TestTenantEnabled || t.cluster.StartedDefaultTestTenant() {
+	if cfg.DefaultTestTenant.TestTenantAlwaysEnabled() || t.cluster.StartedDefaultTestTenant() {
 
 		conn := t.cluster.StorageClusterConn()
 		clusterSettings := toa.clusterSettings
@@ -2975,7 +2988,10 @@ func (t *logicTest) processSubtest(
 			t.setUser(fields[1], nodeIdx)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
-			if t.cfg.DefaultTestTenant == base.TestTenantEnabled && strings.HasPrefix(fields[1], "host-cluster-") {
+			//
+			// TODO(#76378): It seems the conditional should include `||
+			// t.cluster.StartedDefaultTestTenant()` here.
+			if t.cfg.DefaultTestTenant.TestTenantAlwaysEnabled() && strings.HasPrefix(fields[1], "host-cluster-") {
 				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}

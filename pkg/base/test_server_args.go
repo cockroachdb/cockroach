@@ -217,25 +217,130 @@ type TestClusterArgs struct {
 
 // DefaultTestTenantOptions specifies the conditions under which the default
 // test tenant will be started.
-type DefaultTestTenantOptions int
+type DefaultTestTenantOptions struct {
+	testBehavior testBehavior
+
+	// Whether the testserver will allow or block attempts to create
+	// additional secondary tenants. (Default is to block.)
+	allowAdditionalTenants bool
+
+	// If test tenant is disabled, issue and label to link in log message.
+	issueNum int
+	label    string
+}
+
+type testBehavior int8
 
 const (
+	ttProb testBehavior = iota
+	ttEnabled
+	ttDisabled
+)
+
+var (
 	// TestTenantProbabilisticOnly will start the default test tenant on a
 	// probabilistic basis. It will also prevent the starting of additional
 	// tenants by raising an error if it is attempted.
 	// This is the default behavior.
-	TestTenantProbabilisticOnly DefaultTestTenantOptions = iota
+	TestTenantProbabilisticOnly = DefaultTestTenantOptions{testBehavior: ttProb, allowAdditionalTenants: false}
 	// TestTenantProbabilistic will start the default test tenant on a
 	// probabilistic basis. It allows the starting of additional tenants.
-	TestTenantProbabilistic
-	// TestTenantEnabled will always start the default test tenant. This is useful
+	TestTenantProbabilistic = DefaultTestTenantOptions{testBehavior: ttProb, allowAdditionalTenants: true}
+	// TestTenantAlwaysEnabled will always start the default test tenant. This is useful
 	// for quickly verifying that a test works with tenants enabled.
-	TestTenantEnabled
-	// TestTenantDisabled will disable the implicit starting of the default test
-	// tenant. This is useful for tests that want to explicitly control the
-	// starting of tenants, or currently don't work with tenants.
-	TestTenantDisabled
+	//
+	// Note: this value should not be used for checked in test code
+	// unless there is a good reason to do so. We want the common case
+	// to use TestTenantProbabilistic or TestTenantProbabilisticOnly.
+	TestTenantAlwaysEnabled = DefaultTestTenantOptions{testBehavior: ttEnabled, allowAdditionalTenants: true}
+
+	// TestTenantEnabled will disappear in the next commit.
+	TestTenantEnabled = TestTenantAlwaysEnabled
+
+	// TODOTestTenantDisabled should not be used anymore. Use the
+	// other values instead.
+	// TODO(#76378): Review existing tests and use the proper value instead.
+	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
+
+	// TestTenantDisabled will disappear in the next commit.
+	TestTenantDisabled = TODOTestTenantDisabled
+
+	// TestControlsTenantsExplicitly is used when the test wants to
+	// manage its own secondary tenants and tenant servers.
+	TestControlsTenantsExplicitly = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
+
+	// TestIsSpecificToStorageLayerAndNeedsASystemTenant is used when
+	// the test needs to be given access to a SQL conn to a tenant with
+	// sufficient capabilities to access all the storage layer.
+	// (Initially that'd be "the" system tenant.)
+	TestIsSpecificToStorageLayerAndNeedsASystemTenant = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
+
+	// TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs is used when
+	// a test wants to use a single set of testing knobs for both the
+	// storage layer and the SQL layer and for simplicity of the test
+	// code we want to give that test a simplified environment.
+	//
+	// Note: it is debatable whether the gain in test code simplicity is
+	// worth the cost of never running that test with the virtualization
+	// layer active.
+	TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs = TestIsSpecificToStorageLayerAndNeedsASystemTenant
+
+	// InternalNonDefaultDecision is a sentinel value used inside a
+	// mechanism in serverutils. Should not be used by tests directly.
+	//
+	// TODO(#76378): Investigate how we can remove the need for this
+	// sentinel value.
+	InternalNonDefaultDecision = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
 )
+
+func (do DefaultTestTenantOptions) AllowAdditionalTenants() bool {
+	return do.allowAdditionalTenants
+}
+
+func (do DefaultTestTenantOptions) TestTenantAlwaysEnabled() bool {
+	return do.testBehavior == ttEnabled
+}
+
+func (do DefaultTestTenantOptions) TestTenantAlwaysDisabled() bool {
+	return do.testBehavior == ttDisabled
+}
+
+func (do DefaultTestTenantOptions) IssueRef() (int, string) {
+	return do.issueNum, do.label
+}
+
+// TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet can be used
+// to disable virtualization because the test doesn't appear to be compatible
+// with it, and we don't understand it yet.
+// It should link to a github issue with label C-test-failure.
+func TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(
+	issueNumber int,
+) DefaultTestTenantOptions {
+	return DefaultTestTenantOptions{
+		testBehavior:           ttDisabled,
+		allowAdditionalTenants: true,
+		issueNum:               issueNumber,
+		label:                  "C-test-failure",
+	}
+}
+
+// TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet can be
+// used to disable virtualization because the test exercises a feature
+// known not to work with virtualization enabled yet but we wish it to
+// eventually.
+//
+// It should link to a github issue with label C-bug
+// and the issue should be linked to an epic under INI-213 or INI-214.
+func TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(
+	issueNumber int,
+) DefaultTestTenantOptions {
+	return DefaultTestTenantOptions{
+		testBehavior:           ttDisabled,
+		allowAdditionalTenants: true,
+		issueNum:               issueNumber,
+		label:                  "C-bug",
+	}
+}
 
 var (
 	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
