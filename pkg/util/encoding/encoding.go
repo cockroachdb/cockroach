@@ -742,6 +742,12 @@ func DecodeBytesAscending(b []byte, r []byte) ([]byte, []byte, error) {
 	return decodeBytesInternal(b, r, ascendingBytesEscapes, true /* expectMarker */, false /* deepCopy */)
 }
 
+// ValidateDecodeBytesAscending is like DecodeBytesAscending, but discards the
+// decoded bytes. The remainder of the input buffer is returned on success.
+func ValidateDecodeBytesAscending(b []byte) ([]byte, error) {
+	return validateDecodeBytesInternal(b, ascendingBytesEscapes, true /* expectMarker */)
+}
+
 // DecodeBytesAscendingDeepCopy is the same as DecodeBytesAscending, but the
 // decoded []byte will never alias memory of b.
 func DecodeBytesAscendingDeepCopy(b []byte, r []byte) ([]byte, []byte, error) {
@@ -802,6 +808,37 @@ func decodeBytesInternal(
 
 		r = append(r, b[:i]...)
 		r = append(r, e.escapedFF)
+		b = b[i+2:]
+	}
+}
+
+// validateDecodeBytesInternal decodes an encoded []byte value from b,
+// discarding the decoded value. The remainder of b is returned on success, or a
+// non-nil error otherwise.
+func validateDecodeBytesInternal(b []byte, e escapes, expectMarker bool) ([]byte, error) {
+	if expectMarker {
+		if len(b) == 0 || b[0] != e.marker {
+			return nil, errors.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
+		}
+		b = b[1:]
+	}
+
+	for {
+		i := bytes.IndexByte(b, e.escape)
+		if i == -1 {
+			return nil, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
+		}
+		if i+1 >= len(b) {
+			return nil, errors.Errorf("malformed escape in buffer %#x", b)
+		}
+		v := b[i+1]
+		if v == e.escapedTerm {
+			return b[i+2:], nil
+		}
+
+		if v != e.escaped00 {
+			return nil, errors.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
+		}
 		b = b[i+2:]
 	}
 }

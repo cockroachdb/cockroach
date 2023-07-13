@@ -533,6 +533,34 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 	return lockedKey, err
 }
 
+// ValidateLockTableSingleKey is like DecodeLockTableSingleKey, except that it
+// discards the decoded key. It returns nil iff the provided key is a valid
+// single-key lock table key.
+func ValidateLockTableSingleKey(key roachpb.Key) error {
+	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
+		return errors.Errorf("key %q does not have %q prefix",
+			key, LocalRangeLockTablePrefix)
+	}
+	// Cut the prefix.
+	b := key[len(LocalRangeLockTablePrefix):]
+	// Check that it's a single-key lock.
+	if !bytes.HasPrefix(b, LockTableSingleKeyInfix) {
+		return errors.Errorf("key %q is not for a single-key lock", key)
+	}
+	// Cut the prefix.
+	b = b[len(LockTableSingleKeyInfix):]
+	var err error
+	b, err = encoding.ValidateDecodeBytesAscending(b)
+	if err != nil {
+		return err
+	}
+	if len(b) != 0 {
+		return errors.Errorf("key %q has left-over bytes %d after decoding",
+			key, len(b))
+	}
+	return nil
+}
+
 // IsLocal performs a cheap check that returns true iff a range-local key is
 // passed, that is, a key for which `Addr` would return a non-identical RKey
 // (or a decoding error).

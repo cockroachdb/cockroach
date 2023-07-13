@@ -377,10 +377,11 @@ func TestEncodeDecodeUvarintDescending(t *testing.T) {
 // TestDecodeInvalid tests that decoding invalid bytes panics.
 func TestDecodeInvalid(t *testing.T) {
 	tests := []struct {
-		name    string             // name printed with errors.
-		buf     []byte             // buf contains an invalid uvarint to decode.
-		pattern string             // pattern matches the panic string.
-		decode  func([]byte) error // decode is called with buf.
+		name     string             // name printed with errors.
+		buf      []byte             // buf contains an invalid uvarint to decode.
+		pattern  string             // pattern matches the panic string.
+		decode   func([]byte) error // decode is called with buf.
+		validate func([]byte) error // validate is called with buf; may be nil
 	}{
 		{
 			name:    "DecodeVarint, overflows int64",
@@ -389,40 +390,46 @@ func TestDecodeInvalid(t *testing.T) {
 			decode:  func(b []byte) error { _, _, err := DecodeVarintAscending(b); return err },
 		},
 		{
-			name:    "Bytes, no marker",
-			buf:     []byte{'a'},
-			pattern: "did not find marker",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, no marker",
+			buf:      []byte{'a'},
+			pattern:  "did not find marker",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, no terminator",
-			buf:     []byte{bytesMarker, 'a'},
-			pattern: "did not find terminator",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, no terminator",
+			buf:      []byte{bytesMarker, 'a'},
+			pattern:  "did not find terminator",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, malformed escape",
-			buf:     []byte{bytesMarker, 'a', 0x00},
-			pattern: "malformed escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, malformed escape",
+			buf:      []byte{bytesMarker, 'a', 0x00},
+			pattern:  "malformed escape",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, invalid escape 1",
-			buf:     []byte{bytesMarker, 'a', 0x00, 0x00},
-			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, invalid escape 1",
+			buf:      []byte{bytesMarker, 'a', 0x00, 0x00},
+			pattern:  "unknown escape",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "Bytes, invalid escape 2",
-			buf:     []byte{bytesMarker, 'a', 0x00, 0x02},
-			pattern: "unknown escape",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "Bytes, invalid escape 2",
+			buf:      []byte{bytesMarker, 'a', 0x00, 0x02},
+			pattern:  "unknown escape",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
-			name:    "BytesDescending, no marker",
-			buf:     []byte{'a'},
-			pattern: "did not find marker",
-			decode:  func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			name:     "BytesDescending, no marker",
+			buf:      []byte{'a'},
+			pattern:  "did not find marker",
+			decode:   func(b []byte) error { _, _, err := DecodeBytesAscending(b, nil); return err },
+			validate: func(b []byte) error { _, err := ValidateDecodeBytesAscending(b); return err },
 		},
 		{
 			name:    "BytesDescending, no terminator",
@@ -465,6 +472,12 @@ func TestDecodeInvalid(t *testing.T) {
 		err := test.decode(test.buf)
 		if !regexp.MustCompile(test.pattern).MatchString(err.Error()) {
 			t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, err)
+		}
+		if test.validate != nil {
+			err := test.validate(test.buf)
+			if !regexp.MustCompile(test.pattern).MatchString(err.Error()) {
+				t.Errorf("%q, pattern %q doesn't match %q", test.name, test.pattern, err)
+			}
 		}
 	}
 }
@@ -520,6 +533,11 @@ func TestEncodeDecodeBytesAscending(t *testing.T) {
 			t.Errorf("expected encoded size %d, got %d", expSize, len(enc))
 		}
 
+		if _, err := ValidateDecodeBytesAscending(enc); err != nil {
+			t.Error(err)
+			continue
+		}
+
 		remainder, dec, err := DecodeBytesAscending(enc, nil)
 		if err != nil {
 			t.Error(err)
@@ -535,12 +553,17 @@ func TestEncodeDecodeBytesAscending(t *testing.T) {
 		testPeekLength(t, enc)
 
 		enc = append(enc, []byte("remainder")...)
-		remainder, _, err = DecodeBytesAscending(enc, nil)
-		if err != nil {
+
+		if remainder, err = ValidateDecodeBytesAscending(enc); err != nil {
 			t.Error(err)
 			continue
+		} else if string(remainder) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
-		if string(remainder) != "remainder" {
+		if remainder, _, err = DecodeBytesAscending(enc, nil); err != nil {
+			t.Error(err)
+			continue
+		} else if string(remainder) != "remainder" {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 	}

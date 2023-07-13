@@ -769,6 +769,7 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 			k, err := DecodeLockTableSingleKey(ltKey)
 			require.NoError(t, err)
 			require.Equal(t, test.key, k)
+			require.NoError(t, ValidateLockTableSingleKey(ltKey))
 		})
 	}
 }
@@ -793,6 +794,7 @@ func TestLockTableSingleKeyNext_Equivalent(t *testing.T) {
 
 			k, err := DecodeLockTableSingleKey(got)
 			require.NoError(t, err)
+			require.NoError(t, ValidateLockTableSingleKey(got))
 			require.Equal(t, next, k)
 		})
 	}
