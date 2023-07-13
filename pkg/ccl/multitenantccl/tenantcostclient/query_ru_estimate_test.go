@@ -130,6 +130,10 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 			sql:   "SELECT 'deadbeef' FROM generate_series(1, 50000)",
 			count: 10,
 		},
+		{ // Delete (this also ensures that two runs work with the same dataset)
+			sql:   "DELETE FROM abcd WHERE true",
+			count: 1,
+		},
 	}
 
 	var err error
@@ -191,12 +195,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	// Check the estimated RU aggregate for all the queries against the actual
 	// measured RU consumption for the tenant.
 	tenantMeasuredRUs = getTenantRUs() - tenantStartRUs
-	// Usually, the difference is within 0.25 delta, but in rare cases it can be
-	// outside of that delta (when ran on the gceworker, it was outside the 0.5
-	// delta within 6 minutes of stressing), so we allow for generous 0.75
-	// delta. This still provides a good enough sanity check for the RU
-	// estimation.
-	const deltaFraction = 0.75
+	const deltaFraction = 0.05
 	allowedDelta := tenantMeasuredRUs * deltaFraction
 	require.InDeltaf(t, tenantMeasuredRUs, tenantEstimatedRUs, allowedDelta,
 		"estimated RUs (%d) were not within %f RUs of the expected value (%f)",
