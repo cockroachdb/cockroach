@@ -109,20 +109,10 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	if pErr != nil {
 		// A forced error was set (i.e. we did not apply the proposal,
 		// for instance due to its log position).
+		cmd.response.Err = pErr
 		switch cmd.Rejection {
 		case kvserverbase.ProposalRejectionPermanent:
-			cmd.response.Err = pErr
 		case kvserverbase.ProposalRejectionIllegalLeaseIndex:
-			if useReproposalsV2 {
-				// If we're using V2 reproposals, this proposal is actually going to
-				// be fully rejected, but the client won't be listening to it at that
-				// point any more. But we should set the error. (This ends up being
-				// inconsequential but it's the right thing to do).
-				//
-				// TODO(tbg): once useReproposalsV2 is baked in, set the error unconditionally
-				// above the `switch`.
-				cmd.response.Err = pErr
-			}
 			// Reset the error as it's now going to be determined by the outcome of
 			// reproposing (or not); note that tryReproposeWithNewLeaseIndex will
 			// return `nil` if the entry is not eligible for reproposals.
@@ -234,19 +224,14 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				// For proposed simplifications, see:
 				// https://github.com/cockroachdb/cockroach/issues/97633
 				log.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
+				// TODO(repl): we're replacing an error (illegal LAI) here with another error.
+				// A pattern where the error is assigned exactly once would be simpler to
+				// reason about. In particular, we want to make sure we never replace an
+				// ambiguous error with an unambiguous one (at least if the resulting
+				// error will reach the proposer, such as can be the case here, though
+				// the error we're replacing is also definite so it's ok).
 				cmd.response.Err = pErr
 				// Fall through.
-			} else if !useReproposalsV2 {
-				// Unbind the entry's local proposal because we just succeeded
-				// in reproposing it and we don't want to acknowledge the client
-				// yet.
-				//
-				// NB: in v2, reproposing already moved the waiting caller over to a new
-				// proposal, and by design we don't change the "Localness" of the old
-				// proposal mid-application but instead let it fail as a local proposal
-				// (which signals into an throwaway channel).
-				cmd.proposal = nil
-				return
 			}
 		default:
 			panic("unexpected")
