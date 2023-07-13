@@ -4146,3 +4146,25 @@ func (s *statusServer) GetJobProfilerExecutionDetails(
 	}
 	return &serverpb.GetJobProfilerExecutionDetailResponse{Data: data}, nil
 }
+
+// ListJobProfilerExecutionDetails lists all the stored execution details for a
+// given job ID.
+func (s *statusServer) ListJobProfilerExecutionDetails(
+	ctx context.Context, req *serverpb.ListJobProfilerExecutionDetailsRequest,
+) (*serverpb.ListJobProfilerExecutionDetailsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	// TODO(adityamaru): Figure out the correct privileges required to get execution details.
+	_, err := s.privilegeChecker.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	jobID := jobspb.JobID(req.JobId)
+	execCfg := s.sqlServer.execCfg
+	eb := sql.MakeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID)
+	files, err := eb.ListExecutionDetailFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.ListJobProfilerExecutionDetailsResponse{Files: files}, nil
+}

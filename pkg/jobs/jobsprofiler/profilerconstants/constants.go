@@ -42,15 +42,15 @@ func MakeNodeProcessorProgressInfoKey(flowID string, instanceID string, processo
 const ExecutionDetailsChunkKeyPrefix = "~profiler/"
 
 // MakeProfilerExecutionDetailsChunkKeyPrefix is the prefix of the info key used to store all
-// chunks of a job's execution details for a given filename.
+// chunks of a job's execution details.
 func MakeProfilerExecutionDetailsChunkKeyPrefix(filename string) string {
 	return fmt.Sprintf("%s%s", ExecutionDetailsChunkKeyPrefix, filename)
 }
 
-// MakeProfilerBundleChunkKey is the info key used to store a chunk of a job's
-// execution details for a given filename.
-func MakeProfilerBundleChunkKey(filename string, chunkCounter int) string {
-	return fmt.Sprintf("%s%s#%04d", ExecutionDetailsChunkKeyPrefix, filename, chunkCounter)
+// MakeProfilerExecutionDetailsChunkKey is the info key used to store a chunk of
+// a job's execution details.
+func MakeProfilerExecutionDetailsChunkKey(chunkName string) string {
+	return fmt.Sprintf("%s%s", ExecutionDetailsChunkKeyPrefix, chunkName)
 }
 
 // GetNodeProcessorProgressInfoKeyParts deconstructs the passed in info key and
