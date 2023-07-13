@@ -428,7 +428,11 @@ func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int
 	c.SrcTenantSQL.Exec(t, "ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series($1::INT, $2::INT, $3::INT))",
 		rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange)
 	c.SrcTenantSQL.Exec(t, "ALTER TABLE d.scattered SCATTER")
-	time.Sleep(5 * time.Second)
+	var leaseHolderCount int
+	c.SrcTenantSQL.QueryRow(t,
+		`SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM DATABASE d WITH DETAILS]`).
+		Scan(&leaseHolderCount)
+	require.Greater(t, leaseHolderCount, 0)
 }
 
 var defaultSrcClusterSetting = map[string]string{
