@@ -292,7 +292,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
-	msstw, err := storage.NewMultiSSTWriter(ctx, kvSS.CreateNewSSTWriter, keyRanges)
+	msstw, err := storage.NewMultiSSTWriter(ctx, kvSS.CreateNewSSTWriter, keyRanges, 128<<20)
 	if err != nil {
 		return noSnap, err
 	}
