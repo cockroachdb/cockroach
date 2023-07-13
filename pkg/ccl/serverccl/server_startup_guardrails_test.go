@@ -86,7 +86,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 				// Disable the default test tenant, since we create one explicitly
 				// below.
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Settings:          storageSettings,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{

@@ -64,7 +64,7 @@ func TestTenantUpgrade(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Settings:          settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -226,7 +226,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant here.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Settings:          settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{

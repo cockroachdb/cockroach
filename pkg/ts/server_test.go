@@ -300,7 +300,7 @@ func TestServerQueryTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableTimeSeriesMaintenanceQueue: true,

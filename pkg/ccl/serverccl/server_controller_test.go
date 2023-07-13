@@ -63,18 +63,18 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 	}()
 
 	tc := serverutils.StartNewTestCluster(t, nodeCount, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled},
+		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				ExternalIODir:     dirs[0],
 			},
 			1: {
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				ExternalIODir:     dirs[1],
 			},
 			2: {
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				ExternalIODir:     dirs[2],
 			},
 		},
@@ -135,7 +135,7 @@ func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings:          st,
 		TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(st, specialSize),
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -158,7 +158,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -334,7 +334,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer s.Stopper().Stop(ctx)
 
 	_, sql, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
@@ -420,7 +420,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		}})
 	defer func() {
 		t.Logf("stopping test cluster")
@@ -472,7 +472,7 @@ func TestServerStartStop(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -635,7 +635,7 @@ func TestServiceShutdownUsesGracefulDrain(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

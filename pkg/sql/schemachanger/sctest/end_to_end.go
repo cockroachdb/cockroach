@@ -75,7 +75,7 @@ func SingleNodeCluster(
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
 			JobsTestingKnobs:            newJobsKnobs(),
@@ -102,7 +102,7 @@ func SingleNodeMixedCluster(
 	}
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				BootstrapVersionKeyOverride:    targetVersionKey,

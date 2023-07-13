@@ -70,7 +70,7 @@ func TestRangeFeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	host, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	host, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer host.Stopper().Stop(ctx)
 
 	tenant, tenantSQL := serverutils.StartTenant(t, host, base.TestTenantArgs{
