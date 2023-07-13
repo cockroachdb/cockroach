@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	jobs "github.com/cockroachdb/cockroach/pkg/jobs"
 	username "github.com/cockroachdb/cockroach/pkg/security/username"
 	cluster "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	catalog "github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -515,17 +516,17 @@ func (m *MockBackfiller) EXPECT() *MockBackfillerMockRecorder {
 }
 
 // BackfillIndexes mocks base method.
-func (m *MockBackfiller) BackfillIndexes(arg0 context.Context, arg1 scexec.BackfillProgress, arg2 scexec.BackfillerProgressWriter, arg3 catalog.TableDescriptor) error {
+func (m *MockBackfiller) BackfillIndexes(arg0 context.Context, arg1 scexec.BackfillProgress, arg2 scexec.BackfillerProgressWriter, arg3 *jobs.Job, arg4 catalog.TableDescriptor) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BackfillIndexes", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "BackfillIndexes", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // BackfillIndexes indicates an expected call of BackfillIndexes.
-func (mr *MockBackfillerMockRecorder) BackfillIndexes(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockBackfillerMockRecorder) BackfillIndexes(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillIndexes", reflect.TypeOf((*MockBackfiller)(nil).BackfillIndexes), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillIndexes", reflect.TypeOf((*MockBackfiller)(nil).BackfillIndexes), arg0, arg1, arg2, arg3, arg4)
 }
 
 // MaybePrepareDestIndexesForBackfill mocks base method.
@@ -567,17 +568,17 @@ func (m *MockMerger) EXPECT() *MockMergerMockRecorder {
 }
 
 // MergeIndexes mocks base method.
-func (m *MockMerger) MergeIndexes(arg0 context.Context, arg1 scexec.MergeProgress, arg2 scexec.BackfillerProgressWriter, arg3 catalog.TableDescriptor) error {
+func (m *MockMerger) MergeIndexes(arg0 context.Context, arg1 *jobs.Job, arg2 scexec.MergeProgress, arg3 scexec.BackfillerProgressWriter, arg4 catalog.TableDescriptor) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MergeIndexes", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "MergeIndexes", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // MergeIndexes indicates an expected call of MergeIndexes.
-func (mr *MockMergerMockRecorder) MergeIndexes(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockMergerMockRecorder) MergeIndexes(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeIndexes", reflect.TypeOf((*MockMerger)(nil).MergeIndexes), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeIndexes", reflect.TypeOf((*MockMerger)(nil).MergeIndexes), arg0, arg1, arg2, arg3, arg4)
 }
 
 // MockBackfillerTracker is a mock of BackfillerTracker interface.
