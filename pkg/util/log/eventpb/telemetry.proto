@@ -288,9 +288,12 @@ message SampledQuery {
   // if any.
   string schema_changer_mode = 76 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
+  // SQLInstanceIDs is a list of all the SQL instance id used in this statements execution.
+  repeated int32 sql_instance_ids = 77 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "SQLInstanceIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
   reserved 12;
 
-  // Next available ID: 77.
+  // Next available ID: 78.
 }
 
 
