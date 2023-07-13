@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -323,6 +324,17 @@ func (p *planner) maybeLogStatementInternal(
 
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 
+			var sqlInstanceIDs []int32
+			if len(queryLevelStats.SqlInstanceIds) > 0 {
+				sqlInstanceIDs = make([]int32, 0, len(queryLevelStats.SqlInstanceIds))
+				for sqlId := range queryLevelStats.SqlInstanceIds {
+					sqlInstanceIDs = append(sqlInstanceIDs, int32(sqlId))
+				}
+				sort.Slice(sqlInstanceIDs, func(i, j int) bool {
+					return sqlInstanceIDs[i] < sqlInstanceIDs[j]
+				})
+			}
+
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:                  execDetails,
 				SkippedQueries:                        skippedQueries,
@@ -359,6 +371,7 @@ func (p *planner) maybeLogStatementInternal(
 				ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 				ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
 				Regions:                               queryLevelStats.Regions,
+				SQLInstanceIDs:                        sqlInstanceIDs,
 				NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
