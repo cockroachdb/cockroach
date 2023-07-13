@@ -47,6 +47,7 @@ var gopgIgnoreList = blocklist{
 	"pg | ORM struct model | fetches Author relations":    "41690",
 	"pg | ORM struct model | fetches Book relations":      "41690",
 	"pg | ORM struct model | fetches Genre relations":     "41690",
+	"pg | ORM | ForEach works with scalars":               "Test Setup",
 	// Different error message for context cancellation timeout.
 	"pg | OnConnect | does not panic on timeout": "41690",
 	// These tests assume different transaction isolation level (READ COMMITTED).
