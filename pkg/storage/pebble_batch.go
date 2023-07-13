@@ -12,12 +12,12 @@ package storage
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -66,7 +66,7 @@ type pebbleBatch struct {
 
 var _ Batch = &pebbleBatch{}
 
-var pebbleBatchPool = sync.Pool{
+var pebbleBatchPool = syncutil.Pool{
 	New: func() interface{} {
 		return &pebbleBatch{}
 	},

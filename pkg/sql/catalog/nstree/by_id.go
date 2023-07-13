@@ -11,9 +11,8 @@
 package nstree
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/google/btree"
 )
 
@@ -37,7 +36,7 @@ func (b *byIDItem) Less(thanItem btree.Item) bool {
 	return b.id < than.id
 }
 
-var byIDItemPool = sync.Pool{
+var byIDItemPool = syncutil.Pool{
 	New: func() interface{} { return new(byIDItem) },
 }
 

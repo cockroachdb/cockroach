@@ -155,7 +155,7 @@ type raftScheduleState struct {
 	ticks int
 }
 
-var raftSchedulerBatchPool = sync.Pool{
+var raftSchedulerBatchPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(raftSchedulerBatch)
 	},

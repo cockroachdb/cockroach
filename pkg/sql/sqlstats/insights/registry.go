@@ -11,11 +11,10 @@
 package insights
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // This registry is the central object in the insights subsystem. It observes
@@ -56,7 +55,7 @@ func (b *statementBuf) release() {
 	statementsBufPool.Put(b)
 }
 
-var statementsBufPool = sync.Pool{
+var statementsBufPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(statementBuf)
 	},

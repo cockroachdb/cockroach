@@ -12,13 +12,13 @@ package kvserver
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // todoSpanSet is a placeholder value for callsites that need to pass a properly
@@ -30,7 +30,7 @@ import (
 // Do not introduce new uses of this.
 var todoSpanSet = &spanset.SpanSet{}
 
-var evalContextPool = sync.Pool{
+var evalContextPool = syncutil.Pool{
 	New: func() interface{} {
 		return &evalContextImpl{}
 	},

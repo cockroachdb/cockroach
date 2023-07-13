@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -25,10 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
-var scanNodePool = sync.Pool{
+var scanNodePool = syncutil.Pool{
 	New: func() interface{} {
 		return &scanNode{}
 	},

@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -143,7 +143,7 @@ func (d *drainHelper) ConsumerDone() {}
 // ConsumerClosed implements the execinfra.RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
 
-var materializerPool = sync.Pool{
+var materializerPool = syncutil.Pool{
 	New: func() interface{} {
 		return &Materializer{}
 	},

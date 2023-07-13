@@ -16,7 +16,6 @@ package log
 import (
 	"context"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,9 +38,9 @@ type loggingT struct {
 	config
 
 	// allocation pool for entry formatting buffers.
-	bufPool sync.Pool
+	bufPool syncutil.Pool
 	// allocation pool for slices of buffer pointers.
-	bufSlicePool sync.Pool
+	bufSlicePool syncutil.Pool
 
 	// interceptor contains the configured InterceptorFn callbacks, if any.
 	interceptor interceptorSink

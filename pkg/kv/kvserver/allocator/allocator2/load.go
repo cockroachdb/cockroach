@@ -12,9 +12,9 @@ package allocator2
 
 import (
 	"math"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Misc helper classes for working with range, store and node load.
@@ -254,7 +254,7 @@ type meansMemo struct {
 	scratchNodes map[roachpb.NodeID]*nodeLoad
 }
 
-var meansForStoreSetSlicePool = sync.Pool{
+var meansForStoreSetSlicePool = syncutil.Pool{
 	New: func() interface{} {
 		return &mapEntrySlice[*meansForStoreSet]{}
 	},

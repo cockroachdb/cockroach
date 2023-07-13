@@ -11,6 +11,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
     ],
 )

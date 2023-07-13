@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -159,7 +159,7 @@ type grpcTransport struct {
 	nextReplicaIdx int
 }
 
-var grpcTransportPool = sync.Pool{
+var grpcTransportPool = syncutil.Pool{
 	New: func() interface{} { return &grpcTransport{} },
 }
 

@@ -16,8 +16,8 @@ import (
 	"hash/fnv"
 	"math/rand"
 	"strings"
-	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -41,8 +41,8 @@ type ledger struct {
 	deck []int // contains indexes into the txs slice
 
 	reg      *histogram.Registry
-	rngPool  *sync.Pool
-	hashPool *sync.Pool
+	rngPool  *syncutil.Pool
+	hashPool *syncutil.Pool
 }
 
 func init() {
@@ -110,12 +110,12 @@ func (w *ledger) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *ledger) Tables() []workload.Table {
 	if w.rngPool == nil {
-		w.rngPool = &sync.Pool{
+		w.rngPool = &syncutil.Pool{
 			New: func() interface{} { return rand.New(rand.NewSource(timeutil.Now().UnixNano())) },
 		}
 	}
 	if w.hashPool == nil {
-		w.hashPool = &sync.Pool{
+		w.hashPool = &syncutil.Pool{
 			New: func() interface{} { return fnv.New64() },
 		}
 	}

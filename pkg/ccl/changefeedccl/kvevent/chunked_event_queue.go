@@ -8,7 +8,7 @@
 
 package kvevent
 
-import "sync"
+import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 const bufferEventChunkArrSize = 128
 
@@ -83,7 +83,7 @@ type bufferEventChunk struct {
 	next       *bufferEventChunk // linked-list element
 }
 
-var bufferEntryChunkPool = sync.Pool{
+var bufferEntryChunkPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(bufferEventChunk)
 	},

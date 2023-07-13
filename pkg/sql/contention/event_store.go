@@ -13,7 +13,6 @@ package contention
 import (
 	"context"
 	"math/rand"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -62,7 +61,7 @@ func (b *eventBatch) len() int {
 	return eventBatchSize
 }
 
-var eventBatchPool = &sync.Pool{
+var eventBatchPool = syncutil.Pool{
 	New: func() interface{} {
 		return &eventBatch{}
 	},

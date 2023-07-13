@@ -13,13 +13,13 @@ package storage
 import (
 	"bytes"
 	"math"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -88,7 +88,7 @@ func (noopStatsReporterImpl) aggregateIterStats(IteratorStats) {}
 var _ MVCCIterator = &pebbleIterator{}
 var _ EngineIterator = &pebbleIterator{}
 
-var pebbleIterPool = sync.Pool{
+var pebbleIterPool = syncutil.Pool{
 	New: func() interface{} {
 		return &pebbleIterator{}
 	},

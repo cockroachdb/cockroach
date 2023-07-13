@@ -10,12 +10,12 @@ package changefeedccl
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -53,7 +53,7 @@ type ioResult struct {
 	err     error
 }
 
-var resultPool sync.Pool = sync.Pool{
+var resultPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(ioResult)
 	},

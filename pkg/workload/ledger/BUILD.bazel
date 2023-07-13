@@ -18,6 +18,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/types",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",

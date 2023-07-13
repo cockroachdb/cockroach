@@ -1173,7 +1173,7 @@ func (c *CallbackResultWriter) Err() error {
 var _ execinfra.RowReceiver = &DistSQLReceiver{}
 var _ execinfra.BatchReceiver = &DistSQLReceiver{}
 
-var receiverSyncPool = sync.Pool{
+var receiverSyncPool = syncutil.Pool{
 	New: func() interface{} {
 		return &DistSQLReceiver{}
 	},

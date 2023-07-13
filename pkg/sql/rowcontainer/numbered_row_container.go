@@ -14,7 +14,6 @@ import (
 	"container/heap"
 	"context"
 	"math"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -323,7 +323,7 @@ type cacheElement struct {
 	numAccesses int
 }
 
-var cacheElementSyncPool = sync.Pool{
+var cacheElementSyncPool = syncutil.Pool{
 	New: func() interface{} {
 		return &cacheElement{}
 	},

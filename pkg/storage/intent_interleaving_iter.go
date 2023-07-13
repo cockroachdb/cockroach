@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -158,7 +158,7 @@ type intentInterleavingIter struct {
 
 var _ MVCCIterator = &intentInterleavingIter{}
 
-var intentInterleavingIterPool = sync.Pool{
+var intentInterleavingIterPool = syncutil.Pool{
 	New: func() interface{} {
 		return &intentInterleavingIter{}
 	},

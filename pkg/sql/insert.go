@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -24,16 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
-var insertNodePool = sync.Pool{
+var insertNodePool = syncutil.Pool{
 	New: func() interface{} {
 		return &insertNode{}
 	},
 }
 
-var tableInserterPool = sync.Pool{
+var tableInserterPool = syncutil.Pool{
 	New: func() interface{} {
 		return &tableInserter{}
 	},

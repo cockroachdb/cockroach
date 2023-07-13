@@ -12,7 +12,6 @@ package rowflow
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,7 +42,7 @@ type rowBasedFlow struct {
 
 var _ flowinfra.Flow = &rowBasedFlow{}
 
-var rowBasedFlowPool = sync.Pool{
+var rowBasedFlowPool = syncutil.Pool{
 	New: func() interface{} {
 		return &rowBasedFlow{}
 	},

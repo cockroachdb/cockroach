@@ -5,6 +5,7 @@ go_library(
     srcs = ["shuffle.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/shuffle",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/syncutil"],
 )
 
 go_test(

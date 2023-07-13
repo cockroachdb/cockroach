@@ -16,9 +16,10 @@ import (
 	"bytes"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // nilT is a nil instance of the Template type.
@@ -121,13 +122,13 @@ func nodeToLeaf(n *node) *leafNode {
 	return (*leafNode)(unsafe.Pointer(n))
 }
 
-var leafPool = sync.Pool{
+var leafPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(leafNode)
 	},
 }
 
-var nodePool = sync.Pool{
+var nodePool = syncutil.Pool{
 	New: func() interface{} {
 		return new(node)
 	},

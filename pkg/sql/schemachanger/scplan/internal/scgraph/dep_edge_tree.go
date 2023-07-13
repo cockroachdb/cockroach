@@ -11,11 +11,10 @@
 package scgraph
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
@@ -241,7 +240,7 @@ func cmpEdgeTreeEntry(a, b *depEdgeTreeEntry, first bool) (less, eq bool) {
 // depEdgeTreeEntryPool pools depEdgeTreeEntry objects. This turns out to be
 // important because these objects are used when querying the depEdges, which
 // happens many times.
-var depEdgeTreeEntryPool = sync.Pool{
+var depEdgeTreeEntryPool = syncutil.Pool{
 	New: func() interface{} {
 		return &depEdgeTreeEntry{}
 	},

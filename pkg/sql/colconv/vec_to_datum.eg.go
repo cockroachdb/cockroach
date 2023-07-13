@@ -12,8 +12,6 @@
 package colconv
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -21,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
@@ -60,7 +59,7 @@ type VecToDatumConverter struct {
 
 var _ execreleasable.Releasable = &VecToDatumConverter{}
 
-var vecToDatumConverterPool = sync.Pool{
+var vecToDatumConverterPool = syncutil.Pool{
 	New: func() interface{} {
 		return &VecToDatumConverter{}
 	},

@@ -22,7 +22,6 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -40,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -769,7 +769,7 @@ func (v Value) GetTuple() ([]byte, error) {
 	return v.dataBytes(), nil
 }
 
-var crc32Pool = sync.Pool{
+var crc32Pool = syncutil.Pool{
 	New: func() interface{} {
 		return crc32.NewIEEE()
 	},

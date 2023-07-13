@@ -11,10 +11,9 @@
 package nstree
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/google/btree"
 )
 
@@ -50,7 +49,7 @@ func (b *byNameItem) value() interface{} {
 	return b.v
 }
 
-var byNameItemPool = sync.Pool{
+var byNameItemPool = syncutil.Pool{
 	New: func() interface{} { return new(byNameItem) },
 }
 

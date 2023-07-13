@@ -11,9 +11,8 @@
 package kvserver
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -54,7 +53,7 @@ type replicatedCmdBufNode struct {
 	next *replicatedCmdBufNode
 }
 
-var replicatedCmdBufBufNodeSyncPool = sync.Pool{
+var replicatedCmdBufBufNodeSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(replicatedCmdBufNode) },
 }
 

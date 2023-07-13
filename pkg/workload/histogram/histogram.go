@@ -132,7 +132,7 @@ type Registry struct {
 	start         time.Time
 	cumulative    map[string]*hdrhistogram.Histogram
 	prevTick      map[string]time.Time
-	histogramPool *sync.Pool
+	histogramPool *syncutil.Pool
 }
 
 // NewRegistry returns an initialized Registry.
@@ -148,7 +148,7 @@ func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 		cumulative:   make(map[string]*hdrhistogram.Histogram),
 		prevTick:     make(map[string]time.Time),
 		promReg:      prometheus.NewRegistry(),
-		histogramPool: &sync.Pool{
+		histogramPool: &syncutil.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
 			},

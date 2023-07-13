@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@io_etcd_go_raft_v3//raftpb",
     ],

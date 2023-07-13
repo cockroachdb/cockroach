@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +39,7 @@ var _ execopnode.OpNode = &noopProcessor{}
 
 const noopProcName = "noop"
 
-var noopPool = sync.Pool{
+var noopPool = syncutil.Pool{
 	New: func() interface{} {
 		return &noopProcessor{}
 	},

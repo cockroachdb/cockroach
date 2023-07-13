@@ -26,7 +26,6 @@ package requestbatcher
 import (
 	"container/heap"
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -568,20 +568,20 @@ func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
 // pool stores object pools for the various commonly reused objects of the
 // batcher
 type pool struct {
-	responseChanPool sync.Pool
-	batchPool        sync.Pool
-	requestPool      sync.Pool
+	responseChanPool syncutil.Pool
+	batchPool        syncutil.Pool
+	requestPool      syncutil.Pool
 }
 
 func makePool() pool {
 	return pool{
-		responseChanPool: sync.Pool{
+		responseChanPool: syncutil.Pool{
 			New: func() interface{} { return make(chan Response, 1) },
 		},
-		batchPool: sync.Pool{
+		batchPool: syncutil.Pool{
 			New: func() interface{} { return &batch{} },
 		},
-		requestPool: sync.Pool{
+		requestPool: syncutil.Pool{
 			New: func() interface{} { return &request{} },
 		},
 	}

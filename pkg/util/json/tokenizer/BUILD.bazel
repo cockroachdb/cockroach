@@ -9,6 +9,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/json/tokenizer",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/syncutil"],
 )
 
 go_test(

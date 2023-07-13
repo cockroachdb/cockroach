@@ -11,7 +11,6 @@ package streamingest
 import (
 	"context"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -160,7 +160,7 @@ func (b *streamIngestionBuffer) reset() {
 	b.curRangeKVBatch = b.curRangeKVBatch[:0]
 }
 
-var bufferPool = sync.Pool{
+var bufferPool = syncutil.Pool{
 	New: func() interface{} { return &streamIngestionBuffer{} },
 }
 

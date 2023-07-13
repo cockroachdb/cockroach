@@ -12,7 +12,6 @@ package colflow
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,7 +44,7 @@ type FlowCoordinator struct {
 	cancelFlow context.CancelFunc
 }
 
-var flowCoordinatorPool = sync.Pool{
+var flowCoordinatorPool = syncutil.Pool{
 	New: func() interface{} {
 		return &FlowCoordinator{}
 	},
@@ -208,7 +208,7 @@ type BatchFlowCoordinator struct {
 	cancelFlow context.CancelFunc
 }
 
-var batchFlowCoordinatorPool = sync.Pool{
+var batchFlowCoordinatorPool = syncutil.Pool{
 	New: func() interface{} {
 		return &BatchFlowCoordinator{}
 	},

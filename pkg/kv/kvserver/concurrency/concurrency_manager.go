@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -656,7 +656,7 @@ func (r *Request) isSingle(m kvpb.Method) bool {
 }
 
 // Used to avoid allocations.
-var guardPool = sync.Pool{
+var guardPool = syncutil.Pool{
 	New: func() interface{} { return new(Guard) },
 }
 

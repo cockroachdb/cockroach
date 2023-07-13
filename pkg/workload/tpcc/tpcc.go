@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -100,7 +99,7 @@ type tpcc struct {
 		syncutil.Mutex
 		values [][]int
 	}
-	localsPool *sync.Pool
+	localsPool *syncutil.Pool
 }
 
 type waitSetter struct {
@@ -535,7 +534,7 @@ func (w *tpcc) Tables() []workload.Table {
 	lettersInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, lettersAlphabet)
 	numbersInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, numbersAlphabet)
 	if w.localsPool == nil {
-		w.localsPool = &sync.Pool{
+		w.localsPool = &syncutil.Pool{
 			New: func() interface{} {
 				return &generateLocals{
 					rng: tpccRand{

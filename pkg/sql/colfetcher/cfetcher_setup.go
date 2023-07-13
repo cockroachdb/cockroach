@@ -12,13 +12,13 @@ package colfetcher
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // cFetcherTableArgs describes the information about the index we're fetching
@@ -33,7 +33,7 @@ type cFetcherTableArgs struct {
 	typs []*types.T
 }
 
-var cFetcherTableArgsPool = sync.Pool{
+var cFetcherTableArgsPool = syncutil.Pool{
 	New: func() interface{} {
 		return &cFetcherTableArgs{}
 	},

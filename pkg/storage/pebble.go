@@ -2234,7 +2234,7 @@ type pebbleReadOnly struct {
 
 var _ ReadWriter = &pebbleReadOnly{}
 
-var pebbleReadOnlyPool = sync.Pool{
+var pebbleReadOnlyPool = syncutil.Pool{
 	New: func() interface{} {
 		return &pebbleReadOnly{
 			// Defensively set reusable=true. One has to be careful about this since

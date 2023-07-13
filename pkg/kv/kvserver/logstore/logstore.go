@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3"
@@ -353,11 +353,11 @@ func (cb *nonBlockingSyncWaiterCallback) release() {
 	nonBlockingSyncWaiterCallbackPool.Put(cb)
 }
 
-var nonBlockingSyncWaiterCallbackPool = sync.Pool{
+var nonBlockingSyncWaiterCallbackPool = syncutil.Pool{
 	New: func() interface{} { return new(nonBlockingSyncWaiterCallback) },
 }
 
-var valPool = sync.Pool{
+var valPool = syncutil.Pool{
 	New: func() interface{} { return &roachpb.Value{} },
 }
 

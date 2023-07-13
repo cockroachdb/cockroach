@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/encoding",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "//pkg/workload",

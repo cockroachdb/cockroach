@@ -13,7 +13,6 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -129,7 +129,7 @@ type Processor struct {
 	stoppedC   chan struct{}
 }
 
-var eventSyncPool = sync.Pool{
+var eventSyncPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(event)
 	},

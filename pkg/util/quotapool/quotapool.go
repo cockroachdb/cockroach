@@ -19,7 +19,6 @@ package quotapool
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -187,7 +186,7 @@ func (qp *AbstractPool) updateLocked(f UpdateFunc) {
 
 // chanSyncPool is used to pool allocations of the channels used to notify
 // goroutines waiting in Acquire.
-var chanSyncPool = sync.Pool{
+var chanSyncPool = syncutil.Pool{
 	New: func() interface{} { return make(chan struct{}, 1) },
 }
 

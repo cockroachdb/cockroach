@@ -17,9 +17,9 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -70,7 +70,7 @@ type tpch struct {
 	selectedQueries []int
 
 	textPool   textPool
-	localsPool *sync.Pool
+	localsPool *syncutil.Pool
 }
 
 func init() {
@@ -196,7 +196,7 @@ type generateLocals struct {
 // Tables implements the Generator interface.
 func (w *tpch) Tables() []workload.Table {
 	if w.localsPool == nil {
-		w.localsPool = &sync.Pool{
+		w.localsPool = &syncutil.Pool{
 			New: func() interface{} {
 				return &generateLocals{
 					rng: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
