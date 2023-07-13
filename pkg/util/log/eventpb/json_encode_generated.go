@@ -4830,6 +4830,23 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, '"')
 	}
 
+	if len(m.SQLInstanceIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SQLInstanceIDs\":["...)
+		for i, v := range m.SQLInstanceIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
+			b = append(b, '"')
+		}
+		b = append(b, ']')
+	}
+
 	return printComma, b
 }
 
