@@ -299,3 +299,39 @@ update t74385
       └── projections
            ├── c:10 IS NULL [as=partial_index_put1:14, outer=(10)]
            └── CAST(NULL AS INT8) [as=b_new:13]
+
+# Regression for #106663. Also simplify passthrough partial index put/del
+# columns to false when the indexed columns and columns referenced in predicates
+# are not changing.
+
+exec-ddl
+CREATE TABLE t106663 (a INT, b INT, c BOOL, INDEX (b) WHERE c, FAMILY (a, b), FAMILY (c))
+----
+
+norm expect=SimplifyPartialIndexProjections
+UPDATE t106663 SET a = 1 WHERE true
+----
+update t106663
+ ├── columns: <none>
+ ├── fetch columns: a:7 b:8 rowid:10
+ ├── update-mapping:
+ │    └── a_new:13 => a:1
+ ├── partial index put columns: partial_index_put2:14
+ ├── partial index del columns: partial_index_del2:15
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: a_new:13!null partial_index_put2:14!null partial_index_del2:15!null a:7 b:8 rowid:10!null
+      ├── key: (10)
+      ├── fd: ()-->(13-15), (10)-->(7,8)
+      ├── scan t106663
+      │    ├── columns: a:7 b:8 rowid:10!null
+      │    ├── partial index predicates
+      │    │    └── t106663_b_idx: filters
+      │    │         └── c:9 [outer=(9), constraints=(/9: [/true - /true]; tight), fd=()-->(9)]
+      │    ├── key: (10)
+      │    └── fd: (10)-->(7,8)
+      └── projections
+           ├── 1 [as=a_new:13]
+           ├── false [as=partial_index_put2:14]
+           └── false [as=partial_index_del2:15]
