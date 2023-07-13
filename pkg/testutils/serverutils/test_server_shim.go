@@ -65,18 +65,21 @@ var PreventStartTenantError = errors.New("attempting to manually start a server 
 // This can be overridden either via the build tag `metamorphic_disable`
 // or just for test tenants via COCKROACH_TEST_TENANT.
 func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) bool {
-	// Explicit cases for enabling or disabling the default test tenant.
-	if serverArgs.DefaultTestTenant == base.TestTenantDisabled {
-		return false
-	}
-	if serverArgs.DefaultTestTenant == base.TestTenantEnabled {
-		return true
-	}
-
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
+		return false
+	}
+
+	// Explicit cases for enabling or disabling the default test tenant.
+	if serverArgs.DefaultTestTenant.TestTenantAlwaysEnabled() {
+		return true
+	}
+	if serverArgs.DefaultTestTenant.TestTenantAlwaysDisabled() {
+		if issueNum, label := serverArgs.DefaultTestTenant.IssueRef(); issueNum != 0 {
+			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+		}
 		return false
 	}
 
@@ -333,7 +336,10 @@ func StartServer(
 	if !startDefaultSQLServer {
 		// If we're told not to start a test tenant, set the
 		// disable flag explicitly.
-		params.DefaultTestTenant = base.TestTenantDisabled
+		//
+		// TODO(#76378): review the definition of params.DefaultTestTenant
+		// so we do not need this weird sentinel value.
+		params.DefaultTestTenant = base.InternalNonDefaultDecision
 	}
 
 	s, err := NewServer(params)

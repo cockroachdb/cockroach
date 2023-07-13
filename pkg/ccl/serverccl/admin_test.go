@@ -84,6 +84,8 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	if defaultTestTenant == base.TestTenantDisabled {
 		// Make sure secondary tenants don't cause the endpoint to error.
+		//
+		// TODO(#76378): This CREATE TENANT is suspicious - why is it even needed?
 		sqlDB.Exec(t, "CREATE TENANT 'app'")
 	}
 
