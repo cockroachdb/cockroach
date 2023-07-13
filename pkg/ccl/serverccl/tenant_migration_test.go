@@ -82,7 +82,7 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			// Disable the default test tenant, since we create one explicitly
 			// below.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Settings:          st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -192,7 +192,7 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 				// Disable the default tenant because we're creating one
 				// explicitly below.
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Settings:          st,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{

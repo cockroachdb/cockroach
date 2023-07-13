@@ -2040,7 +2040,7 @@ func TestFailedImportGC(t *testing.T) {
 		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
 		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
 		Knobs: base.TestingKnobs{
@@ -2149,7 +2149,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -2206,7 +2206,7 @@ func TestImportCSVStmt(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		SQLMemoryPoolSize: 256 << 20,
 		ExternalIODir:     baseDir,
 	}})
@@ -2779,7 +2779,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 		SQLMemoryPoolSize: 256 << 20,
 	}})
@@ -2958,7 +2958,7 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     datapathutils.TestDataPath(t, "csv")}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -3069,7 +3069,7 @@ func TestImportIntoCSV(t *testing.T) {
 		},
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -4776,7 +4776,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 		base.TestServerArgs{
 			// Test hangs when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -5299,7 +5299,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test fails when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -6487,7 +6487,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
 		args := mkArgs()
-		args.DefaultTestTenant = base.TestTenantDisabled
+		args.DefaultTestTenant = base.TODOTestTenantDisabled
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
@@ -6665,7 +6665,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
 	args := base.TestServerArgs{
 		Settings:          st,
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 	}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
@@ -7132,7 +7132,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	// Test fails within a test tenant. More investigation is required.
 	// Tracked with #76378.
-	args.DefaultTestTenant = base.TestTenantDisabled
+	args.DefaultTestTenant = base.TODOTestTenantDisabled
 	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc := serverutils.StartNewTestCluster(t, nodes, params)

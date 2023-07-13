@@ -315,7 +315,7 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 	ctx := context.Background()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

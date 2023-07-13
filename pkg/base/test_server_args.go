@@ -249,16 +249,10 @@ var (
 	// to use TestTenantProbabilistic or TestTenantProbabilisticOnly.
 	TestTenantAlwaysEnabled = DefaultTestTenantOptions{testBehavior: ttEnabled}
 
-	// TestTenantEnabled will disappear in the next commit.
-	TestTenantEnabled = TestTenantAlwaysEnabled
-
 	// TODOTestTenantDisabled should not be used anymore. Use the
 	// other values instead.
 	// TODO(#76378): Review existing tests and use the proper value instead.
 	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled}
-
-	// TestTenantDisabled will disappear in the next commit.
-	TestTenantDisabled = DeprecatedTestTenantDisabled
 
 	// TestIsSpecificToStorageLayerAndNeedsASystemTenant is used when
 	// the test needs to be given access to a SQL conn to a tenant with

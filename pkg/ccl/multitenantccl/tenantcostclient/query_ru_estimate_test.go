@@ -63,7 +63,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 
 	params := base.TestServerArgs{
 		Settings:          st,
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 
 	s, mainDB, _ := serverutils.StartServer(t, params)

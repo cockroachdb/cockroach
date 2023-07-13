@@ -56,7 +56,7 @@ func TestSQLServer(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// We need to disable the default test tenant because we're going to create
 		// our own.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -83,7 +83,7 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -113,7 +113,7 @@ func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -157,7 +157,7 @@ func TestTenantHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -204,7 +204,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
@@ -334,7 +334,7 @@ func TestNonExistentTenant(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -356,7 +356,7 @@ func TestTenantRowIDs(t *testing.T) {
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	const numRows = 10
@@ -399,7 +399,7 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
 			// Don't use a default test tenant. We will explicitly create one.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

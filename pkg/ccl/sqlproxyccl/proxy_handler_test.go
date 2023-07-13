@@ -142,7 +142,7 @@ func TestProxyProtocol(t *testing.T) {
 		// Need to disable the test tenant here because it appears as though
 		// we're not able to establish the necessary connections from within
 		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
@@ -255,7 +255,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 		// Need to disable the test tenant here because it appears as though
 		// we're not able to establish the necessary connections from within
 		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
@@ -432,7 +432,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 		// Need to disable the test tenant here because it appears as though
 		// we're not able to establish the necessary connections from within
 		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
@@ -705,7 +705,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 		// Need to disable the test tenant here because it appears as though
 		// we're not able to establish the necessary connections from within
 		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -908,7 +908,7 @@ func TestProxyTLSClose(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -965,7 +965,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -1029,7 +1029,7 @@ func TestInsecureProxy(t *testing.T) {
 			// complains about not being able to find the user. This may be
 			// because of the connection through the proxy server. More
 			// investigation is required (tracked with #76378).
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Insecure:          false,
 		},
 	)
@@ -1211,7 +1211,7 @@ func TestDenylistUpdate(t *testing.T) {
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	)
 	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
@@ -1960,7 +1960,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	// Test must be run from the system tenant as it's altering tenants.
-	params.DefaultTestTenant = base.TestTenantDisabled
+	params.DefaultTestTenant = base.TODOTestTenantDisabled
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()

@@ -45,7 +45,7 @@ func TestTenantReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rt := startReporterTest(t, base.TestTenantDisabled)
+	rt := startReporterTest(t, base.TODOTestTenantDisabled)
 	defer rt.Close()
 
 	tenantArgs := base.TestTenantArgs{

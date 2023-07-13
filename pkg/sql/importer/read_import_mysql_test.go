@@ -135,7 +135,7 @@ func readMysqlCreateFrom(
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test relies on descriptor validation, which doesn't seem to be
 		// supported within secondary tenants. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 	ctx := context.Background()

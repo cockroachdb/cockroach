@@ -2740,7 +2740,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -5801,7 +5801,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			UseDatabase:       "test",
 			Knobs:             knobs,
 			ExternalIODir:     sinkDir,
@@ -5887,7 +5887,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 		return base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			UseDatabase:       "test",
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
@@ -6080,7 +6080,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 		perServerKnobs[i] = base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
 					DrainFast:  true,
@@ -8374,7 +8374,7 @@ func TestChangefeedExecLocality(t *testing.T) {
 			ExternalIODir: path.Join(dir, str(i)),
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
-			DefaultTestTenant: base.TestTenantDisabled, // need nodelocal and splits.
+			DefaultTestTenant: base.TODOTestTenantDisabled, // need nodelocal and splits.
 		}
 	}
 
