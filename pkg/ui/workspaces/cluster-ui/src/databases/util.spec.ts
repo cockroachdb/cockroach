@@ -54,7 +54,7 @@ describe("Getting nodes by region string", () => {
       const nodes = [1, 2, 3];
       const regions = {};
       const result = getNodesByRegionString(nodes, regions, false);
-      assert.deepStrictEqual(result, `undefined(n1,n2,n3)`);
+      assert.deepStrictEqual(result, "");
     });
 
     it("when nodes are empty", () => {
