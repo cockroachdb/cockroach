@@ -338,12 +338,10 @@ type NameResolver interface {
 	// ResolveSchema retrieves a schema by name and returns its elements.
 	ResolveSchema(name tree.ObjectNamePrefix, p ResolveParams) ElementResultSet
 
-	// ResolvePrefix retrieves database and schema given the name prefix. The
-	// requested schema must exist and current user must have the required
-	// privilege.
-	ResolvePrefix(
-		prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
-	) (dbElts ElementResultSet, scElts ElementResultSet)
+	// ResolveTargetObject retrieves database and schema given the unresolved
+	// object name. The requested schema must exist and current user must have the
+	// required privilege.
+	ResolveTargetObject(prefix *tree.UnresolvedObjectName, requiredSchemaPriv privilege.Kind) (dbElts ElementResultSet, scElts ElementResultSet)
 
 	// ResolveUserDefinedTypeType retrieves a type by name and returns its elements.
 	ResolveUserDefinedTypeType(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet

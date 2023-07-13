@@ -127,22 +127,19 @@ func (d *buildDeps) MayResolveSchema(
 	return db, schema
 }
 
-func (d *buildDeps) MustResolvePrefix(
+func (d *buildDeps) MayResolvePrefix(
 	ctx context.Context, name tree.ObjectNamePrefix,
-) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
+) (db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor) {
 	const withOffline = false
 	if name.ExplicitSchema {
 		if name.ExplicitCatalog {
-			db, sc := d.MayResolveSchema(ctx, name, withOffline)
-			if sc == nil || db == nil {
-				panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
-			}
+			db, sc = d.MayResolveSchema(ctx, name, withOffline)
 			return db, sc
 		}
 
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
-		db, sc := d.MayResolveSchema(ctx, tree.ObjectNamePrefix{
+		db, sc = d.MayResolveSchema(ctx, tree.ObjectNamePrefix{
 			CatalogName:     tree.Name(d.CurrentDatabase()),
 			SchemaName:      name.SchemaName,
 			ExplicitCatalog: true,
@@ -161,10 +158,7 @@ func (d *buildDeps) MustResolvePrefix(
 			ExplicitSchema:  true,
 		},
 			withOffline)
-		if db != nil && sc != nil {
-			return db, sc
-		}
-		panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+		return db, sc
 	}
 
 	path := d.sessionData.SearchPath
@@ -172,12 +166,12 @@ func (d *buildDeps) MustResolvePrefix(
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		name.SchemaName = tree.Name(scName)
 		name.ExplicitSchema = true
-		db, sc := d.MayResolveSchema(ctx, name, false /* withOffline */)
+		db, sc = d.MayResolveSchema(ctx, name, false /* withOffline */)
 		if sc != nil {
 			return db, sc
 		}
 	}
-	panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+	return nil, nil
 }
 
 // MayResolveTable implements the scbuild.CatalogReader interface.
