@@ -8,8 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeEvery, takeLatest } from "redux-saga/effects";
-import { PayloadAction } from "src/interfaces/action";
+import {
+  all,
+  call,
+  delay,
+  put,
+  takeEvery,
+  takeLatest,
+} from "redux-saga/effects";
+import { PayloadAction, WithRequest } from "src/interfaces/action";
 
 import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
@@ -22,13 +29,15 @@ import {
 } from "./statementsActions";
 import {
   invalidateStatementDiagnosticsRequests,
+  RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
   refreshStatementDiagnosticsRequests,
+  statementDiagnosticInvalidationPeriod,
 } from "src/redux/apiReducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { TimeScale } from "@cockroachlabs/cluster-ui";
+import { TimeScale, api as clusterApi } from "@cockroachlabs/cluster-ui";
 import { setTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
@@ -115,6 +124,35 @@ export function* cancelDiagnosticsReportSaga(
   }
 }
 
+// receivedStatementDiagnosticsSaga creates a saga that handles RECEIVE action for statement diagnostics in
+// addition to default workflow defined in CachedDataReducer.
+// The main goal of this saga is request statement diagnostics results more often if received list of requested
+// diagnostics has some diagnostics that is still not completed (with waiting status).
+// If there's not completed request, we poll data every 30 seconds (or as fallback with default invalidation period
+// that should be less than 30 seconds.
+export const receivedStatementDiagnosticsSaga = (
+  pollingDelay: number = 30000,
+) => {
+  const invalidationPeriodMs =
+    statementDiagnosticInvalidationPeriod.asMilliseconds();
+  const frequentPollingDelay = Math.min(invalidationPeriodMs, pollingDelay);
+  return function* (
+    action: PayloadAction<
+      WithRequest<clusterApi.StatementDiagnosticsResponse, unknown>
+    >,
+  ) {
+    // If we have active requests for statement diagnostics then poll for new data more often (every 30s or as defined
+    // invalidation period (if it less than 30s).
+    const hasActiveRequests = action.payload.data.some(s => !s.completed);
+    if (!hasActiveRequests) {
+      return;
+    }
+    yield delay(frequentPollingDelay);
+    yield put(invalidateStatementDiagnosticsRequests());
+    yield call(refreshStatementDiagnosticsRequests);
+  };
+};
+
 export function* setCombinedStatementsTimeScaleSaga(
   action: PayloadAction<TimeScale>,
 ) {
@@ -128,5 +166,9 @@ export function* statementsSaga() {
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
     takeEvery(CANCEL_STATEMENT_DIAGNOSTICS_REPORT, cancelDiagnosticsReportSaga),
     takeLatest(SET_GLOBAL_TIME_SCALE, setCombinedStatementsTimeScaleSaga),
+    takeEvery(
+      RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
+      receivedStatementDiagnosticsSaga(),
+    ),
   ]);
 }
