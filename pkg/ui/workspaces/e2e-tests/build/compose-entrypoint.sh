@@ -12,7 +12,7 @@ cd /scratch
 # Remove and reinstall any node_modules that may have been copied, since they're
 # potentially specific to the host platform.
 rm -rf node_modules/
-yarn install --force --pure-lockfile
+pnpm install --filter . --force --frozen-lockfile
 
 # Run tests, passing extra CLI arguments through to Cypress
-yarn cy:run "$@"
+pnpm run cy:run "$@"

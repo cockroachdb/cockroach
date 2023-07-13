@@ -163,58 +163,6 @@ func getShasFromNodeRepositoriesCall(call *syntax.CallExpr, shas map[string]stri
 	return nil
 }
 
-func getShasFromYarnRepositoriesCall(call *syntax.CallExpr, shas map[string]string) error {
-	var yarnURLTmpl, yarnVersion, yarnSha, yarnFilename string
-	for _, arg := range call.Args {
-		switch bx := arg.(type) {
-		case *syntax.BinaryExpr:
-			if bx.Op != syntax.EQ {
-				return fmt.Errorf("unexpected binary expression Op %d", bx.Op)
-			}
-			kwarg, err := starlarkutil.ExpectIdent(bx.X)
-			if err != nil {
-				return err
-			}
-			if kwarg == "yarn_releases" {
-				switch d := bx.Y.(type) {
-				case *syntax.DictExpr:
-					if len(d.List) != 1 {
-						return fmt.Errorf("expected only one version in yarn_repositories dict")
-					}
-					switch entry := d.List[0].(type) {
-					case *syntax.DictEntry:
-						strs, err := starlarkutil.ExpectTupleOfStrings(entry.Value, 3)
-						if err != nil {
-							return err
-						}
-						yarnFilename = strs[0]
-						yarnSha = strs[2]
-					default:
-						return fmt.Errorf("expected DictEntry in dictionary expression")
-					}
-				default:
-					return fmt.Errorf("expected dict as value of yarn_repositories kwarg")
-				}
-			} else if kwarg == "yarn_urls" {
-				yarnURLTmpl, err = starlarkutil.ExpectSingletonStringList(bx.Y)
-				if err != nil {
-					return err
-				}
-			} else if kwarg == "yarn_version" {
-				yarnVersion, err = starlarkutil.ExpectLiteralString(bx.Y)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if yarnURLTmpl == "" || yarnVersion == "" || yarnSha == "" || yarnFilename == "" {
-		return fmt.Errorf("did not parse all needed data from yarn_repositories call")
-	}
-	shas[strings.ReplaceAll(strings.ReplaceAll(yarnURLTmpl, "{version}", yarnVersion), "{filename}", yarnFilename)] = yarnSha
-	return nil
-}
-
 func getShasFromWorkspace(workspace string, shas map[string]string) error {
 	in, err := os.Open(workspace)
 	if err != nil {
@@ -255,12 +203,6 @@ func getShasFromWorkspace(workspace string, shas map[string]string) error {
 						return err
 					}
 				}
-				if fun == "yarn_repositories" {
-					if err := getShasFromYarnRepositoriesCall(x, shas); err != nil {
-						return err
-					}
-				}
-
 			}
 		}
 	}

@@ -98,7 +98,7 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
             value.id === "cluster" ? "node" : value.id
           }(s)`}
           value={this.renderSelectValue(value.id)}
-          dropdownRender={_ => (
+          dropdownRender={() => (
             <div onMouseDown={e => e.preventDefault()}>
               <div className="select-selection__deselect">
                 <a onClick={this.onDeselect(value.id)}>Deselect all</a>

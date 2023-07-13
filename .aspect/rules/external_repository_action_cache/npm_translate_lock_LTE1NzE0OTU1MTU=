@@ -1,6 +1,0 @@
-# Input hashes for repository rule npm_translate_lock(name = "npm_e2e_tests", pnpm_lock = "//pkg/ui/workspaces/e2e-tests:pnpm-lock.yaml").
-# This file should be checked into version control along with the pnpm-lock.yaml file.
-pkg/ui/.npmrc.pnpm=1714720514
-pkg/ui/workspaces/e2e-tests/pnpm-lock.yaml=-1787469461
-pkg/ui/workspaces/e2e-tests/yarn.lock=226960718
-pkg/ui/workspaces/e2e-tests/package.json=1674152024

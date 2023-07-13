@@ -8,9 +8,6 @@ set -euxo pipefail
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | sudo apt-key add -
 echo "deb https://deb.nodesource.com/node_16.x focal main" | sudo tee /etc/apt/sources.list.d/nodesource.list
 
-curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 sudo apt-get install -y --no-install-recommends \
@@ -24,8 +21,10 @@ sudo apt-get install -y --no-install-recommends \
   g++ \
   git \
   nodejs \
-  yarn \
   bison
+
+# pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
+curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
 
 sudo adduser "${USER}" docker
 
