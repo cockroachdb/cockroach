@@ -607,6 +607,7 @@ func (a *sumDecimalWindowAgg) Compute(
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.numNonNull++
@@ -627,6 +628,7 @@ func (a *sumDecimalWindowAgg) Compute(
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.numNonNull++
@@ -701,6 +703,7 @@ func (a *sumDecimalWindowAgg) Remove(
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.numNonNull--
@@ -721,6 +724,7 @@ func (a *sumDecimalWindowAgg) Remove(
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.numNonNull--

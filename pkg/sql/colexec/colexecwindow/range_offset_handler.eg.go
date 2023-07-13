@@ -1235,6 +1235,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context,
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -2451,6 +2452,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -3654,6 +3656,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, c
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -5023,6 +5026,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, 
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -6243,6 +6247,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context,
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -7459,6 +7464,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -8662,6 +8668,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, c
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each
@@ -10031,6 +10038,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, 
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
+
 	}
 
 	// Pick up where the last index left off, since the start and indexes of each

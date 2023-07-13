@@ -1954,7 +1954,7 @@ func (*ShowSequences) StatementReturnType() StatementReturnType { return Rows }
 func (*ShowSequences) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowSequences) StatementTag() string { return "SHOW SCHEMAS" }
+func (*ShowSequences) StatementTag() string { return "SHOW SEQUENCES" }
 
 // StatementReturnType implements the Statement interface.
 func (*ShowDefaultPrivileges) StatementReturnType() StatementReturnType { return Rows }
