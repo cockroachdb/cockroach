@@ -1,0 +1,16 @@
+
+init
+a c
+d e
+f h
+----
+Initialized writer with 3 keyspans.
+
+finish
+----
+Table 1
+Point keys: 0
+Table 2
+Point keys: 0
+Table 3
+Point keys: 0
