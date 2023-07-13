@@ -1488,8 +1488,9 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	recordID := progress.ProtectedTimestampRecord
 	if recordID == uuid.Nil {
 		ptr := createProtectedTimestampRecord(
-			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress,
+			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
 		)
+		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
 		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}

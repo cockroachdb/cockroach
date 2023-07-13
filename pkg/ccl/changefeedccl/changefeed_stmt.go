@@ -253,8 +253,8 @@ func changefeedPlanHook(
 				jobID,
 				AllTargets(details),
 				details.StatementTime,
-				progress.GetChangefeed(),
 			)
+			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
 
 			jr.Progress = *progress.GetChangefeed()
 
