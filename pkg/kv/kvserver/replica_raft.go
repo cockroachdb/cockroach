@@ -356,34 +356,11 @@ func (r *Replica) propose(
 ) (pErr *kvpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 
-	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
-	// Failure to propose will propagate to the client. An invariant of this
-	// package is that proposals which are finished carry a raft command with a
-	// MaxLeaseIndex equal to the proposal command's max lease index.
-	defer func(prev kvpb.LeaseAppliedIndex) {
-		if useReproposalsV2 {
-			// The following poorly understood code is not necessary in V2 since
-			// we never mutate MaxLeaseIndex and don't hit propose() twice for
-			// the same *ProposalData.
-			return
-		}
-		if pErr != nil {
-			p.command.MaxLeaseIndex = prev
-		}
-	}(p.command.MaxLeaseIndex)
-
-	if !useReproposalsV2 {
-		// Make sure the maximum lease index is unset. This field will be set in
-		// propBuf.Insert and its encoded bytes will be appended to the encoding
-		// buffer as a MaxLeaseFooter.
-		p.command.MaxLeaseIndex = 0
-	} else {
-		if p.command.MaxLeaseIndex > 0 {
-			// TODO: there are a number of other fields that should still be unset.
-			// Verify them all. Some architectural improvements where we pass in a
-			// subset of ProposalData and then complete it here would be even better.
-			return kvpb.NewError(errors.AssertionFailedf("MaxLeaseIndex is set: %+v", p))
-		}
+	if p.command.MaxLeaseIndex > 0 {
+		// TODO: there are a number of other fields that should still be unset.
+		// Verify them all. Some architectural improvements where we pass in a
+		// subset of ProposalData and then complete it here would be even better.
+		return kvpb.NewError(errors.AssertionFailedf("MaxLeaseIndex is set: %+v", p))
 	}
 
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {

@@ -189,17 +189,13 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				}
 			}
 			if pErr == nil { // since we might have injected an error
-				if useReproposalsV2 {
-					pErr = kvpb.NewError(r.tryReproposeWithNewLeaseIndexV2(ctx, cmd))
-					if pErr == nil {
-						// Avoid falling through below. We managed to repropose, but this
-						// proposal is still erroring out. We don't want to assign to
-						// localResult. If there is an error though, we do fall through into
-						// the existing tangle of correct but unreadable handling below.
-						return
-					}
-				} else {
-					pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+				pErr = kvpb.NewError(r.tryReproposeWithNewLeaseIndexV2(ctx, cmd))
+				if pErr == nil {
+					// Avoid falling through below. We managed to repropose, but this
+					// proposal is still erroring out. We don't want to assign to
+					// localResult. If there is an error though, we do fall through into
+					// the existing tangle of correct but unreadable handling below.
+					return
 				}
 			}
 
@@ -398,42 +394,6 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 
 	success = true
 	return nil
-}
-
-// tryReproposeWithNewLeaseIndex is used by prepareLocalResult to repropose
-// commands that have gotten an illegal lease index error, and that we know
-// could not have applied while their lease index was valid (that is, we
-// observed all applied entries between proposal and the lease index becoming
-// invalid, as opposed to skipping some of them by applying a snapshot).
-//
-// It is not intended for use elsewhere and is only a top-level function so that
-// it can avoid the below_raft_protos check. Returns a nil error if the command
-// has already been successfully applied or has been reproposed here or by a
-// different entry for the same proposal that hit an illegal lease index error.
-func (r *Replica) tryReproposeWithNewLeaseIndex(
-	ctx context.Context, cmd *replicatedCmd,
-) *kvpb.Error {
-	// Note that we don't need to validate anything about the proposal's
-	// lease here - if we got this far, we know that everything but the
-	// index is valid at this point in the log.
-	p := cmd.proposal
-	if p.applied || cmd.Cmd.MaxLeaseIndex != p.command.MaxLeaseIndex {
-		// If the command associated with this rejected raft entry already
-		// applied then we don't want to repropose it. Doing so could lead
-		// to duplicate application of the same proposal.
-		//
-		// Similarly, if the command associated with this rejected raft
-		// entry has a different (larger) MaxLeaseIndex than the one we
-		// decoded from the entry itself, the command must have already
-		// been reproposed (this can happen if there are multiple copies
-		// of the command in the logs; see TestReplicaRefreshMultiple).
-		// We must not create multiple copies with multiple lease indexes,
-		// so don't repropose it again. This ensures that at any time,
-		// there is only up to a single lease index that has a chance of
-		// succeeding in the Raft log for a given command.
-		return nil
-	}
-	return r.tryReproposeWithNewLeaseIndexShared(ctx, cmd.proposal)
 }
 
 func (r *Replica) tryReproposeWithNewLeaseIndexShared(
