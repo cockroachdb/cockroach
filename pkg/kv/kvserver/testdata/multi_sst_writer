@@ -1,0 +1,104 @@
+
+init
+a c
+d e
+f h
+----
+Initialized writer with 3 keyspans.
+
+finish
+----
+Table 1
+Point keys: 0
+Table 2
+Point keys: 0
+Table 3
+Point keys: 0
+
+close
+----
+
+init
+a c
+d z
+----
+Initialized writer with 2 keyspans.
+
+write
+b
+bo
+f
+----
+
+finish
+----
+Table 1
+Point keys: 2
+Table 2
+Point keys: 1
+
+close
+----
+
+init
+a c
+c e
+e f
+g k
+----
+Initialized writer with 4 keyspans.
+
+write
+a c
+b c
+----
+
+finish show-range-sets
+----
+Table 1
+Point keys: 0
+Range key sets: 2
+Table 2
+Point keys: 0
+Range key sets: 0
+Table 3
+Point keys: 0
+Range key sets: 0
+Table 4
+Point keys: 0
+Range key sets: 0
+
+close
+----
+
+init
+a d
+d g
+h p
+----
+Initialized writer with 3 keyspans.
+
+write
+a
+a c
+b
+c d
+c
+d g
+d
+e
+f
+h p
+----
+
+finish show-range-sets
+----
+Table 1
+Point keys: 3
+Range key sets: 2
+Table 2
+Point keys: 3
+Range key sets: 1
+Table 3
+Point keys: 0
+Range key sets: 1
