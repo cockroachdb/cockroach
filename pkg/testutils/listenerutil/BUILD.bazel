@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "listenerutil",
+    srcs = ["listener.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/listenerutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "listenerutil_test",
+    srcs = ["listener_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":listenerutil"],
+    deps = [
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

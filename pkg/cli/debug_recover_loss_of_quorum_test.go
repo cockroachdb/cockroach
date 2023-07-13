@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -437,7 +438,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	listenerReg := testutils.NewListenerRegistry()
+	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
 
 	storeReg := server.NewStickyInMemEnginesRegistry()
@@ -461,7 +462,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 					StickyEngineRegistry: storeReg,
 				},
 			},
-			Listener: listenerReg.GetOrFail(t, i),
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory: true,
@@ -470,8 +470,8 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
-		ReusableListeners: true,
-		ServerArgsPerNode: sa,
+		ReusableListenerReg: listenerReg,
+		ServerArgsPerNode:   sa,
 	})
 	tc.Start(t)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -554,7 +554,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// NB: If recovery is not performed, server will just hang on startup.
 	// This is caused by liveness range becoming unavailable and preventing any
 	// progress. So it is likely that test will timeout if basic workflow fails.
-	listenerReg.ReopenOrFail(t, 0)
 	require.NoError(t, tc.RestartServer(0), "restart failed")
 	s = sqlutils.MakeSQLRunner(tc.Conns[0])
 
