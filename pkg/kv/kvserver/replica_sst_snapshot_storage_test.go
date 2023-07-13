@@ -275,15 +275,21 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 	keySpans := rditer.MakeReplicatedKeySpans(&desc)
 
-	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
-	)
+	createNewSSTWriter := func(ctx context.Context) (storage.SSTWriter, error) {
+		newSSTFile, err := scratch.NewFile(ctx, 0)
+		if err != nil {
+			return storage.SSTWriter{}, err
+		}
+		writer := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), newSSTFile)
+		return writer, nil
+	}
+	msstw, err := storage.NewMultiSSTWriter(ctx, createNewSSTWriter, keySpans)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte
-	fileNames := msstw.scratch.SSTs()
+	fileNames := scratch.SSTs()
 	for _, file := range fileNames {
 		sst, err := fs.ReadFile(eng, file)
 		require.NoError(t, err)
