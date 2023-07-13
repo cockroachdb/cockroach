@@ -580,6 +580,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	existingClosed := r.mu.state.RaftClosedTimestamp
 	newClosed := b.state.RaftClosedTimestamp
 	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) && raftClosedTimestampAssertionsEnabled {
+		r.mu.Unlock()
 		return errors.AssertionFailedf(
 			"raft closed timestamp regression; replica has: %s, new batch has: %s.",
 			existingClosed.String(), newClosed.String())

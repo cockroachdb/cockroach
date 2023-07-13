@@ -2953,15 +2953,15 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
 	r.mu.RLock()
 	replIdx := r.mu.state.RaftAppliedIndex + 1
-
 	status := r.raftStatusRLocked()
+	r.mu.RUnlock()
+
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
 		return errors.Errorf("raft status not initialized")
 	}
 	replTerm := kvpb.RaftTerm(status.Term)
-	r.mu.RUnlock()
 
 	// Delegate has a lower term than the coordinator. This typically means the
 	// lease has been transferred, and we should not process this request. There

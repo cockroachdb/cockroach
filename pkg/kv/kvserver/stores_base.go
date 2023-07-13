@@ -99,7 +99,7 @@ func (s *baseStore) SetQueueActive(active bool, queue string) error {
 func (s *baseStore) GetReplicaMutexForTesting(rangeID roachpb.RangeID) *syncutil.RWMutex {
 	store := (*Store)(s)
 	if repl := store.GetReplicaIfExists(rangeID); repl != nil {
-		return &repl.mu.RWMutex
+		return (*syncutil.RWMutex)(&repl.mu.ReplicaMutex)
 	}
 	return nil
 }
