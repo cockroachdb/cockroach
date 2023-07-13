@@ -107,11 +107,6 @@ def c_deps():
         sha256 = "1ab617eb51b017d27d71ba08a065b6a08ef5410e9aa5554669196b7cf28214c1",
     )
     archived_cdep_repository(
-        lib = "libgeos",
-        config = "windows",
-        sha256 = "221408632feebb02f0793900aea1ed477fbb51cf8b278c4d6eea61f38870ffb4",
-    )
-    archived_cdep_repository(
         lib = "libjemalloc",
         config = "windows",
         sha256 = "1f5ca83705c961b89745fc4f80b8363995f973800be210a5a5fd423d6bd17a22",
