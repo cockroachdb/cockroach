@@ -32,6 +32,7 @@ import (
 )
 
 const bundleChunkSize = 1 << 20 // 1 MiB
+const finalChunkSuffix = "#_final"
 
 // RequestExecutionDetails implements the JobProfiler interface.
 func (p *planner) RequestExecutionDetails(ctx context.Context, jobID jobspb.JobID) error {
@@ -81,30 +82,31 @@ func (e *ExecutionDetailsBuilder) WriteExecutionDetail(
 		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
 
 		var chunkCounter int
-		chunkFileName := filename
+		var chunkName string
 		for len(chunkData) > 0 {
 			chunkSize := bundleChunkSize
 			chunk := chunkData
 			if len(chunk) > chunkSize {
+				chunkName = fmt.Sprintf("%s#%04d", filename, chunkCounter)
 				chunk = chunk[:chunkSize]
 			} else {
 				// This is the last chunk we will write, assign it a sentinel file name.
-				chunkFileName = chunkFileName + "_final"
+				chunkName = filename + finalChunkSuffix
 			}
 			chunkData = chunkData[len(chunk):]
 			var err error
 			chunk, err = compressChunk(chunk)
 			if err != nil {
-				return errors.Wrapf(err, "failed to compress chunk for file %s", chunkFileName)
+				return errors.Wrapf(err, "failed to compress chunk for file %s", filename)
 			}
 
 			// On listing we want the info_key of each chunk to sort after the
 			// previous chunk of the same file so that the chunks can be reassembled
 			// on download. For this reason we use a monotonically increasing
 			// chunk counter as the suffix.
-			err = jobInfo.Write(ctx, profilerconstants.MakeProfilerBundleChunkKey(chunkFileName, chunkCounter), chunk)
+			err = jobInfo.Write(ctx, profilerconstants.MakeProfilerExecutionDetailsChunkKey(chunkName), chunk)
 			if err != nil {
-				return errors.Wrapf(err, "failed to write chunk for file %s", chunkFileName)
+				return errors.Wrapf(err, "failed to write chunk for file %s", filename)
 			}
 			chunkCounter++
 		}
@@ -146,7 +148,7 @@ func (e *ExecutionDetailsBuilder) ReadExecutionDetail(
 			return errors.Wrapf(err, "failed to iterate over chunks for job %d", jobID)
 		}
 
-		if lastInfoKey != "" && !strings.Contains(lastInfoKey, "_final") {
+		if lastInfoKey != "" && !strings.Contains(lastInfoKey, finalChunkSuffix) {
 			return errors.Newf("failed to read all chunks for file %s, last info key read was %s", filename, lastInfoKey)
 		}
 
@@ -155,6 +157,35 @@ func (e *ExecutionDetailsBuilder) ReadExecutionDetail(
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// ListExecutionDetailFiles lists all the files that have been generated as part
+// of a job's execution details.
+func (e *ExecutionDetailsBuilder) ListExecutionDetailFiles(ctx context.Context) ([]string, error) {
+	var res []string
+	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
+
+		// Iterate over all the files that have been stored as part of the job's
+		// execution details.
+		files := make([]string, 0)
+		if err := jobInfo.Iterate(ctx, profilerconstants.ExecutionDetailsChunkKeyPrefix,
+			func(infoKey string, value []byte) error {
+				// Look for the final chunk of each file to find the unique file name.
+				if strings.HasSuffix(infoKey, finalChunkSuffix) {
+					files = append(files, strings.TrimSuffix(infoKey, finalChunkSuffix))
+				}
+				return nil
+			}); err != nil {
+			return errors.Wrapf(err, "failed to iterate over execution detail files for job %d", jobID)
+		}
+		res = files
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 // MakeJobProfilerExecutionDetailsBuilder returns an instance of an ExecutionDetailsBuilder.
@@ -199,7 +230,7 @@ func (e *ExecutionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	}
 	if row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
-		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405"))
+		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
 		if err := e.WriteExecutionDetail(ctx, filename,
 			[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL))); err != nil {
 			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
