@@ -25,7 +25,7 @@ describe("Getting nodes by region string", () => {
         "3": "region3",
       };
       const result = getNodesByRegionString(nodes, regions, false);
-      assert.deepStrictEqual(result, `region1(n1), region2(n2), region3(n3)`);
+      expect(result).toEqual(`region1(n1), region2(n2), region3(n3)`);
     });
 
     it("when all nodes same region", () => {
@@ -36,7 +36,7 @@ describe("Getting nodes by region string", () => {
         "3": "region1",
       };
       const result = getNodesByRegionString(nodes, regions, false);
-      assert.deepStrictEqual(result, `region1(n1,n2,n3)`);
+      expect(result).toEqual(`region1(n1,n2,n3)`);
     });
 
     it("when some nodes different regions", () => {
@@ -47,14 +47,14 @@ describe("Getting nodes by region string", () => {
         "3": "region2",
       };
       const result = getNodesByRegionString(nodes, regions, false);
-      assert.deepStrictEqual(result, `region1(n1,n2), region2(n3)`);
+      expect(result).toEqual(`region1(n1,n2), region2(n3)`);
     });
 
     it("when region map is empty", () => {
       const nodes = [1, 2, 3];
       const regions = {};
       const result = getNodesByRegionString(nodes, regions, false);
-      assert.deepStrictEqual(result, `undefined(n1,n2,n3)`);
+      expect(result).toEqual("");
     });
 
     it("when nodes are empty", () => {
@@ -65,7 +65,7 @@ describe("Getting nodes by region string", () => {
         "3": "region2",
       };
       const result = getNodesByRegionString(nodes, regions, false);
-      assert.deepStrictEqual(result, "");
+      expect(result).toEqual("");
     });
   });
 });
@@ -74,19 +74,13 @@ describe("Normalize privileges", () => {
   it("sorts correctly when input is disordered", () => {
     const privs = ["CREATE", "DELETE", "UPDATE", "ALL", "GRANT"];
     const result = normalizePrivileges(privs);
-    assert.deepStrictEqual(result, [
-      "ALL",
-      "CREATE",
-      "GRANT",
-      "UPDATE",
-      "DELETE",
-    ]);
+    expect(result).toEqual(["ALL", "CREATE", "GRANT", "UPDATE", "DELETE"]);
   });
 
   it("removes duplicates", () => {
     const privs = ["CREATE", "CREATE", "UPDATE", "ALL", "GRANT"];
     const result = normalizePrivileges(privs);
-    assert.deepStrictEqual(result, ["ALL", "CREATE", "GRANT", "UPDATE"]);
+    expect(result).toEqual(["ALL", "CREATE", "GRANT", "UPDATE"]);
   });
 });
 
@@ -94,12 +88,12 @@ describe("Normalize roles", () => {
   it("sorts correctly when input is disordered", () => {
     const roles = ["public", "root", "admin"];
     const result = normalizeRoles(roles);
-    assert.deepStrictEqual(result, ["root", "admin", "public"]);
+    expect(result).toEqual(["root", "admin", "public"]);
   });
 
   it("removes duplicates", () => {
     const roles = ["public", "admin", "admin"];
     const result = normalizeRoles(roles);
-    assert.deepStrictEqual(result, ["admin", "public"]);
+    expect(result).toEqual(["admin", "public"]);
   });
 });

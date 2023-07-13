@@ -407,7 +407,7 @@ describe("Database Details Page", function () {
           live_percentage: 0.5,
         },
         nodes: [1, 2, 3],
-        nodesByRegionString: "undefined(n1,n2,n3)",
+        nodesByRegionString: "",
       },
     });
 
@@ -437,7 +437,7 @@ describe("Database Details Page", function () {
           approximate_disk_bytes: 10,
         },
         nodes: [1, 2, 3, 4, 5],
-        nodesByRegionString: "undefined(n1,n2,n3,n4,n5)",
+        nodesByRegionString: "",
       },
     });
   });
