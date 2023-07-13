@@ -60,7 +60,7 @@ func TestFullClusterBackup(t *testing.T) {
 			// helper function, that is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
 			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Settings:          settings,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -373,7 +373,7 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 			// helper function, is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
 			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -975,7 +975,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	// helper function, is not yet enabled to set up tenants within
 	// clusters by default. Tracking issue
 	// https://github.com/cockroachdb/cockroach/issues/76378
-	params.ServerArgs.DefaultTestTenant = base.TestTenantDisabled
+	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -1085,7 +1085,7 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
 		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1110,7 +1110,7 @@ func TestRestoreWithDroppedDefaultDB(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
 		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1136,7 +1136,7 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 			// helper function, that is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
 			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

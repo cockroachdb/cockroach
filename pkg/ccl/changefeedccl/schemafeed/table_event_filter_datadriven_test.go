@@ -66,7 +66,7 @@ func TestDataDriven(t *testing.T) {
 		ctx := context.Background()
 		ts, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 			// TODO(ajwerner): Otherwise the test gets skipped due to some CCL warning.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		})
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		defer ts.Stopper().Stop(ctx)

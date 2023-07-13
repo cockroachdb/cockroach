@@ -55,7 +55,7 @@ import (
 // TestingGetTableDescriptor which isn't supported in multi-tenancy.
 // Tracked with #76378.
 var testArgs = base.TestServerArgs{
-	DefaultTestTenant: base.TestTenantDisabled,
+	DefaultTestTenant: base.TODOTestTenantDisabled,
 }
 
 // TestEncoderEquality tests that the vector encoder and the row based encoder

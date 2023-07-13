@@ -46,9 +46,9 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer srcServer.Stopper().Stop(ctx)
-	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer destServer.Stopper().Stop(ctx)
 
 	srcTenantID := serverutils.TestTenantID()
@@ -93,7 +93,7 @@ func TestCutoverBuiltin(t *testing.T) {
 			// Disable the test tenant as the test below looks for a
 			// streaming job assuming that it's within the system tenant.
 			// Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -297,7 +297,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 				},
 			},
 		},
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

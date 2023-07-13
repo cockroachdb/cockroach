@@ -65,7 +65,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Disabled due to underlying tests' use of SCATTER.
-				DefaultTestTenant:  base.TestTenantDisabled,
+				DefaultTestTenant:  base.TODOTestTenantDisabled,
 				ExternalIODir:      dir,
 				UseDatabase:        "test",
 				DisableSpanConfigs: true,

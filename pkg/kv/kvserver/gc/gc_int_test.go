@@ -92,7 +92,7 @@ func TestEndToEndGC(t *testing.T) {
 								WallClock: manualClock,
 							},
 						},
-						DefaultTestTenant: base.TestTenantDisabled,
+						DefaultTestTenant: base.TODOTestTenantDisabled,
 					},
 				})
 				tc.Start(t)

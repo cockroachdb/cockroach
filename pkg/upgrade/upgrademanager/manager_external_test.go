@@ -689,7 +689,7 @@ func TestMigrationFailure(t *testing.T) {
 	// Create a storage cluster for the tenant
 	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				SQLEvalContext: &eval.TestingKnobs{
 					TenantLogicalVersionKeyOverride: startVersionKey,

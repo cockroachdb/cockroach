@@ -50,7 +50,7 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 		base.TestServerArgs{
 			// Test runs against tenant, so no need to create the default
 			// test tenant.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	)
 	defer s.Stopper().Stop(ctx)

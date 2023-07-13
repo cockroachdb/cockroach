@@ -1392,7 +1392,7 @@ func (t *logicTest) newCluster(
 		// TODO(#76378): This conditional is naive - what does it expect to do
 		// when the probabilistic behavior is enabled? Investigate what this
 		// was built for, and use a better conditional instead.
-		defaultTestTenant = base.DeprecatedTestTenantDisabled
+		defaultTestTenant = base.TODOTestTenantDisabled
 	}
 
 	params := base.TestClusterArgs{

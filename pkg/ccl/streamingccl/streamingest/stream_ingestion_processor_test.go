@@ -179,7 +179,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled},
+		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled},
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).InternalDB().(descs.DB)

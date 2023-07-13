@@ -874,7 +874,7 @@ func TestConsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	st := cluster.MakeTestingClusterSettings()
@@ -944,7 +944,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 
 	// This test fails when run with the default test tenant. Disabling and
 	// tracking with #76378.
-	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	tenantID := serverutils.TestTenantID()
@@ -1011,7 +1011,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
 
-	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled, Settings: st})
+	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled, Settings: st})
 	defer hostServer.Stopper().Stop(ctx)
 
 	testProvider := newTestProvider()
@@ -1095,7 +1095,7 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 	if _, err := hostDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		t.Fatalf("changefeed setup failed: %s", err.Error())
@@ -1166,7 +1166,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	defer dirCleanupFn()
 	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test fails when run within the default tenant. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     dir,
 	})
 	defer hostServer.Stopper().Stop(context.Background())
@@ -1272,7 +1272,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 
 	hostServer, hostSQL, _ := serverutils.StartServer(b,
 		base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		})
 	defer hostServer.Stopper().Stop(context.Background())
 
@@ -1413,7 +1413,7 @@ func TestRUSettingsChanged(t *testing.T) {
 	ctx := context.Background()
 
 	params := base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 
 	s, mainDB, _ := serverutils.StartServer(t, params)
