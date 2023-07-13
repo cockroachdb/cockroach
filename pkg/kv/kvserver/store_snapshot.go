@@ -292,11 +292,22 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
-	msstw, err := storage.NewMultiSSTWriter(ctx, kvSS.CreateNewSSTWriter, keyRanges)
+
+	clearSpan := func(ctx context.Context, span roachpb.Span, w *storage.MultiSSTWriter) error {
+		// Clear all existing replica state, including both point keys and range keys.
+		if err := w.PutRangeDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		if err := w.PutRangeKeyDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	msstw, err := storage.NewMultiSSTWriter(ctx, kvSS.CreateNewSSTWriter, clearSpan, keyRanges, 128<<20)
 	if err != nil {
 		return noSnap, err
 	}
-	defer msstw.Close()
 
 	log.Event(ctx, "waiting for snapshot batches to begin")
 
@@ -368,7 +379,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
-			msstw.Close()
 			timingTag.stop("sst")
 			log.Eventf(ctx, "all data received from snapshot and all SSTs were finalized")
 
