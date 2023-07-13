@@ -60,7 +60,7 @@ namespace CockroachDrivers
                 using (var cmd = new NpgsqlCommand("SELECT id, balance FROM bank.accounts", conn))
                 using (var reader = cmd.ExecuteReader())
                     while (reader.Read())
-                        Console.Write("\taccount {0}: {1}\n", reader.GetString(0), reader.GetString(1));
+                        Console.Write("\taccount {0}: {1}\n", reader.GetInt32(0), reader.GetInt32(1));
             }
         }
 
@@ -138,7 +138,7 @@ namespace CockroachDrivers
                 using (var cmd = new NpgsqlCommand("SELECT id, balance FROM bank.accounts", conn))
                 using (var reader = cmd.ExecuteReader())
                     while (reader.Read())
-                        Console.Write("\taccount {0}: {1}\n", reader.GetString(0), reader.GetString(1));
+                        Console.Write("\taccount {0}: {1}\n", reader.GetInt32(0), reader.GetInt32(1));
             }
         }
 
@@ -200,8 +200,8 @@ namespace CockroachDrivers
                         {
                             throw new DataException(String.Format("SELECT can't find inserted value: read {0}, expecting 42", a));
                         }
-                        var ts = reader.GetTimeStamp(1);
-                        var expectedTs = new NpgsqlTypes.NpgsqlDateTime(2015, 5, 7, 18, 20, 0, DateTimeKind.Unspecified);
+                        var ts = reader.GetDateTime(1);
+                        var expectedTs = new DateTime(2015, 5, 7, 18, 20, 0, DateTimeKind.Unspecified);
                         if (ts != expectedTs)
                         {
                             throw new DataException(String.Format("SELECT unexpected value for ts: read {0}, expecting {1}", ts, expectedTs));
@@ -212,7 +212,7 @@ namespace CockroachDrivers
                 using (var cmd = new NpgsqlCommand("INSERT INTO test.f VALUES (@x, @ts)", conn))
                 {
                     cmd.Parameters.Add("x", NpgsqlTypes.NpgsqlDbType.Integer).Value = 1;
-                    cmd.Parameters.Add("ts", NpgsqlTypes.NpgsqlDbType.Timestamp).Value = new NpgsqlTypes.NpgsqlDateTime(DateTime.Now);
+                    cmd.Parameters.Add("ts", NpgsqlTypes.NpgsqlDbType.Timestamp).Value = DateTime.Now;
                     cmd.Prepare();
                     var rows = cmd.ExecuteNonQuery();
                     if (rows != 1)
@@ -311,7 +311,7 @@ namespace CockroachDrivers
                 {
                     cmd.Parameters.Add("id", NpgsqlTypes.NpgsqlDbType.Integer).Value = 1;
                     cmd.Parameters.Add("balance", NpgsqlTypes.NpgsqlDbType.Integer).Value = 1000;
-                    cmd.Parameters.Add("cdate", NpgsqlTypes.NpgsqlDbType.Date).Value = new NpgsqlTypes.NpgsqlDate(DateTime.Now);
+                    cmd.Parameters.Add("cdate", NpgsqlTypes.NpgsqlDbType.Date).Value = DateTime.Now;
                     cmd.Prepare();
                     var rows = cmd.ExecuteNonQuery();
                     if (rows != 1)
