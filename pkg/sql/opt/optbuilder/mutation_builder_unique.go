@@ -400,14 +400,15 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 // scanned are also returned.
 func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	tabMeta := h.mb.b.addTable(h.mb.tab, tree.NewUnqualifiedTableName(h.mb.tab.Name()))
-	ordinals = tableOrdinals(tabMeta.Table, columnKinds{
+	var computedColOrdinals []int
+	ordinals, computedColOrdinals = tableOrdinals(tabMeta.Table, columnKinds{
 		includeMutations: false,
 		includeSystem:    false,
 		includeInverted:  false,
 	})
 	return h.mb.b.buildScan(
 		tabMeta,
-		ordinals,
+		ordinals, computedColOrdinals,
 		// After the update we can't guarantee that the constraints are unique
 		// (which is why we need the uniqueness checks in the first place).
 		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},

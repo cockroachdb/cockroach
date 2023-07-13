@@ -144,13 +144,15 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
-			return b.buildScan(
-				tabMeta,
+			ords, computedColOrds :=
 				tableOrdinals(t, columnKinds{
 					includeMutations: false,
 					includeSystem:    true,
 					includeInverted:  false,
-				}),
+				})
+			return b.buildScan(
+				tabMeta,
+				ords, computedColOrds,
 				indexFlags, locking, inScope,
 				false, /* disableNotVisibleIndex */
 			)
@@ -437,6 +439,9 @@ func (b *Builder) buildScanFromTableRef(
 	inScope *scope,
 ) (outScope *scope) {
 	var ordinals []int
+	var computedColOrds []int
+	tn := tree.MakeUnqualifiedTableName(tab.Name())
+	tabMeta := b.addTable(tab, &tn)
 	if ref.Columns != nil {
 		// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
 		// (all columns). whereas an array of length 0 means 'zero columns'.
@@ -446,18 +451,22 @@ func (b *Builder) buildScanFromTableRef(
 				"an explicit list of column IDs must include at least one column"))
 		}
 		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
+		for _, i := range ordinals {
+			if tabMeta.Table.Column(i).IsComputed() && !tabMeta.Table.Column(i).IsMutation() {
+				computedColOrds = append(computedColOrds, i)
+			}
+		}
 	} else {
-		ordinals = tableOrdinals(tab, columnKinds{
+		ordinals, computedColOrds = tableOrdinals(tab, columnKinds{
 			includeMutations: false,
 			includeSystem:    true,
 			includeInverted:  false,
 		})
 	}
 
-	tn := tree.MakeUnqualifiedTableName(tab.Name())
-	tabMeta := b.addTable(tab, &tn)
-
-	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope, false /* disableNotVisibleIndex */)
+	return b.buildScan(tabMeta, ordinals, computedColOrds, indexFlags, locking, inScope,
+		false, /* disableNotVisibleIndex */
+	)
 }
 
 // addTable adds a table to the metadata and returns the TableMeta. The table
@@ -499,11 +508,6 @@ func errorOnInvalidMultiregionDB(
 // be in the list (in practice, this coincides with all "ordinary" table columns
 // being in the list).
 //
-// If scanMutationCols is true, then include columns being added or dropped from
-// the table. These are currently required by the execution engine as "fetch
-// columns", when performing mutation DML statements (INSERT, UPDATE, UPSERT,
-// DELETE).
-//
 // NOTE: Callers must take care that mutation columns (columns that are being
 //
 //	added or dropped from the table) are only used when performing mutation
@@ -516,6 +520,7 @@ func errorOnInvalidMultiregionDB(
 func (b *Builder) buildScan(
 	tabMeta *opt.TableMeta,
 	ordinals []int,
+	computedColOrdinals []int,
 	indexFlags *tree.IndexFlags,
 	locking lockingSpec,
 	inScope *scope,
@@ -705,7 +710,7 @@ func (b *Builder) buildScan(
 	private.Flags.DisableNotVisibleIndex = disableNotVisibleIndex
 
 	b.addCheckConstraintsForTable(tabMeta)
-	b.addComputedColsForTable(tabMeta)
+	b.addComputedColsForTable(tabMeta, computedColOrdinals)
 	tabMeta.CacheIndexPartitionLocalities(b.evalCtx)
 
 	outScope.expr = b.factory.ConstructScan(&private)
@@ -834,7 +839,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // caches them in the table metadata as scalar expressions. These expressions
 // are used as "known truths" about table data. Any columns for which the
 // expression contains non-immutable operators are omitted.
-func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta, computedColOrdinals []int) {
 	// We do not want to track view deps here, otherwise a view depending
 	// on a table with a computed column of a UDT will result in a
 	// type dependency being added between the view and the UDT,
@@ -847,15 +852,11 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 	}
 	var tableScope *scope
 	tab := tabMeta.Table
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+	for _, i := range computedColOrdinals {
 		tabCol := tab.Column(i)
+		// Double-check this really is a computed column.
 		if !tabCol.IsComputed() {
-			continue
-		}
-		if tabCol.IsMutation() {
-			// Mutation columns can be NULL during backfill, so they won't equal the
-			// computed column expression value (in general).
-			continue
+			panic(fmt.Sprintf("expected column ordinal %d to be a computed column", i))
 		}
 		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())
 		if err != nil {

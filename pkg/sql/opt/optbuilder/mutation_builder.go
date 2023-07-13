@@ -286,13 +286,15 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	//
 	// NOTE: Include mutation columns, but be careful to never use them for any
 	//       reason other than as "fetch columns". See buildScan comment.
-	mb.fetchScope = mb.b.buildScan(
-		mb.b.addTable(mb.tab, &mb.alias),
+	ords, computedColOrds :=
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: true,
 			includeSystem:    true,
 			includeInverted:  false,
-		}),
+		})
+	mb.fetchScope = mb.b.buildScan(
+		mb.b.addTable(mb.tab, &mb.alias),
+		ords, computedColOrds,
 		indexFlags,
 		noRowLocking,
 		inScope,
@@ -396,13 +398,15 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// NOTE: Include mutation columns, but be careful to never use them for any
 	//       reason other than as "fetch columns". See buildScan comment.
 	// TODO(andyk): Why does execution engine need mutation columns for Delete?
-	mb.fetchScope = mb.b.buildScan(
-		mb.b.addTable(mb.tab, &mb.alias),
+	ords, computedColOrds :=
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: true,
 			includeSystem:    true,
 			includeInverted:  false,
-		}),
+		})
+	mb.fetchScope = mb.b.buildScan(
+		mb.b.addTable(mb.tab, &mb.alias),
+		ords, computedColOrds,
 		indexFlags,
 		noRowLocking,
 		inScope,

@@ -282,13 +282,15 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
 	// the two tables in the self-join.
-	fetchScope := mb.b.buildScan(
-		mb.b.addTable(mb.tab, &mb.alias),
+	ords, computedColOrds :=
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: false,
 			includeSystem:    false,
 			includeInverted:  false,
-		}),
+		})
+	fetchScope := mb.b.buildScan(
+		mb.b.addTable(mb.tab, &mb.alias),
+		ords, computedColOrds,
 		nil, /* indexFlags */
 		noRowLocking,
 		inScope,
@@ -367,13 +369,15 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// NOTE: Include mutation columns, but be careful to never use them for any
 	//       reason other than as "fetch columns". See buildScan comment.
 	// TODO(andyk): Why does execution engine need mutation columns for Insert?
-	mb.fetchScope = mb.b.buildScan(
-		mb.b.addTable(mb.tab, &mb.alias),
+	ords, computedColOrds :=
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: true,
 			includeSystem:    true,
 			includeInverted:  false,
-		}),
+		})
+	mb.fetchScope = mb.b.buildScan(
+		mb.b.addTable(mb.tab, &mb.alias),
+		ords, computedColOrds,
 		nil, /* indexFlags */
 		noRowLocking,
 		inScope,
@@ -575,12 +579,14 @@ func (h *arbiterPredicateHelper) init(mb *mutationBuilder, arbiterPredicate tree
 // used to fully normalize predicate expressions.
 func (h *arbiterPredicateHelper) tableScope() *scope {
 	if h.tableScopeLazy == nil {
-		h.tableScopeLazy = h.mb.b.buildScan(
-			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
+		ords, computedColOrds :=
+			tableOrdinals(h.tabMeta.Table, columnKinds{
 				includeMutations: false,
 				includeSystem:    false,
 				includeInverted:  false,
-			}),
+			})
+		h.tableScopeLazy = h.mb.b.buildScan(
+			h.tabMeta, ords, computedColOrds,
 			nil, /* indexFlags */
 			noRowLocking,
 			h.mb.b.allocScope(),
