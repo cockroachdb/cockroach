@@ -848,11 +848,25 @@ func (b *builderState) ResolveSchema(
 	return b.QueryByID(sc.GetID())
 }
 
-// ResolvePrefix implements the scbuildstmt.NameResolver interface.
-func (b *builderState) ResolvePrefix(
-	prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
+// ResolveTargetObject implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveTargetObject(
+	name *tree.UnresolvedObjectName, requiredSchemaPriv privilege.Kind,
 ) (dbElts scbuildstmt.ElementResultSet, scElts scbuildstmt.ElementResultSet) {
-	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
+	objName := name.ToTableName()
+	db, sc := b.cr.MayResolvePrefix(b.ctx, objName.ObjectNamePrefix)
+	// If the database or schema are not found during resolution,
+	// then generate an appropriate error.
+	if db == nil || sc == nil {
+		if !objName.ExplicitSchema && !objName.ExplicitCatalog {
+			panic(
+				pgerror.New(pgcode.InvalidName, "no database specified"),
+			)
+		}
+		panic(errors.WithHint(pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot create %q because the target database or schema does not exist",
+			tree.ErrString(&objName)),
+			"verify that the current database and search_path are valid and/or the target database exists"))
+	}
 	b.ensureDescriptor(db.GetID())
 	if sc.SchemaKind() == catalog.SchemaVirtual {
 		panic(sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName()))
@@ -861,7 +875,7 @@ func (b *builderState) ResolvePrefix(
 		panic(unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema"))
 	}
 	b.ensureDescriptor(sc.GetID())
-	b.checkOwnershipOrPrivilegesOnSchemaDesc(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
+	b.checkOwnershipOrPrivilegesOnSchemaDesc(objName.ObjectNamePrefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
 	return b.QueryByID(db.GetID()), b.QueryByID(sc.GetID())
 }
 

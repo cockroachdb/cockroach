@@ -28,7 +28,7 @@ import (
 )
 
 func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
-	dbElts, scElts := b.ResolvePrefix(n.Name.ObjectNamePrefix, privilege.CREATE)
+	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, schemaElem := scpb.FindSchema(scElts)
 	_, _, dbElem := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)
