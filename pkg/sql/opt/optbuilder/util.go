@@ -734,8 +734,13 @@ type columnKinds struct {
 }
 
 // tableOrdinals returns a slice of ordinals that correspond to table columns of
-// the desired kinds.
-func tableOrdinals(tab cat.Table, k columnKinds) []int {
+// the desired kinds, and a slice of ordinals that correspond to computed
+// columns of the desired kinds following different rules on when they should
+// be included:
+// STORED computed columns which are being mutated are always excluded.
+// VIRTUAL computed columns which are being mutated are included if
+// `includeMutations` is true.
+func tableOrdinals(tab cat.Table, k columnKinds) (tableOrdinals, computedColOrdinals []int) {
 	n := tab.ColumnCount()
 	shouldInclude := [...]bool{
 		cat.Ordinary:   true,
@@ -744,12 +749,23 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 		cat.System:     k.includeSystem,
 		cat.Inverted:   k.includeInverted,
 	}
-	ordinals := make([]int, 0, n)
+	tableOrdinals = make([]int, 0, n)
 	for i := 0; i < n; i++ {
 		col := tab.Column(i)
 		if shouldInclude[col.Kind()] {
-			ordinals = append(ordinals, i)
+			tableOrdinals = append(tableOrdinals, i)
+			if col.IsComputed() && (!col.IsMutation() || col.IsVirtualComputed()) {
+				// Mutation columns can be NULL during backfill, so they won't equal the
+				// computed column expression value (in general). Virtual computed
+				// columns may be needed as "fetch" columns in order to build values to
+				// remove from unique indexes which include a virtual column as a key
+				// column. #60733 provides a crucial restriction that ensures that
+				// virtual computed column projections always produce a correct value
+				// during a backfill: they are not allowed to reference other write-only
+				// or delete-only columns, so will evaluate correctly.
+				computedColOrdinals = append(computedColOrdinals, i)
+			}
 		}
 	}
-	return ordinals
+	return tableOrdinals, computedColOrdinals
 }

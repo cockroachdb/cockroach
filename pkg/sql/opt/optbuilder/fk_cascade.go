@@ -292,13 +292,15 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 
 		// Build the input to the delete mutation, which is simply a Scan with a
 		// Select on top.
-		mb.fetchScope = b.buildScan(
-			b.addTable(cb.childTable, &mb.alias),
+		ords, computedColOrds :=
 			tableOrdinals(cb.childTable, columnKinds{
 				includeMutations: false,
 				includeSystem:    false,
 				includeInverted:  false,
-			}),
+			})
+		mb.fetchScope = b.buildScan(
+			b.addTable(cb.childTable, &mb.alias),
+			ords, computedColOrds,
 			nil, /* indexFlags */
 			noRowLocking,
 			b.allocScope(),
@@ -514,13 +516,15 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	bindingProps *props.Relational,
 	oldValues opt.ColList,
 ) (outScope *scope) {
-	outScope = b.buildScan(
-		b.addTable(childTable, childTableAlias),
+	ords, computedColOrds :=
 		tableOrdinals(childTable, columnKinds{
 			includeMutations: false,
 			includeSystem:    false,
 			includeInverted:  false,
-		}),
+		})
+	outScope = b.buildScan(
+		b.addTable(childTable, childTableAlias),
+		ords, computedColOrds,
 		nil, /* indexFlags */
 		noRowLocking,
 		b.allocScope(),
@@ -751,13 +755,15 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	oldValues opt.ColList,
 	newValues opt.ColList,
 ) (outScope *scope) {
-	outScope = b.buildScan(
-		b.addTable(childTable, childTableAlias),
+	ords, computedColOrds :=
 		tableOrdinals(childTable, columnKinds{
 			includeMutations: false,
 			includeSystem:    false,
 			includeInverted:  false,
-		}),
+		})
+	outScope = b.buildScan(
+		b.addTable(childTable, childTableAlias),
+		ords, computedColOrds,
 		nil, /* indexFlags */
 		noRowLocking,
 		b.allocScope(),

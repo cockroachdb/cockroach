@@ -614,9 +614,16 @@ func resolveTable(ctx context.Context, catalog cat.Catalog, id cat.StableID) cat
 // buildOtherTableScan builds a Scan of the "other" table.
 func (h *fkCheckHelper) buildOtherTableScan() (outScope *scope, tabMeta *opt.TableMeta) {
 	otherTabMeta := h.mb.b.addTable(h.otherTab, tree.NewUnqualifiedTableName(h.otherTab.Name()))
+	var computedColOrdinals []int
+	for _, i := range h.otherTabOrdinals {
+		if otherTabMeta.Table.Column(i).IsComputed() && !otherTabMeta.Table.Column(i).IsMutation() {
+			computedColOrdinals = append(computedColOrdinals, i)
+		}
+	}
 	return h.mb.b.buildScan(
 		otherTabMeta,
 		h.otherTabOrdinals,
+		computedColOrdinals,
 		&tree.IndexFlags{IgnoreForeignKeys: true},
 		noRowLocking,
 		h.mb.b.allocScope(),
