@@ -2096,3 +2096,14 @@ DROP INDEX idx97551;
 statement ok
 DROP TABLE t97551;
 DROP TYPE enum97551;
+
+subtest regression_106663
+
+statement ok
+CREATE TABLE t106663 (a INT, b INT, c BOOL, INDEX (b) WHERE c, FAMILY (a, b), FAMILY (c))
+
+statement ok
+UPDATE t106663 SET a = 1 WHERE true
+
+statement ok
+DROP TABLE t106663

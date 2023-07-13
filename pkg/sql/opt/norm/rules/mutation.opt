@@ -28,7 +28,9 @@
         $input
         (SimplifyPartialIndexProjections
             $projections
+            $passthrough
             $simplifiableCols
+            $mutationPrivate
         )
         $passthrough
     )

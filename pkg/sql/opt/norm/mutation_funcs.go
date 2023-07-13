@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // SimplifiablePartialIndexProjectCols returns the set of projected partial
@@ -172,7 +173,10 @@ func multiUsePartialIndexCols(mp *memo.MutationPrivate) opt.ColSet {
 // projected column's expression simplified to false if the column exists in
 // simplifiableCols.
 func (c *CustomFuncs) SimplifyPartialIndexProjections(
-	projections memo.ProjectionsExpr, simplifiableCols opt.ColSet,
+	projections memo.ProjectionsExpr,
+	passthrough opt.ColSet,
+	simplifiableCols opt.ColSet,
+	private *memo.MutationPrivate,
 ) memo.ProjectionsExpr {
 	simplified := make(memo.ProjectionsExpr, len(projections))
 	for i := range projections {
@@ -182,5 +186,24 @@ func (c *CustomFuncs) SimplifyPartialIndexProjections(
 			simplified[i] = projections[i]
 		}
 	}
+	// Any simplifiable partial index expressions that are currently passthrough
+	// columns must be turned into projected expressions.
+	simplifiableCols.IntersectionWith(passthrough)
+	simplifiableCols.ForEach(func(oldCol opt.ColumnID) {
+		newCol := c.f.Metadata().AddColumn("partial_index_foo", types.Bool)
+		simplified = append(simplified, c.f.ConstructProjectionsItem(memo.FalseSingleton, newCol))
+		// TODO(michae2): instead of mutating private, should this return a new
+		// MutationPrivate?
+		for i, col := range private.PartialIndexPutCols {
+			if col == oldCol {
+				private.PartialIndexPutCols[i] = newCol
+			}
+		}
+		for i, col := range private.PartialIndexDelCols {
+			if col == oldCol {
+				private.PartialIndexDelCols[i] = newCol
+			}
+		}
+	})
 	return simplified
 }
