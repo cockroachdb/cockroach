@@ -546,7 +546,11 @@ func (b *Builder) buildScan(
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		name := col.ColName()
-		if col.IsVirtualComputed() {
+		if col.IsVirtualComputed() && !col.IsMutation() {
+			// There is no need to build a projection on a virtual computed column
+			// which is a mutation column, because it should not be scanned when in
+			// this state. See `Builder.addComputedColsForTable`, also called by
+			// `buildScan`, which skips mutation columns.
 			virtualColIDs.Add(colID)
 		} else {
 			scanColIDs.Add(colID)
