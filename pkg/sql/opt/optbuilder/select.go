@@ -153,6 +153,7 @@ func (b *Builder) buildDataSource(
 				}),
 				indexFlags, locking, inScope,
 				false, /* disableNotVisibleIndex */
+				false, /* includeVirtualMutationCols */
 			)
 
 		case cat.Sequence:
@@ -457,7 +458,10 @@ func (b *Builder) buildScanFromTableRef(
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
 
-	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope, false /* disableNotVisibleIndex */)
+	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope,
+		false, /* disableNotVisibleIndex */
+		false, /* includeVirtualMutationCols */
+	)
 }
 
 // addTable adds a table to the metadata and returns the TableMeta. The table
@@ -499,10 +503,10 @@ func errorOnInvalidMultiregionDB(
 // be in the list (in practice, this coincides with all "ordinary" table columns
 // being in the list).
 //
-// If scanMutationCols is true, then include columns being added or dropped from
-// the table. These are currently required by the execution engine as "fetch
-// columns", when performing mutation DML statements (INSERT, UPDATE, UPSERT,
-// DELETE).
+// If includeVirtualMutationCols is true, then include virtual computed columns
+// being added or dropped from the table. These are currently required by the
+// execution engine as "fetch columns", when performing mutation DML statements
+// (INSERT, UPDATE, UPSERT, DELETE).
 //
 // NOTE: Callers must take care that mutation columns (columns that are being
 //
@@ -520,6 +524,7 @@ func (b *Builder) buildScan(
 	locking lockingSpec,
 	inScope *scope,
 	disableNotVisibleIndex bool,
+	includeVirtualMutationCols bool,
 ) (outScope *scope) {
 	if ordinals == nil {
 		panic(errors.AssertionFailedf("no ordinals"))
@@ -705,7 +710,7 @@ func (b *Builder) buildScan(
 	private.Flags.DisableNotVisibleIndex = disableNotVisibleIndex
 
 	b.addCheckConstraintsForTable(tabMeta)
-	b.addComputedColsForTable(tabMeta)
+	b.addComputedColsForTable(tabMeta, includeVirtualMutationCols)
 	tabMeta.CacheIndexPartitionLocalities(b.evalCtx)
 
 	outScope.expr = b.factory.ConstructScan(&private)
@@ -834,7 +839,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // caches them in the table metadata as scalar expressions. These expressions
 // are used as "known truths" about table data. Any columns for which the
 // expression contains non-immutable operators are omitted.
-func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta, includeVirtualMutationCols bool) {
 	// We do not want to track view deps here, otherwise a view depending
 	// on a table with a computed column of a UDT will result in a
 	// type dependency being added between the view and the UDT,
@@ -852,9 +857,11 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 		if !tabCol.IsComputed() {
 			continue
 		}
-		if tabCol.IsMutation() {
+		if tabCol.IsMutation() && (!tabCol.IsVirtualComputed() || !includeVirtualMutationCols) {
 			// Mutation columns can be NULL during backfill, so they won't equal the
-			// computed column expression value (in general).
+			// computed column expression value (in general). Virtual computed columns
+			// may be needed as "fetch" columns in order to build values to remove
+			// from unique indexes which include a virtual column as a key column.
 			continue
 		}
 		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())

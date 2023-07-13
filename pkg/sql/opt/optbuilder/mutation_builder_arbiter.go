@@ -292,7 +292,8 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 		nil, /* indexFlags */
 		noRowLocking,
 		inScope,
-		true, /* disableNotVisibleIndex */
+		true,  /* disableNotVisibleIndex */
+		false, /* includeVirtualMutationCols */
 	)
 
 	// If the index is a unique partial index, then rows that are not in the
@@ -378,6 +379,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 		noRowLocking,
 		inScope,
 		true, /* disableNotVisibleIndex */
+		true, /* includeVirtualMutationCols */
 	)
 	// Set fetchColIDs to reference the columns created for the fetch values.
 	mb.setFetchColIDs(mb.fetchScope.cols)
@@ -585,6 +587,7 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 			noRowLocking,
 			h.mb.b.allocScope(),
 			false, /* disableNotVisibleIndex */
+			false, /* includeVirtualMutationCols */
 		)
 	}
 	return h.tableScopeLazy

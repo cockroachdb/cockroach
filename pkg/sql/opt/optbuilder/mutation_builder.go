@@ -297,6 +297,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		noRowLocking,
 		inScope,
 		false, /* disableNotVisibleIndex */
+		true,  /* includeVirtualMutationCols */
 	)
 
 	// Set list of columns that will be fetched by the input expression.
@@ -407,6 +408,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		noRowLocking,
 		inScope,
 		false, /* disableNotVisibleIndex */
+		true,  /* includeVirtualMutationCols */
 	)
 
 	// Set list of columns that will be fetched by the input expression.
