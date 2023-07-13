@@ -23,6 +23,7 @@ go_library(
         "parallel_io.go",
         "parquet.go",
         "parquet_sink_cloudstorage.go",
+        "protected_timestamps.go",
         "retry.go",
         "scheduled_changefeed.go",
         "schema_registry.go",
@@ -180,7 +181,6 @@ go_test(
     srcs = [
         "alter_changefeed_test.go",
         "avro_test.go",
-        "changefeed_dist_test.go",
         "changefeed_test.go",
         "csv_test.go",
         "encoder_test.go",
@@ -190,6 +190,7 @@ go_test(
         "name_test.go",
         "nemeses_test.go",
         "parquet_test.go",
+        "protected_timestamps_test.go",
         "scheduled_changefeed_test.go",
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",
