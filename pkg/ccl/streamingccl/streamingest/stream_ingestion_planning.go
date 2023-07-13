@@ -219,7 +219,7 @@ func ingestionPlanHook(
 		// Create the producer job first for the purpose of observability, user is
 		// able to know the producer job id immediately after executing
 		// CREATE VIRTUAL CLUSTER ... FROM REPLICATION.
-		replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(sourceTenant))
+		replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(sourceTenant), false)
 		if err != nil {
 			return err
 		}

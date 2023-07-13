@@ -791,7 +791,11 @@ type StreamManagerFactory interface {
 type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified
 	// tenant on the producer side.
-	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
+	//
+	// If the forSpanConfigs arg is passed, the replication stream will only
+	// replicate the tenant's system.span_configuration table.
+	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName, forSpanConfigs bool,
+	) (streampb.ReplicationProducerSpec, error)
 
 	// HeartbeatReplicationStream sends a heartbeat to the replication stream producer, indicating
 	// consumer has consumed until the given 'frontier' timestamp. This updates the producer job

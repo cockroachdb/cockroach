@@ -80,7 +80,7 @@ var _ Client = &partitionedStreamClient{}
 
 // Create implements Client interface.
 func (p *partitionedStreamClient) Create(
-	ctx context.Context, tenantName roachpb.TenantName,
+	ctx context.Context, tenantName roachpb.TenantName, forSpanConfigs bool,
 ) (streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
 	defer sp.Finish()
@@ -88,7 +88,8 @@ func (p *partitionedStreamClient) Create(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var rawReplicationProducerSpec []byte
-	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
+	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1,$2)`,
+		tenantName, forSpanConfigs)
 	err := row.Scan(&rawReplicationProducerSpec)
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)

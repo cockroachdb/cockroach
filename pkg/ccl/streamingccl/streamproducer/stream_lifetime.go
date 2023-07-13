@@ -16,12 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,11 +40,17 @@ import (
 //
 // 1. Tracks the liveness of the replication stream consumption.
 // 2. Updates the protected timestamp for spans being replicated.
+//
+// If the forSpanConfigs arg is passed, the replication stream will only
+// replicate the tenant's system.span_configuration table.
 func startReplicationProducerJob(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, tenantName roachpb.TenantName,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn isql.Txn,
+	tenantName roachpb.TenantName,
+	forSpanConfigs bool,
 ) (streampb.ReplicationProducerSpec, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-
 	if !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
 		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")
 	}
@@ -55,7 +65,32 @@ func startReplicationProducerJob(
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	ptsID := uuid.MakeV4()
 
-	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
+	span := makeTenantSpan(tenantID)
+	if forSpanConfigs {
+		if roachpb.MustMakeTenantID(tenantID) != roachpb.SystemTenantID {
+			return streampb.ReplicationProducerSpec{},
+				errors.New("can only run a replication stream of the span_configuration table on the" +
+					" system tenant")
+		}
+		var spanConfigID descpb.ID
+		if err := sql.DescsTxn(ctx, execConfig, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			g := col.ByName(txn.KV()).Get()
+			_, imm, err := descs.PrefixAndTable(ctx, g, systemschema.SpanConfigurationsTableName)
+			if err != nil {
+				return err
+			}
+			spanConfigID = imm.GetID()
+			return nil
+		}); err != nil {
+			return streampb.ReplicationProducerSpec{}, err
+		}
+		codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
+		spanConfigKey := codec.TablePrefix(uint32(spanConfigID))
+		span = roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
+	}
+
+	jr := makeProducerJobRecord(registry, tenantID, span, timeout, evalCtx.SessionData().User(),
+		ptsID, forSpanConfigs)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
@@ -64,7 +99,7 @@ func startReplicationProducerJob(
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
 	}
-	deprecatedSpansToProtect := roachpb.Spans{makeTenantSpan(tenantID)}
+	deprecatedSpansToProtect := roachpb.Spans{span}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)

@@ -33,8 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -247,54 +249,59 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
 	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
+	tenantPrefix := keys.MakeTenantPrefix(srcTenant.ID)
 	defer cleanupTenant()
 
 	// Makes the stream time out really soon
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
-	t.Run("failed-after-timeout", func(t *testing.T) {
-		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
-		streamID := replicationProducerSpec.StreamID
 
-		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
-			[][]string{{"failed"}})
-		testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
-	})
-
-	// Make sure the stream does not time out within the test timeout
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
-	t.Run("continuously-running-within-timeout", func(t *testing.T) {
-		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
-		streamID := replicationProducerSpec.StreamID
-
-		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
-			[][]string{{"running"}})
-
-		// Ensures the job is continuously running for 3 seconds.
-		testDuration, now := 3*time.Second, timeutil.Now()
-		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
-			h.SysSQL.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
-				[][]string{{"running"}})
-			testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
+	testutils.RunTrueAndFalse(t, "for-span-configs", func(t *testing.T,
+		forSpanConfigs bool) {
+		if forSpanConfigs {
+			testTenantName = "system"
+			tenantPrefix = keys.MakeTenantPrefix(roachpb.SystemTenantID)
 		}
+		t.Run("failed-after-timeout", func(t *testing.T) {
+			h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
+			replicationProducerSpec := h.StartReplicationStream(t, testTenantName, forSpanConfigs)
+			streamID := replicationProducerSpec.StreamID
 
-		// Get a replication stream spec
-		spec, rawSpec := &streampb.ReplicationStreamSpec{}, make([]byte, 0)
-		row := h.SysSQL.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1)", streamID)
-		row.Scan(&rawSpec)
-		require.NoError(t, protoutil.Unmarshal(rawSpec, spec))
+			jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(streamID))
+			testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
+			h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
+		})
+		t.Run("continuously-running-within-timeout", func(t *testing.T) {
+			replicationProducerSpec := h.StartReplicationStream(t, testTenantName, forSpanConfigs)
+			streamID := replicationProducerSpec.StreamID
 
-		// Ensures the processor spec tracks the tenant span
-		require.Equal(t, 1, len(spec.Partitions))
-		require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
-		tenantPrefix := keys.MakeTenantPrefix(srcTenant.ID)
-		require.Equal(t, roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
-			spec.Partitions[0].PartitionSpec.Spans[0])
+			jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
+			testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
+
+			spec, rawSpec := &streampb.ReplicationStreamSpec{}, make([]byte, 0)
+			row := h.SysSQL.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1)", streamID)
+			row.Scan(&rawSpec)
+			require.NoError(t, protoutil.Unmarshal(rawSpec, spec))
+
+			// Ensures the processor spec tracks the tenant span
+			require.Equal(t, 1, len(spec.Partitions))
+			require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
+
+			expectedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()}
+			if forSpanConfigs {
+				var spanConfigTableID uint32
+				h.SysSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`,
+					systemschema.SpanConfigurationsTableName.Table()).Scan(&spanConfigTableID)
+				codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
+				spanConfigKey := codec.TablePrefix(spanConfigTableID)
+				expectedSpan = roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
+			}
+			require.Equal(t, expectedSpan, spec.Partitions[0].PartitionSpec.Spans[0])
+		})
+		t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
+			testStreamReplicationStatus(t, h.SysSQL, streampb.StreamID(123), streampb.StreamReplicationStatus_STREAM_INACTIVE)
+		})
 	})
 
-	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
-		testStreamReplicationStatus(t, h.SysSQL, streampb.StreamID(123), streampb.StreamReplicationStatus_STREAM_INACTIVE)
-	})
 }
 
 func encodeSpec(
@@ -348,7 +355,7 @@ USE d;
 `)
 
 	ctx := context.Background()
-	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName, false)
 	streamID := replicationProducerSpec.StreamID
 	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
 
@@ -496,7 +503,7 @@ USE d;
 `)
 
 	ctx := context.Background()
-	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName, false)
 	streamID := replicationProducerSpec.StreamID
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
@@ -584,7 +591,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '2s';",
 		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
 
-	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName, false)
 	timedOutStreamID := replicationProducerSpec.StreamID
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
@@ -596,7 +603,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 			timedOutStreamID, successfulIngestion)
 
 		// Create a new replication stream and complete it.
-		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+		replicationProducerSpec := h.StartReplicationStream(t, testTenantName, false)
 		streamID := replicationProducerSpec.StreamID
 		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
@@ -673,7 +680,7 @@ USE d;
 `)
 
 	ctx := context.Background()
-	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName, false)
 	streamID := replicationProducerSpec.StreamID
 	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
 
