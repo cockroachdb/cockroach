@@ -100,19 +100,20 @@ func RandomPredecessorHistory(rng *rand.Rand, v *version.Version, k int) ([]stri
 }
 
 // predecessorHistory computes the history of size `k` for a given
-// version. The `releasePicker` function can be used to select which
-// patch release is used at each step.
+// version (from least to most recent, using the order an actual
+// upgrade would have to follow). The `releasePicker` function can be
+// used to select which patch release is used at each step.
 func predecessorHistory(
 	v *version.Version, k int, releasePicker func(Series) string,
 ) ([]string, error) {
-	var history []string
+	history := make([]string, k)
 	currentV := v
-	for i := 0; i < k; i++ {
+	for i := k - 1; i >= 0; i-- {
 		predecessor, err := predecessorSeries(currentV)
 		if err != nil {
 			return nil, err
 		}
-		history = append(history, releasePicker(predecessor))
+		history[i] = releasePicker(predecessor)
 		currentV = mustParseVersion(predecessor.Latest)
 	}
 
