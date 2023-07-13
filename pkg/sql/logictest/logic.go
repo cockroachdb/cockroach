@@ -1383,16 +1383,17 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
-	defaultTestTenant := t.cfg.DefaultTestTenant
-	if defaultTestTenant.TestTenantAlwaysEnabled() {
-		// If the test tenant is explicitly enabled then `logic test` will handle
-		// the creation of a configured test tenant, thus for this case we disable
-		// the implicit creation of the default test tenant.
-		//
-		// TODO(#76378): This conditional is naive - what does it expect to do
-		// when the probabilistic behavior is enabled? Investigate what this
-		// was built for, and use a better conditional instead.
-		defaultTestTenant = base.TODOTestTenantDisabled
+	var defaultTestTenant base.DefaultTestTenantOptions
+	switch t.cfg.UseSecondaryTenant {
+	case logictestbase.Always, logictestbase.Never:
+		// If the test tenant is explicitly enabled or disabled then
+		// `logic test` will handle the creation of a configured test
+		// tenant, thus for this case we disable the implicit creation of
+		// the default test tenant.
+		defaultTestTenant = base.TestControlsTenantsExplicitly
+	case logictestbase.Random:
+		// Delegate to the test framework what to do.
+		defaultTestTenant = base.TestTenantProbabilisticOnly
 	}
 
 	params := base.TestClusterArgs{
@@ -1423,13 +1424,14 @@ func (t *logicTest) newCluster(
 	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
-	if cfg.DefaultTestTenant.TestTenantAlwaysEnabled() {
+	if cfg.UseSecondaryTenant == logictestbase.Always {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
 		//
-		// TODO(#76378): This conditional is naive - what does it expect to do
-		// if probabilistic configuration is requested? In that case
-		// if a secondary tenant is created, it won't set the proper replication mode.
+		// TODO(#76378): This condition is faulty. In the case where the
+		// profile is configured with "Random", we want to set the
+		// replication mode as well when a test tenant is effectively
+		// created. This currently is not happening.
 		params.ReplicationMode = base.ReplicationAuto
 	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
@@ -1497,12 +1499,12 @@ func (t *logicTest) newCluster(
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.DefaultTestTenant.TestTenantAlwaysEnabled() {
-		// TODO(#76378): What's going here? It looks like this code is
-		// trying to "take over" the conditional decision made by
-		// serverutils.StartServer. Is that what we want? Also this code
-		// seems redundant with what 'cockroach demo' does. Maybe we want
-		// to share the code?
+	if cfg.UseSecondaryTenant == logictestbase.Always {
+		// The config profile requires the test to run with a secondary
+		// tenant. Set the tenant servers up now.
+		//
+		// TODO(cli): maybe share this code with the code in
+		// cli/democluster which does a very similar thing.
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			settings := makeClusterSettings(false /* forSystemTenant */)
@@ -1565,7 +1567,7 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	if cfg.DefaultTestTenant.TestTenantAlwaysEnabled() || t.cluster.StartedDefaultTestTenant() {
+	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
 
 		conn := t.cluster.StorageClusterConn()
 		clusterSettings := toa.clusterSettings
@@ -2990,8 +2992,10 @@ func (t *logicTest) processSubtest(
 			// we switch to a different tenant.
 			//
 			// TODO(#76378): It seems the conditional should include `||
-			// t.cluster.StartedDefaultTestTenant()` here.
-			if t.cfg.DefaultTestTenant.TestTenantAlwaysEnabled() && strings.HasPrefix(fields[1], "host-cluster-") {
+			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
+			// where the config specified "Random" and a test tenant was
+			// effectively created.
+			if t.cfg.UseSecondaryTenant == logictestbase.Always && strings.HasPrefix(fields[1], "host-cluster-") {
 				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}
