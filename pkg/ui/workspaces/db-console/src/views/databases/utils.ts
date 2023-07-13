@@ -22,6 +22,10 @@ export function createNodesByRegionMap(
 ): Record<string, number[]> {
   const nodesByRegionMap: Record<string, number[]> = {};
   nodes.forEach((node: number) => {
+    // If the node's region doesn't exist skip it.
+    if (nodeRegions[node.toString()] === undefined) {
+      return;
+    }
     const region: string = nodeRegions[node.toString()];
     if (nodesByRegionMap[region] == null) {
       nodesByRegionMap[region] = [];
