@@ -17,6 +17,7 @@ go_library(
         "intent_interleaving_iter.go",
         "intent_reader_writer.go",
         "min_version.go",
+        "multi_sst_writer.go",
         "mvcc.go",
         "mvcc_incremental_iterator.go",
         "mvcc_key.go",
