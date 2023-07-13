@@ -422,6 +422,7 @@ func (n noopBackfiller) BackfillIndexes(
 	ctx context.Context,
 	progress scexec.BackfillProgress,
 	writer scexec.BackfillerProgressWriter,
+	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
 ) error {
 	return nil
@@ -451,6 +452,7 @@ var _ scexec.Merger = (*noopMerger)(nil)
 
 func (n noopMerger) MergeIndexes(
 	ctx context.Context,
+	job *jobs.Job,
 	progress scexec.MergeProgress,
 	writer scexec.BackfillerProgressWriter,
 	descriptor catalog.TableDescriptor,
