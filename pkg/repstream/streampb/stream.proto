@@ -34,6 +34,8 @@ message ReplicationProducerSpec {
   // through the lifetime of a replication stream. This will be the timestamp as
   // of which each partition will perform its initial rangefeed scan.
   util.hlc.Timestamp replication_start_time = 2 [(gogoproto.nullable) = false];
+
+  bool for_span_config = 3;
 }
 
 // StreamPartitionSpec is the stream partition specification.

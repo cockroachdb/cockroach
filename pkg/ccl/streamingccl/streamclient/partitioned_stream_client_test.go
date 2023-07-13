@@ -128,11 +128,11 @@ INSERT INTO d.t2 VALUES (2);
 			[][]string{{string(status)}})
 	}
 
-	rps, err := client.Create(ctx, testTenantName)
+	rps, err := client.Create(ctx, testTenantName, false)
 	require.NoError(t, err)
 	streamID := rps.StreamID
 	// We can create multiple replication streams for the same tenant.
-	_, err = client.Create(ctx, testTenantName)
+	_, err = client.Create(ctx, testTenantName, false)
 	require.NoError(t, err)
 
 	top, err := client.Plan(ctx, streamID)
@@ -249,7 +249,7 @@ INSERT INTO d.t2 VALUES (2);
 	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
 `)
-	rps, err = client.Create(ctx, testTenantName)
+	rps, err = client.Create(ctx, testTenantName, false)
 	require.NoError(t, err)
 	streamID = rps.StreamID
 	require.NoError(t, client.Complete(ctx, streamID, true))

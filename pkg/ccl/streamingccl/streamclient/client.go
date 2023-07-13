@@ -49,7 +49,8 @@ type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
+	Create(ctx context.Context, tenant roachpb.TenantName,
+		forSpanConfig bool) (streampb.ReplicationProducerSpec, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error

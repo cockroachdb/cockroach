@@ -2017,7 +2017,7 @@ var builtinOidsArray = []string{
 	2041: `to_char(timestamptz: timestamptz, format: string) -> string`,
 	2042: `to_char(interval: interval, format: string) -> string`,
 	2043: `crdb_internal.create_tenant(name: string) -> int`,
-	2044: `crdb_internal.start_replication_stream(tenant_name: string) -> bytes`,
+	2044: `crdb_internal.start_replication_stream(tenant_name: string, for_span_configs: bool) -> bytes`,
 	2045: `pg_blocking_pids() -> int[]`,
 	2046: `crdb_internal.fingerprint(span: bytes[], start_time: timestamptz, all_revisions: bool) -> int`,
 	2047: `tsquerysend(tsquery: tsquery) -> bytes`,

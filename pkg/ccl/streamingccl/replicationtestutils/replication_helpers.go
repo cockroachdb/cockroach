@@ -252,10 +252,11 @@ func (rh *ReplicationHelper) TableSpan(codec keys.SQLCodec, table string) roachp
 // StartReplicationStream reaches out to the system tenant to start the
 // replication stream from the source tenant.
 func (rh *ReplicationHelper) StartReplicationStream(
-	t *testing.T, sourceTenantName roachpb.TenantName,
+	t *testing.T, sourceTenantName roachpb.TenantName, forSpanConfigs bool,
 ) streampb.ReplicationProducerSpec {
 	var rawReplicationProducerSpec []byte
-	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.start_replication_stream($1)`, sourceTenantName)
+	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.start_replication_stream($1,$2)`,
+		sourceTenantName, forSpanConfigs)
 	row.Scan(&rawReplicationProducerSpec)
 	var replicationProducerSpec streampb.ReplicationProducerSpec
 	err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec)

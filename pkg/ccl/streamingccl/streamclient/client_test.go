@@ -39,7 +39,7 @@ func (sc testStreamClient) Dial(_ context.Context) error {
 
 // Create implements the Client interface.
 func (sc testStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName,
+	_ context.Context, _ roachpb.TenantName, _ bool,
 ) (streampb.ReplicationProducerSpec, error) {
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(1),
@@ -191,7 +191,7 @@ func ExampleClient() {
 		_ = client.Close(ctx)
 	}()
 
-	prs, err := client.Create(ctx, "system")
+	prs, err := client.Create(ctx, "system", false)
 	if err != nil {
 		panic(err)
 	}

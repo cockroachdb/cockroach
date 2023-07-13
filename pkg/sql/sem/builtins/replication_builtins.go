@@ -129,6 +129,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
+				{Name: "for_span_configs", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -137,7 +138,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				tenantName := string(tree.MustBeDString(args[0]))
-				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName))
+				forSpanConfigs := bool(tree.MustBeDBool(args[1]))
+				replicationProducerSpec, err := mgr.StartReplicationStream(ctx,
+					roachpb.TenantName(tenantName), forSpanConfigs)
 				if err != nil {
 					return nil, err
 				}
