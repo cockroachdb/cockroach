@@ -118,15 +118,15 @@ func TestLatestPredecessorHistory(t *testing.T) {
 			name:           "valid history",
 			v:              "v23.1.1",
 			k:              3,
-			expectedLatest: []string{"22.2.8", "22.1.12", "19.2.0"},
-			expectedRandom: []string{"22.2.1", "22.1.12", "19.2.0"},
+			expectedLatest: []string{"19.2.0", "22.1.12", "22.2.8"},
+			expectedRandom: []string{"19.2.0", "22.1.12", "22.2.1"},
 		},
 		{
 			name:           "with pre-release",
 			v:              "v23.1.1-beta.1",
 			k:              2,
-			expectedLatest: []string{"22.2.8", "22.1.12"},
-			expectedRandom: []string{"22.2.5", "22.1.0"},
+			expectedLatest: []string{"22.1.12", "22.2.8"},
+			expectedRandom: []string{"22.1.0", "22.2.5"},
 		},
 	}
 
