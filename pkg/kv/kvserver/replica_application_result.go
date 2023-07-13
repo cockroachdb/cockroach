@@ -249,7 +249,22 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	// TODO(tbg): it doesn't make sense to assign to `cmd.response` unconditionally.
 	// We're returning an error; the response should be nil. The error tracking in
 	// this method should be cleaned up.
+	// TODO(tbg): we should have an invariant about `cmd.response`: it is
+	// initially nil (in particular, a command that evaluates with an error - say
+	// a TransactionRetryError - must not enter the replication pipeline; we could
+	// relax this if we ever want erroring commands to be able to mutate the state
+	// machine but safe to say we don't have this now) and is only written once
+	// (in this method).
+	// Also, If a caller gets signaled early (ambiguous result, etc) this does not
+	// affect `response.Err`.
 	cmd.response.EncounteredIntents = cmd.proposal.Local.DetachEncounteredIntents()
+	// TODO(tbg): this seems wrong. the "Always" (pErr != nil) flavor of intents is
+	// for transaction aborts that still "know" about the ultimate fate of an intent.
+	// But since we're never reaching this code for a proposal that evaluated to an
+	// error, we can only reach it for illegal lease errors and the like, and even
+	// though it might be "correct" to surface the "always" intents in the response
+	// in that case, it would seem prudent not to take advantage of that. In other
+	// words, the line below this comment should be conditional on `pErr == nil`.
 	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local
