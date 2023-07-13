@@ -133,7 +133,7 @@ func TestDataDriven(t *testing.T) {
 				ds.replicationClusters.WaitUntilReplicatedTime(stringToHLC(t, replicatedTimeTarget),
 					jobspb.JobID(ds.replicationJobID))
 			case "start-replicated-tenant":
-				cleanupTenant := ds.replicationClusters.CreateDestTenantSQL(ctx)
+				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
 			case "let":
 				if len(d.CmdArgs) == 0 {
@@ -306,8 +306,10 @@ type datadrivenTestState struct {
 }
 
 func (d *datadrivenTestState) cleanup(t *testing.T) {
-	for _, cleanup := range d.cleanupFns {
-		require.NoError(t, cleanup())
+	// To mimic the calling pattern of deferred functions in a single goroutine,
+	// call cleanup functions in the opposite order they were appended.
+	for i := len(d.cleanupFns) - 1; i >= 0; i-- {
+		require.NoError(t, d.cleanupFns[i]())
 	}
 }
 
