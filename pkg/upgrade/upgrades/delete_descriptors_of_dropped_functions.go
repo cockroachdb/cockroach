@@ -33,14 +33,14 @@ SELECT max(id) from id_batch;
 
 const deleteDroppedFunctionQuery = `
 WITH to_json AS (
-    SELECT 
+    SELECT
       id,
       crdb_internal.pb_to_json(
         'cockroach.sql.sqlbase.Descriptor',
         descriptor,
         false
       ) AS d
-    FROM 
+    FROM
       system.descriptor
     WHERE id > $1
     AND id <= $2
@@ -48,7 +48,7 @@ WITH to_json AS (
 to_delete AS (
     SELECT id
     FROM to_json
-    WHERE 
+    WHERE
       d->'function' IS NOT NULL
       AND d->'function'->>'declarativeSchemaChangerState' IS NULL
       AND d->'function'->>'state' = 'DROP'
@@ -81,8 +81,8 @@ func deleteDescriptorsOfDroppedFunctions(
 
 	const batchSize = 50
 	for curID := int64(0); curID < maxID; {
+		var batchMaxID int64
 		if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-
 			row, err := txn.QueryRow(
 				ctx,
 				"upgrade-delete-dropped-function-descriptors-get-batch-max-id",
@@ -94,8 +94,7 @@ func deleteDescriptorsOfDroppedFunctions(
 			if err != nil {
 				return err
 			}
-			batchMaxID := int64(tree.MustBeDInt(row[0]))
-
+			batchMaxID = int64(tree.MustBeDInt(row[0]))
 			_, err = txn.Exec(
 				ctx,
 				"upgrade-delete-dropped-function-descriptors", /* opName */
@@ -104,15 +103,11 @@ func deleteDescriptorsOfDroppedFunctions(
 				curID,
 				batchMaxID,
 			)
-			if err != nil {
-				return err
-			}
-			curID = batchMaxID
-
-			return nil
+			return err
 		}); err != nil {
 			return err
 		}
+		curID = batchMaxID
 	}
 	return nil
 }
