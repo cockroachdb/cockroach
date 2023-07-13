@@ -905,6 +905,13 @@ func TestLogic_geospatial_meta(
 	runLogicTest(t, "geospatial_meta")
 }
 
+func TestLogic_geospatial_regression(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "geospatial_regression")
+}
+
 func TestLogic_geospatial_zm(
 	t *testing.T,
 ) {
