@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -32,10 +31,8 @@ import (
 // modified lease index makes a new proposal (different CmdID), transfers the
 // waiting caller (if any) to it, and proposes that. With this strategy, the
 // *RaftCommand associated to a proposal becomes immutable, which simplifies the
-// mental model and allows various simplifications in the proposal pipeline. For
-// now, the old and new behavior coexist, and we want to keep exercising both.
-// Once we have confidence, we'll hard-code true and remove all old code paths.
-var useReproposalsV2 = util.ConstantWithMetamorphicTestBool("reproposals-v2", true)
+// mental model and allows various simplifications in the proposal pipeline.
+const useReproposalsV2 = true
 
 // replica_application_*.go files provide concrete implementations of
 // the interfaces defined in the storage/apply package:
