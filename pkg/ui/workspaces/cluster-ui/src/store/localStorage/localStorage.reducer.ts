@@ -84,6 +84,8 @@ export type LocalStorageState = {
   "showSetting/JobsPage": string;
   [LocalStorageKeys.DB_DETAILS_VIEW_MODE]: ViewMode;
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]: boolean;
+  "requestTime/StatementsPage": moment.Moment;
+  "requestTime/TransactionsPage": moment.Moment;
 };
 
 type Payload = {
@@ -283,6 +285,8 @@ const initialState: LocalStorageState = {
         LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
       ),
     ) || defaultIsAutoRefreshEnabledSetting,
+  "requestTime/StatementsPage": null,
+  "requestTime/TransactionsPage": null,
 };
 
 const localStorageSlice = createSlice({

@@ -26,6 +26,11 @@ export const selectSortSetting = createSelector(
   localStorage => localStorage["sortSetting/TransactionsPage"],
 );
 
+export const selectRequestTime = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["requestTime/TransactionsPage"],
+);
+
 export const selectFilters = createSelector(
   localStorageSelector,
   localStorage => localStorage["filters/TransactionsPage"],

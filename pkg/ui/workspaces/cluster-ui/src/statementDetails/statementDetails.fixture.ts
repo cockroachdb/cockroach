@@ -851,6 +851,7 @@ export const getStatementDetailsPropsFixture = (
     "3": "gcp-us-west1",
     "4": "gcp-europe-west1",
   },
+  requestTime: moment.utc("2021.12.12"),
   refreshStatementDetails: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshNodes: noop,
@@ -860,6 +861,7 @@ export const getStatementDetailsPropsFixture = (
   diagnosticsReports: [],
   dismissStatementDiagnosticsAlertMessage: noop,
   onTimeScaleChange: noop,
+  onRequestTimeChange: noop,
   createStatementDiagnosticsReport: noop,
   uiConfig: {
     showStatementDiagnosticsLink: true,
