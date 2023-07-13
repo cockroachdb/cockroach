@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +45,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("disabled by default", func(t *testing.T) {
-		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{})
+		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{})
 		defer cleanup()
 
 		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
@@ -61,7 +60,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{})
+		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{})
 		defer cleanup()
 
 		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -87,7 +86,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	})
 
 	t.Run("a single range is unavailable for all KV ops", func(t *testing.T) {
-		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
+		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					for _, ru := range ba.Requests {
@@ -129,7 +128,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		var dbIsAvailable syncutil.AtomicBool
 		dbIsAvailable.Set(true)
 
-		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
+		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					if !dbIsAvailable.Get() {
@@ -174,7 +173,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		var dbIsAvailable syncutil.AtomicBool
 		dbIsAvailable.Set(true)
 
-		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
+		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					if !dbIsAvailable.Get() {
@@ -225,7 +224,7 @@ func TestWriteProbeDoesNotLeaveLiveData(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, p, cleanup := initTestProber(t, base.TestingKnobs{})
+	s, _, p, cleanup := initTestServer(t, base.TestingKnobs{})
 	defer cleanup()
 
 	kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -259,7 +258,7 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 
 	ctx := context.Background()
 	// Disable split and merge queue just in case.
-	_, sqlDB, p, cleanup := initTestProber(t, base.TestingKnobs{
+	_, sqlDB, p, cleanup := initTestServer(t, base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{DisableSplitQueue: true, DisableMergeQueue: true},
 	})
 	defer cleanup()
@@ -307,7 +306,7 @@ func TestProberOpsValidatesProbeKey(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _, cleanup := initTestProber(t, base.TestingKnobs{})
+	s, _, _, cleanup := initTestServer(t, base.TestingKnobs{})
 	defer cleanup()
 
 	var ops kvprober.ProberOps
@@ -350,23 +349,18 @@ func TestProberOpsValidatesProbeKey(t *testing.T) {
 	}
 }
 
-func initTestProber(
+func initTestServer(
 	t *testing.T, knobs base.TestingKnobs,
 ) (serverutils.TestServerInterface, *gosql.DB, *kvprober.Prober, func()) {
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: cluster.MakeClusterSettings(),
 		Knobs:    knobs,
-	})
-	p := kvprober.NewProber(kvprober.Opts{
-		Tracer:                  s.TracerI().(*tracing.Tracer),
-		DB:                      kvDB,
-		HistogramWindowInterval: time.Minute, // actual value not important to test
-		Settings:                s.ClusterSettings(),
 	})
 
 	// Given small test cluster, this better exercises the planning logic.
 	kvprober.NumStepsToPlanAtOnce.Override(context.Background(), &s.ClusterSettings().SV, 10)
+
+	p := s.KvProber()
 	// Want these tests to run as fast as possible; see planner_test.go for a
 	// unit test of the rate limiting.
 	p.SetPlanningRateLimits(0)
