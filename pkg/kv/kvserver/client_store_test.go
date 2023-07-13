@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -120,7 +121,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "kv.expiration_leases_only.enabled", func(t *testing.T, expOnly bool) {
 		storeReg := server.NewStickyInMemEnginesRegistry()
 		defer storeReg.CloseAllStickyInMemEngines()
-		listenerReg := testutils.NewListenerRegistry()
+		listenerReg := listenerutil.NewListenerRegistry()
 		defer listenerReg.Close()
 
 		ctx := context.Background()
@@ -128,11 +129,10 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
 
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ReusableListeners: true,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: listenerReg,
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
-				Listener: listenerReg.GetOrFail(t, 0),
 				RaftConfig: base.RaftConfig{
 					RaftTickInterval: 100 * time.Millisecond,
 				},

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,9 +42,12 @@ func TestStartupInjectedFailureSingleNode(t *testing.T) {
 	t.Log("TestStartupInjectedFailure random seed", seed)
 	reg := server.NewStickyInMemEnginesRegistry()
 	defer reg.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	var enableFaults atomic.Bool
 	args := base.TestClusterArgs{
+		ReusableListenerReg: lisReg,
 		ServerArgs: base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
