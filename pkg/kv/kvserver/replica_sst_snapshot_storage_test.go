@@ -275,15 +275,18 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 	keySpans := rditer.MakeReplicatedKeySpans(&desc)
 
-	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
-	)
+	snapStrategy := kvBatchSnapshotStrategy{
+		scratch: scratch,
+		st:      cluster.MakeTestingClusterSettings(),
+	}
+
+	msstw, err := storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, keySpans)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte
-	fileNames := msstw.scratch.SSTs()
+	fileNames := snapStrategy.scratch.SSTs()
 	for _, file := range fileNames {
 		sst, err := fs.ReadFile(eng, file)
 		require.NoError(t, err)
