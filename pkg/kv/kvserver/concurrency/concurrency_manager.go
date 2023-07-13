@@ -84,21 +84,35 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 	},
 )
 
-// DiscoveredLocksThresholdToConsultFinalizedTxnCache sets a threshold as
-// mentioned in the description string. The default of 200 is somewhat
-// arbitrary but should suffice for small OLTP transactions. Given the default
+// DiscoveredLocksThresholdToConsultTxnStatusCache sets a threshold as mentioned
+// in the description string. The default of 200 is somewhat arbitrary but
+// should suffice for small OLTP transactions. Given the default
 // 10,000 lock capacity of the lock table, 200 is small enough to not matter
 // much against the capacity, which is desirable. We have seen examples with
 // discoveredCount > 100,000, caused by stats collection, where we definitely
 // want to avoid adding these locks to the lock table, if possible.
-var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.RegisterIntSetting(
-	settings.TenantWritable,
+var DiscoveredLocksThresholdToConsultTxnStatusCache = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	// NOTE: the name of this setting mentions "finalized" for historical reasons.
 	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
-	"the maximum number of discovered locks by a waiter, above which the finalized txn cache"+
+	"the maximum number of discovered locks by a waiter, above which the txn status cache"+
 		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+
 		"fraction of the maximum number of locks in the lock table",
 	200,
 	settings.NonNegativeInt,
+)
+
+// BatchPushedLockResolution controls whether the lock table should allow
+// non-locking readers to defer and batch the resolution of conflicting locks
+// whose holder is known to be pending and have been pushed above the reader's
+// timestamp.
+var BatchPushedLockResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.batch_pushed_lock_resolution.enabled",
+	"whether the lock table should allow non-locking readers to defer and batch the resolution of "+
+		"conflicting locks whose holder is known to be pending and have been pushed above the reader's "+
+		"timestamp",
+	true,
 )
 
 // managerImpl implements the Manager interface.
@@ -144,7 +158,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock)
+	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings)
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -462,11 +476,11 @@ func (m *managerImpl) HandleWriterIntentError(
 	//
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
-	consultFinalizedTxnCache :=
-		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
+	consultTxnStatusCache :=
+		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(intent, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
@@ -621,13 +635,6 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 // TestingSetMaxLocks implements the TestingAccessor interface.
 func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
 	m.lt.(*lockTableImpl).setMaxLocks(maxLocks)
-}
-
-func (r *Request) txnMeta() *enginepb.TxnMeta {
-	if r.Txn == nil {
-		return nil
-	}
-	return &r.Txn.TxnMeta
 }
 
 func (r *Request) isSingle(m roachpb.Method) bool {

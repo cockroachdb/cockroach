@@ -1,0 +1,507 @@
+# -------------------------------------------------------------
+# A scan finds 10 intents that it can push from same txn.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0 priority=high
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=1
+  intent txn=txn2 key=a
+  intent txn=txn2 key=b
+  intent txn=txn2 key=c
+  intent txn=txn2 key=d
+  intent txn=txn2 key=e
+  intent txn=txn2 key=f
+  intent txn=txn2 key=g
+  intent txn=txn2 key=h
+  intent txn=txn2 key=i
+  intent txn=txn2 key=j
+----
+[2] handle write intent error req1: handled conflicting intents on "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", released latches
+
+debug-lock-table
+----
+global: num=10
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "i"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "j"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+# Before re-scanning and pushing, add a waiter on a single key to demonstrate
+# that uncontended, replicated keys are released when pushed, while contended,
+# replicated keys are not.
+new-request name=req2 txn=txn3 ts=10,1
+  put key=c value=val
+----
+
+sequence req=req2
+----
+[3] sequence req2: sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: waiting in lock wait-queues
+[3] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 0)
+[3] sequence req2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[3] sequence req2: pushing txn 00000002 to abort
+[3] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Now re-scan with the high-priority reader.
+sequence req=req1
+----
+[4] sequence req1: re-sequencing request
+[4] sequence req1: acquiring latches
+[4] sequence req1: scanning lock table for conflicting locks
+[4] sequence req1: waiting in lock wait-queues
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "a" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: pusher pushed pushee to 10.000000000,2
+[4] sequence req1: resolving intent "a" for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: lock wait-queue event: done waiting
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "a" for 0.000s
+[4] sequence req1: resolving a batch of 9 intent(s)
+[4] sequence req1: resolving intent "b" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "c" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "d" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "e" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "f" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "g" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "h" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "i" for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent "j" for txn 00000002 with PENDING status
+[4] sequence req1: acquiring latches
+[4] sequence req1: scanning lock table for conflicting locks
+[4] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+# Only the contended lock remains.
+debug-lock-table
+----
+global: num=1
+ lock: "c"
+  res: req: 2, txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+local: num=0
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[3] sequence req2: resolving intent "c" for txn 00000002 with ABORTED status
+[3] sequence req2: lock wait-queue event: done waiting
+[3] sequence req2: conflicted with 00000002-0000-0000-0000-000000000000 on "c" for 0.000s
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+# ---------------------------------------------------------------------------
+# A scan finds 2 intents and 2 unreplicated locks from the same txn. When the
+# txn is pushed, only the 2 intents need to be resolved, since it is sufficient
+# to advance the timestamp of the unreplicated locks in the lock table directly.
+# ---------------------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0 priority=high
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=1
+  intent txn=txn2 key=a
+  intent txn=txn2 key=b
+----
+[2] handle write intent error req1: handled conflicting intents on "a", "b", released latches
+
+debug-lock-table
+----
+global: num=2
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=g value=v1
+  put key=h value=v2
+----
+
+sequence req=req2
+----
+[3] sequence req2: sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=g dur=u
+----
+[-] acquire lock: txn 00000002 @ g
+
+on-lock-acquired req=req2 key=h dur=u
+----
+[-] acquire lock: txn 00000002 @ h
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=4
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+sequence req=req1
+----
+[4] sequence req1: re-sequencing request
+[4] sequence req1: acquiring latches
+[4] sequence req1: scanning lock table for conflicting locks
+[4] sequence req1: waiting in lock wait-queues
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "a" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: pusher pushed pushee to 10.000000000,2
+[4] sequence req1: resolving intent "a" for txn 00000002 with PENDING status and clock observation {1 123.000000000,4}
+[4] sequence req1: lock wait-queue event: done waiting
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "a" for 0.000s
+[4] sequence req1: resolving a batch of 1 intent(s)
+[4] sequence req1: resolving intent "b" for txn 00000002 with PENDING status
+[4] sequence req1: acquiring latches
+[4] sequence req1: scanning lock table for conflicting locks
+[4] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=2
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A scan with an uncertainty interval does not defer resolution
+# of pushed intents. Instead, it pushes and resolves intents one
+# by one. This is a limitation.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0 priority=high uncertainty-limit=11,1
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=1
+  intent txn=txn2 key=a
+  intent txn=txn2 key=b
+  intent txn=txn2 key=c
+----
+[2] handle write intent error req1: handled conflicting intents on "a", "b", "c", released latches
+
+debug-lock-table
+----
+global: num=3
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "a" (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[3] sequence req1: pushing timestamp of txn 00000002 above 11.000000000,1
+[3] sequence req1: pusher pushed pushee to 11.000000000,2
+[3] sequence req1: resolving intent "a" for txn 00000002 with PENDING status and clock observation {1 123.000000000,6}
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "a" for 0.000s
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[3] sequence req1: pushing timestamp of txn 00000002 above 11.000000000,1
+[3] sequence req1: resolving intent "b" for txn 00000002 with PENDING status and clock observation {1 123.000000000,8}
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "c" (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 0.000s
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[3] sequence req1: pushing timestamp of txn 00000002 above 11.000000000,1
+[3] sequence req1: resolving intent "c" for txn 00000002 with PENDING status and clock observation {1 123.000000000,10}
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "c" for 0.000s
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+global: num=0
+local: num=0
+
+reset namespace
+----
+
+# -------------------------------------------------------------------------
+# The kv.lock_table.batch_pushed_lock_resolution.enabled cluster setting can
+# be used to disable deferred lock resolution of pushed intents.
+# -------------------------------------------------------------------------
+
+debug-set-batch-pushed-lock-resolution-enabled ok=false
+----
+
+new-txn name=txn1 ts=10,1 epoch=0 priority=high
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+handle-write-intent-error req=req1 lease-seq=1
+  intent txn=txn2 key=a
+  intent txn=txn2 key=b
+  intent txn=txn2 key=c
+  intent txn=txn2 key=d
+  intent txn=txn2 key=e
+  intent txn=txn2 key=f
+  intent txn=txn2 key=g
+  intent txn=txn2 key=h
+  intent txn=txn2 key=i
+  intent txn=txn2 key=j
+----
+[2] handle write intent error req1: handled conflicting intents on "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", released latches
+
+debug-lock-table
+----
+global: num=10
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "h"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "i"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+ lock: "j"
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
+
+# Before re-scanning and pushing, add a waiter on a single key to demonstrate
+# that uncontended, replicated keys are released when pushed, while contended,
+# replicated keys are not.
+new-request name=req2 txn=txn3 ts=10,1
+  put key=c value=val
+----
+
+sequence req=req2
+----
+[3] sequence req2: sequencing request
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: waiting in lock wait-queues
+[3] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 0)
+[3] sequence req2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[3] sequence req2: pushing txn 00000002 to abort
+[3] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Now re-scan with the high-priority reader.
+sequence req=req1
+----
+[4] sequence req1: re-sequencing request
+[4] sequence req1: acquiring latches
+[4] sequence req1: scanning lock table for conflicting locks
+[4] sequence req1: waiting in lock wait-queues
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "a" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: pusher pushed pushee to 10.000000000,2
+[4] sequence req1: resolving intent "a" for txn 00000002 with PENDING status and clock observation {1 123.000000000,13}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "a" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "b" for txn 00000002 with PENDING status and clock observation {1 123.000000000,15}
+[4] sequence req1: lock wait-queue event: wait for txn 00000002 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "c" for txn 00000002 with PENDING status and clock observation {1 123.000000000,17}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "d" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "c" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "d" for txn 00000002 with PENDING status and clock observation {1 123.000000000,19}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "e" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "d" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "e" for txn 00000002 with PENDING status and clock observation {1 123.000000000,21}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "f" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "e" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "f" for txn 00000002 with PENDING status and clock observation {1 123.000000000,23}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "g" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "f" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "g" for txn 00000002 with PENDING status and clock observation {1 123.000000000,25}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "h" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "g" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "h" for txn 00000002 with PENDING status and clock observation {1 123.000000000,27}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "i" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "h" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "i" for txn 00000002 with PENDING status and clock observation {1 123.000000000,29}
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "j" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "i" for 0.000s
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1: resolving intent "j" for txn 00000002 with PENDING status and clock observation {1 123.000000000,31}
+[4] sequence req1: lock wait-queue event: done waiting
+[4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on "j" for 0.000s
+[4] sequence req1: acquiring latches
+[4] sequence req1: scanning lock table for conflicting locks
+[4] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+# Only the contended lock remains.
+debug-lock-table
+----
+global: num=1
+ lock: "c"
+  res: req: 7, txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+local: num=0
+
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[3] sequence req2: resolving intent "c" for txn 00000002 with ABORTED status
+[3] sequence req2: lock wait-queue event: done waiting
+[3] sequence req2: conflicted with 00000002-0000-0000-0000-000000000000 on "c" for 0.000s
+[3] sequence req2: acquiring latches
+[3] sequence req2: scanning lock table for conflicting locks
+[3] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
+
+debug-set-batch-pushed-lock-resolution-enabled ok=true
+----
