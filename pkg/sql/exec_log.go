@@ -323,6 +323,14 @@ func (p *planner) maybeLogStatementInternal(
 
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 
+			var sqlInstanceIDs []string
+			if len(queryLevelStats.SqlInstanceIds) > 0 {
+				sqlInstanceIDs = make([]string, 0, len(queryLevelStats.SqlInstanceIds))
+				for sqlId := range queryLevelStats.SqlInstanceIds {
+					sqlInstanceIDs = append(sqlInstanceIDs, sqlId.String())
+				}
+			}
+
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:                  execDetails,
 				SkippedQueries:                        skippedQueries,
@@ -359,6 +367,7 @@ func (p *planner) maybeLogStatementInternal(
 				ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 				ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
 				Regions:                               queryLevelStats.Regions,
+				SQLInstanceIDs:                        sqlInstanceIDs,
 				NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
