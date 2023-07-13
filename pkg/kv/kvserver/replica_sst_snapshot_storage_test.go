@@ -12,9 +12,11 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	io "io"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -22,11 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
@@ -251,6 +256,94 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+func TestMultiSSTWriterBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testRangeID := roachpb.RangeID(1)
+	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	testLimiter := rate.NewLimiter(rate.Inf, 0)
+
+	cleanup, eng := newOnDiskEngine(ctx, t)
+	defer cleanup()
+	defer eng.Close()
+
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+
+	var keySpans []roachpb.Span
+
+	snapStrategy := kvBatchSnapshotStrategy{
+		scratch: scratch,
+		st:      cluster.MakeTestingClusterSettings(),
+	}
+
+	var msstw *storage.MultiSSTWriter
+	var time int64
+	datadriven.RunTest(t, "testdata/multi_sst_writer", func(t *testing.T, td *datadriven.TestData) string {
+		switch td.Cmd {
+		case "init":
+			keySpans = []roachpb.Span{}
+			for _, line := range strings.Split(td.Input, "\n") {
+				parts := strings.Fields(line)
+				keySpans = append(keySpans, roachpb.Span{Key: []byte(parts[0]), EndKey: []byte(parts[1])})
+			}
+			writer, err := storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, keySpans, 128<<20)
+			require.NoError(t, err)
+			msstw = &writer
+			return fmt.Sprintf("Initialized writer with %d keyspans.", len(keySpans))
+		case "finish":
+			showRange := len(td.CmdArgs) > 0 && td.CmdArgs[0].Key == "show-range-sets"
+			_, err := msstw.Finish(ctx)
+			require.NoError(t, err)
+			var b strings.Builder
+			for i, m := range msstw.TableMetadata() {
+				fmt.Fprintf(&b, "Table %d\n", i+1)
+				fmt.Fprintf(&b, "Point keys: %d\n", m.Properties.NumEntries-1)
+				if showRange {
+					fmt.Fprintf(&b, "Range key sets: %d\n", m.Properties.NumRangeKeySets)
+				}
+			}
+			return b.String()
+		case "write":
+			//var b strings.Builder
+			for _, line := range strings.Split(td.Input, "\n") {
+				parts := strings.Fields(line)
+				if len(parts) == 0 {
+					continue
+				}
+				if len(parts) == 1 {
+					// point key
+					key := storage.EngineKey{Key: []byte(parts[0])}
+					err := msstw.Put(ctx, key, []byte{})
+					require.NoError(t, err)
+				} else {
+					// range key
+					start := []byte(parts[0])
+					end := []byte(parts[1])
+					suffix := storage.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: time})
+					value, err := storage.EncodeMVCCValue(storage.MVCCValue{
+						MVCCValueHeader: enginepb.MVCCValueHeader{
+							LocalTimestamp: hlc.ClockTimestamp{WallTime: time},
+						},
+					})
+					time++
+					require.NoError(t, err)
+					err = msstw.PutRangeKey(ctx, start, end, suffix, value)
+					require.NoError(t, err)
+				}
+			}
+			return ""
+		case "close":
+			msstw.Close()
+		default:
+			return "unknown command"
+		}
+		return ""
+	})
+}
+
 // TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
 // SST files associated with the replicated key ranges by writing a range
 // deletion tombstone that spans the entire range of each respectively.
@@ -280,7 +373,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		st:      cluster.MakeTestingClusterSettings(),
 	}
 
-	msstw, err := storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, keySpans)
+	msstw, err := storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, keySpans, 128<<20)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
