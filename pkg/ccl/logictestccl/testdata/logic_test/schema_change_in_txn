@@ -1,3 +1,7 @@
+# Skip the rest of the test if a retry occurs. They can happen and are fine
+# but there's no way to encapsulate that in logictests.
+skip_on_retry
+
 # Backing up and restoring a descriptor will increment the version of the
 # descriptor before restoring it so we cannot achieve the expected behaviour in
 # this test.
