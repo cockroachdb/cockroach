@@ -1489,12 +1489,16 @@ func (mvb *mixedVersionBackup) runBackup(
 	}
 
 	pauseAfter := 1024 * time.Hour // infinity
+	var pauseResumeDB *gosql.DB
 	if rng.Float64() < pauseProbability {
 		possibleDurations := []time.Duration{
 			10 * time.Second, 30 * time.Second, 2 * time.Minute,
 		}
 		pauseAfter = possibleDurations[rng.Intn(len(possibleDurations))]
-		l.Printf("attempting pauses in %s", pauseAfter)
+
+		var node int
+		node, pauseResumeDB = h.RandomDB(rng, mvb.roachNodes)
+		l.Printf("attempting pauses in %s through node %d", pauseAfter, node)
 	}
 
 	// NB: we need to run with the `detached` option + poll the
@@ -1565,7 +1569,7 @@ func (mvb *mixedVersionBackup) runBackup(
 
 			pauseDur := 5 * time.Second
 			l.Printf("pausing job %d for %s", jobID, pauseDur)
-			if err := h.Exec(rng, fmt.Sprintf("PAUSE JOB %d", jobID)); err != nil {
+			if _, err := pauseResumeDB.Exec(fmt.Sprintf("PAUSE JOB %d", jobID)); err != nil {
 				// We just log the error if pausing the job fails since we
 				// cannot guarantee the job is still running by the time we
 				// attempt to pause it. If that's the case, the next iteration
@@ -1577,7 +1581,7 @@ func (mvb *mixedVersionBackup) runBackup(
 			time.Sleep(pauseDur)
 
 			l.Printf("resuming job %d", jobID)
-			if err := h.Exec(rng, fmt.Sprintf("RESUME JOB %d", jobID)); err != nil {
+			if _, err := pauseResumeDB.Exec(fmt.Sprintf("RESUME JOB %d", jobID)); err != nil {
 				return backupCollection{}, "", fmt.Errorf("error resuming job %d: %w", jobID, err)
 			}
 
