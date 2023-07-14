@@ -1839,9 +1839,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	// index it requested is now actually durable on the follower. Note also that
 	// the follower will generate an MsgAppResp reflecting the applied snapshot
 	// which typically moves the follower to StateReplicate when (if) received
-	// by the leader.
-	//
-	// See: https://github.com/cockroachdb/cockroach/issues/87581
+	// by the leader, which as of #106793 we do synchronously.
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil

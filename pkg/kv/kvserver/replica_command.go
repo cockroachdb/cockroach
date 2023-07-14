@@ -2878,7 +2878,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 				}
 				if resp.MsgAppResp != nil {
 					const mayCampaignOnWake = false
-					_ = r.withRaftGroup(mayCampaignOnWake, func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+					_ = r.withRaftGroup(func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 						msg := *resp.MsgAppResp
 						// With a delegated snapshot, the recipient received the snapshot
 						// from another replica and will thus respond to it instead. But the
