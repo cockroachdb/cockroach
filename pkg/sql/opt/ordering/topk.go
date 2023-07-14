@@ -19,7 +19,7 @@ import (
 func topKCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// TopK orders its own input, so the ordering it can provide is its own.
 	topK := expr.(*memo.TopKExpr)
-	return required.Intersects(&topK.Ordering)
+	return topK.Ordering.Implies(required)
 }
 
 func topKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
