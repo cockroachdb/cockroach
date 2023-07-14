@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestTelemetry(t *testing.T) {
+func TestTelemetryMultiregion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1min under race")
@@ -45,5 +45,96 @@ func TestTelemetry(t *testing.T) {
 			},
 		},
 		false, /* testTenant */
+		"testdata/telemetry/multiregion",
+	)
+}
+
+func TestTelemetryMultiregionDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1min under race")
+	skip.UnderDeadlock(t, "takes >1min under deadlock")
+
+	sqltestutils.TelemetryTest(
+		t,
+		[]base.TestServerArgs{
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ca-central-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ap-southeast-2"}},
+				},
+			},
+		},
+		false, /* testTenant */
+		"testdata/telemetry/multiregion_db",
+	)
+}
+
+func TestTelemetryMultiregionTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1min under race")
+	skip.UnderDeadlock(t, "takes >1min under deadlock")
+
+	sqltestutils.TelemetryTest(
+		t,
+		[]base.TestServerArgs{
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ca-central-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ap-southeast-2"}},
+				},
+			},
+		},
+		false, /* testTenant */
+		"testdata/telemetry/multiregion_table",
+	)
+}
+
+func TestTelemetryMultiregionRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1min under race")
+	skip.UnderDeadlock(t, "takes >1min under deadlock")
+
+	sqltestutils.TelemetryTest(
+		t,
+		[]base.TestServerArgs{
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ca-central-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ap-southeast-2"}},
+				},
+			},
+		},
+		false, /* testTenant */
+		"testdata/telemetry/multiregion_row",
 	)
 }

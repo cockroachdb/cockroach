@@ -37,6 +37,7 @@ func TestTelemetry(t *testing.T) {
 		t,
 		[]base.TestServerArgs{{}},
 		true, /* testTenant */
+		"",
 	)
 }
 
