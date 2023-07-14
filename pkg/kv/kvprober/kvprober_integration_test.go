@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -57,8 +58,6 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
-		require.NoError(t, p.Start(ctx, s.Stopper()))
-
 		time.Sleep(100 * time.Millisecond)
 
 		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
@@ -78,8 +77,6 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
-
-		require.NoError(t, p.Start(ctx, s.Stopper()))
 
 		testutils.SucceedsSoon(t, func() error {
 			if p.Metrics().ReadProbeAttempts.Count() < int64(50) {
@@ -119,8 +116,6 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
-
-		require.NoError(t, p.Start(ctx, s.Stopper()))
 
 		// Expect >=2 failures eventually due to unavailable time-series range.
 		// TODO(josh): Once structured logging is in, can check that failures
@@ -177,10 +172,11 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		}
 
 		// Expect all read probes to fail but write probes & planning to succeed.
-		require.Equal(t, int64(10), p.Metrics().ReadProbeAttempts.Count())
-		require.Equal(t, int64(10), p.Metrics().ReadProbeFailures.Count())
+		require.Equal(t, p.Metrics().ReadProbeAttempts.Count(), p.Metrics().ReadProbeFailures.Count())
+		// kvprober is running in background, so more than ten probes may be run.
+		require.Greater(t, p.Metrics().ReadProbeFailures.Count(), int64(9))
 
-		require.Equal(t, int64(10), p.Metrics().WriteProbeAttempts.Count())
+		require.Greater(t, p.Metrics().WriteProbeAttempts.Count(), int64(9))
 		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
@@ -225,10 +221,11 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		}
 
 		// Expect all write probes to fail but read probes & planning to succeed.
-		require.Equal(t, int64(10), p.Metrics().WriteProbeAttempts.Count())
-		require.Equal(t, int64(10), p.Metrics().WriteProbeFailures.Count())
+		require.Equal(t, p.Metrics().WriteProbeAttempts.Count(), p.Metrics().WriteProbeFailures.Count())
+		// kvprober is running in background, so more than ten probes may be run.
+		require.Greater(t, p.Metrics().WriteProbeFailures.Count(), int64(9))
 
-		require.Equal(t, int64(10), p.Metrics().ReadProbeAttempts.Count())
+		require.Greater(t, p.Metrics().ReadProbeAttempts.Count(), int64(9))
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
@@ -251,7 +248,8 @@ func TestWriteProbeDoesNotLeaveLiveData(t *testing.T) {
 	lastStep := p.WriteProbeReturnLastStep(ctx, s.DB())
 
 	// Expect write probe to succeed.
-	require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+	// kvprober is running in background, so more than one probe may be run.
+	require.Greater(t, p.Metrics().WriteProbeAttempts.Count(), int64(0))
 	require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 	require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 
@@ -277,10 +275,21 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 
 	ctx := context.Background()
 	// Disable split and merge queue just in case.
-	_, sqlDB, p, cleanup := initTestServer(t, base.TestingKnobs{
+	s, sqlDB, _, cleanup := initTestServer(t, base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{DisableSplitQueue: true, DisableMergeQueue: true},
 	})
 	defer cleanup()
+
+	// Create a kvprober and don't call Start, so that we can manually
+	// call the planner from this test, without any planning happening in the
+	// background.
+	p := kvprober.NewProber(kvprober.Opts{
+		Tracer:                  s.TracerI().(*tracing.Tracer),
+		DB:                      s.DB(),
+		HistogramWindowInterval: time.Minute, // actual value not important to test
+		Settings:                s.ClusterSettings(),
+	})
+	p.SetPlanningRateLimits(0)
 
 	rangeIDToTimesWouldBeProbed := make(map[int64]int)
 

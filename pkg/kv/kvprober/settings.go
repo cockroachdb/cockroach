@@ -72,7 +72,7 @@ var writeEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.write.enabled",
 	"whether the KV write prober is enabled",
-  enabled)
+	enabled)
 
 var writeInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
