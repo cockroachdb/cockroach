@@ -139,7 +139,7 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true // we'll control it ourselves
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(_ context.Context, h *kvserverpb.SnapshotRequest_Header) error {
 		// We'll want a signal for when the snapshot was received by the sender.
 		once.Do(func() { close(blockUntilSnapshotCh) })
 

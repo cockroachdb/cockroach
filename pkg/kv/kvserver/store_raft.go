@@ -203,12 +203,22 @@ func (s *Store) HandleDelegatedSnapshot(
 func (s *Store) HandleSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream SnapshotResponseStream,
 ) error {
+	if fn := s.cfg.TestingKnobs.HandleSnapshotDone; fn != nil {
+		defer fn()
+	}
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
 		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
-		return s.receiveSnapshot(ctx, header, stream)
+		err := s.receiveSnapshot(ctx, header, stream)
+		if err != nil && ctx.Err() != nil {
+			// Log trace of incoming snapshot on context cancellation (e.g.
+			// times out or caller goes away).
+			log.Infof(ctx, "incoming snapshot stream failed with error: %v\ntrace:\n%v",
+				err, tracing.SpanFromContext(ctx).GetConfiguredRecording())
+		}
+		return err
 	})
 }
 
