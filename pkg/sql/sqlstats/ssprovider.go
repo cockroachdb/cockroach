@@ -209,7 +209,6 @@ type RecordedStmtStats struct {
 	RowsRead             int64
 	RowsWritten          int64
 	Nodes                []int64
-	Regions              []string
 	StatementType        tree.StatementType
 	Plan                 *appstatspb.ExplainTreePlanNode
 	PlanGist             string
