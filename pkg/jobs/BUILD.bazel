@@ -114,7 +114,6 @@ go_test(
         "//pkg/keys",
         "//pkg/keyvisualizer",
         "//pkg/kv",
-        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",

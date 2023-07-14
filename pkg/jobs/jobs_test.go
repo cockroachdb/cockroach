@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2761,19 +2760,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	haveInjectedRetry := false
 	params := base.TestServerArgs{}
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, r *kvpb.BatchRequest) *kvpb.Error {
-			if r.Txn == nil || r.Txn.Name != txnName {
-				return nil
-			}
-			if _, ok := r.GetArg(kvpb.EndTxn); ok {
-				if !haveInjectedRetry {
-					haveInjectedRetry = true
-					// Force a retry error the first time.
-					return kvpb.NewError(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected error"))
-				}
-			}
-			return nil
-		},
+		TestingRequestFilter: testutils.TestingRequestFilterRetryTxnWithPrefix(txnName, 1),
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
