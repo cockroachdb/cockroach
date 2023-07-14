@@ -433,15 +433,18 @@ func registerKVContention(r registry.Registry) {
 func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                "kv/quiescence/nodes=3",
-		Owner:               registry.OwnerKV,
+		Owner:               registry.OwnerReplication,
 		Cluster:             r.MakeClusterSpec(4),
-		Leases:              registry.MetamorphicLeases,
+		Leases:              registry.EpochLeases,
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+			settings := install.MakeClusterSettings(install.ClusterSettingsOption{
+				"sql.stats.automatic_collection.enabled": "false",
+			})
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, nodes))
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
 
 			db := c.Conn(ctx, t.L(), 1)
