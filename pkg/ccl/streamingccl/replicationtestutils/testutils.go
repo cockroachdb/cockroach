@@ -25,14 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -105,21 +103,27 @@ type TenantStreamingClusters struct {
 	DestTenantSQL  *sqlutils.SQLRunner
 }
 
-// CreateDestTenantSQL creates a dest tenant SQL runner and returns a cleanup
+// StartDestTenant starts the destination tenant and returns a cleanup
 // function that shuts tenant SQL instance and closes all sessions.
 // This function will fail the test if ran prior to the Replication stream
 // closing as the tenant will not yet be active
-func (c *TenantStreamingClusters) CreateDestTenantSQL(ctx context.Context) func() error {
-	testTenant, destTenantConn := serverutils.StartTenant(c.T, c.DestSysServer,
-		base.TestTenantArgs{TenantID: c.Args.DestTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+func (c *TenantStreamingClusters) StartDestTenant(ctx context.Context) func() error {
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START SERVICE SHARED`, c.Args.DestTenantName)
+
+	destTenantConn, err := serverutils.OpenDBConnE(
+		c.DestCluster.Server(0).SQLAddr(), "cluster:"+string(c.Args.DestTenantName)+"/",
+		false, /* insecure */
+		c.DestCluster.Server(0).Stopper())
+	require.NoError(c.T, err)
+
 	c.DestTenantConn = destTenantConn
 	c.DestTenantSQL = sqlutils.MakeSQLRunner(destTenantConn)
+	testutils.SucceedsSoon(c.T, func() error {
+		return c.DestTenantConn.Ping()
+	})
+	// TODO (msbutler): consider granting the new tenant some capabilities.
 	return func() error {
-		if err := destTenantConn.Close(); err != nil {
-			return err
-		}
-		testTenant.Stopper().Stop(ctx)
-		return nil
+		return destTenantConn.Close()
 	}
 }
 
@@ -211,27 +215,7 @@ func (c *TenantStreamingClusters) BuildCreateTenantQuery() string {
 	return streamReplStmt
 }
 
-func waitForTenantPodsActive(
-	t testing.TB, tenantServer serverutils.TestTenantInterface, numPods int,
-) {
-	testutils.SucceedsWithin(t, func() error {
-		status := tenantServer.StatusServer().(serverpb.SQLStatusServer)
-		var nodes *serverpb.NodesListResponse
-		var err error
-		for nodes == nil || len(nodes.Nodes) != numPods {
-			nodes, err = status.NodesList(context.Background(), nil)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	}, 10*time.Second)
-}
-
-func CreateTenantStreamingClusters(
-	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
-) (*TenantStreamingClusters, func()) {
-
+func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 	if args.TestingKnobs != nil && args.TestingKnobs.DistSQLRetryPolicy == nil {
 		args.TestingKnobs.DistSQLRetryPolicy = &retry.Options{
 			InitialBackoff: time.Microsecond,
@@ -240,7 +224,7 @@ func CreateTenantStreamingClusters(
 			MaxRetries:     TestingMaxDistSQLRetries,
 		}
 	}
-	serverArgs := base.TestServerArgs{
+	return base.TestServerArgs{
 		// Test fails because it tries to set a cluster setting only accessible
 		// to system tenants. Tracked with #76378.
 		DisableDefaultTestTenant: true,
@@ -258,6 +242,12 @@ func CreateTenantStreamingClusters(
 			},
 		},
 	}
+}
+
+func CreateTenantStreamingClusters(
+	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
+) (*TenantStreamingClusters, func()) {
+	serverArgs := CreateServerArgs(args)
 
 	startTestCluster := func(
 		ctx context.Context,
@@ -297,20 +287,16 @@ func CreateTenantStreamingClusters(
 
 	require.NoError(t, g.Wait())
 
-	clusterSettings := cluster.MakeTestingClusterSettings()
-	for _, setting := range []*settings.BoolSetting{
-		sql.SecondaryTenantSplitAtEnabled,
-		sql.SecondaryTenantScatterEnabled,
-	} {
-		setting.Override(ctx, &clusterSettings.SV, true)
-	}
-	tenantArgs := base.TestTenantArgs{
+	tenantArgs := base.TestSharedProcessTenantArgs{
 		TenantName: args.SrcTenantName,
 		TenantID:   args.SrcTenantID,
-		Settings:   clusterSettings,
 	}
-	srcTenantServer, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), tenantArgs)
-	waitForTenantPodsActive(t, srcTenantServer, 1)
+	srcTenantServer, srcTenantConn := serverutils.StartSharedProcessTenant(t, srcCluster.Server(0),
+		tenantArgs)
+
+	testutils.SucceedsSoon(t, func() error {
+		return srcTenantConn.Ping()
+	})
 
 	tsc := &TenantStreamingClusters{
 		T:               t,
@@ -322,16 +308,25 @@ func CreateTenantStreamingClusters(
 		SrcTenantSQL:    sqlutils.MakeSQLRunner(srcTenantConn),
 		SrcSysServer:    srcCluster.Server(0),
 		SrcURL:          srcURL,
-		SrcCleanup:      srcCleanup,
-		DestCluster:     destCluster,
-		DestSysSQL:      sqlutils.MakeSQLRunner(destCluster.ServerConn(0)),
-		DestSysServer:   destCluster.Server(0),
+		SrcCleanup: func() {
+			require.NoError(t, srcTenantConn.Close())
+			srcCleanup()
+		},
+		DestCluster:   destCluster,
+		DestSysSQL:    sqlutils.MakeSQLRunner(destCluster.ServerConn(0)),
+		DestSysServer: destCluster.Server(0),
 	}
 
 	tsc.SrcSysSQL.ExecMultiple(t, ConfigureClusterSettings(args.SrcClusterSettings)...)
+	tsc.SrcSysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.
+allow_for_secondary_tenant.
+enabled=true`, args.SrcTenantName)
+	tsc.SrcSysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.
+enabled=true`, args.SrcTenantName)
 	if args.SrcInitFunc != nil {
 		args.SrcInitFunc(t, tsc.SrcSysSQL, tsc.SrcTenantSQL)
 	}
+
 	tsc.DestSysSQL.ExecMultiple(t, ConfigureClusterSettings(args.DestClusterSettings)...)
 	if args.DestInitFunc != nil {
 		args.DestInitFunc(t, tsc.DestSysSQL)
@@ -340,8 +335,8 @@ func CreateTenantStreamingClusters(
 	tsc.DestSysSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 	return tsc, func() {
 		require.NoError(t, srcTenantConn.Close())
-		destCleanup()
 		srcCleanup()
+		destCleanup()
 	}
 }
 
@@ -350,7 +345,11 @@ func (c *TenantStreamingClusters) SrcExec(exec srcInitExecFunc) {
 }
 
 func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID) {
-	testutils.SucceedsSoon(t, func() error {
+	timeout := 45 * time.Second
+	if skip.NightlyStress() {
+		timeout *= 3
+	}
+	testutils.SucceedsWithin(t, func() error {
 		payload := jobutils.GetJobPayload(t, db, ingestionJobID)
 		details, ok := payload.Details.(*jobspb.Payload_StreamIngestion)
 		if !ok {
@@ -365,7 +364,7 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 		}
 
 		return requireReplicatedTime(startTime, jobutils.GetJobProgress(t, db, ingestionJobID))
-	})
+	}, timeout)
 }
 
 func WaitUntilReplicatedTime(
