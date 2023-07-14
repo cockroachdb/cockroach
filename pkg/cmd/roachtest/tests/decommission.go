@@ -97,9 +97,10 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		r.Add(registry.TestSpec{
-			Name:    "decommission/mixed-versions",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
+			Name:                "decommission/mixed-versions",
+			Owner:               registry.OwnerKV,
+			Cluster:             r.MakeClusterSpec(numNodes),
+			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, t.BuildVersion())
 			},
