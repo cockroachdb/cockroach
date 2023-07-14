@@ -69,8 +69,9 @@ var QuietStderr quietStderrOption
 // TeamCity build log, if running in CI), while creating a non-interleaved
 // record in the build artifacts.
 type Logger struct {
-	path string
-	File *os.File
+	path   string
+	parent *Logger // set on calls to ChildLogger
+	File   *os.File
 	// stdoutL and stderrL are the loggers used internally by Printf()/Errorf().
 	// They write to Stdout/Stderr (below), but prefix the messages with
 	// Logger-specific formatting (file/line, time), plus an optional configurable
@@ -195,6 +196,19 @@ func (l *Logger) Closed() bool {
 	return l.mu.closed
 }
 
+// RootLogger returns the logger instance without a parent in this
+// logger chain. If the logger instance was not created with
+// `ChildLogger`, this function will return the a reference to
+// receiver itself.
+func (l *Logger) RootLogger() *Logger {
+	root := l
+	for root.parent != nil {
+		root = root.parent
+	}
+
+	return root
+}
+
 // ChildLogger constructs a new Logger which logs to the specified file. The
 // prefix and teeing of Stdout/Stdout can be controlled by Logger options.
 // If the parent Logger was logging to a file, the new Logger will log to a file
@@ -214,6 +228,7 @@ func (l *Logger) ChildLogger(name string, opts ...loggerOption) (*Logger, error)
 		}
 		return &Logger{
 			path:    l.path,
+			parent:  l,
 			Stdout:  l.Stdout,
 			Stderr:  l.Stderr,
 			stdoutL: stdoutL,
@@ -234,7 +249,13 @@ func (l *Logger) ChildLogger(name string, opts ...loggerOption) (*Logger, error)
 	if l.path != "" {
 		path = filepath.Join(filepath.Dir(l.path), name+".log")
 	}
-	return cfg.NewLogger(path)
+	cl, err := cfg.NewLogger(path)
+	if err != nil {
+		return nil, err
+	}
+
+	cl.parent = l
+	return cl, nil
 }
 
 // PrintfCtx prints a message to the Logger's Stdout. The context's log tags, if
