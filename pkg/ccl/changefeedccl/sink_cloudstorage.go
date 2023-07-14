@@ -517,10 +517,27 @@ func (s *cloudStorageSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-) error {
+) (retErr error) {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
+	defer func() {
+		if !s.compression.enabled() {
+			return
+		}
+		if retErr == nil {
+			retErr = ctx.Err()
+		}
+		if retErr != nil {
+			// If we are returning an error, immediately close all compression
+			// codecs to release resources.  This step is also done in the
+			// Close() method, but doing this clean-up as soon as we know
+			// an error has occurred, ensures that we do not leak resources,
+			// even if the Close() method is not called.
+			retErr = errors.CombineErrors(retErr, s.closeAllCodecs())
+		}
+	}()
 
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	file, err := s.getOrCreateFile(topic, mvcc)
@@ -802,8 +819,7 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	return nil
 }
 
-// Close implements the Sink interface.
-func (s *cloudStorageSink) Close() (err error) {
+func (s *cloudStorageSink) closeAllCodecs() (err error) {
 	// Close any codecs we might have in use and collect the first error if any
 	// (other errors are ignored because they are likely going to be the same ones,
 	// though based on the current compression implementation, the close method
@@ -815,14 +831,20 @@ func (s *cloudStorageSink) Close() (err error) {
 		f := i.(*cloudStorageSinkFile)
 		if f.codec != nil {
 			cErr := f.codec.Close()
+			f.codec = nil
 			if err == nil {
 				err = cErr
 			}
 		}
 		return true
 	})
-	s.files = nil
+	return err
+}
 
+// Close implements the Sink interface.
+func (s *cloudStorageSink) Close() error {
+	err := s.closeAllCodecs()
+	s.files = nil
 	err = errors.CombineErrors(err, s.waitAsyncFlush(context.Background()))
 	close(s.asyncFlushCh) // signal flusher to exit.
 	err = errors.CombineErrors(err, s.flushGroup.Wait())
