@@ -35,11 +35,14 @@ func NewStmtStatsIterator(
 	container *Container, options sqlstats.IteratorOptions,
 ) StmtStatsIterator {
 	var stmtKeys stmtList
-	container.mu.Lock()
-	for k := range container.mu.stmts {
-		stmtKeys = append(stmtKeys, k)
-	}
-	container.mu.Unlock()
+	func() {
+		container.mu.RLock()
+		defer container.mu.RUnlock()
+		for k := range container.mu.stmts {
+			stmtKeys = append(stmtKeys, k)
+		}
+	}()
+
 	if options.SortedKey {
 		sort.Sort(stmtKeys)
 	}
