@@ -61,6 +61,7 @@ func (tsdb *DB) MaintainTimeSeries(
 	if tsdb.WriteRollups() {
 		qmc := MakeQueryMemoryContext(mem, mem, QueryMemoryOptions{
 			BudgetBytes: budgetBytes,
+			Columnar:    tsdb.WriteColumnar(),
 		})
 		if err := tsdb.rollupTimeSeries(ctx, series, now, qmc); err != nil {
 			return err
