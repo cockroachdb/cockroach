@@ -603,3 +603,22 @@ NULL   2
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for #106678.
+statement ok
+CREATE TABLE t106678 (a INT, b INT);
+INSERT INTO t106678 VALUES (2, 0), (1, 100), (2, 0), (3, 20), (1, -1);
+
+# The results should be ordered by (a, b), not just by (a).
+query II
+SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b;
+----
+1  -1
+1  100
+2  0
+
+# Should return the (1, -1) row, not the (1, 100) row.
+query II
+SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b LIMIT 1
+----
+1  -1
