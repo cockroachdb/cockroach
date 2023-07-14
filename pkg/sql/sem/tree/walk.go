@@ -1266,6 +1266,16 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 		}
 	}
 
+	if stmt.Options.ExecutionLocality != nil {
+		rh, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.ExecutionLocality = rh
+		}
+	}
+
 	return ret
 }
 
@@ -1541,6 +1551,16 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 				ret = stmt.copyNode()
 			}
 			ret.Options.IncludeAllSecondaryTenants = include
+		}
+	}
+
+	if stmt.Options.ExecutionLocality != nil {
+		include, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.ExecutionLocality = include
 		}
 	}
 

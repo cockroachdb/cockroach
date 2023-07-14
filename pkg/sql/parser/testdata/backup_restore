@@ -856,12 +856,12 @@ RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = $1 -- lite
 RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- identifiers removed
 
 parse
-RESTORE FROM LATEST IN 'bar' WITH include_all_secondary_tenants = $1, detached
+RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters = $1, execution locality = $2, detached
 ----
-RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_virtual_clusters = ($1) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = $1 -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- identifiers removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1, execution locality = $2 -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_virtual_clusters = ($1), execution locality = ($2) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = $1, execution locality = $1 -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1, execution locality = $2 -- identifiers removed
 
 parse
 RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters, detached
@@ -880,12 +880,12 @@ RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = _ -- liter
 RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = true -- identifiers removed
 
 parse
-RESTORE FROM LATEST IN 'bar' WITH unsafe_restore_incompatible_version, detached
+RESTORE FROM LATEST IN 'bar' WITH unsafe_restore_incompatible_version, execution locality = 'abc', detached
 ----
-RESTORE FROM 'latest' IN 'bar' WITH detached, unsafe_restore_incompatible_version -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH detached, unsafe_restore_incompatible_version -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH detached, unsafe_restore_incompatible_version -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH detached, unsafe_restore_incompatible_version -- identifiers removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, unsafe_restore_incompatible_version, execution locality = 'abc' -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, unsafe_restore_incompatible_version, execution locality = ('abc') -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, unsafe_restore_incompatible_version, execution locality = '_' -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, unsafe_restore_incompatible_version, execution locality = 'abc' -- identifiers removed
 
 error
 BACKUP foo TO 'bar' WITH key1, key2 = 'value'

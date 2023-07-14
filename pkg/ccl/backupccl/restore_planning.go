@@ -1024,6 +1024,7 @@ func restoreTypeCheck(
 			restoreStmt.Options.ForceTenantID,
 			restoreStmt.Options.AsTenant,
 			restoreStmt.Options.DebugPauseOn,
+			restoreStmt.Options.ExecutionLocality,
 		},
 	); err != nil {
 		return false, nil, err
@@ -1145,6 +1146,19 @@ func restorePlanHook(
 		}
 	}
 
+	var execLocality roachpb.Locality
+	if restoreStmt.Options.ExecutionLocality != nil {
+		loc, err := exprEval.String(ctx, restoreStmt.Options.ExecutionLocality)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		if loc != "" {
+			if err := execLocality.Set(loc); err != nil {
+				return nil, nil, nil, false, err
+			}
+		}
+	}
+
 	var newDBName string
 	if restoreStmt.Options.NewDBName != nil {
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
@@ -1262,7 +1276,7 @@ func restorePlanHook(
 
 		return doRestorePlan(
 			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, restoreAllTenants, intoDB,
-			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir,
+			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir, execLocality,
 		)
 	}
 
@@ -1509,6 +1523,7 @@ func doRestorePlan(
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
 	subdir string,
+	execLocality roachpb.Locality,
 ) error {
 	if len(from) == 0 || len(from[0]) == 0 {
 		return errors.New("invalid base backup specified")
@@ -2016,6 +2031,7 @@ func doRestorePlan(
 		SchemaOnly:          restoreStmt.Options.SchemaOnly,
 		VerifyData:          restoreStmt.Options.VerifyData,
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
+		ExecutionLocality:   execLocality,
 	}
 
 	jr := jobs.Record{
