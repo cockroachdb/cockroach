@@ -496,7 +496,7 @@ func (ts *TestServer) PGServer() interface{} {
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
 // the TestServer.
-func (ts *TestServer) PGPreServer() *pgwire.PreServeConnHandler {
+func (ts *TestServer) PGPreServer() interface{} {
 	if ts != nil {
 		return ts.pgPreServer
 	}
@@ -703,7 +703,7 @@ func (t *TestTenant) PGServer() interface{} {
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
 // the TestServer.
-func (ts *TestTenant) PGPreServer() *pgwire.PreServeConnHandler {
+func (ts *TestTenant) PGPreServer() interface{} {
 	if ts != nil {
 		return ts.pgPreServer
 	}
