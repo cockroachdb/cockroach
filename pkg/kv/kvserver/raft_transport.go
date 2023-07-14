@@ -1099,6 +1099,10 @@ func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
 
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible
 // for closing the OutgoingSnapshot.
+//
+// The optional (but usually present) returned message is an MsgAppResp that
+// results from the follower applying the snapshot, acking the log at the index
+// of the snapshot.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
 	storePool *storepool.StorePool,
@@ -1107,17 +1111,17 @@ func (t *RaftTransport) SendSnapshot(
 	newWriteBatch func() storage.WriteBatch,
 	sent func(),
 	recordBytesSent snapshotRecordMetrics,
-) error {
+) (*kvserverpb.SnapshotResponse, error) {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	client := NewMultiRaftClient(conn)
 	stream, err := client.RaftSnapshot(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer func() {
@@ -1132,18 +1136,18 @@ func (t *RaftTransport) SendSnapshot(
 // and determines if it encountered any errors when sending the snapshot.
 func (t *RaftTransport) DelegateSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
-) error {
+) (*kvserverpb.DelegateSnapshotResponse, error) {
 	nodeID := req.DelegatedSender.NodeID
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
-		return errors.Mark(err, errMarkSnapshotError)
+		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
 	client := NewMultiRaftClient(conn)
 
 	// Creates a rpc stream between the leaseholder and sender.
 	stream, err := client.DelegateRaftSnapshot(ctx)
 	if err != nil {
-		return errors.Mark(err, errMarkSnapshotError)
+		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
@@ -1154,12 +1158,12 @@ func (t *RaftTransport) DelegateSnapshot(
 	// Send the request.
 	wrappedRequest := &kvserverpb.DelegateSnapshotRequest{Value: &kvserverpb.DelegateSnapshotRequest_Send{Send: req}}
 	if err := stream.Send(wrappedRequest); err != nil {
-		return errors.Mark(err, errMarkSnapshotError)
+		return nil, errors.Mark(err, errMarkSnapshotError)
 	}
 	// Wait for response to see if the receiver successfully applied the snapshot.
 	resp, err := stream.Recv()
 	if err != nil {
-		return errors.Mark(
+		return nil, errors.Mark(
 			errors.Wrapf(err, "%v: remote failed to send snapshot", req), errMarkSnapshotError,
 		)
 	}
@@ -1175,14 +1179,14 @@ func (t *RaftTransport) DelegateSnapshot(
 
 	switch resp.Status {
 	case kvserverpb.DelegateSnapshotResponse_ERROR:
-		return errors.Mark(
+		return nil, errors.Mark(
 			errors.Wrapf(resp.Error(), "error sending couldn't accept %v", req), errMarkSnapshotError)
 	case kvserverpb.DelegateSnapshotResponse_APPLIED:
 		// This is the response we're expecting. Snapshot successfully applied.
 		log.VEventf(ctx, 3, "%s: delegated snapshot was successfully applied", resp)
-		return nil
+		return resp, nil
 	default:
-		return err
+		return nil, err
 	}
 }
 
