@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var enabled = util.ConstantWithMetamorphicTestBool("kv.prober.*.enabled", false)
+var defaultEnabled = util.ConstantWithMetamorphicTestBool("kv.prober.*.enabled", false)
 
 // kv.prober.bypass_admission_control controls whether kvprober's requests
 // should bypass kv layer's admission control. Setting this value to true
@@ -36,7 +36,7 @@ var readEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.read.enabled",
 	"whether the KV read prober is enabled",
-	enabled)
+	defaultEnabled)
 
 // TODO(josh): Another option is for the cluster setting to be a QPS target
 // for the cluster as a whole.
@@ -72,7 +72,7 @@ var writeEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.write.enabled",
 	"whether the KV write prober is enabled",
-  enabled)
+	defaultEnabled)
 
 var writeInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
@@ -150,7 +150,7 @@ var quarantineWriteEnabled = settings.RegisterBoolSetting(
 		"quarantine pool holds a separate group of ranges that have previously failed "+
 		"a probe which are continually probed. This helps determine outages for ranges "+
 		" with a high level of confidence",
-	enabled)
+	defaultEnabled)
 
 var quarantineWriteInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
