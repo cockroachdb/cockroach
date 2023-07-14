@@ -1,0 +1,176 @@
+feature-allowlist
+sql.multiregion.*
+----
+
+exec
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGION "ca-central-1"
+----
+
+exec
+SET enable_multiregion_placement_policy = true;
+USE d;
+ALTER DATABASE d ADD REGION "ap-southeast-2"
+----
+
+feature-usage
+CREATE TABLE t4 () LOCALITY GLOBAL
+----
+sql.multiregion.create_table.locality.global
+
+feature-usage
+CREATE TABLE t5 () LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.create_table.locality.regional_by_row
+
+feature-usage
+CREATE TABLE t6 (cr crdb_internal_region) LOCALITY REGIONAL BY ROW AS cr
+----
+sql.multiregion.create_table.locality.regional_by_row_as
+
+#
+# GLOBAL -> the others
+#
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_row
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.global.to.global
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_table_in
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL;
+ALTER TABLE t4 ADD COLUMN cr crdb_internal_region NOT NULL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_row_as
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+feature-usage
+ALTER TABLE t4 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.global.to.regional_by_table
+
+exec
+ALTER TABLE t4 SET LOCALITY GLOBAL
+----
+
+#
+# REGIONAL BY ROW -> the others
+#
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_row
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.global
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table_in
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW;
+----
+
+exec
+ALTER TABLE t5 ADD COLUMN cr crdb_internal_region NOT NULL
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_row_as
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+ALTER TABLE t5 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table
+
+exec
+ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW
+----
+
+#
+# REGIONAL BY TABLE -> the others
+#
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_row
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY GLOBAL
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.global
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_table_in
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_row_as
+
+exec
+ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
+----
+
+feature-usage
+ALTER TABLE t6 SET LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_table

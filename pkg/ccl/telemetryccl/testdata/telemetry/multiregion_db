@@ -1,0 +1,88 @@
+feature-allowlist
+sql.multiregion.*
+----
+
+feature-usage
+CREATE DATABASE survive_zone PRIMARY REGION "us-east-1" SURVIVE ZONE FAILURE
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.survival_goal.survive_zone_failure
+
+feature-usage
+CREATE DATABASE survive_region PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.survival_goal.survive_region_failure
+
+feature-usage
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGION "ca-central-1"
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.survival_goal.survive_default
+
+exec
+SET enable_multiregion_placement_policy = true;
+----
+
+feature-usage
+CREATE DATABASE create_placement PRIMARY REGION "us-east-1" PLACEMENT RESTRICTED
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.restricted
+sql.multiregion.create_database.survival_goal.survive_default
+
+feature-usage
+CREATE DATABASE create_placement_default PRIMARY REGION "us-east-1" PLACEMENT DEFAULT
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.default
+sql.multiregion.create_database.survival_goal.survive_default
+
+exec
+CREATE DATABASE to_be_restricted PRIMARY REGION "us-east-1"
+----
+
+feature-usage
+ALTER DATABASE to_be_restricted PLACEMENT RESTRICTED
+----
+sql.multiregion.alter_database.placement.restricted
+
+feature-usage
+ALTER DATABASE to_be_restricted PLACEMENT DEFAULT
+----
+sql.multiregion.alter_database.placement.default
+
+feature-usage
+ALTER DATABASE d DROP REGION "ca-central-1"
+----
+sql.multiregion.drop_region
+
+feature-usage
+ALTER DATABASE d ADD REGION "ap-southeast-2"
+----
+sql.multiregion.add_region
+
+feature-usage
+ALTER DATABASE d SET PRIMARY REGION "ap-southeast-2"
+----
+sql.multiregion.alter_database.set_primary_region.switch_primary_region
+
+feature-usage
+ALTER DATABASE d DROP REGION "us-east-1"
+----
+sql.multiregion.drop_region
+
+feature-usage
+ALTER DATABASE d DROP REGION "ap-southeast-2"
+----
+sql.multiregion.drop_primary_region
+
+feature-usage
+ALTER DATABASE d SET PRIMARY REGION "ca-central-1"
+----
+sql.multiregion.alter_database.set_primary_region.initial_multiregion
+
+feature-usage
+ALTER DATABASE d SURVIVE ZONE FAILURE
+----
+sql.multiregion.alter_database.survival_goal.survive_zone_failure
