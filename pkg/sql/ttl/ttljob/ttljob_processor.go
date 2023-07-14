@@ -314,7 +314,9 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
+			var batchRowCount int64
 			do := func(ctx context.Context, txn isql.Txn) error {
+				txn.KV().SetDebugName("ttljob-delete-batch")
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
 				desc, err := flowCtx.Descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
@@ -334,14 +336,11 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				batchRowCount, err := deleteBuilder.Run(ctx, txn, deleteBatch)
+				batchRowCount, err = deleteBuilder.Run(ctx, txn, deleteBatch)
 				if err != nil {
 					return err
 				}
-
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
-				metrics.RowDeletions.Inc(batchRowCount)
-				spanRowCount += batchRowCount
 				return nil
 			}
 			if err := serverCfg.DB.Txn(
@@ -349,6 +348,8 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 			); err != nil {
 				return spanRowCount, errors.Wrapf(err, "error during row deletion")
 			}
+			metrics.RowDeletions.Inc(batchRowCount)
+			spanRowCount += batchRowCount
 		}
 
 		// Step 3. Early exit if necessary.

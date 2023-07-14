@@ -74,6 +74,7 @@ go_test(
         "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/security/securityassets",
