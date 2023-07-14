@@ -540,9 +540,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				// Test fails with the default tenant. Disabling and
-				// tracking with #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 				Knobs: base.TestingKnobs{
 					SpanConfig: &spanconfig.TestingKnobs{
 						ConfigureScratchRange: true,
@@ -2105,7 +2103,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
 				Settings:          st,
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 				ScanMinIdleTime:   time.Millisecond,
 				ScanMaxIdleTime:   time.Millisecond,
 				Knobs: base.TestingKnobs{
