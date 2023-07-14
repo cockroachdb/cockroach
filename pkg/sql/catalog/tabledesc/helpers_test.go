@@ -40,6 +40,11 @@ func (cea *constraintValidationErrorAccumulator) IsActive(version clusterversion
 	return true
 }
 
+// HasExtraChecksForUpgrade implements catalog.ValidationErrorAccumulator.
+func (cea *constraintValidationErrorAccumulator) HasExtraChecksForUpgrade() bool {
+	return true
+}
+
 func ValidateConstraints(immI catalog.TableDescriptor) error {
 	imm, ok := immI.(*immutable)
 	if !ok {
