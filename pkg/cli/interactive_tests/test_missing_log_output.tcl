@@ -1,7 +1,5 @@
 #! /usr/bin/env expect -f
 
-# disabled until #48413 is resolved.
-
 source [file join [file dirname $argv0] common.tcl]
 
 spawn /bin/bash
@@ -14,7 +12,7 @@ eexpect "CockroachDB node starting"
 system "$argv sql --insecure -e \"select crdb_internal.force_log_fatal('helloworld')\" || true"
 eexpect ":/# "
 send "echo \$?\r"
-eexpect "255"
+eexpect "7"
 eexpect ":/# "
 end_test
 
@@ -105,26 +103,3 @@ eexpect "goroutine"
 eexpect ":/# "
 
 end_test
-
-
-
-start_server $argv
-
-start_test "Test that quit does not show INFO by default with --logtostderr"
-# Test quit as non-start command, this time with --logtostderr. Test
-# that the default logging level is WARNING, so that no INFO messages
-# are printed between the marker and the (first line) error message
-# from quit. Quit will error out because the server is already stopped.
-send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[WEF\]\[0-9\]+|^node is draining'\r"
-eexpect "marker\r\nCommand \"quit\" is deprecated"
-eexpect ":/# "
-end_test
-
-start_test "Check that `--logtostderr` can override the default"
-send "$argv quit --logtostderr=INFO --vmodule=stopper=1\r"
-eexpect "stop has been called"
-eexpect ":/# "
-end_test
-
-send "exit\r"
-eexpect eof
