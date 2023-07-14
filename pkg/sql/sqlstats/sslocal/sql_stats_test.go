@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/url"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -29,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -38,14 +42,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -505,6 +514,141 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		recordStats(&tc)
 		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
 			"testCase: %+v", tc)
+	}
+}
+
+func BenchmarkRecordStatement(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	monitor := mon.NewUnlimitedMonitor(
+		context.Background(), "test", mon.MemoryResource,
+		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
+	)
+
+	insightsProvider := insights.New(st, insights.NewMetrics())
+	sqlStats := sslocal.New(
+		st,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		metric.NewGauge(sql.MetaReportedSQLStatsMemCurBytes), /* curMemoryBytesCount */
+		metric.NewHistogram(metric.HistogramOptions{
+			Metadata: sql.MetaReportedSQLStatsMemMaxBytes,
+			Duration: 10 * time.Second,
+			MaxVal:   19 * 1000,
+			SigFigs:  3,
+			Buckets:  metric.MemoryUsage64MBBuckets,
+		}), /* maxMemoryBytesHist */
+		insightsProvider.Writer,
+		monitor,
+		nil, /* reportingSink */
+		nil, /* knobs */
+		insightsProvider.LatencyInformation(),
+	)
+
+	appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
+	statsCollector := sslocal.NewStatsCollector(
+		st,
+		appStats,
+		sessionphase.NewTimes(),
+		nil, /* knobs */
+	)
+
+	txnId := uuid.FastMakeV4()
+	generateRecord := func() sqlstats.RecordedStmtStats {
+		return sqlstats.RecordedStmtStats{
+			SessionID:            clusterunique.ID{Uint128: uint128.Uint128{Hi: 0x1771ca67e66e6b48, Lo: 0x1}},
+			StatementID:          clusterunique.ID{Uint128: uint128.Uint128{Hi: 0x1771ca67e67262e8, Lo: 0x1}},
+			TransactionID:        txnId,
+			AutoRetryCount:       0,
+			AutoRetryReason:      error(nil),
+			RowsAffected:         1,
+			IdleLatencySec:       0,
+			ParseLatencySec:      6.5208e-05,
+			PlanLatencySec:       0.000187041,
+			RunLatencySec:        0.500771041,
+			ServiceLatencySec:    0.501024374,
+			OverheadLatencySec:   1.0839999999845418e-06,
+			BytesRead:            30,
+			RowsRead:             1,
+			RowsWritten:          1,
+			Nodes:                []int64{1},
+			StatementType:        1,
+			Plan:                 (*appstatspb.ExplainTreePlanNode)(nil),
+			PlanGist:             "AgHQAQIAAwIAAAcGBQYh0AEAAQ==",
+			StatementError:       error(nil),
+			IndexRecommendations: []string(nil),
+			Query:                "UPDATE t SET s = '_' WHERE id = '_'",
+			StartTime:            time.Date(2023, time.July, 14, 16, 58, 2, 837542000, time.UTC),
+			EndTime:              time.Date(2023, time.July, 14, 16, 58, 3, 338566374, time.UTC),
+			FullScan:             false,
+			ExecStats: &execstats.QueryLevelStats{
+				NetworkBytesSent:                   10,
+				MaxMemUsage:                        40960,
+				MaxDiskUsage:                       197,
+				KVBytesRead:                        30,
+				KVPairsRead:                        1,
+				KVRowsRead:                         1,
+				KVBatchRequestsIssued:              1,
+				KVTime:                             498771793,
+				MvccSteps:                          1,
+				MvccStepsInternal:                  2,
+				MvccSeeks:                          4,
+				MvccSeeksInternal:                  4,
+				MvccBlockBytes:                     39,
+				MvccBlockBytesInCache:              25,
+				MvccKeyBytes:                       23,
+				MvccValueBytes:                     250,
+				MvccPointCount:                     6,
+				MvccPointsCoveredByRangeTombstones: 99,
+				MvccRangeKeyCount:                  9,
+				MvccRangeKeyContainedPoints:        88,
+				MvccRangeKeySkippedPoints:          66,
+				NetworkMessages:                    55,
+				ContentionTime:                     498546750,
+				ContentionEvents:                   []kvpb.ContentionEvent{{Key: []byte{}, TxnMeta: enginepb.TxnMeta{ID: uuid.FastMakeV4(), Key: []uint8{0xf0, 0x89, 0x12, 0x74, 0x65, 0x73, 0x74, 0x0, 0x1, 0x88}, IsoLevel: 0, Epoch: 0, WriteTimestamp: hlc.Timestamp{WallTime: 1689354396802600000, Logical: 0, Synthetic: false}, MinTimestamp: hlc.Timestamp{WallTime: 1689354396802600000, Logical: 0, Synthetic: false}, Priority: 118164, Sequence: 1, CoordinatorNodeID: 1}, Duration: 498546750}},
+				RUEstimate:                         9999,
+				CPUTime:                            12345,
+				SqlInstanceIds:                     map[base.SQLInstanceID]struct{}{1: {}},
+				Regions:                            []string{"test"}},
+			Indexes:  []string{"104@1"},
+			Database: "defaultdb",
+		}
+	}
+
+	parallel := []int{10}
+	for _, p := range parallel {
+		name := fmt.Sprintf("RecordStatement: Parallelism %d", p)
+		b.Run(name, func(b *testing.B) {
+			b.SetParallelism(p)
+			recordValue := generateRecord()
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					_, err := statsCollector.RecordStatement(
+						ctx,
+						appstatspb.StatementStatisticsKey{
+							Query:        "select * from T where t.l = 1000",
+							ImplicitTxn:  true,
+							Vec:          true,
+							FullScan:     true,
+							DistSQL:      true,
+							Database:     "testDb",
+							App:          "myTestApp",
+							PlanHash:     9001,
+							QuerySummary: "select * from T",
+						},
+						recordValue,
+					)
+					// Adds overhead to benchmark and shows up in profile
+					if err != nil {
+						require.NoError(b, err)
+					}
+				}
+			})
+		})
 	}
 }
 
