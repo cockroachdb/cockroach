@@ -3150,8 +3150,8 @@ func (t *logicTest) maybeSkipOnRetry(err error) {
 func (t *logicTest) verifyError(
 	sql, pos, expectNotice, expectErr, expectErrCode string, err error,
 ) (bool, error) {
+	t.maybeSkipOnRetry(err)
 	if expectErr == "" && expectErrCode == "" && err != nil {
-		t.maybeSkipOnRetry(err)
 		return t.unexpectedError(sql, pos, err)
 	}
 	if expectNotice != "" {
