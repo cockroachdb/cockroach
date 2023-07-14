@@ -1146,7 +1146,6 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 		// Set up a type and table.
 		sqlDB.Exec(t, `CREATE TYPE t AS ENUM ('hello', 'howdy', 'hi')`)
 		sqlDB.Exec(t, `CREATE TABLE tt (x INT PRIMARY KEY, y t)`)
@@ -1551,7 +1550,6 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		// Schema changes that predate the changefeed.
 		t.Run(`historical`, func(t *testing.T) {
@@ -2581,7 +2579,6 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY rest (c))`)
@@ -2620,7 +2617,6 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
@@ -3612,7 +3608,6 @@ func TestChangefeedNoBackfill(t *testing.T) {
 	skip.UnderShort(t)
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 		// Shorten the intervals so this test doesn't take so long. We need to wait
 		// for timestamps to get resolved.
 		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
@@ -3687,12 +3682,7 @@ func TestChangefeedNoBackfill(t *testing.T) {
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
-			// NB: You might expect to only see the new row here but we'll see them
-			// all because we cannot distinguish between the index backfill and
-			// foreground writes. See #35738.
 			assertPayloads(t, dropColumn, []string{
-				`drop_column: [0]->{"after": {"a": 0}}`,
-				`drop_column: [1]->{"after": {"a": 1}}`,
 				`drop_column: [2]->{"after": {"a": 2}}`,
 			})
 		})
