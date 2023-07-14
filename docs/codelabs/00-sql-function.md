@@ -90,9 +90,18 @@ takes a variable number of string arguments. The `ReturnType` field indicates
 our function returns a string. The implementation of our function is currently
 unfinished, so we’ll return an error for now.
 
-Go ahead and add the above code to `pkg/sql/sem/builtins/builtins.go`. If you’ve
-followed the instructions in [CONTRIBUTING.md], you should be able to build
-CockroachDB from source:
+Go ahead and add the above code to `pkg/sql/sem/builtins/builtins.go`.
+
+Now, we need to assign an OID for this built-in in `pkg/sql/sem/builtins/fixed_oids.go`
+by adding an entry to the end of the `builtinOidsArray []string` array with the index
+equal to the OID of the last current built-in + 1 (OIDs must be unique).
+
+``` go
+2413: whois(string...) -> string
+```
+this indicates that `whois` is the name of the built-in, it accepts a variable number of string arguments, and returns one string value.
+
+If you’ve followed the instructions in [CONTRIBUTING.md], you should be able to build CockroachDB from source:
 
 ```text
 ~/go/src/github.com/cockroachdb/cockroach$ make build
