@@ -228,7 +228,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		pgServer := testServer.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
-		testServer.PGPreServer().TestingAcceptSystemIdentityOption(true)
+		testServer.PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -643,7 +643,7 @@ func TestClientAddrOverride(t *testing.T) {
 	testServer := s.(*server.TestServer)
 	pgServer := testServer.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
-	pgPreServer := testServer.PGPreServer()
+	pgPreServer := testServer.PGPreServer().(*pgwire.PreServeConnHandler)
 
 	testCases := []struct {
 		specialAddr string

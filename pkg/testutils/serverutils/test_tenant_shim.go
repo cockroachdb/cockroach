@@ -94,6 +94,9 @@ type TestTenantInterface interface {
 	// PGServer returns the tenant's *pgwire.Server as an interface{}.
 	PGServer() interface{}
 
+	// PGPreServer returns the tenant's *pgwire.PreServeConnHandler as an interface{}.
+	PGPreServer() interface{}
+
 	// DiagnosticsReporter returns the tenant's *diagnostics.Reporter as an
 	// interface{}. The DiagnosticsReporter periodically phones home to report
 	// diagnostics and usage.
