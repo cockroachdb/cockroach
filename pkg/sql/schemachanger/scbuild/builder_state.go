@@ -1464,6 +1464,20 @@ func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
 		default:
 			return true, expr, nil
 		}
+		// We cannot type-check subqueries without using optbuilder, and there
+		// is no need to because we only need to rewrite string values that are
+		// directly cast to enums. For example, we must rewrite the 'foo' in:
+		//
+		//   SELECT 'foo'::myenum
+		//
+		// We don't need to rewrite the 'foo' in the query below, which can be
+		// corrupted by renaming the 'foo' value in the myenum type.
+		//
+		//   SELECT (SELECT 'foo')::myenum
+		//
+		if _, ok := innerExpr.(*tree.Subquery); ok {
+			return true, expr, nil
+		}
 		var typ *types.T
 		typ, err = tree.ResolveType(b.ctx, typRef, b.semaCtx.TypeResolver)
 		if err != nil {
