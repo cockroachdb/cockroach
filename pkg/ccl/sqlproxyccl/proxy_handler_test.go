@@ -137,13 +137,7 @@ func TestProxyProtocol(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: false,
-		// Need to disable the test tenant here because it appears as though
-		// we're not able to establish the necessary connections from within
-		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
 	ts := sql.(*server.TestServer).TenantOrServer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
@@ -252,15 +246,11 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: false,
-		// Need to disable the test tenant here because it appears as though
-		// we're not able to establish the necessary connections from within
-		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	ts := sql.(*server.TestServer).TenantOrServer()
+	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -429,15 +419,11 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: false,
-		// Need to disable the test tenant here because it appears as though
-		// we're not able to establish the necessary connections from within
-		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	ts := sql.(*server.TestServer).TenantOrServer()
+	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -702,18 +688,13 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: false,
-		// Need to disable the test tenant here because it appears as though
-		// we're not able to establish the necessary connections from within
-		// it. More investigation required (tracked with #76378).
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	},
-	)
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingEnableAuthLogging()
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	ts := sql.(*server.TestServer).TenantOrServer()
+	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := ts.PGServer().(*pgwire.Server)
+	pgs.TestingEnableAuthLogging()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
@@ -904,19 +885,13 @@ func TestProxyTLSClose(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			Insecure: false,
-			// Need to disable the test tenant here because it appears as though
-			// we're not able to establish the necessary connections from within
-			// it. More investigation required (tracked with #76378).
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
-	)
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingEnableAuthLogging()
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	ts := sql.(*server.TestServer).TenantOrServer()
+	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := ts.PGServer().(*pgwire.Server)
+	pgs.TestingEnableAuthLogging()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
@@ -961,19 +936,13 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, sqlDB, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			Insecure: false,
-			// Need to disable the test tenant here because it appears as though
-			// we're not able to establish the necessary connections from within
-			// it. More investigation required (tracked with #76378).
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
-	)
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingEnableAuthLogging()
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	ts := sql.(*server.TestServer).TenantOrServer()
+	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := ts.PGServer().(*pgwire.Server)
+	pgs.TestingEnableAuthLogging()
 
 	// Create some user with password authn.
 	_, err := sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
@@ -1025,20 +994,13 @@ func TestInsecureProxy(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			// Need to disable the test tenant here as the test below
-			// complains about not being able to find the user. This may be
-			// because of the connection through the proxy server. More
-			// investigation is required (tracked with #76378).
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Insecure:          false,
-		},
-	)
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingEnableAuthLogging()
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	ts := sql.(*server.TestServer).TenantOrServer()
+	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := ts.PGServer().(*pgwire.Server)
+	pgs.TestingEnableAuthLogging()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
@@ -1207,17 +1169,12 @@ func TestDenylistUpdate(t *testing.T) {
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
 
-	sql, sqlDB, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			Insecure: false,
-			// Need to disable the test tenant here because it appears as though
-			// we're not able to establish the necessary connections from within
-			// it. More investigation required (tracked with #76378).
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
-	)
-	sql.(*server.TestServer).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
+
+	sql.(*server.TestServer).TenantOrServer().
+		PGPreServer().(*pgwire.PreServeConnHandler).
+		TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create some user with password authn.
 	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
@@ -1961,8 +1918,8 @@ func TestConnectionMigration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	// Test must be run from the system tenant as it's altering tenants.
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
+	params.DefaultTestTenant = base.TestControlsTenantsExplicitly
+
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()

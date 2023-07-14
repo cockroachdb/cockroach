@@ -87,12 +87,8 @@ func TestBackendDialTLS(t *testing.T) {
 	ctx := context.Background()
 
 	storageServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: false,
-		// StartServer will sometimes start a tenant. This test requires
-		// storage server to be the system tenant, otherwise the
-		// tenant10ToStorage test will fail, since the storage server will
-		// server tenant 10.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		Insecure:          false,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer storageServer.Stopper().Stop(ctx)
 
