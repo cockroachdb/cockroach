@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -120,6 +121,43 @@ func dropAnIndex(
 	dropSecondaryIndex(b, index, dropBehavior, sie, toBeDroppedIndexElms)
 }
 
+// panicIfColumnsAreNotStoredElseWhere detects if dropping an index will lose a stored
+// column. Previously, we had an issue where new columns were accidentally
+// added into secondary indexes. This could lead to wrong results and data
+// loss, so for safety we are going to block dropping these secondary indexes.
+func panicIfColumnsAreNotStoredElseWhere(b BuildCtx, sie *scpb.SecondaryIndex) {
+	tblElts := b.QueryByID(sie.TableID)
+	secondaryIdxElts := tblElts.Filter(hasIndexIDAttrFilter(sie.IndexID))
+	_, _, indexName := scpb.FindIndexName(secondaryIdxElts)
+	_, _, pie := scpb.FindPrimaryIndex(b.QueryByID(sie.TableID))
+	primaryIdxElts := tblElts.Filter(hasIndexIDAttrFilter(pie.IndexID))
+
+	foundColumns := make(map[catid.ColumnID]struct{})
+	primaryIdxElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		idxColumn, ok := (e).(*scpb.IndexColumn)
+		if !ok {
+			return
+		}
+		foundColumns[idxColumn.ColumnID] = struct{}{}
+	})
+	secondaryIdxElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		idxColumn, ok := (e).(*scpb.IndexColumn)
+		if !ok {
+			return
+		}
+		columnElts := tblElts.Filter(hasColumnIDAttrFilter(idxColumn.ColumnID))
+		// Skip columns that are virtual.
+		_, _, columnType := scpb.FindColumnType(columnElts)
+		if columnType.IsVirtual {
+			return
+		}
+		// Check if the column is stored in primary index.
+		if _, found := foundColumns[idxColumn.ColumnID]; !found {
+			panic(sqlerrors.NewSecondaryIndexDataLossError(indexName.Name))
+		}
+	})
+}
+
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
 // both in DROP INDEX and as a cascade from another operation.
 func dropSecondaryIndex(
@@ -129,6 +167,10 @@ func dropSecondaryIndex(
 	sie *scpb.SecondaryIndex,
 	toBeDroppedIndexElms ElementResultSet,
 ) {
+	// Sanity: We had a pretty severe bug with a data loss risk, prevent
+	// dropping of any indexes that are the sole source for given data.
+	panicIfColumnsAreNotStoredElseWhere(b, sie)
+
 	// Maybe drop dependent views.
 	// If CASCADE and there are "dependent" views (i.e. views that use this
 	// to-be-dropped index), then we will drop all dependent views and their
