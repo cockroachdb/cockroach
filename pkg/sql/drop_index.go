@@ -138,6 +138,23 @@ func (n *dropIndexNode) startExec(params runParams) error {
 			return false
 		}
 
+		// Determine if any of the columns stored by this index are *not* kept
+		// in the primary index. Dropping these columns will lead to data loss.
+		if idx != nil {
+			primaryStoredColumns := tableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
+			secondaryStoredColumns := idx.CollectSecondaryStoredColumnIDs()
+			colsToRemove := catalog.TableColSet{}
+			for _, col := range tableDesc.AllColumns() {
+				if col.IsVirtual() {
+					colsToRemove.Add(col.GetID())
+				}
+			}
+			secondaryStoredColumns = secondaryStoredColumns.Difference(colsToRemove)
+			if missingColumns := secondaryStoredColumns.Difference(primaryStoredColumns); !missingColumns.Empty() {
+				return sqlerrors.NewSecondaryIndexDataLossError(idx.GetName())
+			}
+		}
+
 		// Drop expression index columns if they are not key columns in any
 		// other index. They cannot be referenced in constraints, computed
 		// columns, or other indexes, so they are safe to drop.
