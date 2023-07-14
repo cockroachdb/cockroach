@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2758,22 +2757,10 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	ctx := context.Background()
 
 	const txnName = "create job"
-	haveInjectedRetry := false
 	params := base.TestServerArgs{}
+	requestFilter, verifyFunc := testutils.TestingRequestFilterRetryTxnWithPrefix(t, txnName, 1)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, r *kvpb.BatchRequest) *kvpb.Error {
-			if r.Txn == nil || r.Txn.Name != txnName {
-				return nil
-			}
-			if _, ok := r.GetArg(kvpb.EndTxn); ok {
-				if !haveInjectedRetry {
-					haveInjectedRetry = true
-					// Force a retry error the first time.
-					return kvpb.NewError(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected error"))
-				}
-			}
-			return nil
-		},
+		TestingRequestFilter: requestFilter,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -2794,7 +2781,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 		txn.KV().SetDebugName(txnName)
 		return jr.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, rec)
 	}))
-	require.True(t, haveInjectedRetry)
+	verifyFunc()
 	require.NoError(t, sj.Start(ctx))
 }
 
