@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,6 +34,42 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
+
+func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: testutils.TestingRequestFilterRetryTxnWithPrefix("stmt-diag-", 1),
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
+CREATE SCHEMA s;
+CREATE TABLE s.a (a INT PRIMARY KEY);`)
+
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
+	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
+
+	// Set a small chunk size to test splitting into chunks. The bundle files are
+	// on the order of 10KB.
+	r.Exec(t, fmt.Sprintf(
+		"SET CLUSTER SETTING sql.stmt_diagnostics.bundle_chunk_size = '%d'",
+		5000+rand.Intn(10000),
+	))
+
+	rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+	checkBundle(
+		t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
+		base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+	)
+}
 
 func TestExplainAnalyzeDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
