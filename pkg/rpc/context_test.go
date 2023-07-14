@@ -1234,6 +1234,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderShort(t, "Takes too long given https://github.com/grpc/grpc-go/pull/2642")
+	skip.UnderStress(t, "Under high parallelism (>100) on the host node, this test reuses ports and fails")
 
 	sc := log.Scope(t)
 	defer sc.Close(t)
