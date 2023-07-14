@@ -455,3 +455,12 @@ FROM
 # Drop INDEX will be blocked
 statement error pq: index t_with_idx_data_loss_n_idx cannot be safely dropped, since doing so will lose data in certain columns
 DROP INDEX t_with_idx_data_loss@t_with_idx_data_loss_n_idx;
+
+# Validate this object is seen as invalid.
+query TT
+SELECT obj_name, error FROM crdb_internal.invalid_objects
+----
+t_with_idx_data_loss  relation "t_with_idx_data_loss" (123): primary index "t_with_idx_data_loss_pkey" must contain column ID 2 in either key or store columns
+
+statement ok
+DROP TABLE t_with_idx_data_loss;
