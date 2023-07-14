@@ -1654,6 +1654,14 @@ func makeSchemaChangeFrontier(
 		spanFrontier:     &spanFrontier{Frontier: sf},
 		initialHighWater: initialHighWater,
 		latestTs:         initialHighWater,
+
+		// latestKV timestamp is set to the current time to make
+		// sure that even if the target table does not have any
+		// KV events coming in, that the changefeed will remain
+		// running for at least changefeedbase.IdleTimeout time
+		// to ensure that sql pod in serverless deployment does
+		// not get shutdown immediately after changefeed starts.
+		latestKV: timeutil.Now(),
 	}, nil
 }
 
