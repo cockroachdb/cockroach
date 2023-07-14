@@ -649,6 +649,16 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      }
      b = append(b, ']')
    }
+ 	{{- else if eq .FieldType "array_of_int32" -}}
+   if len(m.{{.FieldName}}) > 0 {
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":["...)
+     for i, v := range m.{{.FieldName}} {
+       if i > 0 { b = append(b, ',') }
+       b = strconv.AppendInt(b, int64(v), 10)
+     }
+     b = append(b, ']')
+   }
    {{- else if .IsEnum }}
    {{ if not .AllowZeroValue -}}
    if m.{{.FieldName}} != 0 {

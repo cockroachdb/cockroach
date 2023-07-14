@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -162,6 +163,7 @@ func TestTelemetryLogging(t *testing.T) {
 				CPUTime:                            113,
 				KVBatchRequestsIssued:              113,
 				KVTime:                             114,
+				Regions:                            []string{"eastus1"},
 			},
 			enableTracing: false,
 		},
@@ -402,6 +404,12 @@ func TestTelemetryLogging(t *testing.T) {
 				CPUTime:                            9223372036854775807,
 				KVBatchRequestsIssued:              9223372036854775807,
 				KVTime:                             9223372036854775807,
+				Regions:                            []string{"9223372036854775807EastUS9223372036854775807/z^&*&#()(!@%&^61%^7'\\\\&*@#$%"},
+				SqlInstanceIds: map[base.SQLInstanceID]struct{}{
+					base.SQLInstanceID(-2147483648): {},
+					base.SQLInstanceID(0):           {},
+					base.SQLInstanceID(2147483647):  {},
+				},
 			},
 			enableTracing: true,
 		},
@@ -470,6 +478,7 @@ func TestTelemetryLogging(t *testing.T) {
 					var sampledQueryFromLog eventpb.SampledQuery
 					err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
 					require.NoError(t, err)
+
 					expectedSkipped := tc.expectedSkipped[logCount]
 					logCount++
 					if expectedSkipped == 0 {
@@ -580,6 +589,17 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.KVPairsRead, sampledQueryFromLog.KVPairsRead)
 					require.Equal(t, tc.queryLevelStats.KVBatchRequestsIssued, sampledQueryFromLog.KvGrpcCalls)
 					require.Equal(t, tc.queryLevelStats.KVTime.Nanoseconds(), sampledQueryFromLog.KvTimeNanos)
+					require.Equal(t, tc.queryLevelStats.Regions, sampledQueryFromLog.Regions)
+					if len(tc.queryLevelStats.SqlInstanceIds) > 0 {
+						arr := make([]int32, 0, len(tc.queryLevelStats.SqlInstanceIds))
+						for id := range tc.queryLevelStats.SqlInstanceIds {
+							arr = append(arr, int32(id))
+						}
+						sort.Slice(arr, func(i, j int) bool {
+							return arr[i] < arr[j]
+						})
+						require.Equal(t, arr, sampledQueryFromLog.SQLInstanceIDs, "stmt: %s", sampledQueryFromLog.Statement)
+					}
 
 					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
 					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
