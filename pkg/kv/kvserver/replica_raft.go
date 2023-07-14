@@ -951,6 +951,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if err := r.applySnapshot(ctx, inSnap, snap, hs, subsumedRepls); err != nil {
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
+			for _, msg := range msgStorageAppend.Responses {
+				// TODO is this conditional enough?
+				if msg.To == uint64(inSnap.FromReplica.ReplicaID) &&
+					msg.Type == raftpb.MsgAppResp &&
+					!msg.Reject &&
+					msg.Index == snap.Metadata.Index {
+
+					inSnap.msgAppRespCh <- msg
+					break
+				}
+			}
 			stats.tSnapEnd = timeutil.Now()
 			stats.snap.applied = true
 

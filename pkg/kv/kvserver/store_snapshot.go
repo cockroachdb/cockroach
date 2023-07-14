@@ -535,6 +535,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				DataSize:          dataSize,
 				snapType:          header.Type,
 				raftAppliedIndex:  header.State.RaftAppliedIndex,
+				msgAppRespCh:      make(chan raftpb.Message, 1),
 			}
 
 			timingTag.stop("totalTime")
