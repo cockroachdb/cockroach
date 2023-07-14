@@ -16,6 +16,7 @@ go_library(
         "subtest.go",
         "tb.go",
         "trace.go",
+        "txn_restart.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils",
     visibility = ["//visibility:public"],
