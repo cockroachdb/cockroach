@@ -712,6 +712,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
 			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		})
+		err = interpretAWSError(err)
 		return errors.Wrap(err, "upload failed")
 	}), nil
 }
@@ -738,17 +739,10 @@ func (s *s3Storage) openStreamAt(
 
 	out, err := client.GetObjectWithContext(ctx, req)
 	if err != nil {
-		if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
-			switch aerr.Code() {
-			// Relevant 404 errors reported by AWS.
-			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				// nolint:errwrap
-				return nil, errors.Wrapf(
-					errors.Wrap(cloud.ErrFileDoesNotExist, "s3 object does not exist"),
-					"%v",
-					err.Error(),
-				)
-			}
+		err = interpretAWSError(err)
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			// keep this string in case anyone is depending on it
+			err = errors.Wrap(err, "s3 object does not exist")
 		}
 		return nil, errors.Wrap(err, "failed to get s3 object")
 	}
@@ -790,6 +784,7 @@ func (s *s3Storage) ReadFile(
 				// so try a Size() request.
 				x, err := s.Size(ctx, basename)
 				if err != nil {
+					err = interpretAWSError(err)
 					return nil, 0, errors.Wrap(err, "content-length missing from GetObject and Size() failed")
 				}
 				fileSize = x
@@ -851,10 +846,48 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	if err := client.ListObjectsPagesWithContext(
 		ctx, s3Input, pageFn,
 	); err != nil {
+		err = interpretAWSError(err)
 		return errors.Wrap(err, `failed to list s3 bucket`)
 	}
 
 	return fnErr
+}
+
+// interpretAWSError attempts to surface safe information that otherwise would be redacted
+func interpretAWSError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if strings.Contains(err.Error(), "AssumeRole") {
+		err = errors.Wrap(err, "AssumeRole")
+	}
+
+	if strings.Contains(err.Error(), "AccessDenied") {
+		err = errors.Wrap(err, "AccessDenied")
+	}
+
+	if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
+		code := aerr.Code()
+
+		if code != "" {
+			// nolint:errwrap
+			err = errors.Wrapf(err, "%v", code)
+
+			switch code {
+			// Relevant 404 errors reported by AWS.
+			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
+				// nolint:errwrap
+				err = errors.Wrapf(
+					errors.Wrap(cloud.ErrFileDoesNotExist, "s3 object does not exist"),
+					"%v",
+					err.Error(),
+				)
+			}
+		}
+	}
+
+	return err
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
@@ -890,6 +923,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 			return err
 		})
 	if err != nil {
+		err = interpretAWSError(err)
 		return 0, errors.Wrap(err, "failed to get s3 object headers")
 	}
 	return *out.ContentLength, nil
