@@ -1180,7 +1180,7 @@ func (desc *wrapper) validateTableIndexes(
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
-
+	upgradeChecks := vea.HasExtraChecksForUpgrade()
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, idx := range desc.NonDropIndexes() {
@@ -1447,6 +1447,40 @@ func (desc *wrapper) validateTableIndexes(
 			if len(foundIn) > 1 {
 				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
 					idx.GetName(), colID, foundIn)
+			}
+		}
+		// Checks after this point are for future release. Also exclude system
+		// tables from these checks.
+		if !upgradeChecks {
+			continue
+		}
+		// Check that each non-virtual column is in the key or store columns of
+		// the primary index.
+		if idx.Primary() {
+			keyCols := idx.CollectKeyColumnIDs()
+			storeCols := idx.CollectPrimaryStoredColumnIDs()
+			for _, col := range desc.PublicColumns() {
+				if col.IsVirtual() {
+					if storeCols.Contains(col.GetID()) {
+						return errors.Newf(
+							"primary index %q store columns cannot contain virtual column ID %d",
+							idx.GetName(), col.GetID(),
+						)
+					}
+					// No need to check anything else for virtual columns.
+					continue
+				}
+				if !keyCols.Contains(col.GetID()) && !storeCols.Contains(col.GetID()) {
+					return errors.Newf(
+						"primary index %q must contain column ID %d in either key or store columns",
+						idx.GetName(), col.GetID(),
+					)
+				}
+			}
+		} else if len(desc.Mutations) == 0 && desc.DeclarativeSchemaChangerState == nil {
+			if idx.IndexDesc().EncodingType != descpb.SecondaryIndexEncoding {
+				return errors.AssertionFailedf("secondary index %q has invalid encoding type %d in proto, expected %d",
+					idx.GetName(), idx.IndexDesc().EncodingType, descpb.SecondaryIndexEncoding)
 			}
 		}
 	}
