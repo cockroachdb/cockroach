@@ -313,7 +313,8 @@ type IncomingSnapshot struct {
 	DataSize         int64
 	snapType         kvserverpb.SnapshotRequest_Type
 	placeholder      *ReplicaPlaceholder
-	raftAppliedIndex kvpb.RaftIndex // logging only
+	raftAppliedIndex kvpb.RaftIndex      // logging only
+	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
 }
 
 func (s IncomingSnapshot) String() string {

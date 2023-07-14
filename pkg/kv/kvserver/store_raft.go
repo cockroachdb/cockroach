@@ -499,6 +499,18 @@ func (s *Store) processRaftSnapshotRequest(
 			log.Infof(ctx, "ignored stale snapshot at index %d", snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Index)
 			s.metrics.RangeSnapshotRecvUnusable.Inc(1)
 		}
+		// If the snapshot was applied and acked with an MsgAppResp, return that
+		// message up the stack. We're using msgAppRespCh as a shortcut to avoid
+		// plumbing return parameters through an additional few layers of raft
+		// handling.
+		//
+		// NB: in practice there's always an MsgAppResp here, but it is better not
+		// to rely on what is essentially discretionary raft behavior.
+		select {
+		case msg := <-inSnap.msgAppRespCh:
+			msgAppResp = &msg
+		default:
+		}
 		return nil
 	})
 	if pErr != nil {
