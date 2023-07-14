@@ -839,7 +839,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -966,7 +966,7 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
