@@ -2872,8 +2872,23 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		retErr = timeutil.RunWithTimeout(
 			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 				// Sending snapshot
-				_, err := r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
-				return err
+				resp, err := r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+				if err != nil {
+					return err
+				}
+				if resp.MsgAppResp != nil {
+					_ = r.withRaftGroup(func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+						msg := *resp.MsgAppResp
+						// With a delegated snapshot, the recipient received the snapshot
+						// from another replica and will thus respond to it instead. But the
+						// message is valid for the actual originator of the send as well.
+						msg.To = rn.BasicStatus().ID
+						// We do want to unquiesce here - we wouldn't ever want state transitions
+						// on a quiesced replica.
+						return true, rn.Step(*resp.MsgAppResp)
+					})
+				}
+				return nil
 			},
 		)
 		if !selfDelegate {
