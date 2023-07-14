@@ -42,6 +42,9 @@ const (
 	// Errors accumulated when validating up to this level come with additional
 	// telemetry.
 	ValidationLevelAllPreTxnCommit
+	// ValidationLevelExtraForUpgrade means do all of the above, but
+	// apply optional checks which aim at checking upgrade compatibility.
+	ValidationLevelExtraForUpgrade
 )
 
 // ValidationTelemetry defines the kind of telemetry keys to add to the errors.
@@ -71,6 +74,10 @@ type ValidationErrorAccumulator interface {
 	// be enabled, by comparing against the active version. If the active version
 	// is unknown the validation in question will always be enabled.
 	IsActive(version clusterversion.Key) bool
+
+	// HasExtraChecksForUpgrade returns if extra checks required for upgrades
+	// should be performed.
+	HasExtraChecksForUpgrade() bool
 }
 
 // ValidationErrors is the error container returned by Validate which contains

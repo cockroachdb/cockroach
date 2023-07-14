@@ -33,6 +33,10 @@ const (
 
 	// Write is the default validation level when writing a descriptor.
 	Write = catalog.ValidationLevelAllPreTxnCommit
+
+	// ForUpgrade is the validation used by doctor which includes
+	// extra things for upgrades
+	ForUpgrade = catalog.ValidationLevelExtraForUpgrade
 )
 
 // Self is a convenience function for Validate called at the
@@ -214,6 +218,11 @@ func (vea *validationErrorAccumulator) validateDescriptorsAtLevel(
 // IsActive implements the ValidationErrorAccumulator interface.
 func (vea *validationErrorAccumulator) IsActive(version clusterversion.Key) bool {
 	return vea.activeVersion.IsActive(version)
+}
+
+// HasExtraChecksForUpgrade implements catalog.ValidationErrorAccumulator.
+func (vea *validationErrorAccumulator) HasExtraChecksForUpgrade() bool {
+	return vea.targetLevel == catalog.ValidationLevelExtraForUpgrade
 }
 
 func (vea *validationErrorAccumulator) reportDescGetterError(
