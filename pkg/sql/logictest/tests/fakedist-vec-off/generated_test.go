@@ -905,13 +905,6 @@ func TestLogic_group_join(
 	runLogicTest(t, "group_join")
 }
 
-func TestLogic_guardrails(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "guardrails")
-}
-
 func TestLogic_hash_join(
 	t *testing.T,
 ) {
