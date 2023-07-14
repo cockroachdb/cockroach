@@ -13,6 +13,7 @@ package logcrash
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -263,7 +264,23 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 			"buildchannel": info.Channel,
 			"envchannel":   info.EnvChannel,
 		})
+
 	})
+}
+
+func getTagsFromEnvironment() map[string]string {
+	tags := map[string]string{}
+	rawTags := envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORT_TAGS", "")
+	if len(rawTags) > 0 {
+		envTags := strings.Split(rawTags, ";")
+		for _, tag := range envTags {
+			parts := strings.Split(tag, "=")
+			if len(parts) == 2 {
+				tags[parts[0]] = parts[1]
+			}
+		}
+	}
+	return tags
 }
 
 func uptimeTag(now time.Time) string {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
@@ -44,7 +45,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		ResolveParams{
 			IsExistenceOptional: true,
 			RequiredPrivilege:   privilege.USAGE,
-			WithOffline:         true, // We search schema with name `schema`, including offline ones.
+			WithOffline:         true, // We search sequence with provided name, including offline ones.
 		})
 	if ers != nil && !ers.IsEmpty() {
 		if n.IfNotExists {
@@ -170,7 +171,11 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 }
 
 func maybeAssignSequenceOwner(b BuildCtx, sequence *scpb.Namespace, owner *tree.ColumnItem) {
-	// Resolve the column first to validate its sane.
+	if owner.TableName == nil {
+		panic(errors.WithHint(pgerror.New(pgcode.Syntax, "invalid OWNED BY option"),
+			"Specify OWNED BY table.column or OWNED BY NONE."))
+	}
+	// Resolve table first to validate it's sane.
 	tableElts := b.ResolveTable(owner.TableName, ResolveParams{})
 	_, _, tbl := scpb.FindTable(tableElts)
 	_, _, tblNamespace := scpb.FindNamespace(tableElts)
@@ -179,7 +184,7 @@ func maybeAssignSequenceOwner(b BuildCtx, sequence *scpb.Namespace, owner *tree.
 			panic(err)
 		}
 	}
-	// Next resolve the column
+	// Next resolve the column.
 	colElts := b.ResolveColumn(tbl.TableID, owner.ColumnName, ResolveParams{})
 	_, _, col := scpb.FindColumn(colElts)
 	// Create a sequence owner element

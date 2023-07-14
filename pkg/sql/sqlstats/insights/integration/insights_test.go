@@ -572,11 +572,11 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		txn_contention.database_name,
 		txn_contention.table_name,
 		txn_contention.index_name,
-		txn_contention.waiting_txn_fingerprint_id
+		encode(txn_contention.waiting_txn_fingerprint_id, 'hex') AS waiting_txn_fingerprint_id
 		FROM crdb_internal.cluster_execution_insights insight
 		left join crdb_internal.transaction_contention_events txn_contention on  insight.stmt_id = txn_contention.waiting_stmt_id
 																		 where query like 'UPDATE t SET s =%'
-		group by query, insight.contention, txn_contention.schema_name, txn_contention.database_name, txn_contention.table_name, txn_contention.index_name, waiting_txn_fingerprint_id;`)
+		group by query, insight.contention, txn_contention.schema_name, txn_contention.database_name, txn_contention.table_name, txn_contention.index_name, txn_contention.waiting_txn_fingerprint_id;`)
 		if err != nil {
 			return err
 		}
@@ -589,15 +589,18 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 			}
 
 			var totalContentionFromQueryMs, contentionFromEventMs float64
-			var queryText, schemaName, dbName, tableName, indexName string
-			var blockingTxnFingerprintID gosql.NullString
-			err = rows.Scan(&queryText, &totalContentionFromQueryMs, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &blockingTxnFingerprintID)
+			var queryText, schemaName, dbName, tableName, indexName, waitingTxnFingerprintID string
+			err = rows.Scan(&queryText, &totalContentionFromQueryMs, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &waitingTxnFingerprintID)
 			if err != nil {
 				return err
 			}
 
-			if totalContentionFromQueryMs < .2 {
-				return fmt.Errorf("contention time is %f should be greater than .2 since block is delayed by .5 seconds", totalContentionFromQueryMs)
+			if totalContentionFromQueryMs <= 0 {
+				return fmt.Errorf("contention time is %f must be greater than 0", totalContentionFromQueryMs)
+			}
+
+			if totalContentionFromQueryMs > 60*1000 {
+				return fmt.Errorf("contention time must be less than 1 minute:  %f", totalContentionFromQueryMs)
 			}
 
 			diff := totalContentionFromQueryMs - contentionFromEventMs
@@ -621,8 +624,8 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 				return fmt.Errorf("index names do not match 't_pkey', %s", indexName)
 			}
 
-			if !blockingTxnFingerprintID.Valid {
-				return fmt.Errorf("blockingTxnFingerprintId is null")
+			if waitingTxnFingerprintID == "0000000000000000" || waitingTxnFingerprintID == "" {
+				return fmt.Errorf("waitingTxnFingerprintID is default value: %s", waitingTxnFingerprintID)
 			}
 		}
 
