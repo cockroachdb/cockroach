@@ -3619,3 +3619,30 @@ CREATE FUNCTION public.func104242_not_null()
 $$
 
 subtest end
+
+# Regression test for #105259. Do not type-check subqueries in UDFs outside
+# optbuilder. Doing so can cause internal errors.
+subtest regression_105259
+
+statement ok
+CREATE TYPE e105259 AS ENUM ('foo');
+
+statement ok
+CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT (SELECT 'foo')::e105259;
+  SELECT NULL;
+$$
+
+query T
+SELECT f()
+----
+NULL
+
+statement ok
+ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
+
+# Renaming the enum value corrupts the UDF. This is expected behavior.
+statement error pgcode 22P02 invalid input value for enum e105259: "foo"
+SELECT f()
+
+subtest end
