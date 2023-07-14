@@ -2872,7 +2872,8 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		retErr = timeutil.RunWithTimeout(
 			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 				// Sending snapshot
-				return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+				_, err := r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+				return err
 			},
 		)
 		if !selfDelegate {
@@ -3053,7 +3054,7 @@ func (r *Replica) followerSendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
 	req *kvserverpb.DelegateSendSnapshotRequest,
-) error {
+) (*raftpb.Message, error) {
 	ctx = r.AnnotateCtx(ctx)
 	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
 	if sendThreshold > 0 {
@@ -3082,14 +3083,14 @@ func (r *Replica) followerSendSnapshot(
 	// expensive to send.
 	err := r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Throttle snapshot sending. Obtain the send semaphore and determine the rate limit.
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
 	if err != nil {
-		return errors.Wrap(err, "Unable to reserve space for sending this snapshot")
+		return nil, errors.Wrap(err, "Unable to reserve space for sending this snapshot")
 	}
 	defer cleanup()
 
@@ -3097,13 +3098,13 @@ func (r *Replica) followerSendSnapshot(
 	// sent after we are doing waiting.
 	err = r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	snapType := req.Type
 	snap, err := r.GetSnapshot(ctx, snapType, req.SnapId)
 	if err != nil {
-		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return nil, errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -3174,9 +3175,10 @@ func (r *Replica) followerSendSnapshot(
 		}
 	}
 
-	return timeutil.RunWithTimeout(
+	var msgAppResp *raftpb.Message
+	if err := timeutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
-			return r.store.cfg.Transport.SendSnapshot(
+			resp, err := r.store.cfg.Transport.SendSnapshot(
 				ctx,
 				r.store.cfg.StorePool,
 				header,
@@ -3185,8 +3187,16 @@ func (r *Replica) followerSendSnapshot(
 				sent,
 				recordBytesSent,
 			)
+			if err != nil {
+				return err
+			}
+			msgAppResp = resp.MsgAppResp
+			return nil
 		},
-	)
+	); err != nil {
+		return nil, err
+	}
+	return msgAppResp, nil
 }
 
 // replicasCollocated is used in AdminMerge to ensure that the ranges are

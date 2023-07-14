@@ -3048,13 +3048,14 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.NoError(t, s.processRaftSnapshotRequest(ctx, req,
+	_, pErr := s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:    uuid.MakeV4(),
 			Desc:        desc,
 			placeholder: placeholder,
 		},
-	).GoError())
+	)
+	require.NoError(t, pErr.GoError())
 
 	testutils.SucceedsSoon(t, func() error {
 		s.mu.Lock()
@@ -3127,7 +3128,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		sp := &fakeStorePool{}
 		expectedErr := errors.New("")
 		c := fakeSnapshotStream{nil, expectedErr}
-		err := sendSnapshot(
+		_, err := sendSnapshot(
 			ctx, st, tr, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
 		)
 		if sp.failedThrottles != 1 {
@@ -3146,7 +3147,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			EncodedError: errors.EncodeError(ctx, errors.New("boom")),
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(
+		_, err := sendSnapshot(
 			ctx, st, tr, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
 		)
 		if sp.failedThrottles != 1 {

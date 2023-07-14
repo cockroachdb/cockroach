@@ -183,7 +183,8 @@ func (s *Store) HandleDelegatedSnapshot(
 	}
 
 	// Pass the request to the sender replica.
-	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req); err != nil {
+	msgAppResp, err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req)
+	if err != nil {
 		// If an error occurred during snapshot sending, send an error response.
 		return &kvserverpb.DelegateSnapshotResponse{
 			Status:         kvserverpb.DelegateSnapshotResponse_ERROR,
@@ -195,6 +196,7 @@ func (s *Store) HandleDelegatedSnapshot(
 	return &kvserverpb.DelegateSnapshotResponse{
 		Status:         kvserverpb.DelegateSnapshotResponse_APPLIED,
 		CollectedSpans: sp.GetConfiguredRecording(),
+		MsgAppResp:     msgAppResp,
 	}
 }
 
@@ -426,8 +428,9 @@ func (s *Store) processRaftRequestWithReplica(
 // will have been removed.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *kvserverpb.SnapshotRequest_Header, inSnap IncomingSnapshot,
-) *kvpb.Error {
-	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
+) (*raftpb.Message, *kvpb.Error) {
+	var msgAppResp *raftpb.Message
+	pErr := s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
@@ -498,6 +501,10 @@ func (s *Store) processRaftSnapshotRequest(
 		}
 		return nil
 	})
+	if pErr != nil {
+		return nil, pErr
+	}
+	return msgAppResp, nil
 }
 
 // HandleRaftResponse implements the IncomingRaftMessageHandler interface. Per
