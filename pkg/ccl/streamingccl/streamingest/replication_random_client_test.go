@@ -208,7 +208,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test hangs with test tenant. More investigation is required.
 			// Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				TenantTestingKnobs: &sql.TenantTestingKnobs{
 					// Needed to pin down the ID of the replication target.

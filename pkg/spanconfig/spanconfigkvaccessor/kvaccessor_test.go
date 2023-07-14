@@ -151,7 +151,7 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 				ServerArgs: base.TestServerArgs{
 					// Requires span_configuration table which is not visible
 					// from secondary tenants.
-					DefaultTestTenant: base.TestTenantDisabled,
+					DefaultTestTenant: base.TODOTestTenantDisabled,
 				},
 			})
 			defer tc.Stopper().Stop(ctx)
@@ -193,7 +193,7 @@ func TestKVAccessorPagination(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Requires span_configuration table which is not visible
 			// from secondary tenants.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

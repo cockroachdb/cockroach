@@ -100,7 +100,7 @@ func newRowLevelTTLTestJobTestHelper(
 	var defaultTestTenant base.DefaultTestTenantOptions
 	// Disable the default test tenant when running multi-tenant tests.
 	if testMultiTenant {
-		defaultTestTenant = base.TestTenantDisabled
+		defaultTestTenant = base.TODOTestTenantDisabled
 	}
 
 	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{

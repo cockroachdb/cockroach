@@ -33,7 +33,7 @@ func TestValidateUniqueConstraints(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// This test fails when run within a tenant. More investigation is
 	// required. Tracked with #76378.
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 

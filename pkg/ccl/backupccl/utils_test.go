@@ -160,7 +160,7 @@ func backupRestoreTestSetup(
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 			}})
 }
 
@@ -172,7 +172,7 @@ func backupRestoreTestSetupEmpty(
 	params base.TestClusterArgs,
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
 	// TODO (msbutler): this should be disabled by callers of this function
-	params.ServerArgs.DefaultTestTenant = base.TestTenantDisabled
+	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
@@ -715,7 +715,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 	var expectedNumFiles int
 	restoreProcessorKnobCount := atomic.Uint32{}
 	args := base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		SQLMemoryPoolSize: 1 << 30, // Large enough for all mem limit settings.
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{

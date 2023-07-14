@@ -67,11 +67,14 @@ var PreventStartTenantError = errors.New("attempting to manually start a server 
 // or just for test tenants via COCKROACH_TEST_TENANT.
 func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) bool {
 	// Explicit cases for enabling or disabling the default test tenant.
-	if serverArgs.DefaultTestTenant == base.TestTenantDisabled {
-		return false
-	}
-	if serverArgs.DefaultTestTenant == base.TestTenantEnabled {
+	if serverArgs.DefaultTestTenant.TestTenantAlwaysEnabled() {
 		return true
+	}
+	if serverArgs.DefaultTestTenant.TestTenantAlwaysDisabled() {
+		if issueNum, label := serverArgs.DefaultTestTenant.IssueRef(); issueNum != 0 {
+			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+		}
+		return false
 	}
 
 	if skip.UnderBench() {
@@ -331,14 +334,17 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	preventFurtherTenants := params.DefaultTestTenant == base.TestTenantProbabilisticOnly
+	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
 	// Determine if we should probabilistically start a test tenant
 	// for this server.
 	startDefaultSQLServer := ShouldStartDefaultTestTenant(t, params)
 	if !startDefaultSQLServer {
 		// If we're told not to start a test tenant, set the
 		// disable flag explicitly.
-		params.DefaultTestTenant = base.TestTenantDisabled
+		//
+		// TODO(#76378): review the definition of params.DefaultTestTenant
+		// so we do not need this weird sentinel value.
+		params.DefaultTestTenant = base.InternalNonDefaultDecision
 	}
 
 	s, err := NewServer(params)
@@ -354,7 +360,7 @@ func StartServer(
 		t.Log(DefaultTestTenantMessage)
 	}
 
-	if preventFurtherTenants {
+	if !allowAdditionalTenants {
 		s.DisableStartTenant(PreventStartTenantError)
 	}
 

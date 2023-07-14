@@ -50,7 +50,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	// Need to disable the test tenant because this test fails
 	// when run through a tenant (with internal server error).
 	// More investigation is required. Tracked with #76387.
-	defaultTestTenant := base.TestTenantDisabled
+	defaultTestTenant := base.TODOTestTenantDisabled
 	testCluster := serverutils.StartNewTestCluster(t, 3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
@@ -82,8 +82,10 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	sqlDB.Exec(t, `ALTER PARTITION us OF TABLE comments CONFIGURE ZONE USING gc.ttlseconds = 9001`)
 	sqlDB.Exec(t, `ALTER PARTITION eu OF TABLE comments CONFIGURE ZONE USING gc.ttlseconds = 9002`)
 
-	if defaultTestTenant == base.TestTenantDisabled {
+	if defaultTestTenant == base.TODOTestTenantDisabled {
 		// Make sure secondary tenants don't cause the endpoint to error.
+		//
+		// TODO(#76378): This CREATE TENANT is suspicious - why is it even needed?
 		sqlDB.Exec(t, "CREATE TENANT 'app'")
 	}
 
@@ -131,7 +133,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer dirCleanupFn()
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Fails with the default test tenant. Tracked with #76378.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     dir})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -171,7 +173,7 @@ func TestListTenants(t *testing.T) {
 
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -206,7 +208,7 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
 	defer s.Stopper().Stop(ctx)
 
 	st, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
