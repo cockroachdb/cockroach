@@ -1924,3 +1924,33 @@ statement error pgcode 22P02 invalid input value for enum e105259: "foo"
 SELECT * FROM v105259
 
 subtest end
+
+# Regression test for #106602. Check for cross-database type references when
+# executing CREATE OR REPLACE VIEW.
+subtest regression_106602
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = FALSE
+
+statement ok
+CREATE DATABASE db106602a
+
+statement ok
+CREATE DATABASE db106602b
+
+statement ok
+USE db106602a;
+
+statement ok
+CREATE TYPE e AS ENUM ('foo');
+
+statement ok
+USE db106602b;
+
+statement ok
+CREATE VIEW v AS (SELECT 1)
+
+statement error cross database type references are not supported: db106602a.public.e
+CREATE OR REPLACE VIEW v AS (SELECT 1 FROM (VALUES (1)) val(i) WHERE 'foo'::db106602a.e = 'foo'::db106602a.e)
+
+subtest end
