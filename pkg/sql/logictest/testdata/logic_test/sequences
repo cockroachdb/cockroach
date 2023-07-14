@@ -2403,3 +2403,10 @@ CREATE SEQUENCE TIMESTAMPTZ . PRIMARY . IS;
 
 statement error pgcode 3F000 cannot create \"timestamptz.is\" because the target database or schema does not exist
 CREATE SEQUENCE TIMESTAMPTZ . IS;
+
+# The following subtest ensures OWNED BY option returns a reasonable user error
+# when the table name is missing.
+subtest regression_106838
+
+statement error pgcode 42601 pq: invalid OWNED BY option
+CREATE SEQUENCE s_106838 OWNED BY col;

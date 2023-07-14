@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/stretchr/testify/require"
 )
 
 // Renumber lines so they're stable no matter what changes above. (We
@@ -376,6 +378,25 @@ func TestUptimeTag(t *testing.T) {
 		if a, e := uptimeTag(tc.crashTime), tc.expected; a != e {
 			t.Errorf("uptimeTag(%v) got %v, want %v)", tc.crashTime, a, e)
 		}
+	}
+}
+
+func TestGetTagsFromEnvironment(t *testing.T) {
+	testCases := []struct {
+		envTags      string
+		expectedTags map[string]string
+	}{
+		{"", map[string]string{}},
+		{"a=b", map[string]string{"a": "b"}},
+		{"a=123", map[string]string{"a": "123"}},
+		{"a=123;b=FOOBAR", map[string]string{"a": "123", "b": "FOOBAR"}},
+		{"a=123;b=FOOBAR;", map[string]string{"a": "123", "b": "FOOBAR"}},
+	}
+	for _, tc := range testCases {
+		func() {
+			defer envutil.TestSetEnv(t, "COCKROACH_CRASH_REPORT_TAGS", tc.envTags)()
+			require.Equal(t, tc.expectedTags, getTagsFromEnvironment())
+		}()
 	}
 }
 
