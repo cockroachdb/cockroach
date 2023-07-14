@@ -44,11 +44,18 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("disabled by default", func(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
 		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{})
 		defer cleanup()
 
+		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+		kvprober.WriteInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
@@ -68,6 +75,9 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.WriteInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
@@ -106,6 +116,9 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.WriteInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
@@ -154,6 +167,9 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.WriteInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
+		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
 		// Probe exactly ten times so we can make assertions below.
 		for i := 0; i < 10; i++ {
 			p.ReadProbe(ctx, s.DB())
@@ -198,6 +214,9 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.WriteInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		// Probe exactly ten times so we can make assertions below.
 		for i := 0; i < 10; i++ {
