@@ -75,6 +75,7 @@ CR_GEOS_Status CR_GEOS_ClipByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double xmin,
 // CR_GEOS_Buffer buffers a given EWKB by the given distance and params.
 CR_GEOS_Status CR_GEOS_Buffer(CR_GEOS* lib, CR_GEOS_Slice ewkb, CR_GEOS_BufferParamsInput params,
                               double distance, CR_GEOS_String* ret);
+void CR_GEOS_Version(CR_GEOS* lib, CR_GEOS_String* ret);
 
 //
 // Validity checking.

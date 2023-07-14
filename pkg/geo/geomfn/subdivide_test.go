@@ -47,58 +47,58 @@ func TestSubdivide(t *testing.T) {
 			"Polygon, width > height",
 			args{geo.MustParseGeometry("POLYGON((-1 -1,-1 -0.5, -1 0, 1 0.5, 1 -1,-1 -1))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((-1 -1,-1 0,0 0.25,0 -1,-1 -1))"),
-				geo.MustParseGeometry("POLYGON((0 0.25, 1 0.5, 1 -1, 0 -1, 0 0.25))"),
+				geo.MustParseGeometry("POLYGON ((0 -1, -1 -1, -1 -0.5, 0 -0.5, 0 -1))"),
+				geo.MustParseGeometry("POLYGON ((-1 0, 0 0.25, 0 -0.5, -1 -0.5, -1 0))"),
 			},
 		},
 		{
 			"invalid (bow-tie) Polygon, width > height",
 			args{geo.MustParseGeometry("POLYGON((0 0, -2 -1, -2 1, 0 0, 2 1, 2 -1, 0 0))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((0 0, -2 -1, -2 1, 0 0))"),
-				geo.MustParseGeometry("POLYGON((0 0, 2 1, 2 -1, 0 0))"),
+				geo.MustParseGeometry("POLYGON ((-2 -1, -2 1, 0 0, -2 -1))"),
+				geo.MustParseGeometry("POLYGON ((2 1, 2 -1, 0 0, 2 1))"),
 			},
 		},
 		{
 			"invalid (bow-tie) Polygon, height > width",
 			args{geo.MustParseGeometry("POLYGON((0 0, -1 -2, -1 2, 0 0, 1 2, 1 -2, 0 0))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((0 0, 1 0, 1 -2, 0 0))"),
-				geo.MustParseGeometry("POLYGON((0 0,-1 -2,-1 0,0 0))"),
-				geo.MustParseGeometry("POLYGON((-1 0,-1 2,0 0,-1 0))"),
-				geo.MustParseGeometry("POLYGON((0 0,1 2,1 0,0 0))"),
+				geo.MustParseGeometry("POLYGON ((-1 -2, -1 0, 0 0, -1 -2))"),
+				geo.MustParseGeometry("POLYGON ((1 -2, 0 0, 1 0, 1 -2))"),
+				geo.MustParseGeometry("POLYGON ((-1 2, 0 0, -1 0, -1 2))"),
+				geo.MustParseGeometry("POLYGON ((1 2, 1 0, 0 0, 1 2))"),
 			},
 		},
 		{
 			"Polygon, 12 decimal points precision",
 			args{geo.MustParseGeometry("POLYGON((-0.1 -0.1,-0.1 -0.000000000005, -0.1 0, 0.1 0.000000000005, 0.1 -0.1,-0.1 -0.1))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((-0.1 -0.1,-0.1 0,0 0.0000000000025,0 -0.1,-0.1 -0.1))"),
-				geo.MustParseGeometry("POLYGON((0 0.0000000000025, 0.1 0.000000000005, 0.1 -0.1, 0 -0.1, 0 0.0000000000025))"),
+				geo.MustParseGeometry("POLYGON ((0 -0.1, -0.1 -0.1, -0.1 -0.000000000005, 0 -0.000000000005, 0 -0.1))"),
+				geo.MustParseGeometry("POLYGON ((-0.1 0, 0 0.0000000000025, 0 -0.000000000005, -0.1 -0.000000000005, -0.1 0))"),
 			},
 		},
 		{
 			"Polygon, trapezoid+rectangle",
 			args{geo.MustParseGeometry("POLYGON((-1 0, -1 1, 0 2, 3 2, 3 0, -1 0))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((-1 0,-1 1,0 2,0 0,-1 0))"),
-				geo.MustParseGeometry("POLYGON((0 2,3 2,3 0,0 0,0 2))"),
+				geo.MustParseGeometry("POLYGON ((-1 1, 0 2, 0 0, -1 0, -1 1))"),
+				geo.MustParseGeometry("POLYGON ((3 2, 3 0, 0 0, 0 2, 3 2))"),
 			},
 		},
 		{
 			"Polygon with a hole inside",
 			args{geo.MustParseGeometry("POLYGON((-1 -1, -1 1, 0 2, 1 1, 1 -1, 0 -2, -1 -1),(-0.5 -0.5, -0.5 0.5, 0.5 0.5, 0.5 -0.5, 0 -0.5, -0.5 -0.5))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((1 -1,0 -2,-1 -1,1 -1))"),
-				geo.MustParseGeometry("POLYGON((-1 -1,-1 -0.5,1 -0.5,1 -1,-1 -1))"),
-				geo.MustParseGeometry("POLYGON((-1 -0.5,-1 0.5,-0.5 0.5,-0.5 -0.5,-1 -0.5))"),
-				geo.MustParseGeometry("POLYGON((-1 0.5,-1 1,0.5 1,0.5 0.5,-1 0.5))"),
-				geo.MustParseGeometry("POLYGON((0.5 1,1 1,1 -0.5,0.5 -0.5,0.5 1))"),
-				geo.MustParseGeometry("POLYGON((-1 1,0 2,1 1,-1 1))"),
+				geo.MustParseGeometry("POLYGON ((0 -2, -1 -1, 1 -1, 0 -2))"),
+				geo.MustParseGeometry("POLYGON ((-1 -1, -1 0.5, -0.5 0.5, -0.5 -1, -1 -1))"),
+				geo.MustParseGeometry("POLYGON ((-0.5 -0.5, 1 -0.5, 1 -1, -0.5 -1, -0.5 -0.5))"),
+				geo.MustParseGeometry("POLYGON ((0.5 0.5, 1 0.5, 1 -0.5, 0.5 -0.5, 0.5 0.5))"),
+				geo.MustParseGeometry("POLYGON ((-1 0.5, -1 1, 0 2, 0 0.5, -1 0.5))"),
+				geo.MustParseGeometry("POLYGON ((1 1, 1 0.5, 0 0.5, 0 2, 1 1))"),
 			},
 		},
 		{
-			"LineString, width < height ",
+			"LineString, width < height",
 			args{geo.MustParseGeometry("LINESTRING(0 0, 10 15, 0 0, 10 15, 10 0, 10 15)"), 5},
 			[]geo.Geometry{
 				geo.MustParseGeometry("LINESTRING(0 0,5 7.5)"),
@@ -148,8 +148,8 @@ func TestSubdivide(t *testing.T) {
 			"GeometryCollection, types with different dimensions",
 			args{geo.MustParseGeometry("GEOMETRYCOLLECTION(LINESTRING(0 0, 10 10, 0 10, 10 0), POLYGON((0 0, -2 -1, -2 1, 0 0, 2 1, 2 -1, 0 0)))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((0 0,-2 -1,-2 1,0 0))"),
-				geo.MustParseGeometry("POLYGON((0 0,2 1,2 -1,0 0))"),
+				geo.MustParseGeometry("POLYGON ((-2 -1, -2 1, 0 0, -2 -1))"),
+				geo.MustParseGeometry("POLYGON ((2 1, 2 -1, 0 0, 2 1))"),
 			},
 		},
 		{
@@ -163,10 +163,10 @@ func TestSubdivide(t *testing.T) {
 			"GeometryCollection, same types, one invalid",
 			args{geo.MustParseGeometry("GEOMETRYCOLLECTION(POLYGON((0 0, -2 -1, -2 1, 0 0, 2 1, 2 -1, 0 0)),POLYGON((-1 -1,-1 -0.5, -1 0, 1 0.5, 1 -1,-1 -1)))"), 5},
 			[]geo.Geometry{
-				geo.MustParseGeometry("POLYGON((0 0,-2 -1,-2 1,0 0))"),
-				geo.MustParseGeometry("POLYGON((0 0,2 1,2 -1,0 0))"),
-				geo.MustParseGeometry("POLYGON((-1 -1,-1 0,0 0.25,0 -1,-1 -1))"),
-				geo.MustParseGeometry("POLYGON((0 0.25, 1 0.5, 1 -1, 0 -1, 0 0.25))"),
+				geo.MustParseGeometry("POLYGON ((-2 -1, -2 1, 0 0, -2 -1))"),
+				geo.MustParseGeometry("POLYGON ((2 1, 2 -1, 0 0, 2 1))"),
+				geo.MustParseGeometry("POLYGON ((0 -1, -1 -1, -1 -0.5, 0 -0.5, 0 -1))"),
+				geo.MustParseGeometry("POLYGON ((-1 0, 0 0.25, 0 -0.5, -1 -0.5, -1 0))"),
 			},
 		},
 	}
@@ -174,7 +174,9 @@ func TestSubdivide(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Subdivide(tt.args.g, tt.args.maxVertices)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			for i := range tt.want {
+				assertGeomEqual(t, tt.want[i], got[i])
+			}
 		})
 	}
 
@@ -195,7 +197,7 @@ func TestSubdivide(t *testing.T) {
 		const maxVertices = 5
 		geomTs, err := subdivideRecursive(gt, maxVertices, startDepth, dim, maxDepth)
 		require.NoError(t, err)
-		got := []geo.Geometry{}
+		var got []geo.Geometry
 		for _, cg := range geomTs {
 			g, err := geo.MakeGeometryFromGeomT(cg)
 			require.NoError(t, err)
@@ -204,11 +206,13 @@ func TestSubdivide(t *testing.T) {
 			got = append(got, g)
 		}
 		want := []geo.Geometry{
-			geo.MustParseGeometry("POLYGON((1 -1, 0 -2, -1 -1, 1 -1))"),
-			geo.MustParseGeometry("POLYGON((-1 -1, -1 -0.5, 1 -0.5, 1 -1, -1 -1))"),
-			geo.MustParseGeometry("POLYGON((-1 -0.5, -1 1, 1 1, 1 -0.5, 0.5 -0.5, 0.5 0.5, -0.5 0.5, -0.5 -0.5, -1 -0.5))"),
-			geo.MustParseGeometry("POLYGON((-1 1, 0 2, 1 1, -1 1))"),
+			geo.MustParseGeometry("POLYGON ((0 -2, -1 -1, 1 -1, 0 -2))"),
+			geo.MustParseGeometry("POLYGON ((-1 -1, -1 0.5, -0.5 0.5, -0.5 -1, -1 -1))"),
+			geo.MustParseGeometry("POLYGON ((-0.5 -1, -0.5 -0.5, 0.5 -0.5, 0.5 0.5, 1 0.5, 1 -1, -0.5 -1))"),
+			geo.MustParseGeometry("POLYGON ((-1 0.5, -1 1, 0 2, 0 0.5, -1 0.5))"),
 		}
-		require.Equal(t, want, got)
+		for i := range want {
+			assertGeomEqual(t, want[i], got[i])
+		}
 	})
 }

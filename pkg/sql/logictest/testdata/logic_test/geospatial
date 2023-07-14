@@ -975,9 +975,9 @@ FROM ( VALUES
   ('self-intersecting polygon', 'POLYGON ((14 20, 8 45, 20 35, 14 20, 16 30, 12 30, 14 20))'::geometry)
 ) t(dsc, geom)
 ----
-valid geom                 true   true   true   Valid Geometry                 Valid Geometry          Valid Geometry     POINT (1 2)
-invalid polygon            false  false  false  Self-intersection[1.5 1.5]     Self-intersection       Self-intersection  GEOMETRYCOLLECTION (POLYGON ((1 1, 1.5 1.5, 1.5 -1.5, 1 1)), LINESTRING (1.5 1.5, 2 2))
-self-intersecting polygon  false  false  true   Ring Self-intersection[14 20]  Ring Self-intersection  Valid Geometry     POLYGON ((14 20, 8 45, 20 35, 14 20), (14 20, 16 30, 12 30, 14 20))
+valid geom                 true   true   true   Valid Geometry                   Valid Geometry          Valid Geometry     POINT (1 2)
+invalid polygon            false  false  false  Ring Self-intersection[1.5 1.5]  Ring Self-intersection  Self-intersection  GEOMETRYCOLLECTION (POLYGON ((1.5 1.5, 1.5 -1.5, 1 1, 1.5 1.5)), LINESTRING (1.5 1.5, 2 2))
+self-intersecting polygon  false  false  true   Ring Self-intersection[14 20]    Ring Self-intersection  Valid Geometry     POLYGON ((8 45, 20 35, 14 20, 8 45), (16 30, 12 30, 14 20, 16 30))
 
 query TB
 SELECT
@@ -1073,150 +1073,150 @@ FROM geom_operators_test a
 JOIN geom_operators_test b ON (1=1)
 ORDER BY a.dsc, b.dsc
 ----
-Empty GeometryCollection                  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Faraway point                             GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Line going through left and right square  GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  NULL                                      NULL                                       NULL
-Empty GeometryCollection                  Nested Geometry Collection                GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Point middle of Left Square               GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Point middle of Right Square              GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Square (left)                             GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Square (right)                            GEOMETRYCOLLECTION EMPTY                   true
-Empty GeometryCollection                  Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Empty GeometryCollection                  LINESTRING EMPTY                           true
-Empty LineString                          Empty LineString                          LINESTRING EMPTY                           true
-Empty LineString                          Empty Point                               LINESTRING EMPTY                           true
-Empty LineString                          Faraway point                             LINESTRING EMPTY                           true
-Empty LineString                          Line going through left and right square  LINESTRING EMPTY                           true
-Empty LineString                          NULL                                      NULL                                       NULL
-Empty LineString                          Nested Geometry Collection                LINESTRING EMPTY                           true
-Empty LineString                          Point middle of Left Square               LINESTRING EMPTY                           true
-Empty LineString                          Point middle of Right Square              LINESTRING EMPTY                           true
-Empty LineString                          Square (left)                             LINESTRING EMPTY                           true
-Empty LineString                          Square (right)                            LINESTRING EMPTY                           true
-Empty LineString                          Square overlapping left and right square  LINESTRING EMPTY                           true
-Empty Point                               Empty GeometryCollection                  POINT EMPTY                                true
-Empty Point                               Empty LineString                          POINT EMPTY                                true
-Empty Point                               Empty Point                               POINT EMPTY                                true
-Empty Point                               Faraway point                             POINT EMPTY                                true
-Empty Point                               Line going through left and right square  POINT EMPTY                                true
-Empty Point                               NULL                                      NULL                                       NULL
-Empty Point                               Nested Geometry Collection                POINT EMPTY                                true
-Empty Point                               Point middle of Left Square               POINT EMPTY                                true
-Empty Point                               Point middle of Right Square              POINT EMPTY                                true
-Empty Point                               Square (left)                             POINT EMPTY                                true
-Empty Point                               Square (right)                            POINT EMPTY                                true
-Empty Point                               Square overlapping left and right square  POINT EMPTY                                true
-Faraway point                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Faraway point                             Empty LineString                          LINESTRING EMPTY                           true
-Faraway point                             Empty Point                               POINT EMPTY                                true
-Faraway point                             Faraway point                             POINT (5 5)                                true
-Faraway point                             Line going through left and right square  POINT EMPTY                                true
-Faraway point                             NULL                                      NULL                                       NULL
-Faraway point                             Nested Geometry Collection                POINT EMPTY                                true
-Faraway point                             Point middle of Left Square               POINT EMPTY                                true
-Faraway point                             Point middle of Right Square              POINT EMPTY                                true
-Faraway point                             Square (left)                             POINT EMPTY                                true
-Faraway point                             Square (right)                            POINT EMPTY                                true
-Faraway point                             Square overlapping left and right square  POINT EMPTY                                true
-Line going through left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Line going through left and right square  Empty LineString                          LINESTRING EMPTY                           true
-Line going through left and right square  Empty Point                               POINT EMPTY                                true
-Line going through left and right square  Faraway point                             POINT EMPTY                                true
-Line going through left and right square  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)             true
-Line going through left and right square  NULL                                      NULL                                       NULL
-Line going through left and right square  Nested Geometry Collection                POINT EMPTY                                true
-Line going through left and right square  Point middle of Left Square               POINT (-0.5 0.5)                           true
-Line going through left and right square  Point middle of Right Square              POINT (0.5 0.5)                            true
-Line going through left and right square  Square (left)                             LINESTRING (-0.5 0.5, 0 0.5)               true
-Line going through left and right square  Square (right)                            LINESTRING (0 0.5, 0.5 0.5)                true
-Line going through left and right square  Square overlapping left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)             true
-NULL                                      Empty GeometryCollection                  NULL                                       NULL
-NULL                                      Empty LineString                          NULL                                       NULL
-NULL                                      Empty Point                               NULL                                       NULL
-NULL                                      Faraway point                             NULL                                       NULL
-NULL                                      Line going through left and right square  NULL                                       NULL
-NULL                                      NULL                                      NULL                                       NULL
-NULL                                      Nested Geometry Collection                NULL                                       NULL
-NULL                                      Point middle of Left Square               NULL                                       NULL
-NULL                                      Point middle of Right Square              NULL                                       NULL
-NULL                                      Square (left)                             NULL                                       NULL
-NULL                                      Square (right)                            NULL                                       NULL
-NULL                                      Square overlapping left and right square  NULL                                       NULL
-Nested Geometry Collection                Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Nested Geometry Collection                Empty LineString                          LINESTRING EMPTY                           true
-Nested Geometry Collection                Empty Point                               POINT EMPTY                                true
-Nested Geometry Collection                Faraway point                             POINT EMPTY                                true
-Nested Geometry Collection                Line going through left and right square  POINT EMPTY                                true
-Nested Geometry Collection                NULL                                      NULL                                       NULL
-Nested Geometry Collection                Nested Geometry Collection                POINT (0 0)                                true
-Nested Geometry Collection                Point middle of Left Square               POINT EMPTY                                true
-Nested Geometry Collection                Point middle of Right Square              POINT EMPTY                                true
-Nested Geometry Collection                Square (left)                             POINT (0 0)                                true
-Nested Geometry Collection                Square (right)                            POINT (0 0)                                true
-Nested Geometry Collection                Square overlapping left and right square  POINT (0 0)                                true
-Point middle of Left Square               Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Point middle of Left Square               Empty LineString                          LINESTRING EMPTY                           true
-Point middle of Left Square               Empty Point                               POINT EMPTY                                true
-Point middle of Left Square               Faraway point                             POINT EMPTY                                true
-Point middle of Left Square               Line going through left and right square  POINT (-0.5 0.5)                           true
-Point middle of Left Square               NULL                                      NULL                                       NULL
-Point middle of Left Square               Nested Geometry Collection                POINT EMPTY                                true
-Point middle of Left Square               Point middle of Left Square               POINT (-0.5 0.5)                           true
-Point middle of Left Square               Point middle of Right Square              POINT EMPTY                                true
-Point middle of Left Square               Square (left)                             POINT (-0.5 0.5)                           true
-Point middle of Left Square               Square (right)                            POINT EMPTY                                true
-Point middle of Left Square               Square overlapping left and right square  POINT EMPTY                                true
-Point middle of Right Square              Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Point middle of Right Square              Empty LineString                          LINESTRING EMPTY                           true
-Point middle of Right Square              Empty Point                               POINT EMPTY                                true
-Point middle of Right Square              Faraway point                             POINT EMPTY                                true
-Point middle of Right Square              Line going through left and right square  POINT (0.5 0.5)                            true
-Point middle of Right Square              NULL                                      NULL                                       NULL
-Point middle of Right Square              Nested Geometry Collection                POINT EMPTY                                true
-Point middle of Right Square              Point middle of Left Square               POINT EMPTY                                true
-Point middle of Right Square              Point middle of Right Square              POINT (0.5 0.5)                            true
-Point middle of Right Square              Square (left)                             POINT EMPTY                                true
-Point middle of Right Square              Square (right)                            POINT (0.5 0.5)                            true
-Point middle of Right Square              Square overlapping left and right square  POINT (0.5 0.5)                            true
-Square (left)                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Square (left)                             Empty LineString                          LINESTRING EMPTY                           true
-Square (left)                             Empty Point                               POINT EMPTY                                true
-Square (left)                             Faraway point                             POINT EMPTY                                true
-Square (left)                             Line going through left and right square  LINESTRING (-0.5 0.5, 0 0.5)               true
-Square (left)                             NULL                                      NULL                                       NULL
-Square (left)                             Nested Geometry Collection                POINT (0 0)                                true
-Square (left)                             Point middle of Left Square               POINT (-0.5 0.5)                           true
-Square (left)                             Point middle of Right Square              POINT EMPTY                                true
-Square (left)                             Square (left)                             POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0))      true
-Square (left)                             Square (right)                            LINESTRING (0 0, 0 1)                      true
-Square (left)                             Square overlapping left and right square  POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))  true
-Square (right)                            Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Square (right)                            Empty LineString                          LINESTRING EMPTY                           true
-Square (right)                            Empty Point                               POINT EMPTY                                true
-Square (right)                            Faraway point                             POINT EMPTY                                true
-Square (right)                            Line going through left and right square  LINESTRING (0 0.5, 0.5 0.5)                true
-Square (right)                            NULL                                      NULL                                       NULL
-Square (right)                            Nested Geometry Collection                POINT (0 0)                                true
-Square (right)                            Point middle of Left Square               POINT EMPTY                                true
-Square (right)                            Point middle of Right Square              POINT (0.5 0.5)                            true
-Square (right)                            Square (left)                             LINESTRING (0 1, 0 0)                      true
-Square (right)                            Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))        true
-Square (right)                            Square overlapping left and right square  POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))        true
-Square overlapping left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Square overlapping left and right square  Empty LineString                          LINESTRING EMPTY                           true
-Square overlapping left and right square  Empty Point                               POINT EMPTY                                true
-Square overlapping left and right square  Faraway point                             POINT EMPTY                                true
-Square overlapping left and right square  Line going through left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)             true
-Square overlapping left and right square  NULL                                      NULL                                       NULL
-Square overlapping left and right square  Nested Geometry Collection                POINT (0 0)                                true
-Square overlapping left and right square  Point middle of Left Square               POINT EMPTY                                true
-Square overlapping left and right square  Point middle of Right Square              POINT (0.5 0.5)                            true
-Square overlapping left and right square  Square (left)                             POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))  true
-Square overlapping left and right square  Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))        true
-Square overlapping left and right square  Square overlapping left and right square  POLYGON ((1 0, -0.1 0, -0.1 1, 1 1, 1 0))  true
+Empty GeometryCollection                  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Empty LineString                          GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Empty Point                               GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Faraway point                             GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Line going through left and right square  GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  NULL                                      NULL                                          NULL
+Empty GeometryCollection                  Nested Geometry Collection                GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Point middle of Left Square               GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Point middle of Right Square              GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Square (left)                             GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Square (right)                            GEOMETRYCOLLECTION EMPTY                      true
+Empty GeometryCollection                  Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY                      true
+Empty LineString                          Empty GeometryCollection                  LINESTRING EMPTY                              true
+Empty LineString                          Empty LineString                          LINESTRING EMPTY                              true
+Empty LineString                          Empty Point                               LINESTRING EMPTY                              true
+Empty LineString                          Faraway point                             LINESTRING EMPTY                              true
+Empty LineString                          Line going through left and right square  LINESTRING EMPTY                              true
+Empty LineString                          NULL                                      NULL                                          NULL
+Empty LineString                          Nested Geometry Collection                LINESTRING EMPTY                              true
+Empty LineString                          Point middle of Left Square               LINESTRING EMPTY                              true
+Empty LineString                          Point middle of Right Square              LINESTRING EMPTY                              true
+Empty LineString                          Square (left)                             LINESTRING EMPTY                              true
+Empty LineString                          Square (right)                            LINESTRING EMPTY                              true
+Empty LineString                          Square overlapping left and right square  LINESTRING EMPTY                              true
+Empty Point                               Empty GeometryCollection                  POINT EMPTY                                   true
+Empty Point                               Empty LineString                          POINT EMPTY                                   true
+Empty Point                               Empty Point                               POINT EMPTY                                   true
+Empty Point                               Faraway point                             POINT EMPTY                                   true
+Empty Point                               Line going through left and right square  POINT EMPTY                                   true
+Empty Point                               NULL                                      NULL                                          NULL
+Empty Point                               Nested Geometry Collection                POINT EMPTY                                   true
+Empty Point                               Point middle of Left Square               POINT EMPTY                                   true
+Empty Point                               Point middle of Right Square              POINT EMPTY                                   true
+Empty Point                               Square (left)                             POINT EMPTY                                   true
+Empty Point                               Square (right)                            POINT EMPTY                                   true
+Empty Point                               Square overlapping left and right square  POINT EMPTY                                   true
+Faraway point                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Faraway point                             Empty LineString                          LINESTRING EMPTY                              true
+Faraway point                             Empty Point                               POINT EMPTY                                   true
+Faraway point                             Faraway point                             POINT (5 5)                                   true
+Faraway point                             Line going through left and right square  POINT EMPTY                                   true
+Faraway point                             NULL                                      NULL                                          NULL
+Faraway point                             Nested Geometry Collection                POINT EMPTY                                   true
+Faraway point                             Point middle of Left Square               POINT EMPTY                                   true
+Faraway point                             Point middle of Right Square              POINT EMPTY                                   true
+Faraway point                             Square (left)                             POINT EMPTY                                   true
+Faraway point                             Square (right)                            POINT EMPTY                                   true
+Faraway point                             Square overlapping left and right square  POINT EMPTY                                   true
+Line going through left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Line going through left and right square  Empty LineString                          LINESTRING EMPTY                              true
+Line going through left and right square  Empty Point                               POINT EMPTY                                   true
+Line going through left and right square  Faraway point                             POINT EMPTY                                   true
+Line going through left and right square  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)                true
+Line going through left and right square  NULL                                      NULL                                          NULL
+Line going through left and right square  Nested Geometry Collection                POINT EMPTY                                   true
+Line going through left and right square  Point middle of Left Square               POINT (-0.5 0.5)                              true
+Line going through left and right square  Point middle of Right Square              POINT (0.5 0.5)                               true
+Line going through left and right square  Square (left)                             LINESTRING (-0.5 0.5, 0 0.5)                  true
+Line going through left and right square  Square (right)                            LINESTRING (0 0.5, 0.5 0.5)                   true
+Line going through left and right square  Square overlapping left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)                true
+NULL                                      Empty GeometryCollection                  NULL                                          NULL
+NULL                                      Empty LineString                          NULL                                          NULL
+NULL                                      Empty Point                               NULL                                          NULL
+NULL                                      Faraway point                             NULL                                          NULL
+NULL                                      Line going through left and right square  NULL                                          NULL
+NULL                                      NULL                                      NULL                                          NULL
+NULL                                      Nested Geometry Collection                NULL                                          NULL
+NULL                                      Point middle of Left Square               NULL                                          NULL
+NULL                                      Point middle of Right Square              NULL                                          NULL
+NULL                                      Square (left)                             NULL                                          NULL
+NULL                                      Square (right)                            NULL                                          NULL
+NULL                                      Square overlapping left and right square  NULL                                          NULL
+Nested Geometry Collection                Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Nested Geometry Collection                Empty LineString                          LINESTRING EMPTY                              true
+Nested Geometry Collection                Empty Point                               POINT EMPTY                                   true
+Nested Geometry Collection                Faraway point                             POINT EMPTY                                   true
+Nested Geometry Collection                Line going through left and right square  POINT EMPTY                                   true
+Nested Geometry Collection                NULL                                      NULL                                          NULL
+Nested Geometry Collection                Nested Geometry Collection                POINT (0 0)                                   true
+Nested Geometry Collection                Point middle of Left Square               POINT EMPTY                                   true
+Nested Geometry Collection                Point middle of Right Square              POINT EMPTY                                   true
+Nested Geometry Collection                Square (left)                             POINT (0 0)                                   true
+Nested Geometry Collection                Square (right)                            POINT (0 0)                                   true
+Nested Geometry Collection                Square overlapping left and right square  POINT (0 0)                                   true
+Point middle of Left Square               Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Point middle of Left Square               Empty LineString                          LINESTRING EMPTY                              true
+Point middle of Left Square               Empty Point                               POINT EMPTY                                   true
+Point middle of Left Square               Faraway point                             POINT EMPTY                                   true
+Point middle of Left Square               Line going through left and right square  POINT (-0.5 0.5)                              true
+Point middle of Left Square               NULL                                      NULL                                          NULL
+Point middle of Left Square               Nested Geometry Collection                POINT EMPTY                                   true
+Point middle of Left Square               Point middle of Left Square               POINT (-0.5 0.5)                              true
+Point middle of Left Square               Point middle of Right Square              POINT EMPTY                                   true
+Point middle of Left Square               Square (left)                             POINT (-0.5 0.5)                              true
+Point middle of Left Square               Square (right)                            POINT EMPTY                                   true
+Point middle of Left Square               Square overlapping left and right square  POINT EMPTY                                   true
+Point middle of Right Square              Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Point middle of Right Square              Empty LineString                          LINESTRING EMPTY                              true
+Point middle of Right Square              Empty Point                               POINT EMPTY                                   true
+Point middle of Right Square              Faraway point                             POINT EMPTY                                   true
+Point middle of Right Square              Line going through left and right square  POINT (0.5 0.5)                               true
+Point middle of Right Square              NULL                                      NULL                                          NULL
+Point middle of Right Square              Nested Geometry Collection                POINT EMPTY                                   true
+Point middle of Right Square              Point middle of Left Square               POINT EMPTY                                   true
+Point middle of Right Square              Point middle of Right Square              POINT (0.5 0.5)                               true
+Point middle of Right Square              Square (left)                             POINT EMPTY                                   true
+Point middle of Right Square              Square (right)                            POINT (0.5 0.5)                               true
+Point middle of Right Square              Square overlapping left and right square  POINT (0.5 0.5)                               true
+Square (left)                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Square (left)                             Empty LineString                          LINESTRING EMPTY                              true
+Square (left)                             Empty Point                               POINT EMPTY                                   true
+Square (left)                             Faraway point                             POINT EMPTY                                   true
+Square (left)                             Line going through left and right square  LINESTRING (-0.5 0.5, 0 0.5)                  true
+Square (left)                             NULL                                      NULL                                          NULL
+Square (left)                             Nested Geometry Collection                POINT (0 0)                                   true
+Square (left)                             Point middle of Left Square               POINT (-0.5 0.5)                              true
+Square (left)                             Point middle of Right Square              POINT EMPTY                                   true
+Square (left)                             Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))        true
+Square (left)                             Square (right)                            LINESTRING (0 0, 0 1)                         true
+Square (left)                             Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 0 1, 0 0, -0.1 0))  true
+Square (right)                            Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Square (right)                            Empty LineString                          LINESTRING EMPTY                              true
+Square (right)                            Empty Point                               POINT EMPTY                                   true
+Square (right)                            Faraway point                             POINT EMPTY                                   true
+Square (right)                            Line going through left and right square  LINESTRING (0 0.5, 0.5 0.5)                   true
+Square (right)                            NULL                                      NULL                                          NULL
+Square (right)                            Nested Geometry Collection                POINT (0 0)                                   true
+Square (right)                            Point middle of Left Square               POINT EMPTY                                   true
+Square (right)                            Point middle of Right Square              POINT (0.5 0.5)                               true
+Square (right)                            Square (left)                             LINESTRING (0 1, 0 0)                         true
+Square (right)                            Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))           true
+Square (right)                            Square overlapping left and right square  POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))           true
+Square overlapping left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      true
+Square overlapping left and right square  Empty LineString                          LINESTRING EMPTY                              true
+Square overlapping left and right square  Empty Point                               POINT EMPTY                                   true
+Square overlapping left and right square  Faraway point                             POINT EMPTY                                   true
+Square overlapping left and right square  Line going through left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)                true
+Square overlapping left and right square  NULL                                      NULL                                          NULL
+Square overlapping left and right square  Nested Geometry Collection                POINT (0 0)                                   true
+Square overlapping left and right square  Point middle of Left Square               POINT EMPTY                                   true
+Square overlapping left and right square  Point middle of Right Square              POINT (0.5 0.5)                               true
+Square overlapping left and right square  Square (left)                             POLYGON ((-0.1 0, -0.1 1, 0 1, 0 0, -0.1 0))  true
+Square overlapping left and right square  Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))           true
+Square overlapping left and right square  Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))  true
 
 query TTTT
 SELECT
@@ -1275,9 +1275,9 @@ NULL                                      NULL                                  
 Nested Geometry Collection                GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
 Point middle of Left Square               POINT (-0.5 0.5)                                       POINT (-0.5 0.5)
 Point middle of Right Square              POINT (0.5 0.5)                                        POINT (0.5 0.5)
-Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+Square (left)                             POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Square (right)                            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Square overlapping left and right square  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
 query TTT nosort
 SELECT
@@ -1320,150 +1320,150 @@ FROM geom_operators_test a
 JOIN geom_operators_test b ON (1=1)
 ORDER BY a.dsc, b.dsc
 ----
-GEOMETRYCOLLECTION EMPTY                                                                                        GEOMETRYCOLLECTION EMPTY
-LINESTRING EMPTY                                                                                                LINESTRING EMPTY
-POINT EMPTY                                                                                                     POINT EMPTY
-POINT (5 5)                                                                                                     POINT (5 5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
-POINT (-0.5 0.5)                                                                                                POINT (-0.5 0.5)
-POINT (0.5 0.5)                                                                                                 POINT (0.5 0.5)
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-GEOMETRYCOLLECTION EMPTY                                                                                        GEOMETRYCOLLECTION EMPTY
-LINESTRING EMPTY                                                                                                LINESTRING EMPTY
-POINT EMPTY                                                                                                     POINT EMPTY
-POINT (5 5)                                                                                                     POINT (5 5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
-POINT (-0.5 0.5)                                                                                                POINT (-0.5 0.5)
-POINT (0.5 0.5)                                                                                                 POINT (0.5 0.5)
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-GEOMETRYCOLLECTION EMPTY                                                                                        GEOMETRYCOLLECTION EMPTY
-LINESTRING EMPTY                                                                                                LINESTRING EMPTY
-POINT EMPTY                                                                                                     POINT EMPTY
-POINT (5 5)                                                                                                     POINT (5 5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
-POINT (-0.5 0.5)                                                                                                POINT (-0.5 0.5)
-POINT (0.5 0.5)                                                                                                 POINT (0.5 0.5)
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-POINT (5 5)                                                                                                     POINT (5 5)
-POINT (5 5)                                                                                                     POINT (5 5)
-POINT (5 5)                                                                                                     POINT (5 5)
-POINT EMPTY                                                                                                     POINT EMPTY
-GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))                                                GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (POINT (5 5), GEOMETRYCOLLECTION (POINT (0 0)))                                              GEOMETRYCOLLECTION (POINT (5 5), GEOMETRYCOLLECTION (POINT (0 0)))
-MULTIPOINT (5 5, -0.5 0.5)                                                                                      MULTIPOINT (5 5, -0.5 0.5)
-MULTIPOINT (5 5, 0.5 0.5)                                                                                       MULTIPOINT (5 5, 0.5 0.5)
-GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))                                        GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
-GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))                                           GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
-GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))                                  GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))                                                GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))
-LINESTRING EMPTY                                                                                                LINESTRING EMPTY
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                           GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))                GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))                 GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (5 5))                                              GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (5 5))
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), LINESTRING (-0.5 0.5, 0.5 0.5))                           GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), LINESTRING (-0.5 0.5, 0.5 0.5))
-NULL                                                                                                            NULL
-POINT EMPTY                                                                                                     POINT EMPTY
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (-0.5 0.5))                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (-0.5 0.5))
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (0.5 0.5))                                          GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (0.5 0.5))
-POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                                                                          POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                                                                             POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))                                                                    POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-POINT (-0.5 0.5)                                                                                                POINT (-0.5 0.5)
-POINT (-0.5 0.5)                                                                                                POINT (-0.5 0.5)
-POINT (-0.5 0.5)                                                                                                POINT (-0.5 0.5)
-MULTIPOINT (-0.5 0.5, 5 5)                                                                                      MULTIPOINT (-0.5 0.5, 5 5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (POINT (-0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                                         GEOMETRYCOLLECTION (POINT (-0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
-POINT EMPTY                                                                                                     POINT EMPTY
-MULTIPOINT (-0.5 0.5, 0.5 0.5)                                                                                  MULTIPOINT (-0.5 0.5, 0.5 0.5)
-POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                                                                          POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))                                      GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
-GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))                             GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
-POINT (0.5 0.5)                                                                                                 POINT (0.5 0.5)
-POINT (0.5 0.5)                                                                                                 POINT (0.5 0.5)
-POINT (0.5 0.5)                                                                                                 POINT (0.5 0.5)
-MULTIPOINT (0.5 0.5, 5 5)                                                                                       MULTIPOINT (0.5 0.5, 5 5)
-LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                                                                                            NULL
-GEOMETRYCOLLECTION (POINT (0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                                          GEOMETRYCOLLECTION (POINT (0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
-MULTIPOINT (0.5 0.5, -0.5 0.5)                                                                                  MULTIPOINT (0.5 0.5, -0.5 0.5)
-POINT EMPTY                                                                                                     POINT EMPTY
-GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))                                    GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
-POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                                                                             POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))                                                                    POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))                                        GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))
-GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))                GEOMETRYCOLLECTION (LINESTRING (0 0.5, 0.5 0.5), POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5)))
-NULL                                                                                                            NULL
-POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                                                                          POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                                                                          POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (0.5 0.5))                                    GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (0.5 0.5))
-POLYGON EMPTY                                                                                                   POLYGON EMPTY
-POLYGON ((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))                                                                 POLYGON ((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))
-MULTIPOLYGON (((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0)), ((0 0, 0 1, 1 1, 1 0, 0 0)))                              MULTIPOLYGON (((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0)), ((0 0, 0 1, 1 1, 1 0, 0 0)))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))                                           GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))                 GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0 0.5), POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5)))
-NULL                                                                                                            NULL
-POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                                                                             POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (-0.5 0.5))                                      GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (-0.5 0.5))
-POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                                                                             POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-POLYGON ((0 1, 1 1, 1 0, 0 0, -1 0, -1 1, 0 1))                                                                 POLYGON ((0 1, 1 1, 1 0, 0 0, -1 0, -1 1, 0 1))
-POLYGON EMPTY                                                                                                   POLYGON EMPTY
-POLYGON ((0 1, 0 0, -0.1 0, -0.1 1, 0 1))                                                                       POLYGON ((0 1, 0 0, -0.1 0, -0.1 1, 0 1))
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))                                  GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))  GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, -0.1 0.5), POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5)))
-NULL                                                                                                            NULL
-POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))                                                                    POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (-0.5 0.5))                             GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (-0.5 0.5))
-POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))                                                                    POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-MULTIPOLYGON (((0 1, 1 1, 1 0, 0 0, 0 1)), ((-0.1 1, -0.1 0, -1 0, -1 1, -0.1 1)))                              MULTIPOLYGON (((0 1, 1 1, 1 0, 0 0, 0 1)), ((-0.1 1, -0.1 0, -1 0, -1 1, -0.1 1)))
-POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))                                                                       POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
-POLYGON EMPTY                                                                                                   POLYGON EMPTY
+GEOMETRYCOLLECTION EMPTY                                                                                      GEOMETRYCOLLECTION EMPTY
+LINESTRING EMPTY                                                                                              LINESTRING EMPTY
+POINT EMPTY                                                                                                   POINT EMPTY
+POINT (5 5)                                                                                                   POINT (5 5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
+POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+LINESTRING EMPTY                                                                                              LINESTRING EMPTY
+LINESTRING EMPTY                                                                                              LINESTRING EMPTY
+LINESTRING EMPTY                                                                                              LINESTRING EMPTY
+POINT (5 5)                                                                                                   POINT (5 5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
+POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+POINT EMPTY                                                                                                   POINT EMPTY
+LINESTRING EMPTY                                                                                              LINESTRING EMPTY
+POINT EMPTY                                                                                                   POINT EMPTY
+POINT (5 5)                                                                                                   POINT (5 5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
+POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+POINT (5 5)                                                                                                   POINT (5 5)
+POINT (5 5)                                                                                                   POINT (5 5)
+POINT (5 5)                                                                                                   POINT (5 5)
+POINT EMPTY                                                                                                   POINT EMPTY
+GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))                                              GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (POINT (5 5), GEOMETRYCOLLECTION (POINT (0 0)))                                            GEOMETRYCOLLECTION (POINT (5 5), GEOMETRYCOLLECTION (POINT (0 0)))
+MULTIPOINT (5 5, -0.5 0.5)                                                                                    MULTIPOINT (5 5, -0.5 0.5)
+MULTIPOINT (5 5, 0.5 0.5)                                                                                     MULTIPOINT (5 5, 0.5 0.5)
+GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))                                      GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
+GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))                                         GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
+GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))                                GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))                                              GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))
+LINESTRING EMPTY                                                                                              LINESTRING EMPTY
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                         GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))                GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))
+GEOMETRYCOLLECTION (POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1)), LINESTRING (-0.5 0.5, 0 0.5))                 GEOMETRYCOLLECTION (POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1)), LINESTRING (-0.5 0.5, 0 0.5))
+GEOMETRYCOLLECTION (POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1)), LINESTRING (-0.5 0.5, -0.1 0.5))  GEOMETRYCOLLECTION (POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1)), LINESTRING (-0.5 0.5, -0.1 0.5))
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (5 5))                                            GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (5 5))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), LINESTRING (-0.5 0.5, 0.5 0.5))                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), LINESTRING (-0.5 0.5, 0.5 0.5))
+NULL                                                                                                          NULL
+POINT EMPTY                                                                                                   POINT EMPTY
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (-0.5 0.5))                                       GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (-0.5 0.5))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (0.5 0.5))                                        GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (0.5 0.5))
+POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
+POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
+POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
+MULTIPOINT (-0.5 0.5, 5 5)                                                                                    MULTIPOINT (-0.5 0.5, 5 5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (POINT (-0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                                       GEOMETRYCOLLECTION (POINT (-0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
+POINT EMPTY                                                                                                   POINT EMPTY
+MULTIPOINT (-0.5 0.5, 0.5 0.5)                                                                                MULTIPOINT (-0.5 0.5, 0.5 0.5)
+POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))                                    GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
+GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))                           GEOMETRYCOLLECTION (POINT (-0.5 0.5), POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
+POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
+POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
+POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
+MULTIPOINT (0.5 0.5, 5 5)                                                                                     MULTIPOINT (0.5 0.5, 5 5)
+LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                                                                                          NULL
+GEOMETRYCOLLECTION (POINT (0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                                        GEOMETRYCOLLECTION (POINT (0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
+MULTIPOINT (0.5 0.5, -0.5 0.5)                                                                                MULTIPOINT (0.5 0.5, -0.5 0.5)
+POINT EMPTY                                                                                                   POINT EMPTY
+GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))                                  GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
+POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))                                      GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))
+GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))                GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))
+NULL                                                                                                          NULL
+POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (0.5 0.5))                                  GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (0.5 0.5))
+POLYGON EMPTY                                                                                                 POLYGON EMPTY
+POLYGON ((-1 0, -1 1, 0 1, 1 1, 1 0, 0 0, -1 0))                                                              POLYGON ((-1 0, -1 1, 0 1, 1 1, 1 0, 0 0, -1 0))
+MULTIPOLYGON (((-1 0, -1 1, -0.1 1, -0.1 0, -1 0)), ((0 1, 1 1, 1 0, 0 0, 0 1)))                              MULTIPOLYGON (((-1 0, -1 1, -0.1 1, -0.1 0, -1 0)), ((0 1, 1 1, 1 0, 0 0, 0 1)))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))                                         GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))
+GEOMETRYCOLLECTION (POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1)), LINESTRING (-0.5 0.5, 0 0.5))                 GEOMETRYCOLLECTION (POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1)), LINESTRING (-0.5 0.5, 0 0.5))
+NULL                                                                                                          NULL
+POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (-0.5 0.5))                                    GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (-0.5 0.5))
+POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+POLYGON ((1 1, 1 0, 0 0, -1 0, -1 1, 0 1, 1 1))                                                               POLYGON ((1 1, 1 0, 0 0, -1 0, -1 1, 0 1, 1 1))
+POLYGON EMPTY                                                                                                 POLYGON EMPTY
+POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))                                                                     POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))                                GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))
+GEOMETRYCOLLECTION (POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1)), LINESTRING (-0.5 0.5, -0.1 0.5))  GEOMETRYCOLLECTION (POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1)), LINESTRING (-0.5 0.5, -0.1 0.5))
+NULL                                                                                                          NULL
+POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (-0.5 0.5))                           GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (-0.5 0.5))
+POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+MULTIPOLYGON (((1 1, 1 0, 0 0, 0 1, 1 1)), ((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0)))                            MULTIPOLYGON (((1 1, 1 0, 0 0, 0 1, 1 1)), ((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0)))
+POLYGON ((-0.1 0, -0.1 1, 0 1, 0 0, -0.1 0))                                                                  POLYGON ((-0.1 0, -0.1 1, 0 1, 0 0, -0.1 0))
+POLYGON EMPTY                                                                                                 POLYGON EMPTY
 
 # CW/CCW predicates.
 query TBBTT
@@ -1925,24 +1925,24 @@ Empty Point                               Square overlapping left and right squa
 Faraway point                             Empty GeometryCollection                  NULL                NULL            NULL
 Faraway point                             Empty LineString                          NULL                NULL            NULL
 Faraway point                             Empty Point                               NULL                NULL            NULL
-Faraway point                             Faraway point                             NaN                 NaN             NaN
-Faraway point                             Line going through left and right square  6.363961030678928   6.952697318307  6.363961030678928
+Faraway point                             Faraway point                             0                   0               0
+Faraway point                             Line going through left and right square  7.106335201775948   7.106335201776  7.106335201775948
 Faraway point                             NULL                                      NULL                NULL            NULL
-Faraway point                             Nested Geometry Collection                NaN                 NaN             NaN
-Faraway point                             Point middle of Left Square               NaN                 NaN             NaN
-Faraway point                             Point middle of Right Square              NaN                 NaN             NaN
+Faraway point                             Nested Geometry Collection                7.0710678118654755  7.071067811865  7.0710678118654755
+Faraway point                             Point middle of Left Square               7.106335201775948   7.106335201776  7.106335201775948
+Faraway point                             Point middle of Right Square              6.363961030678928   6.363961030679  6.363961030678928
 Faraway point                             Square (left)                             7.810249675906654   7.810249675907  7.810249675906654
 Faraway point                             Square (right)                            7.0710678118654755  7.071067811865  7.0710678118654755
 Faraway point                             Square overlapping left and right square  7.142128534267638   7.142128534268  7.142128534267638
 Line going through left and right square  Empty GeometryCollection                  NULL                NULL            NULL
 Line going through left and right square  Empty LineString                          NULL                NULL            NULL
 Line going through left and right square  Empty Point                               NULL                NULL            NULL
-Line going through left and right square  Faraway point                             6.363961030678928   6.952697318307  6.363961030678928
+Line going through left and right square  Faraway point                             7.106335201775948   7.106335201776  7.106335201775948
 Line going through left and right square  Line going through left and right square  0                   0               0
 Line going through left and right square  NULL                                      NULL                NULL            NULL
 Line going through left and right square  Nested Geometry Collection                0.7071067811865476  0.707106781187  0.7071067811865476
 Line going through left and right square  Point middle of Left Square               1                   1               1
-Line going through left and right square  Point middle of Right Square              0                   0.8             0
+Line going through left and right square  Point middle of Right Square              1                   1               1
 Line going through left and right square  Square (left)                             1.5811388300841898  1.581138830084  1.5811388300841898
 Line going through left and right square  Square (right)                            0.7071067811865476  0.707106781187  0.7071067811865476
 Line going through left and right square  Square overlapping left and right square  0.7810249675906654  0.781024967591  0.7810249675906654
@@ -1961,36 +1961,36 @@ NULL                                      Square overlapping left and right squa
 Nested Geometry Collection                Empty GeometryCollection                  NULL                NULL            NULL
 Nested Geometry Collection                Empty LineString                          NULL                NULL            NULL
 Nested Geometry Collection                Empty Point                               NULL                NULL            NULL
-Nested Geometry Collection                Faraway point                             NaN                 NaN             NaN
+Nested Geometry Collection                Faraway point                             7.0710678118654755  7.071067811865  7.0710678118654755
 Nested Geometry Collection                Line going through left and right square  0.7071067811865476  0.707106781187  0.7071067811865476
 Nested Geometry Collection                NULL                                      NULL                NULL            NULL
-Nested Geometry Collection                Nested Geometry Collection                NaN                 NaN             NaN
-Nested Geometry Collection                Point middle of Left Square               NaN                 NaN             NaN
-Nested Geometry Collection                Point middle of Right Square              NaN                 NaN             NaN
+Nested Geometry Collection                Nested Geometry Collection                0                   0               0
+Nested Geometry Collection                Point middle of Left Square               0.7071067811865476  0.707106781187  0.7071067811865476
+Nested Geometry Collection                Point middle of Right Square              0.7071067811865476  0.707106781187  0.7071067811865476
 Nested Geometry Collection                Square (left)                             1.4142135623730951  1.414213562373  1.4142135623730951
 Nested Geometry Collection                Square (right)                            1.4142135623730951  1.414213562373  1.4142135623730951
 Nested Geometry Collection                Square overlapping left and right square  1.4142135623730951  1.414213562373  1.4142135623730951
 Point middle of Left Square               Empty GeometryCollection                  NULL                NULL            NULL
 Point middle of Left Square               Empty LineString                          NULL                NULL            NULL
 Point middle of Left Square               Empty Point                               NULL                NULL            NULL
-Point middle of Left Square               Faraway point                             NaN                 NaN             NaN
+Point middle of Left Square               Faraway point                             7.106335201775948   7.106335201776  7.106335201775948
 Point middle of Left Square               Line going through left and right square  1                   1               1
 Point middle of Left Square               NULL                                      NULL                NULL            NULL
-Point middle of Left Square               Nested Geometry Collection                NaN                 NaN             NaN
-Point middle of Left Square               Point middle of Left Square               NaN                 NaN             NaN
-Point middle of Left Square               Point middle of Right Square              NaN                 NaN             NaN
+Point middle of Left Square               Nested Geometry Collection                0.7071067811865476  0.707106781187  0.7071067811865476
+Point middle of Left Square               Point middle of Left Square               0                   0               0
+Point middle of Left Square               Point middle of Right Square              1                   1               1
 Point middle of Left Square               Square (left)                             0.7071067811865476  0.707106781187  0.7071067811865476
 Point middle of Left Square               Square (right)                            1.5811388300841898  1.581138830084  1.5811388300841898
 Point middle of Left Square               Square overlapping left and right square  1.5811388300841898  1.581138830084  1.5811388300841898
 Point middle of Right Square              Empty GeometryCollection                  NULL                NULL            NULL
 Point middle of Right Square              Empty LineString                          NULL                NULL            NULL
 Point middle of Right Square              Empty Point                               NULL                NULL            NULL
-Point middle of Right Square              Faraway point                             NaN                 NaN             NaN
-Point middle of Right Square              Line going through left and right square  0                   0.8             0
+Point middle of Right Square              Faraway point                             6.363961030678928   6.363961030679  6.363961030678928
+Point middle of Right Square              Line going through left and right square  1                   1               1
 Point middle of Right Square              NULL                                      NULL                NULL            NULL
-Point middle of Right Square              Nested Geometry Collection                NaN                 NaN             NaN
-Point middle of Right Square              Point middle of Left Square               NaN                 NaN             NaN
-Point middle of Right Square              Point middle of Right Square              NaN                 NaN             NaN
+Point middle of Right Square              Nested Geometry Collection                0.7071067811865476  0.707106781187  0.7071067811865476
+Point middle of Right Square              Point middle of Left Square               1                   1               1
+Point middle of Right Square              Point middle of Right Square              0                   0               0
 Point middle of Right Square              Square (left)                             1.5811388300841898  1.581138830084  1.5811388300841898
 Point middle of Right Square              Square (right)                            0.7071067811865476  0.707106781187  0.7071067811865476
 Point middle of Right Square              Square overlapping left and right square  0.7810249675906654  0.781024967591  0.7810249675906654
@@ -2463,38 +2463,38 @@ Point middle of Right Square              Square overlapping left and right squa
 Square (left)                             Empty GeometryCollection                  POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
 Square (left)                             Empty LineString                          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
 Square (left)                             Empty Point                               POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-Square (left)                             Faraway point                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-Square (left)                             Line going through left and right square  POLYGON ((0 0.5, 0 0, -1 0, -1 1, 0 1, 0 0.5))
+Square (left)                             Faraway point                             POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+Square (left)                             Line going through left and right square  POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0))
 Square (left)                             NULL                                      NULL
-Square (left)                             Nested Geometry Collection                POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-Square (left)                             Point middle of Left Square               POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-Square (left)                             Point middle of Right Square              POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (left)                             Nested Geometry Collection                POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+Square (left)                             Point middle of Left Square               POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+Square (left)                             Point middle of Right Square              POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
 Square (left)                             Square (left)                             POLYGON EMPTY
-Square (left)                             Square (right)                            POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0))
-Square (left)                             Square overlapping left and right square  POLYGON ((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0))
+Square (left)                             Square (right)                            POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (left)                             Square overlapping left and right square  POLYGON ((-1 0, -1 1, -0.1 1, -0.1 0, -1 0))
 Square (right)                            Empty GeometryCollection                  POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square (right)                            Empty LineString                          POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square (right)                            Empty Point                               POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-Square (right)                            Faraway point                             POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-Square (right)                            Line going through left and right square  POLYGON ((0 0.5, 0 1, 1 1, 1 0, 0 0, 0 0.5))
+Square (right)                            Faraway point                             POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+Square (right)                            Line going through left and right square  POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1))
 Square (right)                            NULL                                      NULL
-Square (right)                            Nested Geometry Collection                POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-Square (right)                            Point middle of Left Square               POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-Square (right)                            Point middle of Right Square              POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-Square (right)                            Square (left)                             POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+Square (right)                            Nested Geometry Collection                POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+Square (right)                            Point middle of Left Square               POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+Square (right)                            Point middle of Right Square              POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+Square (right)                            Square (left)                             POLYGON ((1 1, 1 0, 0 0, 0 1, 1 1))
 Square (right)                            Square (right)                            POLYGON EMPTY
 Square (right)                            Square overlapping left and right square  POLYGON EMPTY
 Square overlapping left and right square  Empty GeometryCollection                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 Square overlapping left and right square  Empty LineString                          POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 Square overlapping left and right square  Empty Point                               POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
-Square overlapping left and right square  Faraway point                             POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-Square overlapping left and right square  Line going through left and right square  POLYGON ((-0.1 0.5, -0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5))
+Square overlapping left and right square  Faraway point                             POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+Square overlapping left and right square  Line going through left and right square  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1))
 Square overlapping left and right square  NULL                                      NULL
-Square overlapping left and right square  Nested Geometry Collection                POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-Square overlapping left and right square  Point middle of Left Square               POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-Square overlapping left and right square  Point middle of Right Square              POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
-Square overlapping left and right square  Square (left)                             POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
-Square overlapping left and right square  Square (right)                            POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
+Square overlapping left and right square  Nested Geometry Collection                POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+Square overlapping left and right square  Point middle of Left Square               POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+Square overlapping left and right square  Point middle of Right Square              POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+Square overlapping left and right square  Square (left)                             POLYGON ((1 1, 1 0, 0 0, 0 1, 1 1))
+Square overlapping left and right square  Square (right)                            POLYGON ((-0.1 0, -0.1 1, 0 1, 0 0, -0.1 0))
 Square overlapping left and right square  Square overlapping left and right square  POLYGON EMPTY
 
 query TT
@@ -3804,7 +3804,7 @@ CREATE TABLE geog_operators_test AS SELECT dsc, geom::geography AS geog FROM geo
 query TR
 SELECT
   a.dsc,
-  ST_Area(a.geog)
+  round(ST_Area(a.geog), 2)
 FROM geog_operators_test a
 GROUP BY a.dsc, a.geog
 ORDER BY a.dsc
@@ -3818,32 +3818,32 @@ NULL                                      NULL
 Nested Geometry Collection                0
 Point middle of Left Square               0
 Point middle of Right Square              0
-Square (left)                             1.2308778361469452e+10
-Square (right)                            1.2308778361469452e+10
-Square overlapping left and right square  1.3539728842301937e+10
+Square (left)                             1.230877836147e+10
+Square (right)                            1.230877836147e+10
+Square overlapping left and right square  1.35397288423e+10
 
 # Unary operators
 query TRRRRRRRRR
 SELECT
   a.dsc,
-  ST_Area(a.geog), round(ST_Area(a.geog, false), 4), ST_Area(a.geog, true),
-  ST_Length(a.geog), ST_Length(a.geog, false), ST_Length(a.geog, true),
-  ST_Perimeter(a.geog), round(ST_Perimeter(a.geog, false), 4), ST_Perimeter(a.geog, true)
+  round(ST_Area(a.geog), 4), round(ST_Area(a.geog, false), 4), round(ST_Area(a.geog, true), 4),
+  round(ST_Length(a.geog), 4), round(ST_Length(a.geog, false), 4), round(ST_Length(a.geog, true), 4),
+  round(ST_Perimeter(a.geog), 4), round(ST_Perimeter(a.geog, false), 4), round(ST_Perimeter(a.geog, true), 4)
 FROM geog_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  0                       0                     0                       0                  0                   0                  0                   0            0
-Empty LineString                          0                       0                     0                       0                  0                   0                  0                   0            0
-Empty Point                               0                       0                     0                       0                  0                   0                  0                   0            0
-Faraway point                             0                       0                     0                       0                  0                   0                  0                   0            0
-Line going through left and right square  0                       0                     0                       111315.2803544632  111190.84565924056  111315.2803544632  0                   0            0
-NULL                                      NULL                    NULL                  NULL                    NULL               NULL                NULL               NULL                NULL         NULL
-Nested Geometry Collection                0                       0                     0                       0                  0                   0                  0                   0            0
-Point middle of Left Square               0                       0                     0                       0                  0                   0                  0                   0            0
-Point middle of Right Square              0                       0                     0                       0                  0                   0                  0                   0            0
-Square (left)                             1.2308778361469452e+10  1.23640317985177e+10  1.2308778361469452e+10  0                  0                   0                  443770.9172483019   444763.383   443770.9172483019
-Square (right)                            1.2308778361469452e+10  1.23640317985177e+10  1.2308778361469452e+10  0                  0                   0                  443770.9172483019   444763.383   443770.9172483019
-Square overlapping left and right square  1.3539728842301937e+10  1.36005074605892e+10  1.3539728842301937e+10  0                  0                   0                  466033.13116216904  467000.7052  466033.13116216904
+Empty GeometryCollection                  0                     0                     0                     0            0            0            0            0            0
+Empty LineString                          0                     0                     0                     0            0            0            0            0            0
+Empty Point                               0                     0                     0                     0            0            0            0            0            0
+Faraway point                             0                     0                     0                     0            0            0            0            0            0
+Line going through left and right square  0                     0                     0                     111315.2804  111190.8457  111315.2804  0            0            0
+NULL                                      NULL                  NULL                  NULL                  NULL         NULL         NULL         NULL         NULL         NULL
+Nested Geometry Collection                0                     0                     0                     0            0            0            0            0            0
+Point middle of Left Square               0                     0                     0                     0            0            0            0            0            0
+Point middle of Right Square              0                     0                     0                     0            0            0            0            0            0
+Square (left)                             1.23087783614695e+10  1.23640317985177e+10  1.23087783614695e+10  0            0            0            443770.9172  444763.383   443770.9172
+Square (right)                            1.23087783614695e+10  1.23640317985177e+10  1.23087783614695e+10  0            0            0            443770.9172  444763.383   443770.9172
+Square overlapping left and right square  1.35397288423019e+10  1.36005074605892e+10  1.35397288423019e+10  0            0            0            466033.1312  467000.7052  466033.1312
 
 query TTTB
 SELECT
@@ -5741,7 +5741,7 @@ subtest st_unaryunion
 query T
 SELECT ST_AsText(ST_UnaryUnion(ST_GeomFromText('MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))')));
 ----
-MULTIPOLYGON (((-1 -1, -1 -2, -2 -2, -2 -1, -1 -1)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 2 1, 2 2, 1 2, 1 1)))
+MULTIPOLYGON (((-1 -2, -2 -2, -2 -1, -1 -1, -1 -2)), ((0 4, 4 4, 4 0, 0 0, 0 4), (2 1, 2 2, 1 2, 1 1, 2 1)))
 
 
 query T
@@ -5784,11 +5784,11 @@ ST_AsEWKT(
                           190 100,185 79,186 56,186 52,178 34,168 18,147 13,132 10))'::geometry,10)
 )
 ----
-SRID=4326;POLYGON ((119 23, 85 35, 68 29, 66 28, 32 56, 22 64, 29.826086956521738 100, 119 100, 119 23))
-SRID=4326;POLYGON ((132 10, 119 23, 119 56, 186 56, 186 52, 178 34, 168 18, 147 13, 132 10))
-SRID=4326;POLYGON ((119 56, 119 100, 190 100, 185 79, 186 56, 119 56))
-SRID=4326;POLYGON ((29.826086956521738 100, 32 110, 40 119, 36 150, 57 158, 75 171, 92 182, 114 184, 114 100, 29.826086956521738 100))
-SRID=4326;POLYGON ((114 184, 132 186, 146 178, 176 184, 179 162, 184 141, 190 122, 190 100, 114 100, 114 184))
+SRID=4326;POLYGON ((85 35, 68 29, 66 28, 32 56, 22 64, 29.826086956521738 100, 119 100, 119 23, 85 35))
+SRID=4326;POLYGON ((186 52, 178 34, 168 18, 147 13, 132 10, 119 23, 119 56, 186 56, 186 52))
+SRID=4326;POLYGON ((185 79, 186 56, 119 56, 119 100, 190 100, 185 79))
+SRID=4326;POLYGON ((40 119, 36 150, 57 158, 75 171, 92 182, 114 184, 114 100, 29.826086956521738 100, 32 110, 40 119))
+SRID=4326;POLYGON ((132 186, 146 178, 176 184, 179 162, 184 141, 190 122, 190 100, 114 100, 114 184, 132 186))
 
 query T
 SELECT ST_AsText(ST_Subdivide('POLYGON((-1 -1,-1 -0.5, -1 0, 1 0.5, 1 -1,-1 -1))'::geometry))
@@ -5809,7 +5809,7 @@ SELECT ST_AsText(ST_SubDivide(ST_GeomFromText('POLYGON((1 1, 1 3, 3 3, 3 1, 1 1)
 query T
 SELECT ST_AsText(ST_VoronoiPolygons(ST_GeomFromText('MULTIPOINT(50 30, 60 30, 100 100,10 150, 110 120)'))::geometry, 1)
 ----
-GEOMETRYCOLLECTION (POLYGON ((-110 43.3, -110 270, 100.5 270, 59.3 132.8, 36.8 92.3, -110 43.3)), POLYGON ((55 -90, -110 -90, -110 43.3, 36.8 92.3, 55 79.3, 55 -90)), POLYGON ((230 47.5, 230 -20.7, 55 79.3, 36.8 92.3, 59.3 132.8, 230 47.5)), POLYGON ((230 -20.7, 230 -90, 55 -90, 55 79.3, 230 -20.7)), POLYGON ((100.5 270, 230 270, 230 47.5, 59.3 132.8, 100.5 270)))
+GEOMETRYCOLLECTION (POLYGON ((-110 270, 100.5 270, 59.3 132.8, 36.8 92.3, -110 43.3, -110 270)), POLYGON ((-110 -90, -110 43.3, 36.8 92.3, 55 79.3, 55 -90, -110 -90)), POLYGON ((230 -20.7, 55 79.3, 36.8 92.3, 59.3 132.8, 230 47.5, 230 -20.7)), POLYGON ((230 -90, 55 -90, 55 79.3, 230 -20.7, 230 -90)), POLYGON ((230 270, 230 47.5, 59.3 132.8, 100.5 270, 230 270)))
 
 subtest st_voronoilines
 

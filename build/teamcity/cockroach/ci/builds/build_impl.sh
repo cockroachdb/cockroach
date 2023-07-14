@@ -27,10 +27,13 @@ then
 fi
 
 EXTRA_ARGS=
+# GEOS does not compile on windows.
+GEOS_TARGET=//c-deps:libgeos
 
 if [ "$CONFIG" == "crosswindows" ]
 then
    EXTRA_ARGS=--enable_runfiles
+   GEOS_TARGET=
 fi
 
 bazel build //pkg/cmd/bazci --config=ci
@@ -39,7 +42,7 @@ BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 		       --config "$CONFIG" --config ci $EXTRA_ARGS \
 		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
-		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
+		       //pkg/cmd/cockroach-oss $GEOS_TARGET $EXTRA_TARGETS
 
 if [[ $CONFIG == "crosslinuxfips" ]]; then
     for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do

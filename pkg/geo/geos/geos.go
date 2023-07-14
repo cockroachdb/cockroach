@@ -292,6 +292,18 @@ func statusToError(s C.CR_GEOS_Status) error {
 	return &Error{msg: string(cStringToSafeGoBytes(s))}
 }
 
+// Version returns the GEOS version used.
+func Version() (string, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return "", err
+	}
+	var version C.CR_GEOS_String
+	C.CR_GEOS_Version(g, &version)
+	// Returns a `const char*`, so we don't have to free anything.
+	return string(cStringToUnsafeGoBytes(version)), nil
+}
+
 // BufferParamsJoinStyle maps to the GEOSBufJoinStyles enum in geos_c.h.in.
 type BufferParamsJoinStyle int
 
