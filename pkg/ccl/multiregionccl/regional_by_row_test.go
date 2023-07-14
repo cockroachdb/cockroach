@@ -354,7 +354,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// when running inside a tenant, for some reason
 							// this test doesn't error when expected. More
 							// investigation is required. Tracked with #76378.
-							params.DefaultTestTenant = base.TestTenantDisabled
+							params.DefaultTestTenant = base.TODOTestTenantDisabled
 							var sqlDB *gosql.DB
 							params.Knobs = base.TestingKnobs{
 								SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{

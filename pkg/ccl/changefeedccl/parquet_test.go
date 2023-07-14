@@ -46,7 +46,7 @@ func TestParquetRows(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// TODO(#98816): cdctest.GetHydratedTableDescriptor does not work with tenant dbs.
 		// Once it is fixed, this flag can be removed.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

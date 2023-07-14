@@ -201,7 +201,7 @@ SELECT job_id
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Knobs:             knobs,
 			},
 		})
@@ -247,7 +247,7 @@ range_max_bytes = 654321000`)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestTenantDisabled,
+				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Knobs:             knobs,
 			},
 		})

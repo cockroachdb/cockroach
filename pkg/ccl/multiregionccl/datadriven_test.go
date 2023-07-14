@@ -157,7 +157,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						// "wait-for-zone-config-changes" only work correctly
 						// when called from the system tenant. More
 						// investigation is required (tracked with #76378).
-						DefaultTestTenant: base.TestTenantDisabled,
+						DefaultTestTenant: base.TODOTestTenantDisabled,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {

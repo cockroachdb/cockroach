@@ -39,7 +39,7 @@ func TestVerifyPassword(t *testing.T) {
 			// Need to disable the test tenant here because it appears as
 			// though we don't have all the same roles in the tenant as we
 			// have in the host cluster (like root).
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	)
 	defer s.Stopper().Stop(ctx)

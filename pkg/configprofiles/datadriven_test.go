@@ -73,7 +73,7 @@ func TestDataDriven(t *testing.T) {
 					// simple.
 					Insecure: true,
 					// The test controls secondary tenants manually.
-					DefaultTestTenant: base.TestTenantDisabled,
+					DefaultTestTenant: base.TODOTestTenantDisabled,
 				})
 				// We need to force the connection to the system tenant,
 				// because at least one of the config profiles changes the

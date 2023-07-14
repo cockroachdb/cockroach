@@ -36,7 +36,7 @@ func TestDecodeCapabilities(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled, // system.tenants only exists for the system tenant
+			DefaultTestTenant: base.TODOTestTenantDisabled, // system.tenants only exists for the system tenant
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

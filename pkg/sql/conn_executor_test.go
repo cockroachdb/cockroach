@@ -1191,7 +1191,7 @@ func TestTransactionDeadline(t *testing.T) {
 	}
 	testClusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs:             knobs,
 		},
 	}

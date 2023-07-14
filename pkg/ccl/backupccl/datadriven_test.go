@@ -286,7 +286,7 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
 //   - disable-tenant : ensures the test is never run in a multitenant environment by
-//     setting testserverargs.DefaultTestTenant to base.TestTenantDisabled.
+//     setting testserverargs.DefaultTestTenant to base.TODOTestTenantDisabled.
 //
 //   - "upgrade-cluster version=<version>"
 //     Upgrade the cluster version of the active cluster to the passed in
@@ -510,7 +510,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
 			}
 			if d.HasArg("disable-tenant") {
-				defaultTestTenant = base.TestTenantDisabled
+				defaultTestTenant = base.TODOTestTenantDisabled
 			}
 
 			lastCreatedCluster = name

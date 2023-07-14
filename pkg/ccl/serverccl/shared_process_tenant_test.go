@@ -29,7 +29,7 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		}})
 	defer tc.Stopper().Stop(ctx)
 

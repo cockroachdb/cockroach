@@ -163,7 +163,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Tests fail within a tenant. Disabling until we can
 			// investigate further. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -289,7 +289,7 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test fails within a tenant. Disabling pending further
 			// investigation. Tracked with #76378.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

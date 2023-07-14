@@ -420,7 +420,7 @@ func TestImportInTenant(t *testing.T) {
 		ExternalIODir: baseDir,
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -474,7 +474,7 @@ func TestImportInMultiServerTenant(t *testing.T) {
 	args := base.TestServerArgs{
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 	}
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})

@@ -167,7 +167,7 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		// Disable the default test tenant so that we can start our own.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TenantRateKnobs: tenantrate.TestingKnobs{
@@ -329,7 +329,7 @@ func TestTenantCtx(t *testing.T) {
 		pushErr := make(chan error)
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {

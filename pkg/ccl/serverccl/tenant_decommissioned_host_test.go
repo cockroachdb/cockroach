@@ -42,7 +42,7 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Disable the default test tenant since we are creating our own.
-		DefaultTestTenant: base.TestTenantDisabled,
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}})
 	defer tc.Stopper().Stop(ctx)
 

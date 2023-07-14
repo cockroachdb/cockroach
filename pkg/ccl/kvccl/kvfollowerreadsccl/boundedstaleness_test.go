@@ -275,7 +275,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
-			DefaultTestTenant: base.TestTenantDisabled,
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {

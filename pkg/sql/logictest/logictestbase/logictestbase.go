@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -61,11 +60,12 @@ type TestClusterConfig struct {
 	// latest version.
 	DisableUpgrade bool
 
-	// If a test tenant is explicitly enabled, a sql tenant server will be started
-	// and pointed at a node in the cluster. Connections on behalf of the logic
-	// test will go to that tenant. Otherwise, the default test tenant logic will
-	// be followed
-	DefaultTestTenant base.DefaultTestTenantOptions
+	// If a config profile sets this to "Always", a SQL tenant server will
+	// always be started and pointed at a node in the cluster.
+	// Connections on behalf of the logic test will go to that tenant.
+	// If set to "Never", the tenant server will never be started.
+	// If set to "Random", the default randomization logic will be used.
+	UseSecondaryTenant TenantMode
 
 	// IsCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
@@ -92,6 +92,18 @@ type TestClusterConfig struct {
 	// of the current commit, and upgrades to the current commit.
 	UseCockroachGoTestserver bool
 }
+
+// TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
+type TenantMode int8
+
+const (
+	// Random is the default behavior.
+	Random TenantMode = iota
+	// Always will always start a tenant server.
+	Always
+	// Never will never start a tenant server.
+	Never
+)
 
 const threeNodeTenantConfigName = "3node-tenant"
 
@@ -265,7 +277,11 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideDistSQLMode: "off",
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
-		DefaultTestTenant:           base.TestTenantDisabled,
+		//
+		// TODO(#76378): We should review this choice. Why can't we use "Random"
+		// here? If there are specific tests that are incompatible, we can
+		// flag them to run only in a separate config.
+		UseSecondaryTenant:          Never,
 		DeclarativeCorpusCollection: true,
 	},
 	{
@@ -309,7 +325,11 @@ var LogicTestConfigs = []TestClusterConfig{
 		// this mode which try to modify zone configurations and we're more
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #75569 for more info.
-		DefaultTestTenant: base.TestTenantDisabled,
+		//
+		// TODO(#76378): We should review this choice. Zone configs have
+		// been supported for secondary tenants since v22.2.
+		// Should this config use "Random" instead?
+		UseSecondaryTenant: Never,
 	},
 	{
 		Name:                "5node-disk",
@@ -326,7 +346,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// dev testlogic ccl --files 3node-tenant --subtest $SUBTEST
 		Name:                        threeNodeTenantConfigName,
 		NumNodes:                    3,
-		DefaultTestTenant:           base.TestTenantEnabled,
+		UseSecondaryTenant:          Always,
 		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
 		DeclarativeCorpusCollection: true,
@@ -340,7 +360,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// dev testlogic ccl --files 3node-tenant-multiregion --subtests $SUBTESTS
 		Name:                        "3node-tenant-multiregion",
 		NumNodes:                    3,
-		DefaultTestTenant:           base.TestTenantEnabled,
+		UseSecondaryTenant:          Always,
 		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
 		DeclarativeCorpusCollection: true,
@@ -417,14 +437,18 @@ var LogicTestConfigs = []TestClusterConfig{
 		// Need to disable the default test tenant here until we have the
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
-		DefaultTestTenant:           base.TestTenantDisabled,
+		//
+		// TODO(#76378): We've fixed that issue. Review this choice. Can
+		// it be "Random" instead? Then we can merge it with the next
+		// config below.
+		UseSecondaryTenant:          Never,
 		DeclarativeCorpusCollection: true,
 	},
 	{
 		Name:                        "multiregion-9node-3region-3azs-tenant",
 		NumNodes:                    9,
 		Localities:                  multiregion9node3region3azsLocalities,
-		DefaultTestTenant:           base.TestTenantEnabled,
+		UseSecondaryTenant:          Always,
 		DeclarativeCorpusCollection: true,
 	},
 	{
