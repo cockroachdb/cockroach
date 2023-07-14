@@ -2473,7 +2473,6 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 // for Raft consensus.
 func TestAddVotersWithoutRaftQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 87553)
 	ctx := context.Background()
 
 	// Disable the raft snapshot queue to make sure we don't require a raft snapshot.
