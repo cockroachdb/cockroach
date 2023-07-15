@@ -1586,8 +1586,8 @@ def go_deps():
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
         vcs = "git",
-        remote = "https://github.com/bananabrick/pebble",  # Custom fork.
-        commit = "e1537d394337e2ce644efb6220ae92564f5172ba",  # Custom commit.
+        remote = "https://github.com/irfansharif/pebble",  # Custom fork.
+        commit = "595eb9c759592aa03ab9683fe3af8abac161ed64",  # Custom commit.
     )
 #     go_repository(
 #        name = "com_github_cockroachdb_sentry_go",
