@@ -168,6 +168,32 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 		}
 	}
+	// If there are no columns projected from the left input, simply advance the
+	// cross-joiner state according to the number of input rows.
+	if len(b.left.types) == 0 {
+		outStartIdx := destStartIdx
+		for bs.curSrcStartIdx < leftSrcEndIdx && outStartIdx < outputCapacity {
+			// Repeat each row leftNumRepeats times.
+			// {{/* toAppend will always be positive. */}}
+			toAppend := leftNumRepeats - bs.numRepeatsIdx
+			if outStartIdx+toAppend > outputCapacity {
+				// We don't have enough space to repeat the current
+				// value the required number of times, so we'll have
+				// to continue from here on the next call.
+				toAppend = outputCapacity - outStartIdx
+				bs.numRepeatsIdx += toAppend
+			} else {
+				// We fully processed the current tuple for the
+				// current column, and before moving on to the next
+				// one, we need to reset numRepeatsIdx (so that the
+				// next tuple would be repeated leftNumRepeats
+				// times).
+				bs.curSrcStartIdx++
+				bs.numRepeatsIdx = 0
+			}
+			outStartIdx += toAppend
+		}
+	}
 }
 
 // buildFromLeftInput builds part of the output of a cross join that comes from
