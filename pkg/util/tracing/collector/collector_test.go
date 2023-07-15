@@ -217,8 +217,7 @@ func TestClusterInflightTraces(t *testing.T) {
 	defer cancel()
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// The test itself creates tenants however necessary.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	}
 
