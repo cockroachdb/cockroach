@@ -46,8 +46,11 @@ type BenchmarkFn func(b *testing.B, db *sqlutils.SQLRunner)
 func benchmarkCockroach(b *testing.B, f BenchmarkFn) {
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
-			UseDatabase:       "bench",
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			UseDatabase: "bench",
+			// Until #83461 is resolved, we want to make sure that we don't use
+			// the multi-tenant setup so that the comparison against old
+			// single-tenant SHAs in the benchmarks is fair.
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -65,7 +68,7 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer s.Stopper().Stop(ctx)
 
@@ -114,7 +117,7 @@ func benchmarkSepProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer s.Stopper().Stop(ctx)
 
@@ -142,8 +145,11 @@ func benchmarkMultinodeCockroach(b *testing.B, f BenchmarkFn) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase:       "bench",
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				UseDatabase: "bench",
+				// Until #83461 is resolved, we want to make sure that we don't
+				// use the multi-tenant setup so that the comparison against old
+				// single-tenant SHAs in the benchmarks is fair.
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			},
 		})
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
