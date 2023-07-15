@@ -143,7 +143,7 @@ func ListExecutionDetailFiles(
 			func(infoKey string, value []byte) error {
 				// Look for the final chunk of each file to find the unique file name.
 				if strings.HasSuffix(infoKey, finalChunkSuffix) {
-					files = append(files, strings.TrimSuffix(infoKey, finalChunkSuffix))
+					files = append(files, strings.TrimPrefix(strings.TrimSuffix(infoKey, finalChunkSuffix), profilerconstants.ExecutionDetailsChunkKeyPrefix))
 				}
 				return nil
 			}); err != nil {

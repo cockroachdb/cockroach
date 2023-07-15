@@ -212,6 +212,19 @@ const jobReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshJob = jobReducerObj.refresh;
 
+export const jobProfilerRequestKey = (
+  req: api.ListJobProfilerExecutionDetailsRequestMessage,
+): string => `${req.job_id}`;
+
+const jobProfilerReducerObj = new KeyedCachedDataReducer(
+  api.getExecutionDetails,
+  "jobProfiler",
+  jobProfilerRequestKey,
+  null,
+  moment.duration(10, "m"),
+);
+export const refreshExecutionDetails = jobProfilerReducerObj.refresh;
+
 export const queryToID = (req: api.QueryPlanRequestMessage): string =>
   req.query;
 
@@ -558,6 +571,7 @@ export interface APIReducersState {
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
+  jobProfiler: KeyedCachedDataReducerState<api.ListJobProfilerExecutionDetailsResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   job: KeyedCachedDataReducerState<api.JobResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
@@ -620,6 +634,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
+  [jobProfilerReducerObj.actionNamespace]: jobProfilerReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
