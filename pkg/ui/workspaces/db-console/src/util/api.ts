@@ -90,6 +90,11 @@ export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
 export type JobRequestMessage = protos.cockroach.server.serverpb.JobRequest;
 export type JobResponseMessage = protos.cockroach.server.serverpb.JobResponse;
 
+export type ListJobProfilerExecutionDetailsRequestMessage =
+  protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
+export type ListJobProfilerExecutionDetailsResponseMessage =
+  protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse;
+
 export type QueryPlanRequestMessage =
   protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage =
@@ -466,6 +471,18 @@ export function getJob(
   return timeoutFetch(
     serverpb.JobResponse,
     `${API_PREFIX}/jobs/${req.job_id}`,
+    null,
+    timeout,
+  );
+}
+
+export function getExecutionDetails(
+  req: ListJobProfilerExecutionDetailsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<ListJobProfilerExecutionDetailsResponseMessage> {
+  return timeoutFetch(
+    serverpb.ListJobProfilerExecutionDetailsResponse,
+    `${STATUS_PREFIX}/list_job_profiler_execution_details/${req.job_id}`,
     null,
     timeout,
   );
