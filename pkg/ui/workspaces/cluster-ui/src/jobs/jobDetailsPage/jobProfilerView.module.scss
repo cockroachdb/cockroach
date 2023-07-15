@@ -1,0 +1,9 @@
+@import "src/core/index.module";
+
+.anchor {
+    @include text--body;
+}
+
+.sorted-table {
+    width: 100%;
+}
