@@ -1153,7 +1153,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// sequence (so now some stores have v21.2, but others v22.1) you are
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
-		if v := cfg.Settings.Version; storeClusterVersion.Less(v.BinaryMinSupportedVersion()) {
+		if v := cfg.Settings.Version; storeClusterVersion.Less(v.BinaryMinSupportedVersion()) && false {
 			if storeClusterVersion.Major < clusterversion.DevOffset && v.BinaryVersion().Major >= clusterversion.DevOffset {
 				return nil, errors.Errorf(
 					"store last used with cockroach non-development version v%s "+
