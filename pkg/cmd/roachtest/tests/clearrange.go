@@ -18,10 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerClearRange(r registry.Registry) {
@@ -29,14 +32,27 @@ func registerClearRange(r registry.Registry) {
 		for _, rangeTombstones := range []bool{true, false} {
 			checks := checks
 			rangeTombstones := rangeTombstones
+
+			clusterSpec := r.MakeClusterSpec(
+				10, /* nodeCount */
+				spec.CPU(16),
+				spec.Zones("us-east1-b"),
+				spec.VolumeSize(500),
+				spec.Cloud(spec.GCE),
+			)
+			clusterSpec.InstanceType = "n2-standard-16"
+			clusterSpec.GCEMinCPUPlatform = "Intel Ice Lake"
+			clusterSpec.GCEVolumeType = "pd-ssd"
+
 			r.Add(registry.TestSpec{
 				Name:  fmt.Sprintf(`clearrange/checks=%t/rangeTs=%t`, checks, rangeTombstones),
 				Owner: registry.OwnerStorage,
-				// 5h for import, 90 for the test. The import should take closer
-				// to <3:30h but it varies.
-				Timeout: 5*time.Hour + 90*time.Minute,
-				Cluster: r.MakeClusterSpec(10, spec.CPU(16)),
-				Leases:  registry.MetamorphicLeases,
+				// 5h for import, 90m for the test. The import should take
+				// closer to <3:30h but it varies.
+				Timeout:        5*time.Hour + 90*time.Minute,
+				Cluster:        clusterSpec,
+				Leases:         registry.MetamorphicLeases,
+				SnapshotPrefix: "clearrange-bank-65m",
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runClearRange(ctx, t, c, checks, rangeTombstones)
 				},
@@ -70,27 +86,62 @@ func runClearRange(
 	aggressiveChecks bool,
 	useRangeTombstones bool,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
+		NamePrefix: t.SnapshotPrefix(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshots) == 0 {
+		t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
+			t.Name(), t.SnapshotPrefix())
 
-	t.Status("restoring fixture")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-
-	{
-		conn := c.Conn(ctx, t.L(), 1)
-		if _, err := conn.ExecContext(ctx,
-			`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = $1`,
-			useRangeTombstones); err != nil {
+		pred, err := version.PredecessorVersion(*t.BuildVersion())
+		if err != nil {
 			t.Fatal(err)
 		}
-		conn.Close()
+
+		path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, c.All(), pred)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Copy over the binary to ./cockroach and run it from there. This test
+		// captures disk snapshots, which are fingerprinted using the binary
+		// version found in this path. The reason it can't just poke at the
+		// running CRDB process is because when grabbing snapshots, CRDB is not
+		// running.
+		c.Run(ctx, c.All(), fmt.Sprintf("cp %s ./cockroach", path))
+
+		t.Status("restoring fixture")
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+
+		// NB: on a 10 node cluster, this should take well below 3h.
+		tBegin := timeutil.Now()
+		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
+		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+
+		// Stop all nodes before capturing cluster snapshots.
+		c.Stop(ctx, t.L(), option.DefaultStopOpts())
+
+		// Create the aforementioned snapshots.
+		snapshots, err = c.CreateSnapshot(ctx, t.SnapshotPrefix())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.L().Printf("created %d new snapshot(s) with prefix %q, using this state",
+			len(snapshots), t.SnapshotPrefix())
+	} else {
+		t.L().Printf("using %d pre-existing snapshot(s) with prefix %q",
+			len(snapshots), t.SnapshotPrefix())
+
+		if err := c.ApplySnapshots(ctx, snapshots); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	// NB: on a 10 node cluster, this should take well below 3h.
-	tBegin := timeutil.Now()
-	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
-		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
-	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
-	c.Stop(ctx, t.L(), option.DefaultStopOpts())
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	t.Status()
 
 	settings := install.MakeClusterSettings()
@@ -103,6 +154,16 @@ func runClearRange(
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+
+	{
+		conn := c.Conn(ctx, t.L(), 1)
+		if _, err := conn.ExecContext(ctx,
+			`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = $1`,
+			useRangeTombstones); err != nil {
+			t.Fatal(err)
+		}
+		conn.Close()
+	}
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that
@@ -168,9 +229,9 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 		t.WorkerStatus("dropping table")
 		defer t.WorkerStatus()
 
-		// Set a low TTL so that the ClearRange-based cleanup mechanism can kick in earlier.
-		// This could also be done after dropping the table.
-		if _, err := conn.ExecContext(ctx, `ALTER TABLE bigbank.bank CONFIGURE ZONE USING gc.ttlseconds = 1200`); err != nil {
+		// Set a low TTL so that the ClearRange-based cleanup mechanism can kick
+		// in earlier. This could also be done after dropping the table.
+		if _, err := conn.ExecContext(ctx, `ALTER TABLE bigbank.bank CONFIGURE ZONE USING gc.ttlseconds = 600`); err != nil {
 			return err
 		}
 

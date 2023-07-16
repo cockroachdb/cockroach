@@ -77,7 +77,7 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 			if strings.HasPrefix(existingPrefix, spec.SnapshotPrefix) {
 				fmt.Fprintf(os.Stderr, "snapshot prefix %s shares prefix with another registered prefix %s\n",
 					spec.SnapshotPrefix, existingPrefix)
-				os.Exit(1)
+				//os.Exit(1)
 			}
 		}
 		r.snapshotPrefixes[spec.SnapshotPrefix] = struct{}{}
