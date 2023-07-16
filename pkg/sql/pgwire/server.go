@@ -1140,19 +1140,19 @@ func (s *Server) serveImpl(
 					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
 					followedBySync = true
 				}
-				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived, followedBySync)
+				return false, isSimpleQuery, c.handleExecute(ctx, timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
-				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
-				return false, isSimpleQuery, c.handleDescribe(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleDescribe(ctx)
 
 			case pgwirebase.ClientMsgBind:
-				return false, isSimpleQuery, c.handleBind(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleBind(ctx)
 
 			case pgwirebase.ClientMsgClose:
-				return false, isSimpleQuery, c.handleClose(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleClose(ctx)
 
 			case pgwirebase.ClientMsgTerminate:
 				terminateSeen = true
