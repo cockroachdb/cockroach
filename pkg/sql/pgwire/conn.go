@@ -122,7 +122,7 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
-func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) error {
+func (c *conn) sendError(ctx context.Context, err error) error {
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
@@ -226,7 +226,7 @@ func (c *conn) processCommandsAsync(
 
 		var decrementConnectionCount func()
 		if decrementConnectionCount, retErr = sqlServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
-			_ = c.sendError(ctx, sqlServer.GetExecutorConfig(), retErr)
+			_ = c.sendError(ctx, retErr)
 			return
 		}
 		defer decrementConnectionCount()
@@ -473,26 +473,24 @@ func (c *conn) handleSimpleQuery(
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleParse(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
-) error {
+func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 	telemetry.Inc(sqltelemetry.ParseRequestCounter)
-	name, err := buf.GetString()
+	name, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	query, err := buf.GetString()
+	query, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	// The client may provide type information for (some of) the placeholders.
-	numQArgTypes, err := buf.GetUint16()
+	numQArgTypes, err := c.readBuf.GetUint16()
 	if err != nil {
 		return err
 	}
 	inTypeHints := make([]oid.Oid, numQArgTypes)
 	for i := range inTypeHints {
-		typ, err := buf.GetUint32()
+		typ, err := c.readBuf.GetUint32()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -586,13 +584,13 @@ func (c *conn) handleParse(
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleDescribe(ctx context.Context) error {
 	telemetry.Inc(sqltelemetry.DescribeRequestCounter)
-	typ, err := buf.GetPrepareType()
+	typ, err := c.readBuf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	name, err := buf.GetString()
+	name, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -606,13 +604,13 @@ func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) e
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleClose(ctx context.Context) error {
 	telemetry.Inc(sqltelemetry.CloseRequestCounter)
-	typ, err := buf.GetPrepareType()
+	typ, err := c.readBuf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	name, err := buf.GetString()
+	name, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -632,13 +630,13 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // statement.
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleBind(ctx context.Context) error {
 	telemetry.Inc(sqltelemetry.BindRequestCounter)
-	portalName, err := buf.GetString()
+	portalName, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	statementName, err := buf.GetString()
+	statementName, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -649,7 +647,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	// specified format code is applied to all arguments; or it can equal the
 	// actual number of arguments.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numQArgFormatCodes, err := buf.GetUint16()
+	numQArgFormatCodes, err := c.readBuf.GetUint16()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -660,7 +658,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		qArgFormatCodes = formatCodesAllText
 	case 1:
 		// `1` means read one code and apply it to every argument.
-		ch, err := buf.GetUint16()
+		ch, err := c.readBuf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -674,7 +672,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgFormatCodes)
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
-			ch, err := buf.GetUint16()
+			ch, err := c.readBuf.GetUint16()
 			if err != nil {
 				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 			}
@@ -682,13 +680,13 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		}
 	}
 
-	numValues, err := buf.GetUint16()
+	numValues, err := c.readBuf.GetUint16()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	qargs := make([][]byte, numValues)
 	for i := 0; i < int(numValues); i++ {
-		plen, err := buf.GetUint32()
+		plen, err := c.readBuf.GetUint32()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -697,7 +695,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 			qargs[i] = nil
 			continue
 		}
-		b, err := buf.GetBytes(int(plen))
+		b, err := c.readBuf.GetBytes(int(plen))
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -711,7 +709,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	// (if any); or it can equal the actual number of result columns of the
 	// query.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numColumnFormatCodes, err := buf.GetUint16()
+	numColumnFormatCodes, err := c.readBuf.GetUint16()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -722,7 +720,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		columnFormatCodes = formatCodesAllText
 	case 1:
 		// All columns will use the one specified format.
-		ch, err := buf.GetUint16()
+		ch, err := c.readBuf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -736,7 +734,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		columnFormatCodes = make([]pgwirebase.FormatCode, numColumnFormatCodes)
 		// Read one format code for each column and apply it to that column.
 		for i := range columnFormatCodes {
-			ch, err := buf.GetUint16()
+			ch, err := c.readBuf.GetUint16()
 			if err != nil {
 				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 			}
@@ -757,14 +755,14 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, followedBySync bool,
+	ctx context.Context, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
-	portalName, err := buf.GetString()
+	portalName, err := c.readBuf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	limit, err := buf.GetUint32()
+	limit, err := c.readBuf.GetUint32()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
