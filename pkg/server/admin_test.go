@@ -3200,11 +3200,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -3230,7 +3226,10 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	sqlDB.Exec(t, "CREATE USER withviewdebug")
 	sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	ts := s.TenantOrServer()
+
+	kvDB := ts.DB()
+	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 
 	plannerFn := func(opName string) (interface{}, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
@@ -3247,8 +3246,8 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	}
 
 	underTest := &adminPrivilegeChecker{
-		ie:          s.InternalExecutor().(*sql.InternalExecutor),
-		st:          s.ClusterSettings(),
+		ie:          ts.InternalExecutor().(*sql.InternalExecutor),
+		st:          ts.ClusterSettings(),
 		makePlanner: plannerFn,
 	}
 
