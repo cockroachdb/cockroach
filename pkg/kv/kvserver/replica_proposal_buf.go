@@ -508,7 +508,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// If this is a reproposal, we don't reassign the LAI. We also don't
 		// reassign the closed timestamp: we could, in principle, but we'd have to
 		// make a copy of the encoded command as to not modify the copy that's
-		// already stored in the local replica's raft entry cache.
+		// already stored in the local replica's raft entry cache. We would rather
+		// have the proposal be immutable.
 		if !reproposal {
 			lai, closedTimestamp, err := b.allocateLAIAndClosedTimestampLocked(ctx, p, closedTSTarget)
 			if err != nil {

@@ -110,11 +110,20 @@ import (
 // (https://github.com/cockroachdb/cockroach/issues/97605)
 //
 // See also the prose near the call to `tryReproposeWithNewLeaseIndex`.
+//
+// The access rules for this field are as follows:
+//   - if the proposal has not yet been passed successfully to Replica.propose,
+//     can access freely on the originating goroutine.
+//   - otherwise, once the proposal has been seen in `retrieveLocalProposals`
+//     and removed from r.mu.proposals, can access freely under raftMu.
+//   - otherwise, must hold r.mu across the access.
+//
+// This reflects the lifecycle of the proposal, which enters first the proposal
+// buffer (guarded by r.mu) and then is flushed into the proposals map, from
+// which it is consumed during log application (which holds raftMu).
 type ProposalData struct {
 	// The caller's context, used for logging proposals, reproposals, message
-	// sends, but not command application. In order to enable safely tracing events
-	// beneath, modifying this ctx field in *ProposalData requires holding the
-	// raftMu.
+	// sends, but not command application.
 	//
 	// This is either the caller's context (if they are waiting for the result)
 	// or a "background" context, perhaps with a span in it (for async consensus
@@ -128,12 +137,6 @@ type ProposalData struct {
 	// that during command application one should always use `replicatedCmd.ctx`
 	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
 	// scope, i.e. outside of raft command application.
-	//
-	// TODO(tbg): under useReproposalsV2, the field can be modified safely as long
-	// as the ProposalData is still in `r.mu.proposals` and `r.mu` is held. If it's
-	// not in that map, we are log application and have exclusive access. Add a more
-	// general comment that explains what can be accessed where (I think I wrote one
-	// somewhere but it should live on ProposalData).
 	ctx context.Context
 
 	// An optional tracing span bound to the proposal in the case of async
@@ -142,7 +145,7 @@ type ProposalData struct {
 	// anything else (all tracing goes through `p.ctx`).
 	sp *tracing.Span
 
-	// idKey uniquely identifies this proposal.
+	// idKey uniquely identifies this proposal. Immutable.
 	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
@@ -153,30 +156,33 @@ type ProposalData struct {
 	// *first* proposed.
 	createdAtTicks int
 
-	// command is serialized and proposed to raft. In the event of
-	// reproposals its MaxLeaseIndex field is mutated.
-	//
-	// TODO(tbg): when useReproposalsV2==true is baked in, the above comment
-	// is stale - MLI never gets mutated.
+	// command is the log entry that is encoded into encodedCommand and proposed
+	// to raft. Never mutated.
 	command *kvserverpb.RaftCommand
 
 	// encodedCommand is the encoded Raft command, with an optional prefix
-	// containing the command ID.
+	// containing the command ID, depending on the raftlog.EntryEncoding.
+	// Immutable.
 	encodedCommand []byte
 
-	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
-	// proposal has been passed to raft modifying this field requires holding the
-	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
-	// passed to r.mu.quotaReleaseQueue.
+	// quotaAlloc is the allocation retrieved from the proposalQuota. The quota is
+	// released when the command comes up for application (even if it will be
+	// reproposed). See retrieveLocalProposals and tryReproposeWithNewLeaseIndex.
 	quotaAlloc *quotapool.IntAlloc
 
 	// ec.done is called after command application to update the timestamp
 	// cache and optionally release latches and exits lock wait-queues.
+	//
+	// TODO(repl): the contract about when this is called is a bit muddy. In
+	// particular, it seems that this can be called multiple times. We ought to
+	// work towards a world where it's exactly once.
 	ec endCmds
 
-	// applied is set when the a command finishes application. It is used to
-	// avoid reproposing a failed proposal if an earlier version of the same
-	// proposal succeeded in applying.
+	// applied is set when the a command finishes application. It is a remnant of
+	// an earlier version of tryReproposeWithNewLeaseIndex that has yet to be
+	// phased out.
+	//
+	// TODO(repl): phase this field out.
 	applied bool
 
 	// doneCh is used to signal the waiting RPC handler (the contents of
@@ -188,18 +194,9 @@ type ProposalData struct {
 
 	// Local contains the results of evaluating the request tying the upstream
 	// evaluation of the request to the downstream application of the command.
-	// Nil when the proposal came from another node (i.e. the evaluation wasn't
-	// done here).
 	Local *result.LocalResult
 
 	// Request is the client's original BatchRequest.
-	// TODO(tschottdorf): tests which use TestingCommandFilter use this.
-	// Decide how that will work in the future, presumably the
-	// CommandFilter would run at proposal time or we allow an opaque
-	// struct to be attached to a proposal which is then available as it
-	// applies. Other than tests, we only need a few bits of the request
-	// here; this could be replaced with isLease and isChangeReplicas
-	// booleans.
 	Request *kvpb.BatchRequest
 
 	// leaseStatus represents the lease under which the Request was evaluated and
@@ -217,25 +214,8 @@ type ProposalData struct {
 
 	// v2SeenDuringApplication is set to true right at the very beginning of
 	// processing this proposal for application (regardless of what the outcome of
-	// application is). Under useReproposalsV2, a local proposal is bound to an
-	// entry only once and the proposals map entry removed. This flag makes sure
-	// that the proposal buffer won't accidentally reinsert the proposal into the
-	// map. In doing so, this field also addresses locking concerns. As long as
-	// the ProposalData is in the `proposals` map, replicaMu must be held. But
-	// command application unlinks the command from the map and wants to be able
-	// to access it without acquiring replicaMu. The only other actor that can
-	// access the proposal while it is being applied is the proposal buffer (which
-	// always holds replicaMu); since v2SeenDuringApplication is flipped while
-	// under the lock (which log application holds at that point in time) and is
-	// never mutated afterwards, the proposal buffer is allowed to access that
-	// particular field and use it to avoid touching the ProposalData. A similar
-	// strategy is not possible under !useReproposalsV2 because by "design",
-	// proposals may repeatedly leave and re-enter the map and ultimately still
-	// apply successfully.
-	//
-	// See: https://github.com/cockroachdb/cockroach/issues/97605
-	//
-	// Never set unless useReproposalsV2 is active.
+	// application is). This flag makes sure that the proposal buffer won't
+	// accidentally reinsert a finished proposal into the map.
 	v2SeenDuringApplication bool
 }
 
