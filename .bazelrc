@@ -98,7 +98,14 @@ build:crosslinuxs390x '--workspace_status_command=./build/bazelutil/stamp.sh s39
 build:crosslinuxs390x --config=crosslinuxs390xbase
 build:crosslinuxs390xbase --platforms=//build/toolchains:cross_linux_s390x
 build:crosslinuxs390xbase --config=cross
-
+build:crosslinuxppc64le '--workspace_status_command=./build/bazelutil/stamp.sh ppc64le-redhat-linux-gnu'
+build:crosslinuxppc64le --config=crosslinuxppc64lebase
+build:crosslinuxppc64lebase --platforms=//build/toolchains:cross_linux_ppc64le
+build:crosslinuxppc64lebase --config=cross
+build:crosslinuxppc '--workspace_status_command=./build/bazelutil/stamp.sh ppc-redhat-linux-gnu'
+build:crosslinuxppc --config=crosslinuxppcbase
+build:crosslinuxppcbase --platforms=//build/toolchains:cross_linux_ppc
+build:crosslinuxppc --config=cross
 # devdarwinx86_64 is a legacy setting that implies `--config=dev`.
 build:devdarwinx86_64 --config=dev
 build:macos --action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin

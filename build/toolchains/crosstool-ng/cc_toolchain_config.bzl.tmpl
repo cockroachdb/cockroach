@@ -141,7 +141,7 @@ def _impl(ctx):
         ]
     else:
         linker_flags.append("-lstdc++")
-    if "%{target}" in ("x86_64-unknown-linux-gnu", "s390x-ibm-linux-gnu"):
+    if "%{target}" in ("x86_64-unknown-linux-gnu", "s390x-ibm-linux-gnu", "ppc64le-redhat-linux-gnu"):
         linker_flags.append("-lrt")
 
     default_linker_flags = feature(
