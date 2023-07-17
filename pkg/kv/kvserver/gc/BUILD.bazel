@@ -46,6 +46,7 @@ go_test(
     embed = [":gc"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
@@ -57,6 +58,8 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
