@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestParquetRows(t *testing.T) {
@@ -152,7 +154,24 @@ func TestParquetRows(t *testing.T) {
 			err = writer.close()
 			require.NoError(t, err)
 
-			parquet.ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer.inner, datums)
+			meta, readDatums, err := parquet.ReadFile(f.Name())
+			require.NoError(t, err)
+			require.Equal(t, meta.NumRows, numRows)
+			require.Equal(t, meta.NumCols, numCols)
+			// NB: Rangefeeds have per-key ordering, so the rows in the parquet
+			// file may not match the order we insert them. To accommodate for
+			// this, sort the expected and actual datums by the primary key.
+			slices.SortFunc(datums, func(a []tree.Datum, b []tree.Datum) bool {
+				return a[0].Compare(&eval.Context{}, b[0]) == -1
+			})
+			slices.SortFunc(readDatums, func(a []tree.Datum, b []tree.Datum) bool {
+				return a[0].Compare(&eval.Context{}, b[0]) == -1
+			})
+			for r := 0; r < numRows; r++ {
+				for c := 0; c < numCols; c++ {
+					parquet.ValidateDatum(t, datums[r][c], readDatums[r][c])
+				}
+			}
 		})
 	}
 }
