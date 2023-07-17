@@ -11135,7 +11135,6 @@ func TestRestoreMemoryMonitoringWithShadowing(t *testing.T) {
 	restoreProcessorKnobCount := atomic.Uint32{}
 
 	args := base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
@@ -11187,11 +11186,7 @@ func TestRestoreMemoryMonitoringMinWorkerMemory(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numAccounts = 100
 
-	args := base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	}
-	params := base.TestClusterArgs{ServerArgs: args}
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 
 	// 4 restore workers means we need minimum 2 workers to start restore.
