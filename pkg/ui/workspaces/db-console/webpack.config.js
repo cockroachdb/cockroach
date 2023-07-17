@@ -67,14 +67,8 @@ module.exports = (env, argv) => {
   // node_modules.
   let modules = [
     ...localRoots,
-    path.resolve(__dirname, "node_modules"),
-    path.resolve(__dirname, "../..", "node_modules"),
+    "node_modules",
   ];
-
-  if (isBazelBuild) {
-    // required for bazel build to resolve properly dependencies
-    modules.push("node_modules");
-  }
 
   const config = {
     context: __dirname,
