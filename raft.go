@@ -276,6 +276,13 @@ type Config struct {
 	// This option may be removed once false positives are no longer possible.
 	// See: https://github.com/etcd-io/raft/issues/80
 	DisableConfChangeValidation bool
+
+	// StepDownOnRemoval makes the leader step down when it is removed from the
+	// group or demoted to a learner.
+	//
+	// This behavior will become unconditional in the future. See:
+	// https://github.com/etcd-io/raft/issues/83
+	StepDownOnRemoval bool
 }
 
 func (c *Config) validate() error {
@@ -408,6 +415,7 @@ type raft struct {
 	// when raft changes its state to follower or candidate.
 	randomizedElectionTimeout int
 	disableProposalForwarding bool
+	stepDownOnRemoval         bool
 
 	tick func()
 	step stepFunc
@@ -447,6 +455,7 @@ func newRaft(c *Config) *raft {
 		readOnly:                    newReadOnly(c.ReadOnlyOption),
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
+		stepDownOnRemoval:           c.StepDownOnRemoval,
 	}
 
 	cfg, prs, err := confchange.Restore(confchange.Changer{
@@ -1918,7 +1927,7 @@ func (r *raft) switchToConfig(cfg tracker.Config, prs tracker.ProgressMap) pb.Co
 	r.isLearner = ok && pr.IsLearner
 
 	if (!ok || r.isLearner) && r.state == StateLeader {
-		// This node is leader and was removed or demoted, step down.
+		// This node is leader and was removed or demoted, step down if requested.
 		//
 		// We prevent demotions at the time writing but hypothetically we handle
 		// them the same way as removing the leader.
@@ -1926,7 +1935,9 @@ func (r *raft) switchToConfig(cfg tracker.Config, prs tracker.ProgressMap) pb.Co
 		// TODO(tbg): ask follower with largest Match to TimeoutNow (to avoid
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
-		r.becomeFollower(r.Term, None)
+		if r.stepDownOnRemoval {
+			r.becomeFollower(r.Term, None)
+		}
 		return cs
 	}
 
