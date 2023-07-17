@@ -27,13 +27,6 @@ import (
 	"go.etcd.io/raft/v3"
 )
 
-// useReproposalsV2 activates prototype code that instead of reproposing using a
-// modified lease index makes a new proposal (different CmdID), transfers the
-// waiting caller (if any) to it, and proposes that. With this strategy, the
-// *RaftCommand associated to a proposal becomes immutable, which simplifies the
-// mental model and allows various simplifications in the proposal pipeline.
-const useReproposalsV2 = true
-
 // replica_application_*.go files provide concrete implementations of
 // the interfaces defined in the storage/apply package:
 //
