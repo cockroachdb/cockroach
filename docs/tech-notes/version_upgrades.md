@@ -208,8 +208,6 @@ Here are the remaining uses:
 - auto-generate a random UUID for `cluster.secret`.
 - block the node startup if a user/role with name `public` is present in `system.users`.
 - create the `defaultdb` and `postgres` empty databases.
-- copy the values from the old `timeseries.storage.10s_resolution_ttl` and `timeseries.storage.30m_resolution_ttl` settings
-  to their new setting names.
 - add the default lat/long entries to `system.locations`.
 - add the `CREATELOGIN` option to roles that already have the `CREATEROLE` role option.
 
