@@ -388,17 +388,6 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 		}
 	}()
 
-	if err := r.tryReproposeWithNewLeaseIndexShared(ctx, newProposal).GoError(); err != nil {
-		return err
-	}
-
-	success = true
-	return nil
-}
-
-func (r *Replica) tryReproposeWithNewLeaseIndexShared(
-	ctx context.Context, newProposal *ProposalData,
-) *kvpb.Error {
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
@@ -417,7 +406,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndexShared(
 			r.mu.state.Desc,
 			"reproposal failed due to closed timestamp",
 		)
-		return kvpb.NewError(err)
+		return err
 	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
@@ -426,11 +415,12 @@ func (r *Replica) tryReproposeWithNewLeaseIndexShared(
 	// reproposals.
 	newProposal.raftAdmissionMeta = nil
 
-	pErr := r.propose(ctx, newProposal, tok.Move(ctx))
-	if pErr != nil {
-		return pErr
+	if pErr := r.propose(ctx, newProposal, tok.Move(ctx)); pErr != nil {
+		return pErr.GoError()
 	}
 	log.VEventf(ctx, 2, "reproposed command %x", newProposal.idKey)
+
+	success = true
 	return nil
 }
 
