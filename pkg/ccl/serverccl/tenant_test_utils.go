@@ -144,12 +144,9 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
-	t.Helper()
-
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = knobs
-	// We're running tenant tests, no need for a default tenant.
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
+	params.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
