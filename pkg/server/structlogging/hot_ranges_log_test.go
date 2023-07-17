@@ -47,7 +47,7 @@ func TestHotRangesStats(t *testing.T) {
 	defer cleanup()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
 			base.DefaultTestStoreSpec,
