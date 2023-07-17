@@ -1962,6 +1962,15 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 		b = strconv.AppendUint(b, uint64(m.BulkJobId), 10)
 	}
 
+	if m.StmtCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StmtCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.StmtCount), 10)
+	}
+
 	return printComma, b
 }
 
