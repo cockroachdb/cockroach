@@ -26,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -134,19 +136,27 @@ func fingerprint(
 				ExportFingerprint:  true,
 				FingerprintOptions: kvpb.FingerprintOptions{StripIndexPrefixAndTimestamp: stripped}}
 			var rawResp kvpb.Response
+			var recording tracingpb.Recording
 			var pErr *kvpb.Error
 			exportRequestErr := contextutil.RunWithTimeout(ctx,
 				fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
 					EndKey: span.EndKey}),
 				5*time.Minute, func(ctx context.Context) error {
-					rawResp, pErr = kv.SendWrappedWithAdmission(ctx,
-						evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
+					sp := tracing.SpanFromContext(ctx)
+					ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "fingerprint.ExportRequest", tracing.WithParent(sp))
+					defer func() {
+						recording = exportSpan.FinishAndGetConfiguredRecording()
+					}()
+					rawResp, pErr = kv.SendWrappedWithAdmission(ctx, evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
 					if pErr != nil {
 						return pErr.GoError()
 					}
 					return nil
 				})
 			if exportRequestErr != nil {
+				if recording != nil {
+					log.Errorf(ctx, "failed export request trace:\n%s", recording)
+				}
 				return nil, exportRequestErr
 			}
 

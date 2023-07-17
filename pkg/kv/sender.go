@@ -441,10 +441,10 @@ func SendWrappedWith(
 	return SendWrappedWithAdmission(ctx, sender, h, kvpb.AdmissionHeader{}, args)
 }
 
-// SendWrappedWithAdmission is a convenience function which wraps the request
-// in a batch and sends it via the provided Sender and headers. It returns the
-// unwrapped response or an error. It's valid to pass a `nil` context; an
-// empty one is used in that case.
+// SendWrappedWithAdmission is a convenience function which wraps the request in
+// a batch and sends it via the provided Sender and headers. It returns the
+// unwrapped response or an error. It's valid to pass a `nil` context; an empty
+// one is used in that case.
 func SendWrappedWithAdmission(
 	ctx context.Context, sender Sender, h kvpb.Header, ah kvpb.AdmissionHeader, args kvpb.Request,
 ) (kvpb.Response, *kvpb.Error) {

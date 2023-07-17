@@ -1219,6 +1219,20 @@ func (n *Node) batchInternal(
 		tracing.SpanFromContext(ctx).MaybeRecordStackHistory(tStart)
 	}
 
+	// If the sender cancelled the context they may not wait around for the
+	// replica to notice the cancellation and return a response. For this reason,
+	// we log the server-side trace of the cancelled request to help debug what
+	// the request was doing at the time it noticed the cancellation.
+	if pErr != nil && ctx.Err() != nil {
+		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
+			recording := sp.GetConfiguredRecording()
+			if recording.Len() != 0 {
+				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
+					pErr.GoError(), recording)
+			}
+		}
+	}
+
 	n.metrics.callComplete(timeutil.Since(tStart), pErr)
 	br.Error = pErr
 
