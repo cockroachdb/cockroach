@@ -37,7 +37,9 @@ func TestProfilesValidSQL(t *testing.T) {
 			defer log.Scope(t).Close(t)
 
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				// The predefined config profiles are meant to be executed in
+				// the system tenant only.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			})
 			defer s.Stopper().Stop(context.Background())
 			db := sqlutils.MakeSQLRunner(sqlDB)

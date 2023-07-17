@@ -67,13 +67,13 @@ func TestDataDriven(t *testing.T) {
 				numExpectedTasks := len(configprofiles.TestingGetProfiles()[setter.String()])
 
 				s, _, _ = serverutils.StartServer(t, base.TestServerArgs{
+					DefaultTestTenant: base.TestControlsTenantsExplicitly,
+
 					AutoConfigProvider: provider,
 					// This test does not exercise security parameters, so we
 					// keep the configuration simpler to keep the test code also
 					// simple.
 					Insecure: true,
-					// The test controls secondary tenants manually.
-					DefaultTestTenant: base.TODOTestTenantDisabled,
 				})
 				// We need to force the connection to the system tenant,
 				// because at least one of the config profiles changes the
