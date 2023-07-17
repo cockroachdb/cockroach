@@ -39,6 +39,8 @@ import (
 
 func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -261,6 +263,8 @@ func TestServerQuery(t *testing.T) {
 // query request has more queries than the server's MaxWorkers count.
 func TestServerQueryStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	workerCount := 20
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax: workerCount,
@@ -526,6 +530,7 @@ func TestServerQueryTenant(t *testing.T) {
 // constrained memory requirements.
 func TestServerQueryMemoryManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Number of workers that will be available to process data.
 	workerCount := 20
@@ -581,6 +586,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 func TestServerDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	seriesCount := 10
@@ -752,6 +758,8 @@ func TestServerDump(t *testing.T) {
 }
 
 func BenchmarkServerQuery(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
