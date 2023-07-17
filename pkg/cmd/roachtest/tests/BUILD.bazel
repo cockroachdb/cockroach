@@ -152,7 +152,6 @@ go_library(
         "sqlsmith.go",
         "sstable_corruption.go",
         "status_server.go",
-        "synctest.go",
         "sysbench.go",
         "tlp.go",
         "tombstones.go",
