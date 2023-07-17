@@ -120,85 +120,132 @@ cdep_alias("libproj")
 cmake(
     name = "libgeos_foreign",
     cache_entries = select({
-        "@io_bazel_rules_go//go/platform:windows": {
+        "//build/toolchains:is_geos_dynamic_windows": {
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Windows",
         },
-        "@io_bazel_rules_go//go/platform:darwin": {
+        "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_SHARED_LIBS": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Windows",
+        },
+        "//build/toolchains:is_geos_dynamic_macos": {
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Darwin",
         },
+        "@io_bazel_rules_go//go/platform:darwin": {
+            "BUILD_SHARED_LIBS": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Darwin",
+        },
+        # NB: We should be able to use `is_geos_dynamic` here instead of
+        # special-casing on these OS's, but https://github.com/bazelbuild/bazel/issues/14604
+        # is in our way. Should make it into Bazel 6 or 7.
+        "//build/toolchains:is_geos_dynamic_linux": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+        },
+        "//build/toolchains:is_geos_dynamic_freebsd": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+        },
         "//conditions:default": {
+            "BUILD_SHARED_LIBS": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_C_FLAGS": "-fPIC",
             "CMAKE_CXX_FLAGS": "-fPIC",
         },
     }),
     data = select({
-        # TODO: This select needs 4 cases to handle the differing host platforms,
-        # not just these 2 based on the target.
-        "//build/toolchains:is_cross_macos_x86_64": [
+        # TODO(ricky): This select needs 4 cases to handle the differing host platforms,
+        # not just these 2 based on the target. However we're switching to static linking
+        # for the geos release, meaning it should be possible to get rid of this stuff.
+        "//build/toolchains:is_cross_macos_x86_64_geos_dynamic": [
             "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool",
             "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool",
         ],
-        "//build/toolchains:is_cross_macos_arm64": [
+        "//build/toolchains:is_cross_macos_arm64_geos_dynamic": [
             "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
             "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool",
         ],
         "//conditions:default": [],
     }),
     env = select({
-        "//build/toolchains:is_cross_macos_x86_64": {
+        "//build/toolchains:is_cross_macos_x86_64_geos_dynamic": {
             "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool)",
             "OTOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool)",
         },
-        "//build/toolchains:is_cross_macos_arm64": {
+         "//build/toolchains:is_cross_macos_arm64_geos_dynamic": {
             "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool)",
             "OTOOL": "$(execpath @cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool)",
-        },
+         },
         "//conditions:default": {},
     }),
     generate_args = ["-GUnix Makefiles"],
     lib_source = "@geos//:all",
     out_lib_dir = select({
-        "@io_bazel_rules_go//go/platform:windows": "bin",
+        "//build/toolchains:is_geos_dynamic_windows": "bin",
         "//conditions:default": "lib",
     }),
     out_shared_libs = select({
-        "@io_bazel_rules_go//go/platform:darwin": [
+        "//build/toolchains:is_geos_dynamic_macos": [
             "libgeos_c.dylib",
             "libgeos.dylib",
         ],
-        "@io_bazel_rules_go//go/platform:windows": [
+        "//build/toolchains:is_geos_dynamic_windows": [
             "libgeos_c.dll",
             "libgeos.dll",
         ],
-        "//conditions:default": [
+        # See comment about about bazelbuild/bazel#14604.
+        "//build/toolchains:is_geos_dynamic_linux": [
             "libgeos_c.so",
             "libgeos.so",
         ],
+        "//build/toolchains:is_geos_dynamic_freebsd": [
+            "libgeos_c.so",
+            "libgeos.so",
+        ],
+        "//conditions:default": [],
+    }),
+    out_static_libs = select({
+        "//build/toolchains:is_geos_dynamic": [],
+        "//conditions:default": [
+            "libgeos.a",
+            "libgeos_c.a",
+        ],
     }),
     postfix_script = "mkdir -p libgeos/lib\n" + select({
-        "//build/toolchains:is_cross_macos": (
+        "//build/toolchains:is_cross_macos_geos_dynamic": (
             "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
             "PREFIX=$($OTOOL -D $INSTALLDIR/lib/libgeos_c.dylib | tail -n1 | rev | cut -d/ -f2- | rev)\n" +
             "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n" +
             "$CMAKE_INSTALL_NAME_TOOL -id @rpath/libgeos_c.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n" +
             "$CMAKE_INSTALL_NAME_TOOL -change $PREFIX/libgeos.3.8.1.dylib @rpath/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos_c.dylib\n"
         ),
-        "@io_bazel_rules_go//go/platform:darwin": "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib",
-        "@io_bazel_rules_go//go/platform:windows": "",
-        "//build/toolchains:is_cross_linux": (
+        "//build/toolchains:is_geos_dynamic_macos": (
+            "cp -L lib/libgeos.3.8.1.dylib $INSTALLDIR/lib/libgeos.dylib\n"),
+        "//build/toolchains:is_cross_linux_geos_dynamic": (
             "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so\n" +
             "patchelf --set-rpath /usr/local/lib/cockroach/ $INSTALLDIR/lib/libgeos_c.so\n" +
             "patchelf --set-soname libgeos.so $INSTALLDIR/lib/libgeos.so\n" +
             "patchelf --replace-needed libgeos.so.3.8.1 libgeos.so $INSTALLDIR/lib/libgeos_c.so\n"
         ),
-        "//conditions:default": "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so",
+        # See comment about about bazelbuild/bazel#14604.
+        "//build/toolchains:is_geos_dynamic_linux": (
+            "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so\n"),
+        "//build/toolchains:is_geos_dynamic_freebsd": (
+            "cp -L lib/libgeos.so.3.8.1 $INSTALLDIR/lib/libgeos.so\n"),
+        "//conditions:default": "",
     }),
     targets = ["geos_c"],
     visibility = ["//visibility:public"],

@@ -2,11 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "geos",
+    # keep
     srcs = [
         "geos.cc",
         "geos.go",
         "geos.h",
-    ],
+        "geos_cc.hh",
+    ] + select({
+        "//build/toolchains:is_geos_dynamic": ["geos_dynamic.cc"],
+        "//conditions:default": ["geos_static.cc"],
+    }),
     cgo = True,
     clinkopts = select({
         "@io_bazel_rules_go//go/platform:aix": [
@@ -66,7 +71,11 @@ go_library(
 go_test(
     name = "geos_test",
     size = "small",
-    srcs = ["geos_test.go"],
+    # keep
+    srcs = select({
+        "//build/toolchains:is_geos_dynamic": ["geos_dyn_test.go"],
+        "//conditions:default": ["geos_test.go"],
+    }),
     args = ["-test.timeout=55s"],
     data = ["//c-deps:libgeos"],
     embed = [":geos"],

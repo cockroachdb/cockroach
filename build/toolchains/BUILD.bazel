@@ -329,13 +329,56 @@ config_setting(
     },
 )
 
+bool_flag(
+    name = "geos_dynamic_flag",
+    build_setting_default = True,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
-    name = "is_cross_macos",
+    name = "is_geos_dynamic",
+    flag_values = {
+        ":geos_dynamic_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_geos_dynamic_macos",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
     ],
     flag_values = {
-        ":cross_flag": "true",
+        ":geos_dynamic_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_geos_dynamic_windows",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:windows",
+    ],
+    flag_values = {
+        ":geos_dynamic_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_geos_dynamic_linux",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":geos_dynamic_flag": "true",
+    },
+)
+
+config_setting(
+    name = "is_geos_dynamic_freebsd",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:freebsd",
+    ],
+    flag_values = {
+        ":geos_dynamic_flag": "true",
     },
 )
 
@@ -373,34 +416,48 @@ config_setting(
 )
 
 config_setting(
-    name = "is_cross_macos_x86_64",
+    name = "is_cross_macos_geos_dynamic",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":geos_dynamic_flag": "true",
+    },
+)    
+
+config_setting(
+    name = "is_cross_macos_x86_64_geos_dynamic",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
         "@platforms//cpu:x86_64",
     ],
     flag_values = {
         ":cross_flag": "true",
+        ":geos_dynamic_flag": "true",
     },
 )
 
 config_setting(
-    name = "is_cross_macos_arm64",
+    name = "is_cross_macos_arm64_geos_dynamic",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
         "@platforms//cpu:arm64",
     ],
     flag_values = {
         ":cross_flag": "true",
+        ":geos_dynamic_flag": "true",
     },
 )
 
 config_setting(
-    name = "is_cross_linux",
+    name = "is_cross_linux_geos_dynamic",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",
     ],
     flag_values = {
         ":cross_flag": "true",
+        ":geos_dynamic_flag": "true",
     },
 )
 

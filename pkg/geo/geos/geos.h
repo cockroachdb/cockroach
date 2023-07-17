@@ -13,7 +13,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+  
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Geometry;
 typedef void* CR_GEOS_PreparedInternalGeometry;
@@ -194,6 +194,148 @@ CR_GEOS_Status CR_GEOS_VoronoiDiagram(CR_GEOS* lib, CR_GEOS_Slice g, CR_GEOS_Sli
 
 CR_GEOS_Status CR_GEOS_Snap(CR_GEOS* lib, CR_GEOS_Slice input, CR_GEOS_Slice target, double tolerance, CR_GEOS_String* ret);
 
+  // Data Types adapted from `capi/geos_c.h.in` in GEOS.
+typedef void* CR_GEOS_Handle;
+typedef void (*CR_GEOS_MessageHandler)(const char*, void*);
+typedef void* CR_GEOS_WKTReader;
+typedef void* CR_GEOS_WKBReader;
+typedef void* CR_GEOS_WKBWriter;
+typedef void* CR_GEOS_BufferParams;
+
+// Function declarations from `capi/geos_c.h.in` in GEOS.
+typedef CR_GEOS_Handle (*CR_GEOS_init_r)();
+typedef void (*CR_GEOS_finish_r)(CR_GEOS_Handle);
+typedef CR_GEOS_MessageHandler (*CR_GEOS_Context_setErrorMessageHandler_r)(CR_GEOS_Handle,
+                                                                           CR_GEOS_MessageHandler,
+                                                                           void*);
+typedef void (*CR_GEOS_Free_r)(CR_GEOS_Handle, void* buffer);
+typedef void (*CR_GEOS_SetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry, int);
+typedef int (*CR_GEOS_GetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef void (*CR_GEOS_GeomDestroy_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef char (*CR_GEOS_HasZ_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_IsEmpty_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_IsSimple_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef int (*CR_GEOS_GeomTypeId_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef CR_GEOS_WKTReader (*CR_GEOS_WKTReader_create_r)(CR_GEOS_Handle);
+typedef CR_GEOS_Geometry (*CR_GEOS_WKTReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKTReader,
+                                                     const char*);
+typedef void (*CR_GEOS_WKTReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKTReader);
+
+typedef CR_GEOS_WKBReader (*CR_GEOS_WKBReader_create_r)(CR_GEOS_Handle);
+typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKBReader, const char*,
+                                                     size_t);
+typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
+
+typedef CR_GEOS_BufferParams (*CR_GEOS_BufferParams_create_r)(CR_GEOS_Handle);
+typedef void (*CR_GEOS_GEOSBufferParams_destroy_r)(CR_GEOS_Handle, CR_GEOS_BufferParams);
+typedef int (*CR_GEOS_BufferParams_setEndCapStyle_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                     int endCapStyle);
+typedef int (*CR_GEOS_BufferParams_setJoinStyle_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                   int joinStyle);
+typedef int (*CR_GEOS_BufferParams_setMitreLimit_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                    double mitreLimit);
+typedef int (*CR_GEOS_BufferParams_setQuadrantSegments_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                          int quadrantSegments);
+typedef int (*CR_GEOS_BufferParams_setSingleSided_r)(CR_GEOS_Handle, CR_GEOS_BufferParams,
+                                                     int singleSided);
+typedef CR_GEOS_Geometry (*CR_GEOS_BufferWithParams_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                       CR_GEOS_BufferParams, double width);
+
+typedef char (*CR_GEOS_isValid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char* (*CR_GEOS_isValidReason_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_isValidDetail_r)(CR_GEOS_Handle, CR_GEOS_Geometry, int flags, char** reason,
+                                        CR_GEOS_Geometry* loc);
+typedef CR_GEOS_Geometry (*CR_GEOS_MakeValid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_MinimumClearance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef CR_GEOS_Geometry (*CR_GEOS_MinimumClearanceLine_r)( CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef int (*CR_GEOS_Normalize_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_LineMerge_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_Boundary_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_ConvexHull_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Difference_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                 CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Simplify_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
+typedef CR_GEOS_Geometry (*CR_GEOS_TopologyPreserveSimplify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                               double);
+typedef CR_GEOS_Geometry (*CR_GEOS_UnaryUnion_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Union_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Intersection_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                   CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_SymDifference_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                    CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_PointOnSurface_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_MinimumBoundingCircle_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*, CR_GEOS_Geometry**);
+
+typedef int (*CR_GEOS_Distance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_FrechetDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                         double*);
+typedef int (*CR_GEOS_FrechetDistanceDensify_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                                double, double*);
+typedef int (*CR_GEOS_HausdorffDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                           double*);
+typedef int (*CR_GEOS_HausdorffDistanceDensify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, double, double*);
+
+typedef CR_GEOS_PreparedInternalGeometry (*CR_GEOS_Prepare_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef void (*CR_GEOS_PreparedGeom_destroy_r)(CR_GEOS_Handle, CR_GEOS_PreparedInternalGeometry);
+
+typedef char (*CR_GEOS_PreparedIntersects_r)(CR_GEOS_Handle, CR_GEOS_PreparedInternalGeometry, CR_GEOS_Geometry);
+
+typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Contains_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Crosses_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Disjoint_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Equals_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Intersects_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Overlaps_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Touches_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Within_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+
+typedef char* (*CR_GEOS_Relate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char* (*CR_GEOS_RelateBoundaryNodeRule_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, int);
+typedef char (*CR_GEOS_RelatePattern_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                        const char*);
+
+typedef CR_GEOS_WKBWriter (*CR_GEOS_WKBWriter_create_r)(CR_GEOS_Handle);
+typedef char* (*CR_GEOS_WKBWriter_write_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, CR_GEOS_Geometry,
+                                           size_t*);
+typedef void (*CR_GEOS_WKBWriter_setByteOrder_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, int);
+typedef void (*CR_GEOS_WKBWriter_setOutputDimension_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, int);
+typedef void (*CR_GEOS_WKBWriter_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter);
+typedef void (*CR_GEOS_WKBWriter_setIncludeSRID_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, const char);
+typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double, double,
+                                                 double, double);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_Node_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_VoronoiDiagram_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, double, int);
+
+typedef char (*CR_GEOS_EqualsExact_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, double);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_MinimumRotatedRectangle_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_Snap_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
+CR_GEOS_String toGEOSString(const char* data, size_t len);
+void errorHandler(const char* msg, void* buffer);
