@@ -7196,12 +7196,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
-				// This test already exercises the tenant codepaths explicitly
-				// by creating a tenant. Furthermore, the test requires that
-				// it run from the system tenant because it restores tenants.
-				// Disable the default test tenant because it's not necessary.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir:     dir,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
