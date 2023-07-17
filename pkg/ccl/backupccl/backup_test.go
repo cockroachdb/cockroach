@@ -6342,12 +6342,17 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
-	// When this test runs under the default test tenant, the RESTORE command
-	// below which is expected to fail, doesn't. This may be a problem with the
-	// testing knobs being incorrectly applied to the cluster. More
-	// investigation is required. Tracked with #76378.
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
-	jobsTableKey := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.JobsTable.GetID()))
+	// TODO(ssd): The way we inject the error requires that we
+	// intercept the actual batch request for job table write. To
+	// keep this from being flakey, we need to disable various
+	// automatic jobs.  Unfortunately, if we disable the span
+	// configuration job, we can't start a tenant.
+	params.ServerArgs.DefaultTestTenant = base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs
+	var jobsTableKey = struct {
+		syncutil.Mutex
+		key roachpb.Key
+	}{}
+
 	var shouldFail, failures int64
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
@@ -6357,12 +6362,18 @@ func TestRestoreErrorPropagates(t *testing.T) {
 			if !ba.IsWrite() {
 				return nil
 			}
+			jobsTableKey.Lock()
+			defer jobsTableKey.Unlock()
+			if len(jobsTableKey.key) == 0 {
+				return nil
+			}
+
 			for _, ru := range ba.Requests {
 				r := ru.GetInner()
 				switch r.(type) {
 				case *kvpb.ConditionalPutRequest, *kvpb.PutRequest:
 					key := r.Header().Key
-					if bytes.HasPrefix(key, jobsTableKey) && atomic.LoadInt64(&shouldFail) > 0 {
+					if bytes.HasPrefix(key, jobsTableKey.key) && atomic.LoadInt64(&shouldFail) > 0 {
 						return kvpb.NewError(errors.Errorf("boom %d", atomic.AddInt64(&failures, 1)))
 					}
 				}
@@ -6378,6 +6389,11 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(db)
+
+	jobsTableKey.Lock()
+	jobsTableKey.key = tc.TenantOrServer(0).Codec().TablePrefix(uint32(systemschema.JobsTable.GetID()))
+	jobsTableKey.Unlock()
+
 	runner.Exec(t, `SET CLUSTER SETTING jobs.metrics.interval.poll = '30s'`)
 	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	runner.Exec(t, `SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = false`)
