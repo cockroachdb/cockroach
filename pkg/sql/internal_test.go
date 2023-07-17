@@ -154,9 +154,9 @@ func TestInternalFullTableScan(t *testing.T) {
 		err.Error())
 
 	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+	mon.StartNoReserved(ctx, s.SQLServer().(*sql.Server).GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+		s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
@@ -193,9 +193,9 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+	mon.StartNoReserved(ctx, s.SQLServer().(*sql.Server).GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+		s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 	)
 	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
 	require.NoError(t, err)
@@ -324,9 +324,9 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 
 	expDB := "foo"
 	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+	mon.StartNoReserved(ctx, s.SQLServer().(*sql.Server).GetBytesMonitor())
 	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+		s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 	)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
@@ -391,9 +391,9 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		defer s.Stopper().Stop(context.Background())
 
 		mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-		mon.StartNoReserved(context.Background(), s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
+		mon.StartNoReserved(context.Background(), s.SQLServer().(*sql.Server).GetBytesMonitor())
 		ie := sql.MakeInternalExecutor(
-			s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
+			s.SQLServer().(*sql.Server), sql.MemoryMetrics{}, mon,
 		)
 		ie.SetSessionData(
 			&sessiondata.SessionData{

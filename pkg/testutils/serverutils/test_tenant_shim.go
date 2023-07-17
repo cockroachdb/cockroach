@@ -110,6 +110,9 @@ type TestTenantInterface interface {
 	// interface{}.
 	TenantStatusServer() interface{}
 
+	// SQLServer returns the *sql.Server as an interface{}.
+	SQLServer() interface{}
+
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
