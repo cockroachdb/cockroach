@@ -13,7 +13,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -59,36 +59,39 @@ const (
 RETURNING id;`
 )
 
-func (r *Registry) maybeDumpTrace(
-	resumerCtx context.Context, resumer Resumer, jobID, traceID int64, jobErr error,
-) {
-	if _, ok := resumer.(TraceableJob); !ok || r.td == nil {
-		return
-	}
-	dumpMode := traceableJobDumpTraceMode.Get(&r.settings.SV)
-	if dumpMode == int64(noDump) {
+// maybeDumpTrace will conditionally persist the trace recording of the job's
+// current resumer for consumption by job profiler tools. This method must be
+// invoked before the tracing span corresponding to the job's current resumer is
+// Finish()'ed.
+func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, jobID jobspb.JobID) {
+	if tj, ok := resumer.(TraceableJob); !ok || !tj.DumpTraceAfterRun() {
 		return
 	}
 
 	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
-
-	ieNotBoundToTxn := r.db.Executor()
-
-	// If the job has failed, and the dump mode is set to anything
-	// except noDump, then we should dump the trace.
-	// The string comparison is unfortunate but is used to differentiate a job
-	// that has failed from a job that has been canceled.
-	if jobErr != nil && !HasErrJobCanceled(jobErr) && resumerCtx.Err() == nil {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
+	sp := tracing.SpanFromContext(resumerCtx)
+	if sp == nil || sp.IsNoop() {
+		// Should never be true since TraceableJobs force real tracing spans to be
+		// attached to the context.
 		return
 	}
 
-	// If the dump mode is set to `dumpOnStop` then we should dump the
-	// trace when the job is any of paused, canceled, succeeded or failed state.
-	if dumpMode == int64(dumpOnStop) {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
+	if !r.settings.Version.IsActive(dumpCtx, clusterversion.V23_1) {
+		return
+	}
+
+	resumerTraceFilename := fmt.Sprintf("resumer-trace-n%s.%s.txt",
+		r.ID().String(), timeutil.Now().Format("20060102_150405.00"))
+	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
+	b, err := protoutil.Marshal(&td)
+	if err != nil {
+		return
+	}
+	if err := WriteExecutionDetailFile(dumpCtx, resumerTraceFilename, b, r.db, jobID); err != nil {
+		log.Warning(dumpCtx, "failed to write trace on resumer trace file")
+		return
 	}
 }
 
@@ -497,7 +500,7 @@ func (r *Registry) runJob(
 	// and further updates to the job record from this node may
 	// fail.
 	r.maybeClearLease(job, err)
-	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
+	r.maybeDumpTrace(ctx, resumer, job.ID())
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine()
 	}

@@ -179,11 +179,6 @@ func TestRandomParquetExports(t *testing.T) {
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		UseDatabase:       dbName,
 		ExternalIODir:     dir,
-		Knobs: base.TestingKnobs{
-			DistSQL: &execinfra.TestingKnobs{
-				Export: &importer.ExportTestingKnobs{EnableParquetTestMetadata: true},
-			},
-		},
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -283,11 +278,6 @@ func TestBasicParquetTypes(t *testing.T) {
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		UseDatabase:       dbName,
 		ExternalIODir:     dir,
-		Knobs: base.TestingKnobs{
-			DistSQL: &execinfra.TestingKnobs{
-				Export: &importer.ExportTestingKnobs{EnableParquetTestMetadata: true},
-			},
-		},
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -425,8 +415,7 @@ func TestMemoryMonitor(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				Export: &importer.ExportTestingKnobs{
-					EnableParquetTestMetadata: true,
-					MemoryMonitor:             mm,
+					MemoryMonitor: mm,
 				},
 			},
 		},

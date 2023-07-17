@@ -27,9 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -173,4 +176,71 @@ func TestStorePerNodeProcessorProgressFraction(t *testing.T) {
 			t.Fatalf("unexpected info key %s:%s", k, v)
 		}
 	}
+}
+
+func TestTraceRecordingOnResumerCompletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`CREATE DATABASE test`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE TABLE foo (id INT PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`INSERT INTO foo VALUES (1), (2)`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
+	require.NoError(t, err)
+
+	var jobID int
+	err = sqlDB.QueryRow(`BACKUP INTO 'userfile:///foo' WITH detached`).Scan(&jobID)
+	require.NoError(t, err)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	jobutils.WaitForJobToPause(t, runner, jobspb.JobID(jobID))
+
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+	require.NoError(t, err)
+
+	runner.Exec(t, `RESUME JOB $1`, jobID)
+	jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(jobID))
+
+	// At this point there should have been two resumers, and so we expect two
+	// trace recordings.
+	testutils.SucceedsSoon(t, func() error {
+		recordings := make([]jobspb.TraceData, 0)
+		execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+		edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobspb.JobID(jobID))
+		if err != nil {
+			return err
+		}
+		var traceFiles []string
+		for _, f := range edFiles {
+			if strings.Contains(f, "resumer-trace") {
+				traceFiles = append(traceFiles, f)
+			}
+		}
+
+		for _, f := range traceFiles {
+			data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobspb.JobID(jobID))
+			if err != nil {
+				return err
+			}
+			td := jobspb.TraceData{}
+			if err := protoutil.Unmarshal(data, &td); err != nil {
+				return err
+			}
+			recordings = append(recordings, td)
+		}
+		if len(recordings) != 2 {
+			return errors.Newf("expected 2 entries but found %d", len(recordings))
+		}
+		return nil
+	})
 }

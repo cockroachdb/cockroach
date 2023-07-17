@@ -35,6 +35,7 @@ proto_library(
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
+        "//pkg/util/tracing/tracingpb:tracingpb_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:any_proto",

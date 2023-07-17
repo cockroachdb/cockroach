@@ -148,7 +148,7 @@ func (parquetSink *parquetCloudStorageSink) EmitResolvedTimestamp(
 
 	// TODO: Ideally, we do not create a new schema and writer every time
 	// we emit a resolved timestamp. Currently, util/parquet does not support it.
-	writer, err := newParquetWriter(sch, &buf)
+	writer, err := parquet.NewWriter(sch, &buf)
 	if err != nil {
 		return err
 	}

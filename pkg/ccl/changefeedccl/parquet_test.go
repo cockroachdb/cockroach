@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -33,8 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
+// TestParquetRows tests that the parquetWriter correctly writes datums. It does
+// this by setting up a rangefeed on a table wih data and verifying the writer
+// writes the correct datums the parquet file.
 func TestParquetRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -62,11 +67,13 @@ func TestParquetRows(t *testing.T) {
 	}{
 		{
 			testName: "mixed",
-			createTable: `CREATE TABLE foo (
-    	int32Col INT4 PRIMARY KEY,
-      stringCol STRING ,
-      uuidCol UUID
-  )`,
+			createTable: `
+				CREATE TABLE foo (
+				int32Col INT4 PRIMARY KEY,
+				stringCol STRING,
+				uuidCol UUID
+				)
+		    `,
 			stmts: []string{
 				`INSERT INTO foo VALUES (0, 'a1', '2fec7a4b-0a78-40ce-92e0-d1c0fac70436')`,
 				`INSERT INTO foo VALUES (1,   'b1', '0ce43188-e4a9-4b73-803b-a253abc57e6b')`,
@@ -152,7 +159,24 @@ func TestParquetRows(t *testing.T) {
 			err = writer.close()
 			require.NoError(t, err)
 
-			parquet.ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer.inner, datums)
+			meta, readDatums, err := parquet.ReadFile(f.Name())
+			require.NoError(t, err)
+			require.Equal(t, meta.NumRows, numRows)
+			require.Equal(t, meta.NumCols, numCols)
+			// NB: Rangefeeds have per-key ordering, so the rows in the parquet
+			// file may not match the order we insert them. To accommodate for
+			// this, sort the expected and actual datums by the primary key.
+			slices.SortFunc(datums, func(a []tree.Datum, b []tree.Datum) bool {
+				return a[0].Compare(&eval.Context{}, b[0]) == -1
+			})
+			slices.SortFunc(readDatums, func(a []tree.Datum, b []tree.Datum) bool {
+				return a[0].Compare(&eval.Context{}, b[0]) == -1
+			})
+			for r := 0; r < numRows; r++ {
+				for c := 0; c < numCols; c++ {
+					parquet.ValidateDatum(t, datums[r][c], readDatums[r][c])
+				}
+			}
 		})
 	}
 }
@@ -175,6 +199,8 @@ func makeRangefeedReaderAndDecoder(
 	return popRow, cleanup, decoder
 }
 
+// TestParquetResolvedTimestamps runs tests a changefeed with format=parquet and
+// resolved timestamps enabled.
 func TestParquetResolvedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

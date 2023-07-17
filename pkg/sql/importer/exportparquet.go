@@ -670,7 +670,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 		for {
 			var rows int64
 			buf.Reset()
-			writer, err := newWriter(sch, &buf, compression, knobs)
+			writer, err := crlparquet.NewWriter(sch, &buf, crlparquet.WithCompressionCodec(compression))
 			if err != nil {
 				return err
 			}
@@ -794,21 +794,6 @@ func (sp *parquetWriterProcessor) testingKnobsOrNil() *ExportTestingKnobs {
 		return nil
 	}
 	return sp.flowCtx.TestingKnobs().Export.(*ExportTestingKnobs)
-}
-
-func newWriter(
-	sch *crlparquet.SchemaDefinition,
-	buf *bytes.Buffer,
-	compression crlparquet.CompressionCodec,
-	knobs *ExportTestingKnobs, /* may be nil */
-) (*crlparquet.Writer, error) {
-	if knobs != nil && knobs.EnableParquetTestMetadata {
-		// In tests, configure the writer to add metadata to allow CRDB datums
-		// to be reconstructed after being written to parquet files.
-		return crlparquet.NewWriterWithReaderMeta(sch, buf, crlparquet.WithCompressionCodec(compression))
-	} else {
-		return crlparquet.NewWriter(sch, buf, crlparquet.WithCompressionCodec(compression))
-	}
 }
 
 func init() {

@@ -35,11 +35,6 @@ var eventMemoryMultipier = settings.RegisterFloatSetting(
 
 // ExportTestingKnobs contains testing knobs for Export.
 type ExportTestingKnobs struct {
-	// EnableParquetTestMetadata makes `EXPORT INTO ` with the
-	// parquet format write CRDB-specific metadata that is required
-	// for tests to read raw data in parquet files into CRDB datums.
-	EnableParquetTestMetadata bool
-
 	// MemoryMonitor is a test memory monitor to report allocations to.
 	MemoryMonitor *mon.BytesMonitor
 }

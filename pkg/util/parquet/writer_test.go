@@ -128,7 +128,7 @@ func TestRandomDatums(t *testing.T) {
 	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 	require.NoError(t, err)
 
-	writer, err := NewWriterWithReaderMeta(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
+	writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
 	require.NoError(t, err)
 
 	for _, row := range datums {
@@ -501,7 +501,7 @@ func TestBasicDatums(t *testing.T) {
 			schemaDef, err := NewSchema(tc.sch.columnNames, tc.sch.columnTypes)
 			require.NoError(t, err)
 
-			writer, err := NewWriterWithReaderMeta(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
+			writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
 			require.NoError(t, err)
 
 			for _, row := range datums {
