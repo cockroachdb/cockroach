@@ -7722,7 +7722,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				}
 
 				jobID := int(tree.MustBeDInt(args[0]))
-				if err := evalCtx.JobsProfiler.RequestExecutionDetails(
+				if err := evalCtx.JobsProfiler.RequestExecutionDetailFiles(
 					ctx,
 					jobspb.JobID(jobID),
 				); err != nil {

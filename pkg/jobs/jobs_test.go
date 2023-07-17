@@ -11,15 +11,12 @@
 package jobs_test
 
 import (
-	"archive/zip"
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"runtime/pprof"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1031,6 +1028,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
+		ctx := context.Background()
 		completeCh := make(chan struct{})
 		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
 			completeCh <- struct{}{}
@@ -1053,7 +1051,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			rts.check(t, jobs.StatusPaused)
 
 			<-completeCh
-			checkTraceFiles(t, rts.registry, expectedNumFiles)
+			checkTraceFiles(ctx, t, expectedNumFiles, j.ID(), rts.s)
 
 			rts.sqlDB.Exec(t, "RESUME JOB $1", j.ID())
 
@@ -1067,19 +1065,13 @@ func TestRegistryLifecycle(t *testing.T) {
 			rts.check(t, jobs.StatusSucceeded)
 
 			<-completeCh
-			checkTraceFiles(t, rts.registry, expectedNumFiles)
+			checkTraceFiles(ctx, t, expectedNumFiles+1, j.ID(), rts.s)
 		}
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='never'`)
-		pauseUnpauseJob(0)
-
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onFail'`)
-		pauseUnpauseJob(0)
-
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onStop'`)
 		pauseUnpauseJob(1)
 	})
 
 	t.Run("dump traces on fail", func(t *testing.T) {
+		ctx := context.Background()
 		completeCh := make(chan struct{})
 		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
 			completeCh <- struct{}{}
@@ -1088,7 +1080,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		defer rts.tearDown()
 
 		runJobAndFail := func(expectedNumFiles int) {
-			j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.idb(), rts.mockJob)
+			j, err := jobs.TestingCreateAndStartJob(ctx, rts.registry, rts.idb(), rts.mockJob)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1109,16 +1101,9 @@ func TestRegistryLifecycle(t *testing.T) {
 			rts.check(t, jobs.StatusFailed)
 
 			<-completeCh
-			checkTraceFiles(t, rts.registry, expectedNumFiles)
+			checkTraceFiles(ctx, t, expectedNumFiles, j.ID(), rts.s)
 		}
 
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='never'`)
-		runJobAndFail(0)
-
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onFail'`)
-		runJobAndFail(1)
-
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onStop'`)
 		runJobAndFail(1)
 	})
 
@@ -1129,7 +1114,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
-		rts.sqlDB.Exec(t, `SET CLUSTER SETTING jobs.trace.force_dump_mode='onStop'`)
 		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.idb(), rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -1143,7 +1127,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.sqlDB.Exec(t, "CANCEL JOB $1", j.ID())
 
 		<-completeCh
-		checkTraceFiles(t, rts.registry, 1)
+		checkTraceFiles(rts.ctx, t, 1, j.ID(), rts.s)
 
 		rts.mu.e.OnFailOrCancelStart = true
 		rts.check(t, jobs.StatusReverting)
@@ -1197,28 +1181,29 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 }
 
-func checkTraceFiles(t *testing.T, registry *jobs.Registry, expectedNumFiles int) {
+func checkTraceFiles(
+	ctx context.Context,
+	t *testing.T,
+	expectedNumFiles int,
+	jobID jobspb.JobID,
+	s serverutils.TestServerInterface,
+) {
 	t.Helper()
-	// Check the configured inflight trace dir for dumped zip files.
-	expList := []string{"node1-trace.txt", "node1-jaeger.json"}
-	traceDumpDir := jobs.TestingGetTraceDumpDir(registry)
-	files := make([]string, 0)
-	require.NoError(t, filepath.Walk(traceDumpDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-		files = append(files, path)
-		return nil
-	}))
 
-	require.Equal(t, expectedNumFiles, len(files))
-	for _, file := range files {
-		checkBundle(t, file, expList)
+	recordings := make([]jobspb.TraceData, 0)
+	execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
+	require.NoError(t, err)
+
+	for _, f := range edFiles {
+		data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobID)
+		require.NoError(t, err)
+		td := jobspb.TraceData{}
+		require.NoError(t, protoutil.Unmarshal(data, &td))
+		recordings = append(recordings, td)
 	}
-
-	// Cleanup files for next iteration of the test.
-	for _, file := range files {
-		require.NoError(t, os.Remove(file))
+	if len(recordings) != expectedNumFiles {
+		t.Fatalf("expected %d entries but found %d", expectedNumFiles, len(recordings))
 	}
 }
 
@@ -3149,25 +3134,6 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	require.NoError(t, err)
 	registry.TestingNudgeAdoptionQueue()
 	require.Regexp(t, `expected session "\w+" but found NULL`, <-resumed)
-}
-
-func checkBundle(t *testing.T, zipFile string, expectedFiles []string) {
-	t.Helper()
-	r, err := zip.OpenReader(zipFile)
-	defer func() { _ = r.Close() }()
-	require.NoError(t, err)
-
-	// Make sure the bundle contains the expected list of files.
-	filesInZip := make([]string, 0)
-	for _, f := range r.File {
-		if f.UncompressedSize64 == 0 {
-			t.Fatalf("file %s is empty", f.Name)
-		}
-		filesInZip = append(filesInZip, f.Name)
-	}
-	sort.Strings(filesInZip)
-	sort.Strings(expectedFiles)
-	require.Equal(t, expectedFiles, filesInZip)
 }
 
 type resumeStartedSignaler struct {

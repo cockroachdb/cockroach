@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -221,6 +222,9 @@ func backup(
 	// Create a channel that is large enough that it does not block.
 	perNodeProgressCh := make(chan map[execinfrapb.ComponentID]float32, numTotalSpans)
 	storePerNodeProgressLoop := func(ctx context.Context) error {
+		if !execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+			return nil
+		}
 		for {
 			select {
 			case prog, ok := <-perNodeProgressCh:
@@ -474,6 +478,11 @@ var _ jobs.TraceableJob = &backupResumer{}
 
 // ForceRealSpan implements the TraceableJob interface.
 func (b *backupResumer) ForceRealSpan() bool {
+	return true
+}
+
+// DumpTraceAfterRun implements the TraceableJob interface.
+func (b *backupResumer) DumpTraceAfterRun() bool {
 	return true
 }
 

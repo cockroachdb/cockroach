@@ -91,6 +91,11 @@ func (r *importResumer) ForceRealSpan() bool {
 	return true
 }
 
+// DumpTraceAfterRun implements the TraceableJob interface.
+func (r *importResumer) DumpTraceAfterRun() bool {
+	return true
+}
+
 var _ jobs.Resumer = &importResumer{}
 
 var processorsPerNode = settings.RegisterIntSetting(

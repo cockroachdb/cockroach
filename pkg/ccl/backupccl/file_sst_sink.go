@@ -47,17 +47,25 @@ type fileSSTSink struct {
 	out     io.WriteCloser
 	outName string
 
-	flushedFiles    []backuppb.BackupManifest_File
-	flushedSize     int64
-	flushedRevStart hlc.Timestamp
-	completedSpans  int32
+	flushedFiles []backuppb.BackupManifest_File
+	flushedSize  int64
 
+	// flushedRevStart is the earliest start time of the export responses
+	// written to this sink since the last flush. Resets on each flush.
+	flushedRevStart hlc.Timestamp
+
+	// completedSpans contain the number of completed spans since the last
+	// flush. This counter resets on each flush.
+	completedSpans int32
+
+	// stats contain statistics about the actions of the fileSSTSink over its
+	// entire lifespan.
 	stats struct {
-		files       int
-		flushes     int
-		oooFlushes  int
-		sizeFlushes int
-		spanGrows   int
+		files       int // number of files created.
+		flushes     int // number of flushes.
+		oooFlushes  int // number of out of order flushes.
+		sizeFlushes int // number of flushes due to file exceeding targetFileSize.
+		spanGrows   int // number of times a span was extended.
 	}
 }
 

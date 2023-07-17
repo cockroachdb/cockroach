@@ -25,6 +25,7 @@ import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
 import "server/autoconfig/autoconfigpb/autoconfig.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -1413,4 +1414,8 @@ message RetriableExecutionFailure {
   // that the error was too large. While the structure may be lost, at least
   // some information will be preserved.
   string truncated_error = 6;
+}
+
+message TraceData {
+  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
 }
