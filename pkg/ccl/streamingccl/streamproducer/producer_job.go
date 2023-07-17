@@ -37,9 +37,11 @@ func makeTenantSpan(tenantID uint64) roachpb.Span {
 func makeProducerJobRecord(
 	registry *jobs.Registry,
 	tenantID uint64,
+	span roachpb.Span,
 	timeout time.Duration,
 	user username.SQLUsername,
 	ptsID uuid.UUID,
+	forSpanConfigs bool,
 ) jobs.Record {
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
@@ -47,8 +49,9 @@ func makeProducerJobRecord(
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,
-			Spans:                      []roachpb.Span{makeTenantSpan(tenantID)},
+			Spans:                      roachpb.Spans{span},
 			TenantID:                   roachpb.MustMakeTenantID(tenantID),
+			ForSpanConfigs:             forSpanConfigs,
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration: timeutil.Now().Add(timeout),

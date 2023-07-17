@@ -32,9 +32,9 @@ type replicationStreamManagerImpl struct {
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StartReplicationStream(
-	ctx context.Context, tenantName roachpb.TenantName,
+	ctx context.Context, tenantName roachpb.TenantName, forSpanConfig bool,
 ) (streampb.ReplicationProducerSpec, error) {
-	return startReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName)
+	return startReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, forSpanConfig)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.

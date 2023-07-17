@@ -78,17 +78,13 @@ func NewPartitionedStreamClient(
 
 var _ Client = &partitionedStreamClient{}
 
-// Create implements Client interface.
-func (p *partitionedStreamClient) Create(
-	ctx context.Context, tenantName roachpb.TenantName,
+func (p *partitionedStreamClient) executeCreateCmd(
+	ctx context.Context, tenantName roachpb.TenantName, cmd string,
 ) (streampb.ReplicationProducerSpec, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
-	defer sp.Finish()
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var rawReplicationProducerSpec []byte
-	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
+	row := p.mu.srcConn.QueryRow(ctx, cmd, tenantName)
 	err := row.Scan(&rawReplicationProducerSpec)
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)
@@ -99,6 +95,24 @@ func (p *partitionedStreamClient) Create(
 	}
 
 	return replicationProducerSpec, err
+}
+
+// Create implements Client interface.
+func (p *partitionedStreamClient) Create(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (streampb.ReplicationProducerSpec, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
+	defer sp.Finish()
+	return p.executeCreateCmd(ctx, tenantName, `SELECT crdb_internal.start_replication_stream($1)`)
+}
+
+func (p *partitionedStreamClient) CreateForSpanConfigs(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (streampb.ReplicationProducerSpec, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForSpanConfigs")
+	defer sp.Finish()
+	return p.executeCreateCmd(ctx, tenantName,
+		`SELECT crdb_internal.start_span_configs_replication_stream($1)`)
 }
 
 // Dial implements Client interface.

@@ -96,6 +96,7 @@ func (c coordinatedResumer) OnFailOrCancel(
 	return err
 }
 
+// TODO(msbutler): completely rewrite this test.
 func TestStreamReplicationProducerJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -185,7 +186,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		{ // Job times out at the beginning
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			ptsID := uuid.MakeV4()
-			jr := makeProducerJobRecord(registry, 10, timeout, usr, ptsID)
+			jr := makeProducerJobRecord(registry, uint64(10), makeTenantSpan(10), timeout, usr, ptsID,
+				false)
 			defer jobs.ResetConstructors()()
 
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor()
@@ -217,8 +219,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ptsTime := timeutil.Now()
 			ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 			ptsID := uuid.MakeV4()
-
-			jr := makeProducerJobRecord(registry, 20, timeout, usr, ptsID)
+			jr := makeProducerJobRecord(registry, uint64(20), makeTenantSpan(20), timeout, usr, ptsID,
+				false)
 			defer jobs.ResetConstructors()()
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting :=
 				registerConstructor()
