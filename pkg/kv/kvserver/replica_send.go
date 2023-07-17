@@ -1303,14 +1303,17 @@ func (ec *endCmds) move() endCmds {
 // map and the Replica mutex must be held throughout.
 func (ec *endCmds) poison() {
 	if ec.repl == nil {
-		// Already cleared.
+		// Already cleared. This path may no longer be hit thanks to a re-work
+		// of reproposals[1]. The caller to poison holds the replica mutex and
+		// the command is in r.mu.proposals, meaning the command hasn't been
+		// signaled by log application yet, i.e. latches must not have been
+		// released (even if refreshProposalsLocked has already signaled the
+		// client with an ambiguous result).
 		//
-		// TODO(tbg): revisit whether this path should be reachable with
-		// useReproposalsV2. I believe it shouldn't, since ProposalData is inserted
-		// into the map exactly once, removed exactly once before being applied, and
-		// only finished (cleared) at the end of application, at which point it cannot
-		// be in the map.
-		_ = useReproposalsV2
+		// [1]: https://github.com/cockroachdb/cockroach/pull/106750
+		//
+		// TODO(repl): verify that and put an assertion here. This is similar to
+		// the TODO on ProposalData.endCmds.
 		return
 	}
 	ec.repl.concMgr.PoisonReq(ec.g)
