@@ -45,6 +45,8 @@ message CommonSQLExecDetails {
   uint32 txn_counter = 9 [(gogoproto.jsontag) = ",omitempty"];
   // The job id for bulk job (IMPORT/BACKUP/RESTORE).
   uint64 bulk_job_id = 10 [(gogoproto.jsontag) = ",omitempty"];
+ // The statement's index in the transaction, starting at 1.
+  uint32 stmt_pos_in_txn = 11 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 
