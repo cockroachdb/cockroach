@@ -52,7 +52,7 @@ var enterpriseLicense = func() *settings.StringSetting {
 
 // enterpriseStatus determines whether the cluster is enabled
 // for enterprise features or if enterprise status depends on the license.
-var enterpriseStatus int32 = deferToLicense
+var enterpriseStatus int32 = enterpriseEnabled
 
 const (
 	deferToLicense    = 0
