@@ -198,6 +198,63 @@ Every `mixedversion` hook is passed a `*rand.Rand` instance. Tests that wish to 
 
 In the [example](#walkthrough-of-a-simple-mixedversion-test) above, notice how SQL statements were run with `h.Exec()` instead of using `cluster.Conn()` as most roachtests do. The former picks a random node to send the query to; this is especially important in mixed-version, as we want to test that our feature works regardless of the node (and therefore, binary version) we are connecting to.
 
+##### Note: non-deterministic use of the `*rand.Rand` instance
+
+In order to take [full advantage](#reproducing-failures) of randomness in mixedversion tests, it's highly advisable that every use of the `*rand.Rand` instance passed to test steps happen either in deterministic code, or in non-deterministic code controlled by the same rng instance. Conversely, _uses of `*rand.Rand` that are influenced by non-determinism sources other than the `*rand.Rand` instance itself should be avoided_.
+
+Consider the following example:
+
+``` go
+func myTestStep(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	// ...
+	for {
+		select {
+		case <-someWork.Done():
+			if rng.Float64() < scatterProbability {
+				if err := h.Exec(rng, "ALTER TABLE t1 SCATTER"); err != nil {
+					return errors.Wrap(err, "failed to scatter")
+				}
+			}
+
+			return nil
+
+		case <-time.After(time.Second):
+			var amount int
+			if err := h.QueryRow(rng, "SELECT amount FROM t1").Scan(&amount); err != nil {
+				return errors.Wrap(err, "failed to query amount")
+			}
+
+			l.Printf("still waiting for work to be done, %d left", amount)
+		}
+	}
+}
+```
+
+In the loop above, we wait for `someWork` to be done, and when that happens, we perform an operation (`SCATTER`) randomly based on a certain `scatterProbability`. Every 1s, the loop also prints a log message to display some progress towards the goal. Notice how we use `h.QueryRow` and pass the `rng` argument to that function.
+
+Consider two runs of this test using the same random seed: in the first, `someWork` takes 800ms to complete; in the second, it takes 1.2s. By the time we are evaluating whether to scatter, our `rng` instance will be different in the two runs and our test runs will diverge.
+
+To avoid this situation, one must avoid using the `*rand.Rand` instance in non-deterministic situations outside of the control of the rand instance itself; in this case, the source of non-determinisim is how long it takes to finish `someWork`. To deal with situations like this, the test author could have picked a node _before_ the loop, as in the updated code below:
+
+``` go
+// ...
+_, db := h.RandomDB(rng, crdbNodes)
+for {
+	select {
+	case <-someWork.Done():
+		// ...
+
+	case <-time.After(time.Second):
+		var amount int
+		if err := db.QueryRow("SELECT amount FROM t1").Scan(&amount); err != nil {
+			return errors.Wrap(err, "failed to query amount")
+		}
+	}
+}
+```
+
 #### Log progress
 
 Logging events in the test as it runs can make debugging failures a lot easier. All hooks passed to the `mixedversion` API receive a `*logger.Logger` instance as parameter. **Functions should use that logger instead of the test logger** (`t.L()`). Doing so has two main advantages:
@@ -314,7 +371,7 @@ Needless to say, CockroachDB's behaviour in a roachtest is highly non-determinis
 
 That said, there are measures we can take to make failures _more likely_ to be reproducible. When a [failure occurs](#understanding-the-test-failure), the `mixedversion` framework logs the _random seed_ used in that particular run. By re-running the test with the same seed, we guarantee that:
 
-* the same test plan is generated (i.e., ordering of events, as performed by the test, is the same);
+* the same test plan is generated (i.e., ordering of events, as performed by the test, is the same). Note that, at the moment, this is only guaranteed if `roachtest` is built on the same SHA as the one used when the failure occurred;
 * random values used by user hooks are also the same. Note that this only holds if user hooks are diligent about [using the `*rand.Rand` instance passed to them](#embrace-randomness).
 
 In practice, we have observed that this goes a long way towards reproducing issues. To run a `mixedversion` test with a specific seed, set the `COCKROACH_RANDOM_SEED` environment variable accordingly, as illustrated below:
