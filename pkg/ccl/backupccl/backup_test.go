@@ -5428,9 +5428,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	const numAccounts = 1
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	// Test fails when run within a tenant. More investigation is
-	// required. Tracked with #76378.
-	args := base.TestServerArgs{ExternalIODir: dir, DefaultTestTenant: base.TODOTestTenantDisabled}
+	args := base.TestServerArgs{ExternalIODir: dir}
 
 	// Setup for sequence ownership backup/restore tests in the same database.
 	backupLoc := localFoo + `/d`
@@ -5440,6 +5438,11 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	origDB.Exec(t, `CREATE SEQUENCE d.seq OWNED BY d.t.a`)
 	origDB.Exec(t, `BACKUP DATABASE d TO $1`, backupLoc)
 
+	getTableDescriptorFromTestCluster := func(tc *testcluster.TestCluster, database string, table string) catalog.TableDescriptor {
+		srv := tc.TenantOrServer(0)
+		return desctestutils.TestingGetPublicTableDescriptor(srv.DB(), srv.Codec(), database, table)
+	}
+
 	// When restoring a database which has a owning table and an owned sequence,
 	// the ownership relationship should be preserved and remapped post restore.
 	t.Run("test restoring database should preserve ownership dependency", func(t *testing.T) {
@@ -5447,12 +5450,11 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		defer tc.Stopper().Stop(context.Background())
 
 		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-		kvDB := tc.Server(0).DB()
 
 		newDB.Exec(t, `RESTORE DATABASE d FROM $1`, backupLoc)
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
-		seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "seq")
+		tableDesc := getTableDescriptorFromTestCluster(tc, "d", "t")
+		seqDesc := getTableDescriptorFromTestCluster(tc, "d", "seq")
 
 		require.True(t, seqDesc.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5477,14 +5479,14 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		defer tc.Stopper().Stop(context.Background())
 
 		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-		kvDB := tc.Server(0).DB()
+
 		newDB.Exec(t, `CREATE DATABASE d`)
 		newDB.Exec(t, `USE d`)
 		newDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner`,
 			`RESTORE TABLE seq FROM $1`, backupLoc)
 
 		newDB.Exec(t, `RESTORE TABLE seq FROM $1 WITH skip_missing_sequence_owners`, backupLoc)
-		seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "seq")
+		seqDesc := getTableDescriptorFromTestCluster(tc, "d", "seq")
 		require.False(t, seqDesc.GetSequenceOpts().HasOwner(), "unexpected owner of restored sequence.")
 	})
 
@@ -5499,7 +5501,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			defer tc.Stopper().Stop(context.Background())
 
 			newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-			kvDB := tc.Server(0).DB()
+
 			newDB.Exec(t, `CREATE DATABASE d`)
 			newDB.Exec(t, `USE d`)
 			newDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner table`,
@@ -5509,7 +5511,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 				`RESTORE TABLE t FROM $1`, backupLoc)
 			newDB.Exec(t, `RESTORE TABLE t FROM $1 WITH skip_missing_sequence_owners`, backupLoc)
 
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
+			tableDesc := getTableDescriptorFromTestCluster(tc, "d", "t")
 
 			require.Equal(t, 0, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 				"expected restored table to own 0 sequences",
@@ -5519,7 +5521,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 				`RESTORE TABLE seq FROM $1`, backupLoc)
 			newDB.Exec(t, `RESTORE TABLE seq FROM $1 WITH skip_missing_sequence_owners`, backupLoc)
 
-			seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "seq")
+			seqDesc := getTableDescriptorFromTestCluster(tc, "d", "seq")
 			require.False(t, seqDesc.GetSequenceOpts().HasOwner(), "unexpected sequence owner after restore")
 		})
 
@@ -5530,13 +5532,12 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		defer tc.Stopper().Stop(context.Background())
 
 		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-		kvDB := tc.Server(0).DB()
 
 		newDB.Exec(t, `CREATE DATABASE restore_db`)
 		newDB.Exec(t, `RESTORE d.* FROM $1 WITH into_db='restore_db'`, backupLoc)
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "restore_db", "t")
-		seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "restore_db", "seq")
+		tableDesc := getTableDescriptorFromTestCluster(tc, "restore_db", "t")
+		seqDesc := getTableDescriptorFromTestCluster(tc, "restore_db", "seq")
 
 		require.True(t, seqDesc.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5579,14 +5580,13 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			defer tc.Stopper().Stop(context.Background())
 
 			newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-			kvDB := tc.Server(0).DB()
 
 			newDB.ExpectErr(t, "pq: cannot restore sequence \"seq\" without referenced owner|"+
 				"pq: cannot restore table \"t\" without referenced sequence",
 				`RESTORE DATABASE d2 FROM $1`, backupLocD2D3)
 			newDB.Exec(t, `RESTORE DATABASE d2 FROM $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
 
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d2", "t")
+			tableDesc := getTableDescriptorFromTestCluster(tc, "d2", "t")
 			require.Equal(t, 0, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 				"expected restored table to own no sequences.",
 			)
@@ -5596,12 +5596,12 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 				`RESTORE DATABASE d3 FROM $1`, backupLocD2D3)
 			newDB.Exec(t, `RESTORE DATABASE d3 FROM $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
 
-			seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d3", "seq")
+			seqDesc := getTableDescriptorFromTestCluster(tc, "d3", "seq")
 			require.False(t, seqDesc.GetSequenceOpts().HasOwner(), "unexpected sequence owner after restore")
 
 			// Sequence dependencies inside the database should still be preserved.
-			sd := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d3", "seq2")
-			td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d3", "t")
+			sd := getTableDescriptorFromTestCluster(tc, "d3", "seq2")
+			td := getTableDescriptorFromTestCluster(tc, "d3", "t")
 
 			require.True(t, sd.GetSequenceOpts().HasOwner(), "no owner found for seq2")
 			require.Equal(t, td.GetID(), sd.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5624,13 +5624,12 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		defer tc.Stopper().Stop(context.Background())
 
 		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-		kvDB := tc.Server(0).DB()
 
 		newDB.Exec(t, `RESTORE DATABASE d2, d3 FROM $1`, backupLocD2D3)
 
 		// d2.t owns d3.seq should be preserved.
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d2", "t")
-		seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d3", "seq")
+		tableDesc := getTableDescriptorFromTestCluster(tc, "d2", "t")
+		seqDesc := getTableDescriptorFromTestCluster(tc, "d3", "seq")
 
 		require.True(t, seqDesc.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5647,9 +5646,9 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		)
 
 		// d3.t owns d2.seq and d3.seq2 should be preserved.
-		td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d3", "t")
-		sd := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d2", "seq")
-		sdSeq2 := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d3", "seq2")
+		td := getTableDescriptorFromTestCluster(tc, "d3", "t")
+		sd := getTableDescriptorFromTestCluster(tc, "d2", "seq")
+		sdSeq2 := getTableDescriptorFromTestCluster(tc, "d3", "seq2")
 
 		require.True(t, sd.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.True(t, sdSeq2.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
