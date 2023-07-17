@@ -583,20 +583,52 @@ fi
 	return results, nil
 }
 
+// MonitorNodeSkipped represents a node whose status was not checked.
+type MonitorNodeSkipped struct{}
+
+// MonitorNodeRunning represents the cockroach process running on a
+// node.
+type MonitorNodeRunning struct {
+	PID string
+}
+
+// MonitorNodeDead represents the cockroach process dying on a node.
+type MonitorNodeDead struct {
+	ExitCode string
+}
+
+type MonitorError struct {
+	Err error
+}
+
 // NodeMonitorInfo is a message describing a cockroach process' status.
 type NodeMonitorInfo struct {
 	// The index of the node (in a SyncedCluster) at which the message originated.
 	Node Node
-	// A message about the node. This is either a PID, "dead", "nc exited", or
-	// "skipped".
-	// Anything but a PID or "skipped" is an indication that there is some
-	// problem with the node and that the process is not running.
-	Msg string
-	// Err is an error that may occur when trying to probe the status of the node.
-	// If Err is non-nil, Msg is empty. After an error is returned, the node with
-	// the given index will no longer be probed. Errors typically indicate networking
-	// issues or nodes that have (physically) shut down.
-	Err error
+	// Event describes what happened to the node; it is one of
+	// MonitorNodeSkipped (no store directory was found);
+	// MonitorNodeRunning, sent when cockroach is running on a node;
+	// MonitorNodeDead, when the cockroach process stops running on a
+	// node; or MonitorError, typically indicate networking issues
+	// or nodes that have (physically) shut down.
+	Event interface{}
+}
+
+func (nmi NodeMonitorInfo) String() string {
+	var status string
+
+	switch event := nmi.Event.(type) {
+	case MonitorNodeRunning:
+		status = fmt.Sprintf("cockroach process is running (PID: %s)", event.PID)
+	case MonitorNodeSkipped:
+		status = "node skipped"
+	case MonitorNodeDead:
+		status = fmt.Sprintf("cockroach process died (exit code %s)", event.ExitCode)
+	case MonitorError:
+		status = fmt.Sprintf("error: %s", event.Err.Error())
+	}
+
+	return fmt.Sprintf("n%d: %s", nmi.Node, status)
 }
 
 // MonitorOpts is used to pass the options needed by Monitor.
@@ -606,16 +638,16 @@ type MonitorOpts struct {
 }
 
 // Monitor writes NodeMonitorInfo for the cluster nodes to the returned channel.
-// Infos sent to the channel always have the Index and exactly one of Msg or Err
-// set.
+// Infos sent to the channel always have the Node the event refers to, and the
+// event itself. See documentation for NodeMonitorInfo for possible event types.
 //
-// If oneShot is true, infos are retrieved only once for each node and the
+// If OneShot is true, infos are retrieved only once for each node and the
 // channel is subsequently closed; otherwise the process continues indefinitely
 // (emitting new information as the status of the cockroach process changes).
 //
-// If ignoreEmptyNodes is true, nodes on which no CockroachDB data is found
-// (in {store-dir}) will not be probed and single message, "skipped", will
-// be emitted for them.
+// If IgnoreEmptyNodes is true, nodes on which no CockroachDB data is found
+// (in {store-dir}) will not be probed and single event, MonitorNodeSkipped,
+// will be emitted for them.
 func (c *SyncedCluster) Monitor(
 	l *logger.Logger, ctx context.Context, opts MonitorOpts,
 ) chan NodeMonitorInfo {
@@ -624,10 +656,30 @@ func (c *SyncedCluster) Monitor(
 	var wg sync.WaitGroup
 	monitorCtx, cancel := context.WithCancel(ctx)
 
+	// sendEvent sends the NodeMonitorInfo passed through the channel
+	// that is listened to by the caller. Bails if the context is
+	// canceled.
+	sendEvent := func(info NodeMonitorInfo) {
+		select {
+		case ch <- info:
+			// We were able to send the info through the channel.
+		case <-monitorCtx.Done():
+			// Don't block trying to send the info.
+		}
+	}
+
+	const (
+		separator  = "|"
+		skippedMsg = "skipped"
+		runningMsg = "running"
+		deadMsg    = "dead"
+	)
+
 	for i := range nodes {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+
 			node := nodes[i]
 
 			// On each monitored node, we loop looking for a cockroach process.
@@ -637,18 +689,30 @@ func (c *SyncedCluster) Monitor(
 				Store       string
 				Port        int
 				Local       bool
+				Separator   string
+				SkippedMsg  string
+				RunningMsg  string
+				DeadMsg     string
 			}{
 				OneShot:     opts.OneShot,
 				IgnoreEmpty: opts.IgnoreEmptyNodes,
 				Store:       c.NodeDir(node, 1 /* storeIndex */),
 				Port:        c.NodePort(node),
 				Local:       c.IsLocal(),
+				Separator:   separator,
+				SkippedMsg:  skippedMsg,
+				RunningMsg:  runningMsg,
+				DeadMsg:     deadMsg,
 			}
 
+			// NB.: we parse the output of every line this script
+			// prints. Every call to `echo` must match the parsing logic
+			// down below in order to produce structured results to the
+			// caller.
 			snippet := `
 {{ if .IgnoreEmpty }}
 if ! ls {{.Store}}/marker.* 1> /dev/null 2>&1; then
-  echo "skipped"
+  echo "{{.SkippedMsg}}"
   exit 0
 fi
 {{- end}}
@@ -682,10 +746,10 @@ while :; do
         # the new incarnation. We lost the actual exit status of the old PID.
         status="unknown"
       fi
-    	echo "dead (exit status ${status})"
+    	echo "{{.DeadMsg}}{{.Separator}}${status}"
     fi
 		if [ "${pid}" != 0 ]; then
-			echo "${pid}"
+			echo "{{.RunningMsg}}{{.Separator}}${pid}"
     fi
     lastpid=${pid}
   fi
@@ -704,7 +768,8 @@ done
 			t := template.Must(template.New("script").Parse(snippet))
 			var buf bytes.Buffer
 			if err := t.Execute(&buf, data); err != nil {
-				ch <- NodeMonitorInfo{Node: node, Err: err}
+				err := errors.Wrap(err, "failed to execute template")
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				return
 			}
 
@@ -713,14 +778,16 @@ done
 
 			p, err := sess.StdoutPipe()
 			if err != nil {
-				ch <- NodeMonitorInfo{Node: node, Err: err}
+				err := errors.Wrap(err, "failed to read stdout pipe")
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				wg.Done()
 				return
 			}
 			// Request a PTY so that the script will receive a SIGPIPE when the
 			// session is closed.
 			if err := sess.RequestPty(); err != nil {
-				ch <- NodeMonitorInfo{Node: node, Err: err}
+				err := errors.Wrap(err, "failed to request PTY")
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				return
 			}
 
@@ -734,12 +801,31 @@ done
 					if err == io.EOF {
 						return
 					}
-					ch <- NodeMonitorInfo{Node: node, Msg: string(line)}
+					if err != nil {
+						err := errors.Wrap(err, "error reading from session")
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+					}
+
+					parts := strings.Split(string(line), separator)
+					switch parts[0] {
+					case skippedMsg:
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorNodeSkipped{}})
+					case runningMsg:
+						pid := parts[1]
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorNodeRunning{pid}})
+					case deadMsg:
+						exitCode := parts[1]
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorNodeDead{exitCode}})
+					default:
+						err := fmt.Errorf("internal error: unrecognized output from monitor: %s", line)
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+					}
 				}
 			}(p)
 
 			if err := sess.Start(); err != nil {
-				ch <- NodeMonitorInfo{Node: node, Err: err}
+				err := errors.Wrap(err, "failed to start session")
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				return
 			}
 
@@ -755,7 +841,8 @@ done
 			// pipe. Otherwise it can be closed under us, causing the reader to loop
 			// infinitely receiving a non-`io.EOF` error.
 			if err := sess.Wait(); err != nil {
-				ch <- NodeMonitorInfo{Node: node, Err: err}
+				err := errors.Wrap(err, "failed to wait for session")
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				return
 			}
 		}(i)

@@ -1528,7 +1528,7 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	}
 
 	t.L().Printf("checking for dead nodes")
-	ch, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
+	eventsCh, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
 
 	// An error here means there was a problem initialising a SyncedCluster.
 	if err != nil {
@@ -1536,14 +1536,12 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	}
 
 	deadNodes := 0
-	for n := range ch {
-		// If there's an error, it means either that the monitor command failed
-		// completely, or that it found a dead node worth complaining about.
-		if n.Err != nil || strings.HasPrefix(n.Msg, "dead") {
+	for info := range eventsCh {
+		t.L().Printf("%s", info)
+
+		if _, isDeath := info.Event.(install.MonitorNodeDead); isDeath {
 			deadNodes++
 		}
-
-		t.L().Printf("n%d: err=%v,msg=%s", n.Node, n.Err, n.Msg)
 	}
 
 	if deadNodes > 0 {
