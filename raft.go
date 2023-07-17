@@ -254,6 +254,28 @@ type Config struct {
 	// logical clock from assigning the timestamp and then forwarding the data
 	// to the leader.
 	DisableProposalForwarding bool
+
+	// DisableConfChangeValidation turns off propose-time verification of
+	// configuration changes against the currently active configuration of the
+	// raft instance. These checks are generally sensible (cannot leave a joint
+	// config unless in a joint config, et cetera) but they have false positives
+	// because the active configuration may not be the most recent
+	// configuration. This is because configurations are activated during log
+	// application, and even the leader can trail log application by an
+	// unbounded number of entries.
+	// Symmetrically, the mechanism has false negatives - because the check may
+	// not run against the "actual" config that will be the predecessor of the
+	// newly proposed one, the check may pass but the new config may be invalid
+	// when it is being applied. In other words, the checks are best-effort.
+	//
+	// Users should *not* use this option unless they have a reliable mechanism
+	// (above raft) that serializes and verifies configuration changes. If an
+	// invalid configuration change enters the log and gets applied, a panic
+	// will result.
+	//
+	// This option may be removed once false positives are no longer possible.
+	// See: https://github.com/etcd-io/raft/issues/80
+	DisableConfChangeValidation bool
 }
 
 func (c *Config) validate() error {
@@ -356,6 +378,9 @@ type raft struct {
 	// be proposed if the leader's applied index is greater than this
 	// value.
 	pendingConfIndex uint64
+	// disableConfChangeValidation is Config.DisableConfChangeValidation,
+	// see there for details.
+	disableConfChangeValidation bool
 	// an estimate of the size of the uncommitted tail of the Raft log. Used to
 	// prevent unbounded log growth. Only maintained by the leader. Reset on
 	// term changes.
@@ -407,20 +432,21 @@ func newRaft(c *Config) *raft {
 	}
 
 	r := &raft{
-		id:                        c.ID,
-		lead:                      None,
-		isLearner:                 false,
-		raftLog:                   raftlog,
-		maxMsgSize:                entryEncodingSize(c.MaxSizePerMsg),
-		maxUncommittedSize:        entryPayloadSize(c.MaxUncommittedEntriesSize),
-		prs:                       tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
-		electionTimeout:           c.ElectionTick,
-		heartbeatTimeout:          c.HeartbeatTick,
-		logger:                    c.Logger,
-		checkQuorum:               c.CheckQuorum,
-		preVote:                   c.PreVote,
-		readOnly:                  newReadOnly(c.ReadOnlyOption),
-		disableProposalForwarding: c.DisableProposalForwarding,
+		id:                          c.ID,
+		lead:                        None,
+		isLearner:                   false,
+		raftLog:                     raftlog,
+		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
+		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		prs:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
+		electionTimeout:             c.ElectionTick,
+		heartbeatTimeout:            c.HeartbeatTick,
+		logger:                      c.Logger,
+		checkQuorum:                 c.CheckQuorum,
+		preVote:                     c.PreVote,
+		readOnly:                    newReadOnly(c.ReadOnlyOption),
+		disableProposalForwarding:   c.DisableProposalForwarding,
+		disableConfChangeValidation: c.DisableConfChangeValidation,
 	}
 
 	cfg, prs, err := confchange.Restore(confchange.Changer{
@@ -1242,17 +1268,17 @@ func stepLeader(r *raft, m pb.Message) error {
 				alreadyJoint := len(r.prs.Config.Voters[1]) > 0
 				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
 
-				var refused string
+				var failedCheck string
 				if alreadyPending {
-					refused = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
+					failedCheck = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
 				} else if alreadyJoint && !wantsLeaveJoint {
-					refused = "must transition out of joint config first"
+					failedCheck = "must transition out of joint config first"
 				} else if !alreadyJoint && wantsLeaveJoint {
-					refused = "not in joint state; refusing empty conf change"
+					failedCheck = "not in joint state; refusing empty conf change"
 				}
 
-				if refused != "" {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.prs.Config, refused)
+				if failedCheck != "" && !r.disableConfChangeValidation {
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.prs.Config, failedCheck)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
