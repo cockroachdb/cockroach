@@ -175,7 +175,8 @@ type ProposalData struct {
 	//
 	// TODO(repl): the contract about when this is called is a bit muddy. In
 	// particular, it seems that this can be called multiple times. We ought to
-	// work towards a world where it's exactly once.
+	// work towards a world where it's exactly once. A similar question applies
+	// to endCmds.poison.
 	ec endCmds
 
 	// applied is set when the a command finishes application. It is a remnant of
