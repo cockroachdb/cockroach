@@ -113,6 +113,10 @@ type TestTenantInterface interface {
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
+	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
+	// also implements isql.InternalExecutor if the test cannot depend on sql).
+	InternalExecutor() interface{}
+
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 

@@ -468,6 +468,7 @@ go_test(
         "//pkg/base",
         "//pkg/base/serverident",
         "//pkg/build",
+        "//pkg/ccl",
         "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/config",
