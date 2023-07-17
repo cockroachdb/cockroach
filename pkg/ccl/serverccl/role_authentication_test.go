@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -36,20 +35,18 @@ func TestVerifyPassword(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Need to disable the test tenant here because it appears as
-			// though we don't have all the same roles in the tenant as we
-			// have in the host cluster (like root).
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// One of the sub-tests fails.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106903),
 		},
 	)
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.(*server.TestServer)
+	ts := s.TenantOrServer()
 
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the
 		// race detector is on.
-		security.BcryptCost.Override(ctx, &ts.Cfg.Settings.SV, int64(bcrypt.MinCost))
+		security.BcryptCost.Override(ctx, &ts.ClusterSettings().SV, int64(bcrypt.MinCost))
 	}
 
 	//location is used for timezone testing.
