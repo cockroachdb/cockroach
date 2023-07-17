@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -43,6 +45,7 @@ import (
 // interactions and reject the rest. This test exercises these scenarios.
 func TestTruncateWithConcurrentMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	type blockType int
@@ -67,7 +70,8 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 		var (
 			blocked = make(chan struct{})
 			unblock = make(chan error)
-			tc      *testcluster.TestCluster
+			s       serverutils.TestServerInterface
+			db      *gosql.DB
 		)
 		{
 			settings := cluster.MakeTestingClusterSettings()
@@ -87,18 +91,15 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 			case blockBeforeResume:
 				scKnobs.RunBeforeResume = blockFunc
 			}
-			tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Settings: settings,
-					Knobs: base.TestingKnobs{
-						SQLSchemaChanger: scKnobs,
-					},
+			s, db, _ = serverutils.StartServer(t, base.TestServerArgs{
+				Settings: settings,
+				Knobs: base.TestingKnobs{
+					SQLSchemaChanger: scKnobs,
 				},
 			})
-			defer tc.Stopper().Stop(ctx)
+			defer s.Stopper().Stop(ctx)
 		}
 
-		db := tc.ServerConn(0)
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.ExecMultiple(t, strings.Split(`
 SET use_declarative_schema_changer = 'off';
@@ -395,6 +396,12 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 				},
 			})
 			defer tc.Stopper().Stop(ctx)
+			s := tc.TenantOrServer(0)
+			tenantSettings := s.ClusterSettings()
+			conn := serverutils.OpenDBConn(t, s.SQLAddr(), "defaultdb", false, tc.Stopper())
+			// Ensure that if we're running with the test tenant, it can split
+			// the table below.
+			sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
 
 			{
 				// This test asserts on KV-internal effects (i.e. range splits
@@ -402,12 +409,12 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 				// installed splits. To ensure it works with the span configs
 				// infrastructure quickly enough, we set a low closed timestamp
 				// target duration.
-				tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+				tdb := sqlutils.MakeSQLRunner(conn)
 				tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 			}
 
 			var err error
-			_, err = tc.Conns[0].ExecContext(ctx, `
+			_, err = conn.ExecContext(ctx, `
 CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b));
 INSERT INTO a SELECT g,g FROM generate_series(1,10000) g(g);
 ALTER TABLE a SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
@@ -420,7 +427,7 @@ ALTER INDEX a_b_idx SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000
 			// Range split decisions happen asynchronously, hence the
 			// succeeds-soon block here and below.
 			testutils.SucceedsSoon(t, func() error {
-				row := tc.Conns[0].QueryRowContext(ctx, `
+				row := conn.QueryRowContext(ctx, `
 SELECT count(*) FROM [SHOW RANGES FROM TABLE a]`)
 				assert.NoError(t, row.Err())
 
@@ -432,17 +439,17 @@ SELECT count(*) FROM [SHOW RANGES FROM TABLE a]`)
 				return nil
 			})
 
-			_, err = tc.Conns[0].ExecContext(ctx, `TRUNCATE a`)
+			_, err = conn.ExecContext(ctx, `TRUNCATE a`)
 			assert.NoError(t, err)
 
 			// We subtract 1 from the original n ranges because the first range
 			// can't be migrated to the new keyspace, as its prefix doesn't
 			// include an index ID.
 			expRanges := origNRanges + testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(
-				&tc.Servers[0].Cfg.Settings.SV))
+				&tenantSettings.SV))
 
 			testutils.SucceedsSoon(t, func() error {
-				row := tc.Conns[0].QueryRowContext(ctx, `
+				row := conn.QueryRowContext(ctx, `
 SELECT count(*) FROM [SHOW RANGES FROM TABLE a]`)
 				assert.NoError(t, row.Err())
 
