@@ -116,12 +116,12 @@ grep 'SELECT ..*550..* +' $logfile;
 exit 1;"
 
 # Two separate single-stmt txns.
-system "n=`grep 'SELECT ..*550..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*550..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
 # Same txns.
-system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 
 end_test
 
