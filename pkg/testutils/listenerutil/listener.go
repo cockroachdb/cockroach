@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package testutils
+package listenerutil
 
 import (
 	"net"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -32,27 +31,30 @@ import (
 // actual network sockets when closed, but will pause accepting connections.
 // Test could then specifically resume listeners prior to restarting servers.
 type ListenerRegistry struct {
-	listeners map[int]*reusableListener
+	listeners map[int]*ReusableListener
 }
 
 // NewListenerRegistry creates a registry of reusable listeners to be used with
-// test cluster. Once created use ListenerRegistry.GetOrFail to create new
+// test cluster. Once created use ListenerRegistry.MustGetOrCreate to create new
 // listeners and inject them into test cluster using Listener field of
 // base.TestServerArgs.
-func NewListenerRegistry() ListenerRegistry {
-	return ListenerRegistry{listeners: make(map[int]*reusableListener)}
+func NewListenerRegistry() *ListenerRegistry {
+	return &ListenerRegistry{listeners: make(map[int]*ReusableListener)}
 }
 
-// GetOrFail returns an existing reusable socket listener or creates a new one
+// MustGetOrCreate returns an existing reusable socket listener or creates a new one
 // on a random local port.
-func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) net.Listener {
-	t.Helper()
+func (r *ListenerRegistry) MustGetOrCreate(t require.TestingT, idx int) *ReusableListener {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	if l, ok := r.listeners[idx]; ok {
 		return l
 	}
 	nl, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err, "failed to create network listener")
-	l := &reusableListener{
+	l := &ReusableListener{
+		reg:     r,
 		id:      idx,
 		wrapped: nl,
 		acceptC: make(chan acceptResult),
@@ -64,13 +66,13 @@ func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) net.Listener {
 	return l
 }
 
-// ReopenOrFail will allow accepting more connections on existing shared
-// listener if it was previously closed. If it was not closed, nothing happens.
-// If listener wasn't created previously, test failure is raised.
-func (r *ListenerRegistry) ReopenOrFail(t *testing.T, idx int) {
-	l, ok := r.listeners[idx]
-	require.Truef(t, ok, "socket for id %d is not open", idx)
-	l.resume()
+func (r *ListenerRegistry) MustGet(t require.TestingT, idx int) *ReusableListener {
+	if l, ok := r.listeners[idx]; ok {
+		return l
+	}
+	t.Errorf("listener %d not found", idx)
+	t.FailNow()
+	return nil // not reached
 }
 
 // Close closes and deletes all previously created shared listeners.
@@ -87,8 +89,13 @@ type acceptResult struct {
 	err  error
 }
 
-type reusableListener struct {
-	id      int
+// A ReusableListener wraps a net.Listener and gives it the ability to be closed
+// and reopened, which is useful for tests that want to restart servers under
+// the same address without worrying about losing a race with another process'
+// port acquisition.
+type ReusableListener struct {
+	reg     *ListenerRegistry
+	id      int // idx into reg.listeners
 	wrapped net.Listener
 	acceptC chan acceptResult
 	pauseMu struct {
@@ -98,7 +105,7 @@ type reusableListener struct {
 	stopC chan interface{}
 }
 
-func (l *reusableListener) run() {
+func (l *ReusableListener) run() {
 	defer func() {
 		close(l.acceptC)
 	}()
@@ -121,20 +128,32 @@ func (l *reusableListener) run() {
 	}
 }
 
-func (l *reusableListener) pauseC() <-chan interface{} {
+func (l *ReusableListener) pauseC() <-chan interface{} {
 	l.pauseMu.RLock()
 	defer l.pauseMu.RUnlock()
 	return l.pauseMu.pauseC
 }
 
-func (l *reusableListener) resume() {
+// Reopen will allow accepting more connections on existing shared listener if
+// it was previously closed. If it was not closed, nothing happens. If listener
+// wasn't created previously, an error is returned.
+func (r *ReusableListener) Reopen() error {
+	l, ok := r.reg.listeners[r.id]
+	if !ok {
+		return errors.Errorf("socket for id %d is not open", r.id)
+	}
+	l.resume()
+	return nil
+}
+
+func (l *ReusableListener) resume() {
 	l.pauseMu.Lock()
 	defer l.pauseMu.Unlock()
 	l.pauseMu.pauseC = make(chan interface{})
 }
 
 // Accept implements net.Listener interface.
-func (l *reusableListener) Accept() (net.Conn, error) {
+func (l *ReusableListener) Accept() (net.Conn, error) {
 	select {
 	case c, ok := <-l.acceptC:
 		if !ok {
@@ -150,7 +169,7 @@ func (l *reusableListener) Accept() (net.Conn, error) {
 // doesn't close underlying listener and it is the responsibility of
 // ListenerRegistry that provided it to close wrapped listener when registry
 // is closed.
-func (l *reusableListener) Close() error {
+func (l *ReusableListener) Close() error {
 	l.pauseMu.Lock()
 	defer l.pauseMu.Unlock()
 	select {
@@ -163,6 +182,6 @@ func (l *reusableListener) Close() error {
 }
 
 // Addr implements net.Listener interface.
-func (l *reusableListener) Addr() net.Addr {
+func (l *ReusableListener) Addr() net.Addr {
 	return l.wrapped.Addr()
 }
