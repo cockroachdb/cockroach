@@ -132,22 +132,32 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-				tenantName := string(tree.MustBeDString(args[0]))
-				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName))
-				if err != nil {
-					return nil, err
-				}
-				rawReplicationProducerSpec, err := protoutil.Marshal(&replicationProducerSpec)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(rawReplicationProducerSpec)), err
+				return parseStartStream(ctx, evalCtx, args, false)
 			},
 			Info: "This function can be used on the producer side to start a replication stream for " +
+				"the specified tenant. The returned stream ID uniquely identifies created stream. " +
+				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
+				"notify that the replication is still ongoing.",
+			Volatility: volatility.Volatile,
+		},
+	),
+	// Stream production functions starts here.
+	"crdb_internal.start_span_configs_replication_stream": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tenant_name", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return parseStartStream(ctx, evalCtx, args, true)
+			},
+			Info: "This function can be used on the producer side to start a replication stream for" +
+				" span config updates of" +
 				"the specified tenant. The returned stream ID uniquely identifies created stream. " +
 				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
 				"notify that the replication is still ongoing.",
@@ -294,4 +304,23 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 	),
+}
+
+func parseStartStream(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums, forSpanConfigs bool,
+) (tree.Datum, error) {
+	mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tenantName := string(tree.MustBeDString(args[0]))
+	replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName), forSpanConfigs)
+	if err != nil {
+		return nil, err
+	}
+	rawReplicationProducerSpec, err := protoutil.Marshal(&replicationProducerSpec)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDBytes(tree.DBytes(rawReplicationProducerSpec)), err
 }

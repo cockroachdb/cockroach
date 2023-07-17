@@ -71,6 +71,13 @@ func (m *mockStreamClient) Create(
 	panic("unimplemented")
 }
 
+// CreateForSpanConfigs implements the Client interface.
+func (m *mockStreamClient) CreateForSpanConfigs(
+	_ context.Context, _ roachpb.TenantName,
+) (streampb.ReplicationProducerSpec, error) {
+	panic("unimplemented")
+}
+
 // Dial implements the Client interface.
 func (m *mockStreamClient) Dial(_ context.Context) error {
 	panic("unimplemented")

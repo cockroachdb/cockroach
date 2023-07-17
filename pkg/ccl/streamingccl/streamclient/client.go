@@ -51,6 +51,11 @@ type Client interface {
 	// can be used to interact with this stream in the future.
 	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
 
+	// CreateForSpanConfigs initializes a stream to stream the span configs that apply to the
+	// passed in tenant.
+	CreateForSpanConfigs(ctx context.Context, tenant roachpb.TenantName) (streampb.
+		ReplicationProducerSpec, error)
+
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
 
