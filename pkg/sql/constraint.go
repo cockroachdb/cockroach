@@ -125,7 +125,7 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 
 	ic.Init(
 		fe, nil, indexCols, notNullIndexCols, nil, opt.ColSet{},
-		consolidate, evalCtx, &nf, partition.PrefixSorter{},
+		consolidate, evalCtx, &nf, partition.PrefixSorter{}, func() {}, /* checkCancellation */
 	)
 
 	remaining := ic.RemainingFilters()
