@@ -261,13 +261,10 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	defer b.p.rlocker().Unlock()
 
 	if p.v2SeenDuringApplication {
-		if useReproposalsV2 {
-			// We should never see a proposal that has already been on the apply loop
-			// passed to `Insert`. The only place where such proposals can be seen is
-			// `ReinsertLocked`.
-			return errors.AssertionFailedf("proposal that was already applied passed to propBuf.Insert: %+v", p)
-		}
-		return nil
+		// We should never see a proposal that has already been on the apply loop
+		// passed to `Insert`. The only place where such proposals can be seen is
+		// `ReinsertLocked`.
+		return errors.AssertionFailedf("proposal that was already applied passed to propBuf.Insert: %+v", p)
 	}
 
 	if filter := b.testing.insertFilter; filter != nil {
