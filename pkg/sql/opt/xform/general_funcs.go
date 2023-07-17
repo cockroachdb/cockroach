@@ -234,6 +234,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		true /* consolidate */, c.e.evalCtx, c.e.f, ps,
+		c.checkCancellation,
 	)
 	return ic
 }
