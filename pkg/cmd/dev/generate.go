@@ -315,7 +315,7 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 		return fmt.Errorf("building JS development prerequisites: %w", err)
 	}
 
-	bazelBin, err := d.getBazelBin(ctx)
+	bazelBin, err := d.getBazelBin(ctx, []string{})
 	if err != nil {
 		return err
 	}
