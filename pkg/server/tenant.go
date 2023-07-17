@@ -403,10 +403,7 @@ func newTenantServer(
 	}
 
 	// Tell the status/admin servers how to access SQL structures.
-	//
-	// TODO(knz): If/when we want to support statement diagnostic requests
-	// in secondary tenants, this is where we would call setStmtDiagnosticsRequester(),
-	// like in NewServer().
+	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	serverIterator.sqlServer = sqlServer
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
