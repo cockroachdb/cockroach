@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -34,9 +34,15 @@ import (
 func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// To enable tenant servers until we can do this in main_test.go for
+	// all tests.
+	defer ccl.TestingEnableEnterprise()()
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*server.TestServer)
+
+	ts := s.TenantOrServer()
 
 	query := "EXPLAIN ANALYZE (DEBUG) SELECT 'secret'"
 	_, err := db.Exec(query)
@@ -72,19 +78,25 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// To enable tenant servers until we can do this in main_test.go for
+	// all tests.
+	defer ccl.TestingEnableEnterprise()()
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+
+	ts := s.TenantOrServer()
 
 	req := &serverpb.CreateStatementDiagnosticsReportRequest{
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := srvtestutils.PostStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+	if err := srvtestutils.PostStatusJSONProto(ts, "stmtdiagreports", req, &resp); err != nil {
 		t.Fatal(err)
 	}
 
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := srvtestutils.GetStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+	if err := srvtestutils.GetStatusJSONProto(ts, "stmtdiagreports", &respGet); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,14 +109,20 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// To enable tenant servers until we can do this in main_test.go for
+	// all tests.
+	defer ccl.TestingEnableEnterprise()()
+
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
-	ctx := context.Background()
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ts := s.TenantOrServer()
 
-	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
+	ctx := context.Background()
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+
+	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
@@ -126,11 +144,11 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := srvtestutils.PostStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+	if err := srvtestutils.PostStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", req, &resp, false); err != nil {
 		t.Fatal(err)
 	}
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", &respGet, false); err != nil {
 		t.Fatal(err)
 	}
 	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
@@ -156,12 +174,12 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", apiconstants.TestingUserNameNoAdmin().Normalized()))
 
-	if err := srvtestutils.PostStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+	if err := srvtestutils.PostStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", req, &resp, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
 	}
-	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", &respGet, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
@@ -183,8 +201,14 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// To enable tenant servers until we can do this in main_test.go for
+	// all tests.
+	defer ccl.TestingEnableEnterprise()()
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+
+	ts := s.TenantOrServer()
 
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	if err != nil {
@@ -195,7 +219,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := srvtestutils.PostStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+	if err := srvtestutils.PostStatusJSONProto(ts, "stmtdiagreports", req, &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,7 +229,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	}
 
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := srvtestutils.GetStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+	if err := srvtestutils.GetStatusJSONProto(ts, "stmtdiagreports", &respGet); err != nil {
 		t.Fatal(err)
 	}
 
@@ -215,7 +239,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 
 	var diagRespGet serverpb.StatementDiagnosticsResponse
 	diagPath := fmt.Sprintf("stmtdiag/%d", respGet.Reports[0].StatementDiagnosticsId)
-	if err := srvtestutils.GetStatusJSONProto(s, diagPath, &diagRespGet); err != nil {
+	if err := srvtestutils.GetStatusJSONProto(ts, diagPath, &diagRespGet); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -224,9 +248,15 @@ func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// To enable tenant servers until we can do this in main_test.go for
+	// all tests.
+	defer ccl.TestingEnableEnterprise()()
+
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	ts := s.TenantOrServer()
 
 	statementFingerprint := "INSERT INTO test VALUES (_)"
 	expiresAfter := 5 * time.Millisecond
@@ -238,7 +268,7 @@ func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 		ExpiresAfter:         expiresAfter,
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := srvtestutils.PostStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+	if err := srvtestutils.PostStatusJSONProto(ts, "stmtdiagreports", req, &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,7 +285,7 @@ WHERE statement_fingerprint = $1`, statementFingerprint)
 
 	// Check that expired report is not returned in API response.
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := srvtestutils.GetStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+	if err := srvtestutils.GetStatusJSONProto(ts, "stmtdiagreports", &respGet); err != nil {
 		t.Fatal(err)
 	}
 
