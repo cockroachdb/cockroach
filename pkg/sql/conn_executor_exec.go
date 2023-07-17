@@ -802,6 +802,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			0, /* rowsAffected */
+			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
 			execErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -1564,6 +1565,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						int(ex.state.mu.autoRetryCounter),
 						ex.extraTxnState.txnCounter,
 						ppInfo.dispatchToExecutionEngine.rowsAffected,
+						ex.state.mu.stmtCount,
 						bulkJobId,
 						ppInfo.curRes.ErrAllowReleased(),
 						ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -1590,6 +1592,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				int(ex.state.mu.autoRetryCounter),
 				ex.extraTxnState.txnCounter,
 				nonBulkJobNumRows,
+				ex.state.mu.stmtCount,
 				bulkJobId,
 				res.Err(),
 				ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -2254,6 +2257,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			0, /* rowsAffected */
+			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
 			execErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
