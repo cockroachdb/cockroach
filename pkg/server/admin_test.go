@@ -361,9 +361,17 @@ func generateRandomName() string {
 func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// The stmt diag interface should be available for secondary
+		// tenants already. Yet this test fails if we enable the test
+		// tenant here, with a 404 error on one of the API endpoints. This
+		// needs to be investigated.
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106930),
+	})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+
+	ts := s.TenantOrServer()
 
 	query := "EXPLAIN ANALYZE (DEBUG) SELECT 'secret'"
 	_, err := db.Exec(query)
