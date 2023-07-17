@@ -54,10 +54,6 @@ type remoteCommand struct {
 	cmd           string
 	debugDisabled bool
 	debugName     string
-
-	// TODO(renato): remove this option once we no longer have AWS
-	// clusters with default hostnames.
-	hostValidationDisabled bool
 }
 
 type remoteSessionOption = func(c *remoteCommand)
@@ -71,12 +67,6 @@ func withDebugDisabled() remoteSessionOption {
 func withDebugName(name string) remoteSessionOption {
 	return func(c *remoteCommand) {
 		c.debugName = name
-	}
-}
-
-func withHostValidationDisabled() remoteSessionOption {
-	return func(c *remoteCommand) {
-		c.hostValidationDisabled = true
 	}
 }
 

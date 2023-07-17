@@ -114,7 +114,7 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			if !bytes.HasPrefix(line, []byte{'-'}) {
 				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
 			}
-		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
+		case bytes.HasPrefix(line, []byte{'-'}) && (bytes.Contains(line, []byte(".Skip")) || bytes.Contains(line, []byte("skip."))):
 			if curPkgName != "" && len(curTestName) > 0 {
 				curPkg := pkgs[curPkgName]
 				curPkg.tests = append(curPkg.tests, curTestName)
@@ -234,38 +234,28 @@ func main() {
 			if bazel.BuiltWithBazel() || forceBazel {
 				args = append(args, "test")
 
-				tries := 0
-				var out []byte
-				var err error
-				for {
-					// NB: We use a pretty dumb technique to list the bazel test
-					// targets: we ask bazel query to enumerate all the tests in this
-					// package. bazel queries can take a second or so to run, so it's
-					// conceivable that the delay introduced by this could be
-					// noticeable. For packages that have two or more test targets, the
-					// test filters should mean that we don't execute more tests than
-					// we need to. This should be refactored to improve performance and
-					// to strip out the unnecessary calls to `bazel`, but that might
-					// better be saved for when we no longer need `make` support and
-					// don't have to worry about accidentally breaking it.
-					out, err = exec.Command(
-						"bazel",
-						"query",
-						fmt.Sprintf("kind(go_test, //%s:all) except attr(tags, \"integration\", //%s:all)", name, name),
-						"--output=label").Output()
-					if err == nil {
-						break
-					} else {
-						var stderr []byte
-						if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-							stderr = exitErr.Stderr
-						}
-						fmt.Printf("bazel query over pkg %s failed; got stdout %s, stderr %s\n", name, string(out), string(stderr))
-						if tries == 3 {
-							log.Fatal(err)
-						}
+				// NB: We use a pretty dumb technique to list the bazel test
+				// targets: we ask bazel query to enumerate all the tests in this
+				// package. bazel queries can take a second or so to run, so it's
+				// conceivable that the delay introduced by this could be
+				// noticeable. For packages that have two or more test targets, the
+				// test filters should mean that we don't execute more tests than
+				// we need to. This should be refactored to improve performance and
+				// to strip out the unnecessary calls to `bazel`, but that might
+				// better be saved for when we no longer need `make` support and
+				// don't have to worry about accidentally breaking it.
+				out, err := exec.Command(
+					"bazel",
+					"query",
+					fmt.Sprintf("kind(go_test, //%s:all) except attr(tags, \"integration\", //%s:all)", name, name),
+					"--output=label").Output()
+				if err != nil {
+					var stderr []byte
+					if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
+						stderr = exitErr.Stderr
 					}
-					tries += 1
+					fmt.Printf("bazel query over pkg %s failed; got stdout %s, stderr %s\n", name, string(out), string(stderr))
+					log.Fatal(err)
 				}
 
 				numTargets := 0
