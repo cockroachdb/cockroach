@@ -2792,6 +2792,7 @@ func (ex *connExecutor) execCopyOut(
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			numOutputRows,
+			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
 			copyErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -3036,7 +3037,8 @@ func (ex *connExecutor) execCopyIn(
 		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(ctx, ex.executorType, true,
 			int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter,
-			numInsertedRows, 0, /* bulkJobId */
+			numInsertedRows, ex.state.mu.stmtCount,
+			0, /* bulkJobId */
 			copyErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
