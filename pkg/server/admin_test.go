@@ -74,25 +74,25 @@ import (
 )
 
 func getAdminJSONProto(
-	ts serverutils.TestServerInterface, path string, response protoutil.Message,
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
 ) error {
 	return getAdminJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 func getAdminJSONProtoWithAdminOption(
-	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, adminPrefix+path, response, isAdmin)
 }
 
 func postAdminJSONProto(
-	ts serverutils.TestServerInterface, path string, request, response protoutil.Message,
+	ts serverutils.TestTenantInterface, path string, request, response protoutil.Message,
 ) error {
 	return postAdminJSONProtoWithAdminOption(ts, path, request, response, true)
 }
 
 func postAdminJSONProtoWithAdminOption(
-	ts serverutils.TestServerInterface,
+	ts serverutils.TestTenantInterface,
 	path string,
 	request, response protoutil.Message,
 	isAdmin bool,
@@ -102,7 +102,7 @@ func postAdminJSONProtoWithAdminOption(
 
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
-func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
+func getText(ts serverutils.TestTenantInterface, url string) ([]byte, error) {
 	httpClient, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
 // getJSON fetches the JSON from the specified URL and returns
 // it as unmarshaled JSON. Returns an error on any failure to fetch
 // or unmarshal response body.
-func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error) {
+func getJSON(ts serverutils.TestTenantInterface, url string) (interface{}, error) {
 	body, err := getText(ts, url)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 }
 
 // debugURL returns the root debug URL.
-func debugURL(s serverutils.TestServerInterface) string {
+func debugURL(s serverutils.TestTenantInterface) string {
 	return s.AdminURL().WithPath(debug.Endpoint).String()
 }
 
@@ -140,14 +140,13 @@ func debugURL(s serverutils.TestServerInterface) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails with
-		// it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	jI, err := getJSON(s, debugURL(s)+"vars")
+	ts := s.TenantOrServer()
+
+	jI, err := getJSON(ts, debugURL(ts)+"vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -165,14 +164,13 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails with
-		// it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	jI, err := getJSON(s, debugURL(s)+"metrics")
+	ts := s.TenantOrServer()
+
+	jI, err := getJSON(ts, debugURL(ts)+"metrics")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -190,14 +188,12 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails with
-		// it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	body, err := getText(s, debugURL(s)+"pprof/block?debug=1")
+	ts := s.TenantOrServer()
+
+	body, err := getText(ts, debugURL(ts)+"pprof/block?debug=1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,12 +207,11 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails with
-		// it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+
+	ts := s.TenantOrServer()
 
 	tc := []struct {
 		segment, search string
@@ -226,7 +221,7 @@ func TestAdminDebugTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := getText(s, debugURL(s)+c.segment)
+		body, err := getText(ts, debugURL(ts)+c.segment)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -240,15 +235,12 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails with
-		// it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
 
-	url := debugURL(s)
+	ts := s.TenantOrServer()
+
+	url := debugURL(ts)
 
 	// Unauthenticated.
 	client, err := ts.GetUnauthenticatedHTTPClient()
@@ -298,15 +290,13 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails with
-		// it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
 
-	expURL := debugURL(s)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	ts := s.TenantOrServer()
+
+	expURL := debugURL(ts)
 	origURL := expURL + "incorrect"
 
 	// Must be admin to access debug endpoints
