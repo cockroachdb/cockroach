@@ -1829,6 +1829,8 @@ CREATE VIEW pg_comedies AS
 statement error pq: cannot drop columns from view
 CREATE OR REPLACE VIEW comedies AS SELECT ARRAY[films.*]::string FROM films;
 
+subtest end
+
 subtest circular_dependency
 
 statement ok
@@ -1863,6 +1865,8 @@ DROP VIEW cd_v1;
 statement ok
 DROP VIEW cd_v1 CASCADE;
 
+subtest end
+
 # Regression test for #104927. Correctly resolve table references in views as
 # TupleStars.
 subtest regression_104927
@@ -1893,3 +1897,30 @@ query T
 SELECT * FROM v104927
 ----
 [{"i": 1, "s": "foo"}]
+
+subtest end
+
+# Regression test for #105259. Do not type-check subqueries in views outside
+# optbuilder. Doing so can cause internal errors.
+subtest regression_105259
+
+statement ok
+CREATE TYPE e105259 AS ENUM ('foo');
+
+statement ok
+CREATE VIEW v105259 AS
+SELECT (SELECT 'foo')::e105259
+
+query T
+SELECT * FROM v105259
+----
+foo
+
+statement ok
+ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
+
+# Renaming the enum value corrupts the view. This is expected behavior.
+statement error pgcode 22P02 invalid input value for enum e105259: "foo"
+SELECT * FROM v105259
+
+subtest end

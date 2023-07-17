@@ -315,6 +315,7 @@ func (s *Server) Query(
 							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
 							EstimatedSources:        estimatedSourceCount,
 							InterpolationLimitNanos: interpolationLimit,
+							Columnar:                s.db.WriteColumnar(),
 						},
 					)
 
