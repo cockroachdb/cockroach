@@ -2593,7 +2593,7 @@ func (rpcCtx *Context) runHeartbeat(
 						return
 					}
 					st = conn.grpcConn.GetState()
-					if st == connectivity.TransientFailure {
+					if st != connectivity.Ready {
 						connFailedCh <- st
 						return
 					}
