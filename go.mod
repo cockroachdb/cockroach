@@ -219,7 +219,7 @@ require (
 	github.com/xdg-go/scram v1.1.2
 	github.com/xdg-go/stringprep v1.0.4
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
-	go.etcd.io/raft/v3 v3.0.0-20230626154957-a10cd4571633
+	go.etcd.io/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee
 	go.opentelemetry.io/otel v1.0.0-RC3
 	go.opentelemetry.io/otel/exporters/jaeger v1.0.0-RC3
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.0-RC3
