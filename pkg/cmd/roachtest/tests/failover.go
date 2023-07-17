@@ -1533,7 +1533,6 @@ func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskS
 func (f *diskStallFailer) String() string              { return string(f.Mode()) }
 func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
 func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
-func (f *diskStallFailer) Ready(context.Context, int)  {}
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
@@ -1545,6 +1544,15 @@ func (f *diskStallFailer) Cleanup(ctx context.Context) {
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
 	f.staller.Cleanup(ctx)
+}
+
+func (f *diskStallFailer) Ready(ctx context.Context, nodeID int) {
+	// Other failure modes may have disabled the disk stall detector (see
+	// pauseFailer), so we explicitly enable it.
+	conn := f.c.Conn(ctx, f.t.L(), nodeID)
+	_, err := conn.ExecContext(ctx,
+		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = true`)
+	require.NoError(f.t, err)
 }
 
 func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
@@ -1583,7 +1591,7 @@ func (f *pauseFailer) CanRunWith(other failureMode) bool {
 func (f *pauseFailer) Ready(ctx context.Context, nodeID int) {
 	// The process pause can trip the disk stall detector, so we disable it. We
 	// could let it fire, but we'd like to see if the node can recover from the
-	// pause and keep working.
+	// pause and keep working. It will be re-enabled by diskStallFailer.Ready().
 	conn := f.c.Conn(ctx, f.t.L(), nodeID)
 	_, err := conn.ExecContext(ctx,
 		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
@@ -1596,13 +1604,9 @@ func (f *pauseFailer) Fail(ctx context.Context, nodeID int) {
 
 func (f *pauseFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Signal(ctx, f.t.L(), 18, f.c.Node(nodeID)) // SIGCONT
-
-	// Re-enable disk stall detector, in case we do a disk stall failure after
-	// this (e.g. in chaos tests).
-	conn := f.c.Conn(ctx, f.t.L(), 1)
-	_, err := conn.ExecContext(ctx,
-		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = true`)
-	require.NoError(f.t, err)
+	// NB: We don't re-enable the disk stall detector here, but instead rely on
+	// diskStallFailer.Ready to ensure it's enabled, since the cluster likely
+	// hasn't recovered yet and we may fail to set the cluster setting.
 }
 
 // waitForUpreplication waits for upreplication of ranges that satisfy the
