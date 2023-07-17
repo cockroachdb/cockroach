@@ -835,6 +835,11 @@ func (t *TestTenant) SettingsWatcher() interface{} {
 	return t.SQLServer.settingsWatcher
 }
 
+// InternalExecutor is part of TestTenantInterface.
+func (t *TestTenant) InternalExecutor() interface{} {
+	return t.SQLServer.internalExecutor
+}
+
 // StartSharedProcessTenant is part of TestServerInterface.
 func (ts *TestServer) StartSharedProcessTenant(
 	ctx context.Context, args base.TestSharedProcessTenantArgs,
@@ -1376,7 +1381,7 @@ func (ts *TestServer) LeaseManager() interface{} {
 	return ts.sqlServer.leaseMgr
 }
 
-// InternalExecutor is part of TestServerInterface.
+// InternalExecutor is part of TestTenantInterface.
 func (ts *TestServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
