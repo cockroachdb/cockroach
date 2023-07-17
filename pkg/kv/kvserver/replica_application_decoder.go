@@ -75,15 +75,13 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 	return nil
 }
 
-// retrieveLocalProposalsV2 is used with useReproposalsV2, replacing a call
-// to retrieveLocalProposals. The V2 implementation is simpler because a log
-// entry that comes up for a local proposal can always consume that proposal
-// from the map because V2 never mutates the MaxLeaseIndex for the same proposal.
-// In contrast, with V1, we can only remove the proposal from the map once we
-// have found a log entry that had a matching MaxLeaseIndex. This lead to the
-// complexity of having multiple entries associated to the same proposal during
-// application.
-func (d *replicaDecoder) retrieveLocalProposalsV2() (anyLocal bool) {
+// retrieveLocalProposals removes all proposals which have a log entry pending
+// immediate application from the proposals map. The entries which are paired up
+// with a proposal in that way are considered "local", meaning a client is
+// waiting on their result, and may be reproposed (as a new proposal) with a new
+// lease index in case they apply with an illegal lease index (see
+// tryReproposeWithNewLeaseIndexV2).
+func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
 
