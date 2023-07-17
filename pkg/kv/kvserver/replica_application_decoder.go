@@ -59,7 +59,7 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 	if err := d.decode(ctx, ents); err != nil {
 		return false, err
 	}
-	anyLocal := d.retrieveLocalProposalsV2()
+	anyLocal := d.retrieveLocalProposals()
 	d.createTracingSpans(ctx)
 	return anyLocal, nil
 }
