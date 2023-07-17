@@ -16,7 +16,6 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/contention",
-        "//pkg/sql/pgwire",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
