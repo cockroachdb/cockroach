@@ -477,6 +477,7 @@
 /pkg/internal/rsg/           @cockroachdb/sql-queries
 /pkg/internal/sqlsmith/      @cockroachdb/sql-queries
 /pkg/internal/team/          @cockroachdb/test-eng
+/pkg/internal/workloadreplay/          @cockroachdb/test-eng-noreview
 /pkg/jobs/                   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/keys/                   @cockroachdb/kv-prs
 /pkg/keysbase/               @cockroachdb/kv-prs

@@ -1207,6 +1207,7 @@ GO_TARGETS = [
     "//pkg/internal/sqlsmith:sqlsmith_test",
     "//pkg/internal/team:team",
     "//pkg/internal/team:team_test",
+    "//pkg/internal/workloadreplay:workloadreplay",
     "//pkg/jobs/ingeststopped:ingeststopped",
     "//pkg/jobs/joberror:joberror",
     "//pkg/jobs/joberror:joberror_test",
