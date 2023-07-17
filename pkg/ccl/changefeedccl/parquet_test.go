@@ -37,6 +37,9 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+// TestParquetRows tests that the parquetWriter correctly writes datums. It does
+// this by setting up a rangefeed on a table wih data and verifying the writer
+// writes the correct datums the parquet file.
 func TestParquetRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -64,11 +67,13 @@ func TestParquetRows(t *testing.T) {
 	}{
 		{
 			testName: "mixed",
-			createTable: `CREATE TABLE foo (
-    	int32Col INT4 PRIMARY KEY,
-      stringCol STRING ,
-      uuidCol UUID
-  )`,
+			createTable: `
+				CREATE TABLE foo (
+				int32Col INT4 PRIMARY KEY,
+				stringCol STRING,
+				uuidCol UUID
+				)
+		    `,
 			stmts: []string{
 				`INSERT INTO foo VALUES (0, 'a1', '2fec7a4b-0a78-40ce-92e0-d1c0fac70436')`,
 				`INSERT INTO foo VALUES (1,   'b1', '0ce43188-e4a9-4b73-803b-a253abc57e6b')`,
@@ -194,6 +199,8 @@ func makeRangefeedReaderAndDecoder(
 	return popRow, cleanup, decoder
 }
 
+// TestParquetResolvedTimestamps runs tests a changefeed with format=parquet and
+// resolved timestamps enabled.
 func TestParquetResolvedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -13,7 +13,6 @@ package parquet
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"strconv"
@@ -30,15 +29,6 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
-
-// NewWriterWithReaderMeta constructs a Writer that writes additional metadata
-// required to use the reader utility functions below.
-func NewWriterWithReaderMeta(
-	sch *SchemaDefinition, sink io.Writer, opts ...Option,
-) (*Writer, error) {
-	opts = append(opts, WithMetadata(MakeReaderMetadata(sch)))
-	return NewWriter(sch, sink, opts...)
-}
 
 // ReadFileAndVerifyDatums asserts that a parquet file's metadata matches the
 // metadata from the writer and its data matches writtenDatums.
@@ -69,7 +59,7 @@ func ReadFileAndVerifyDatums(
 // ReadFile reads a parquet file and returns the contained metadata and datums.
 //
 // To use this function, the Writer must be configured to write CRDB-specific
-// metadata for the reader. See NewWriterWithReaderMeta.
+// metadata for the reader. See NewWriter() and buildutil.CrdbTestBuild.
 //
 // NB: The returned datums may not be hydrated or identical to the ones
 // which were written. See comment on ValidateDatum for more info.
@@ -95,7 +85,7 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 	if typFamiliesMeta == nil {
 		return ReadDatumsMetadata{}, nil,
 			errors.AssertionFailedf("missing type family metadata. ensure the writer is configured" +
-				" to write reader metadata. see NewWriterWithReaderMeta()")
+				" to write reader metadata. see NewWriter() and buildutil.CrdbTestBuild")
 	}
 	typFamilies, err := deserializeIntArray(*typFamiliesMeta)
 	if err != nil {
@@ -112,7 +102,7 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 	if typOidsMeta == nil {
 		return ReadDatumsMetadata{}, nil,
 			errors.AssertionFailedf("missing type oid metadata. ensure the writer is configured" +
-				" to write reader metadata. see NewWriterWithReaderMeta()")
+				" to write reader metadata. see NewWriter() and buildutil.CrdbTestBuild)")
 	}
 	typOids, err := deserializeIntArray(*typOidsMeta)
 	if err != nil {
