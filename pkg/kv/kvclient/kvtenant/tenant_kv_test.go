@@ -36,9 +36,7 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	ts, hostDB, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			InsecureWebAccess: true,
-			// Must disable test tenant because test below assumes that
-			// it is connecting to the host tenant.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// We disable the split queue as an untimely split can cause the QPS
