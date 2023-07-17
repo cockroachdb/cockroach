@@ -45,6 +45,7 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	const keysPerDesc = 2
 
 	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
@@ -114,6 +115,7 @@ func TestInitialKeys(t *testing.T) {
 func TestInitialKeysAndSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "initial_keys"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "initial-keys":
@@ -167,6 +169,7 @@ func TestInitialKeysAndSplits(t *testing.T) {
 func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	type testcase struct {
 		schema string
 		pkg    catalog.TableDescriptor
