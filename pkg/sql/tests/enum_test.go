@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLargeEnums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
@@ -114,6 +116,7 @@ func (i intItem) Less(o btree.Item) bool {
 // with bind where we would not properly deal with leases involving types.
 func TestEnumPlaceholderWithAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
@@ -147,6 +150,7 @@ func TestEnumPlaceholderWithAsOfSystemTime(t *testing.T) {
 // to drop said value.
 func TestEnumDropValueCheckConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})

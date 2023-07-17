@@ -12,7 +12,6 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"errors"
 	"net/url"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/jackc/pgx/v4"
@@ -36,16 +36,14 @@ import (
 // optimization is applied when doing a simple INSERT with a prepared statement.
 func TestInsertFastPathExtendedProtocol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-
-	var db *gosql.DB
-
 	params, _ := CreateTestServerParams()
 	params.Settings = cluster.MakeTestingClusterSettings()
-
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
-	db = tc.ServerConn(0)
+	db := tc.ServerConn(0)
 	_, err := db.Exec(`CREATE TABLE fast_path_test(val int);`)
 	require.NoError(t, err)
 
@@ -87,16 +85,14 @@ func TestInsertFastPathExtendedProtocol(t *testing.T) {
 // executed in the same transaction as a DDL.
 func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-
-	var db *gosql.DB
-
 	params, _ := CreateTestServerParams()
 	params.Settings = cluster.MakeTestingClusterSettings()
-
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
-	db = tc.ServerConn(0)
+	db := tc.ServerConn(0)
 	_, err := db.Exec(`CREATE TABLE fast_path_test(val int, j int);`)
 	require.NoError(t, err)
 
@@ -153,9 +149,9 @@ func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 // in an implicit transaction.
 func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	var db *gosql.DB
+	ctx := context.Background()
 
 	var shouldErrorOnAutoCommit syncutil.AtomicBool
 	var traceID atomic.Uint64
@@ -186,7 +182,7 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
-	db = tc.ServerConn(0)
+	db := tc.ServerConn(0)
 
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)
