@@ -294,7 +294,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 	// non-local now invites logic bugs) but not bound to the caller.
 
 	// NB: quotaAlloc is always nil here, because we already
-	// released the quota unconditionally in retrieveLocalProposalsV2.
+	// released the quota unconditionally in retrieveLocalProposals.
 	// So the below is a no-op.
 	//
 	// TODO(tbg): if we shifted the release of proposal quota to *after*
