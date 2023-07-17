@@ -302,18 +302,18 @@ func TestServerQueryStarvation(t *testing.T) {
 
 func TestServerQueryTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					DisableTimeSeriesMaintenanceQueue: true,
-				},
+	defer log.Scope(t).Close(t)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
 			},
 		},
 	})
-	defer testCluster.Stopper().Stop(context.Background())
-	tsrv := testCluster.Server(0).(*server.TestServer)
+	defer s.Stopper().Stop(context.Background())
+	tsrv := s.(*server.TestServer)
 	systemDB := serverutils.OpenDBConn(
 		t,
 		tsrv.ServingSQLAddr(),
@@ -491,13 +491,13 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	}
 
-	tenant, _ := serverutils.StartTenant(t, testCluster.Server(0), base.TestTenantArgs{TenantID: tenantID})
+	tenant, _ := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
 	if err != nil {
 		t.Fatal(err)
 	}
 	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
-	testCluster.WaitForTenantCapabilities(t, tenantID, capability)
+	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, tsrv.NodeID(), rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
