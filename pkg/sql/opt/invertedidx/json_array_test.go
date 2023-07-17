@@ -1147,7 +1147,8 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tc.indexOrd),
-			nil, /* computedColumns */
+			nil,       /* computedColumns */
+			func() {}, /* checkCancellation */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
