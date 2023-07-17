@@ -284,7 +284,7 @@ func newBuilderState(
 		panic(err)
 	}
 	for _, t := range incumbent.TargetState.Targets {
-		bs.ensureDescriptor(screl.GetDescID(t.Element()))
+		bs.ensureDescriptors(t.Element())
 	}
 	for i, t := range incumbent.TargetState.Targets {
 		bs.upsertElementState(elementState{
