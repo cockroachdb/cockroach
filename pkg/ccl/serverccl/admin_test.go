@@ -173,7 +173,7 @@ func TestListTenants(t *testing.T) {
 
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -206,14 +206,13 @@ func TestListTenants(t *testing.T) {
 
 func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	st, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
-		TenantID: serverutils.TestTenantID(),
-	})
+	st := s.TenantOrServer()
 	_, err := db.Exec("CREATE TABLE test (id int)")
 	require.NoError(t, err)
 	_, err = db.Exec("INSERT INTO test VALUES (1)")
