@@ -665,7 +665,7 @@ func (ts *TestServer) Start(ctx context.Context) error {
 // calling the TestServerInterface.StartTenant method or by calling the wrapper
 // serverutils.StartTenant method.
 type TestTenant struct {
-	*SQLServer
+	sql    *SQLServer
 	Cfg    *BaseConfig
 	SQLCfg *SQLConfig
 	*httpTestServer
@@ -677,6 +677,16 @@ type TestTenant struct {
 }
 
 var _ serverutils.TestTenantInterface = &TestTenant{}
+
+// AnnotateCtx is part of TestTenantInterface.
+func (t *TestTenant) AnnotateCtx(ctx context.Context) context.Context {
+	return t.sql.AnnotateCtx(ctx)
+}
+
+// SQLInstanceID is part of TestTenantInterface.
+func (t *TestTenant) SQLInstanceID() base.SQLInstanceID {
+	return t.sql.SQLInstanceID()
+}
 
 // SQLAddr is part of TestTenantInterface interface.
 func (t *TestTenant) SQLAddr() string {
@@ -695,12 +705,12 @@ func (t *TestTenant) RPCAddr() string {
 
 // DB is part of the TestTenantInterface.
 func (t *TestTenant) DB() *kv.DB {
-	return t.execCfg.DB
+	return t.sql.execCfg.DB
 }
 
 // PGServer is part of TestTenantInterface.
 func (t *TestTenant) PGServer() interface{} {
-	return t.pgServer
+	return t.sql.pgServer
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
@@ -714,47 +724,52 @@ func (ts *TestTenant) PGPreServer() interface{} {
 
 // DiagnosticsReporter is part of TestTenantInterface.
 func (t *TestTenant) DiagnosticsReporter() interface{} {
-	return t.diagnosticsReporter
+	return t.sql.diagnosticsReporter
 }
 
 // StatusServer is part of TestTenantInterface.
 func (t *TestTenant) StatusServer() interface{} {
-	return t.execCfg.SQLStatusServer
+	return t.sql.execCfg.SQLStatusServer
 }
 
 // TenantStatusServer is part of TestTenantInterface.
 func (t *TestTenant) TenantStatusServer() interface{} {
-	return t.execCfg.TenantStatusServer
+	return t.sql.execCfg.TenantStatusServer
+}
+
+// SQLServer is part of TestTenantInterface.
+func (t *TestTenant) SQLServer() interface{} {
+	return t.sql.pgServer.SQLServer
 }
 
 // DistSQLServer is part of TestTenantInterface.
 func (t *TestTenant) DistSQLServer() interface{} {
-	return t.SQLServer.distSQLServer
+	return t.sql.distSQLServer
 }
 
 // DistSenderI is part of the TestTenantInterface.
 func (t *TestTenant) DistSenderI() interface{} {
-	return t.SQLServer.execCfg.DistSender
+	return t.sql.execCfg.DistSender
 }
 
 // RPCContext is part of TestTenantInterface.
 func (t *TestTenant) RPCContext() *rpc.Context {
-	return t.execCfg.RPCContext
+	return t.sql.execCfg.RPCContext
 }
 
 // JobRegistry is part of TestTenantInterface.
 func (t *TestTenant) JobRegistry() interface{} {
-	return t.SQLServer.jobRegistry
+	return t.sql.jobRegistry
 }
 
 // ExecutorConfig is part of TestTenantInterface.
 func (t *TestTenant) ExecutorConfig() interface{} {
-	return *t.SQLServer.execCfg
+	return *t.sql.execCfg
 }
 
 // RangeFeedFactory is part of TestTenantInterface.
 func (t *TestTenant) RangeFeedFactory() interface{} {
-	return t.SQLServer.execCfg.RangeFeedFactory
+	return t.sql.execCfg.RangeFeedFactory
 }
 
 // ClusterSettings is part of TestTenantInterface.
@@ -764,12 +779,12 @@ func (t *TestTenant) ClusterSettings() *cluster.Settings {
 
 // Stopper is part of TestTenantInterface.
 func (t *TestTenant) Stopper() *stop.Stopper {
-	return t.stopper
+	return t.sql.stopper
 }
 
 // Clock is part of TestTenantInterface.
 func (t *TestTenant) Clock() *hlc.Clock {
-	return t.SQLServer.execCfg.Clock
+	return t.sql.execCfg.Clock
 }
 
 // AmbientCtx implements serverutils.TestTenantInterface. This
@@ -786,32 +801,32 @@ func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
 
 // SpanConfigKVAccessor is part TestTenantInterface.
 func (t *TestTenant) SpanConfigKVAccessor() interface{} {
-	return t.SQLServer.tenantConnect
+	return t.sql.tenantConnect
 }
 
 // SpanConfigReporter is part TestTenantInterface.
 func (t *TestTenant) SpanConfigReporter() interface{} {
-	return t.SQLServer.tenantConnect
+	return t.sql.tenantConnect
 }
 
 // SpanConfigReconciler is part TestTenantInterface.
 func (t *TestTenant) SpanConfigReconciler() interface{} {
-	return t.SQLServer.spanconfigMgr.Reconciler
+	return t.sql.spanconfigMgr.Reconciler
 }
 
 // SpanConfigSQLTranslatorFactory is part TestTenantInterface.
 func (t *TestTenant) SpanConfigSQLTranslatorFactory() interface{} {
-	return t.SQLServer.spanconfigSQLTranslatorFactory
+	return t.sql.spanconfigSQLTranslatorFactory
 }
 
 // SpanConfigSQLWatcher is part TestTenantInterface.
 func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
-	return t.SQLServer.spanconfigSQLWatcher
+	return t.sql.spanconfigSQLWatcher
 }
 
 // SystemConfigProvider is part TestTenantInterface.
 func (t *TestTenant) SystemConfigProvider() config.SystemConfigProvider {
-	return t.SQLServer.systemConfigWatcher
+	return t.sql.systemConfigWatcher
 }
 
 // DrainClients exports the drainClients() method for use by tests.
@@ -821,27 +836,27 @@ func (t *TestTenant) DrainClients(ctx context.Context) error {
 
 // MustGetSQLCounter implements TestTenantInterface.
 func (t *TestTenant) MustGetSQLCounter(name string) int64 {
-	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
+	return mustGetSQLCounterForRegistry(t.sql.metricsRegistry, name)
 }
 
 // RangeDescIteratorFactory implements the TestTenantInterface.
 func (t *TestTenant) RangeDescIteratorFactory() interface{} {
-	return t.SQLServer.execCfg.RangeDescIteratorFactory
+	return t.sql.execCfg.RangeDescIteratorFactory
 }
 
 // Codec is part of the TestTenantInterface.
 func (t *TestTenant) Codec() keys.SQLCodec {
-	return t.execCfg.Codec
+	return t.sql.execCfg.Codec
 }
 
 // Tracer is part of the TestTenantInterface.
 func (t *TestTenant) Tracer() *tracing.Tracer {
-	return t.SQLServer.ambientCtx.Tracer
+	return t.sql.ambientCtx.Tracer
 }
 
 // SettingsWatcher is part of the TestTenantInterface.
 func (t *TestTenant) SettingsWatcher() interface{} {
-	return t.SQLServer.settingsWatcher
+	return t.sql.settingsWatcher
 }
 
 // StartSharedProcessTenant is part of TestServerInterface.
@@ -930,7 +945,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 	hts.t.tenantName = args.TenantName
 
 	testTenant := &TestTenant{
-		SQLServer:      sqlServer,
+		sql:            sqlServer,
 		Cfg:            sqlServer.cfg,
 		SQLCfg:         sqlServerWrapper.sqlCfg,
 		pgPreServer:    sqlServerWrapper.pgPreServer,
@@ -953,7 +968,7 @@ func (ts *TestServer) DisableStartTenant(reason error) {
 
 // MigrationServer is part of the TestTenantInterface.
 func (t *TestTenant) MigrationServer() interface{} {
-	return t.migrationServer
+	return t.sql.migrationServer
 }
 
 // StartTenant is part of TestServerInterface.
@@ -1202,7 +1217,7 @@ func (ts *TestServer) StartTenant(
 	hts.t.sqlServer = sw.sqlServer
 
 	return &TestTenant{
-		SQLServer:      sw.sqlServer,
+		sql:            sw.sqlServer,
 		Cfg:            &baseCfg,
 		SQLCfg:         &sqlCfg,
 		pgPreServer:    sw.pgPreServer,
@@ -1460,12 +1475,12 @@ func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
 	return ts.sqlServer.spanconfigSQLWatcher
 }
 
-// SQLServer is part of TestServerInterface.
+// SQLServer is part of TestTenantInterface.
 func (ts *TestServer) SQLServer() interface{} {
 	return ts.sqlServer.pgServer.SQLServer
 }
 
-// DistSQLServer is part of TestServerInterface.
+// DistSQLServer is part of TestTenantInterface.
 func (ts *TestServer) DistSQLServer() interface{} {
 	return ts.sqlServer.distSQLServer
 }
