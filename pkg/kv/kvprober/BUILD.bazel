@@ -17,6 +17,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
