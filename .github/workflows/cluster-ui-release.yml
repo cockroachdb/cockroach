@@ -6,7 +6,6 @@ on:
       - 'release-*'
     paths:
       - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
-      - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
       - 'pkg/ui/workspaces/cluster-ui/package.json'
 
 jobs:
@@ -28,14 +27,18 @@ jobs:
         path: ~/.cache/bazel
         key: ${{ runner.os }}-bazel-cache
 
+    - uses: pnpm/action-setup@v2
+      with:
+        version: 8
+
     - name: Setup NodeJS
       uses: actions/setup-node@v3
       with:
         node-version: 16
         registry-url: 'https://registry.npmjs.org'
         always-auth: true
-        cache: 'yarn'
-        cache-dependency-path: pkg/ui/workspaces/cluster-ui/yarn.lock
+        cache: 'pnpm'
+        cache-dependency-path: 'pkg/ui/pnpm-lock.yaml'
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -64,10 +67,10 @@ jobs:
     - name: Build Cluster UI
       if: steps.version-check.outputs.published == 'no'
       run: |
-        yarn install --frozen-lockfile
+        pnpm install --frozen-lockfile
         bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
-        yarn build
+        pnpm build
 
     - name: Create version tag and push
       if: steps.version-check.outputs.published == 'no'
