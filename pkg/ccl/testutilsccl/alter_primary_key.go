@@ -63,8 +63,11 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 		t.Run(tc.Desc, func(t *testing.T) {
 			var db *gosql.DB
 			params, _ := tests.CreateTestServerParams()
-			// Test fails within a test tenant. Tracked with #76378.
-			params.DefaultTestTenant = base.TODOTestTenantDisabled
+
+			// Override the default set in CreateTestServerParams() until
+			// #76378 is fully resolved.
+			params.DefaultTestTenant = base.TestTenantProbabilistic
+
 			params.Locality.Tiers = []roachpb.Tier{
 				{Key: "region", Value: "ajstorm-1"},
 			}
@@ -99,6 +102,11 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			s, sqlDB, _ := serverutils.StartServer(t, params)
 			db = sqlDB
 			defer s.Stopper().Stop(ctx)
+
+			st := s.TenantOrServer().ClusterSettings()
+			// Ensure multi-region abstractions and zone configs are enabled in secondary tenants.
+			sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &st.SV, true)
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &st.SV, true)
 
 			if _, err := sqlDB.Exec(fmt.Sprintf(`
 %s;
