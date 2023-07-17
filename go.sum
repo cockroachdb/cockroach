@@ -458,8 +458,8 @@ github.com/cockroachdb/errors v1.8.1/go.mod h1:qGwQn6JmZ+oMjuLwjWzUNqblqk0xl4CVV
 github.com/cockroachdb/errors v1.8.8/go.mod h1:z6VnEL3hZ/2ONZEvG7S5Ym0bU2AqPcEKnIiA1wbsSu0=
 github.com/cockroachdb/errors v1.9.0 h1:B48dYem5SlAY7iU8AKsgedb4gH6mo+bDkbtLIvM/a88=
 github.com/cockroachdb/errors v1.9.0/go.mod h1:vaNcEYYqbIqB5JhKBhFV9CneUqeuEbB2OYJBK4GBNYQ=
-github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230615105354-88bbb1d5f3a3 h1:OPhIGaL0ndge3elF0beXelcZLH9w6bjabDZqxxmI/XE=
-github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230615105354-88bbb1d5f3a3/go.mod h1:KahI8w9l6cp+9Mu9A/oFq78Iiy+aGsooJpVK/Fspyhc=
+github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230713102455-f61509e7f127 h1:QT4p0mJ4sV3vnBAeuRUwFN0wu+FL4C0d3uK+87v3xvA=
+github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230713102455-f61509e7f127/go.mod h1:KahI8w9l6cp+9Mu9A/oFq78Iiy+aGsooJpVK/Fspyhc=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
 github.com/cockroachdb/google-api-go-client v0.80.1-0.20221117193156-6a9f7150cb93 h1:4OctRhiOrTL8zT3udFWOyb2DNIipaGawQudxVt4wcdQ=
