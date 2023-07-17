@@ -6,3 +6,27 @@ query T
 SHOW search_path;
 ----
 public, public, a, b, c
+
+# Make sure that max_connections session var reflects cluster setting change.
+subtest max_connections_session_var
+
+statement ok
+
+query T
+SHOW max_connections;
+----
+-1
+
+statement ok
+SET CLUSTER SETTING server.max_connections_per_gateway = 2;
+
+query T
+SHOW max_connections;
+----
+2
+
+# Make sure that max_connections cannot be modified.
+statement error parameter "max_connections" cannot be changed
+SET max_connections = 2;
+
+subtest end
