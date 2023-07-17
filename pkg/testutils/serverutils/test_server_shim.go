@@ -160,9 +160,6 @@ type TestServerInterface interface {
 	// MigrationServer returns the internal *migrationServer as in interface{}
 	MigrationServer() interface{}
 
-	// SQLServer returns the *sql.Server as an interface{}.
-	SQLServer() interface{}
-
 	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
 	SQLLivenessProvider() interface{}
 
