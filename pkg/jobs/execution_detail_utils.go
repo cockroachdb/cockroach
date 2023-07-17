@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package jobs
 
 import (
 	"bytes"
@@ -17,47 +17,15 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/klauspost/compress/gzip"
 )
 
 const bundleChunkSize = 1 << 20 // 1 MiB
 const finalChunkSuffix = "#_final"
-
-// RequestExecutionDetails implements the JobProfiler interface.
-func (p *planner) RequestExecutionDetails(ctx context.Context, jobID jobspb.JobID) error {
-	execCfg := p.ExecCfg()
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
-		return errors.Newf("execution details can only be requested on a cluster with version >= %s",
-			clusterversion.V23_1.String())
-	}
-
-	e := MakeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID)
-	// TODO(adityamaru): When we start collecting more information we can consider
-	// parallelize the collection of the various pieces.
-	e.addDistSQLDiagram(ctx)
-	e.addLabelledGoroutines(ctx)
-
-	return nil
-}
-
-// ExecutionDetailsBuilder can be used to read and write execution details corresponding
-// to a job.
-type ExecutionDetailsBuilder struct {
-	srv   serverpb.SQLStatusServer
-	db    isql.DB
-	jobID jobspb.JobID
-}
 
 func compressChunk(chunkBuf []byte) ([]byte, error) {
 	gzipBuf := bytes.NewBuffer([]byte{})
@@ -71,15 +39,15 @@ func compressChunk(chunkBuf []byte) ([]byte, error) {
 	return gzipBuf.Bytes(), nil
 }
 
-// WriteExecutionDetail will break up data into chunks of a fixed size, and
+// WriteExecutionDetailFile will break up data into chunks of a fixed size, and
 // gzip compress them before writing them to the job_info table.
-func (e *ExecutionDetailsBuilder) WriteExecutionDetail(
-	ctx context.Context, filename string, data []byte,
+func WriteExecutionDetailFile(
+	ctx context.Context, filename string, data []byte, db isql.DB, jobID jobspb.JobID,
 ) error {
-	return e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Take a copy of the data to operate on inside the txn closure.
 		chunkData := data[:]
-		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
+		jobInfo := InfoStorageForJob(txn, jobID)
 
 		var chunkCounter int
 		var chunkName string
@@ -114,19 +82,19 @@ func (e *ExecutionDetailsBuilder) WriteExecutionDetail(
 	})
 }
 
-// ReadExecutionDetail will stitch together all the chunks corresponding to the
+// ReadExecutionDetailFile will stitch together all the chunks corresponding to the
 // filename and return the uncompressed data of the file.
-func (e *ExecutionDetailsBuilder) ReadExecutionDetail(
-	ctx context.Context, filename string,
+func ReadExecutionDetailFile(
+	ctx context.Context, filename string, db isql.DB, jobID jobspb.JobID,
 ) ([]byte, error) {
 	// TODO(adityamaru): If filename=all add logic to zip up all the files corresponding
 	// to the job's execution details and return the zipped bundle instead.
 
 	buf := bytes.NewBuffer([]byte{})
-	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Reset the buf inside the txn closure to guard against txn retries.
 		buf.Reset()
-		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
+		jobInfo := InfoStorageForJob(txn, jobID)
 
 		// Iterate over all the chunks of the requested file and return the unzipped
 		// chunks of data.
@@ -161,10 +129,12 @@ func (e *ExecutionDetailsBuilder) ReadExecutionDetail(
 
 // ListExecutionDetailFiles lists all the files that have been generated as part
 // of a job's execution details.
-func (e *ExecutionDetailsBuilder) ListExecutionDetailFiles(ctx context.Context) ([]string, error) {
+func ListExecutionDetailFiles(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+) ([]string, error) {
 	var res []string
-	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfo := InfoStorageForJob(txn, jobID)
 
 		// Iterate over all the files that have been stored as part of the job's
 		// execution details.
@@ -186,54 +156,4 @@ func (e *ExecutionDetailsBuilder) ListExecutionDetailFiles(ctx context.Context) 
 	}
 
 	return res, nil
-}
-
-// MakeJobProfilerExecutionDetailsBuilder returns an instance of an ExecutionDetailsBuilder.
-func MakeJobProfilerExecutionDetailsBuilder(
-	srv serverpb.SQLStatusServer, db isql.DB, jobID jobspb.JobID,
-) ExecutionDetailsBuilder {
-	e := ExecutionDetailsBuilder{
-		srv: srv, db: db, jobID: jobID,
-	}
-	return e
-}
-
-// addLabelledGoroutines collects and persists goroutines from all nodes in the
-// cluster that have a pprof label tying it to the job whose execution details
-// are being collected.
-func (e *ExecutionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
-	profileRequest := serverpb.ProfileRequest{
-		NodeId:      "all",
-		Type:        serverpb.ProfileRequest_GOROUTINE,
-		Labels:      true,
-		LabelFilter: fmt.Sprintf("%d", e.jobID),
-	}
-	resp, err := e.srv.Profile(ctx, &profileRequest)
-	if err != nil {
-		log.Errorf(ctx, "failed to collect goroutines for job %d: %+v", e.jobID, err.Error())
-		return
-	}
-	filename := fmt.Sprintf("goroutines.%s.txt", timeutil.Now().Format("20060102_150405.00"))
-	if err := e.WriteExecutionDetail(ctx, filename, resp.Data); err != nil {
-		log.Errorf(ctx, "failed to write goroutine for job %d: %+v", e.jobID, err.Error())
-	}
-}
-
-// addDistSQLDiagram generates and persists a `distsql.<timestamp>.html` file.
-func (e *ExecutionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
-	query := `SELECT plan_diagram FROM [SHOW JOB $1 WITH EXECUTION DETAILS]`
-	row, err := e.db.Executor().QueryRowEx(ctx, "profiler-bundler-add-diagram", nil, /* txn */
-		sessiondata.NoSessionDataOverride, query, e.jobID)
-	if err != nil {
-		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
-		return
-	}
-	if row != nil && row[0] != tree.DNull {
-		dspDiagramURL := string(tree.MustBeDString(row[0]))
-		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
-		if err := e.WriteExecutionDetail(ctx, filename,
-			[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL))); err != nil {
-			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
-		}
-	}
 }
