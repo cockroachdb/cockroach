@@ -50,7 +50,7 @@ func TestIsValidReason(t *testing.T) {
 		{"LINESTRING(1.0 1.0, 2.0 2.0, 3.0 3.0)", "Valid Geometry"},
 		{"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0))", "Valid Geometry"},
 
-		{"POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))", "Self-intersection[1.5 1.5]"},
+		{"POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))", "Ring Self-intersection[1.5 1.5]"},
 	}
 
 	for _, tc := range testCases {
@@ -96,7 +96,7 @@ func TestIsValidDetail(t *testing.T) {
 			0,
 			ValidDetail{
 				IsValid:         false,
-				Reason:          "Self-intersection",
+				Reason:          "Ring Self-intersection",
 				InvalidLocation: geo.MustParseGeometry("POINT(1.5 1.5)"),
 			},
 		},
@@ -178,11 +178,11 @@ func TestMakeValid(t *testing.T) {
 
 		{
 			"POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))",
-			"GEOMETRYCOLLECTION(POLYGON((1 1,1.5 1.5,1.5 -1.5,1 1)),LINESTRING(1.5 1.5,2 2))",
+			"GEOMETRYCOLLECTION (POLYGON ((1.5 1.5, 1.5 -1.5, 1 1, 1.5 1.5)), LINESTRING (1.5 1.5, 2 2))",
 		},
 		{
 			"SRID=4326;POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))",
-			"SRID=4326;GEOMETRYCOLLECTION(POLYGON((1 1,1.5 1.5,1.5 -1.5,1 1)),LINESTRING(1.5 1.5,2 2))",
+			"SRID=4326;GEOMETRYCOLLECTION (POLYGON ((1.5 1.5, 1.5 -1.5, 1 1, 1.5 1.5)), LINESTRING (1.5 1.5, 2 2))",
 		},
 	}
 
@@ -196,7 +196,7 @@ func TestMakeValid(t *testing.T) {
 
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
-			require.Equal(t, expected, ret)
+			requireGeomEqual(t, expected, ret)
 		})
 	}
 }
