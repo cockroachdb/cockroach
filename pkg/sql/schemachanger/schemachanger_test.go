@@ -140,32 +140,28 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	}
 
 	backfillNotif, continueNotif := initBackfillNotification()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		if _, err := sqlDB.Exec(`CREATE INDEX i ON t.test (v)`); err != nil {
-			t.Error(err)
-		}
-		wg.Done()
-	}()
+	g := ctxgroup.WithContext(ctx)
+	g.Go(func() error {
+		_, err := sqlDB.Exec(`CREATE INDEX i ON t.test (v)`)
+		return err
+	})
 
-	// Wait until the create index schema change job has started
-	// before kicking off the alter primary key.
+	// Wait until the CREATE INDEX schema change job has started
+	// before kicking off the ALTER PRIMARY KEY.
 	<-backfillNotif
 	require.Zero(t, alterPrimaryKeyBlockedCounter.Load())
-	wg.Add(1)
-	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
-			t.Error(err)
-		}
-		wg.Done()
-	}()
+	g.Go(func() error {
+		_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+		return err
+	})
 
-	// Unblock the create index job.
+	// Unblock the CREATE INDEX, and, by extension, ALTER PRIMARY KEY.
 	continueNotif <- struct{}{}
-	wg.Wait()
 
-	// The ALTER PRIMARY KEY schema change must have been blocked.
+	// Wait for both schema changes to complete.
+	require.NoError(t, g.Wait())
+
+	// The ALTER PRIMARY KEY schema change must have blocked.
 	require.NotZero(t, alterPrimaryKeyBlockedCounter.Load())
 
 	// There should be 5 k/v pairs per row:
