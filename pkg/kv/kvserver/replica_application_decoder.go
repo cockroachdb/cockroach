@@ -80,7 +80,7 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 // with a proposal in that way are considered "local", meaning a client is
 // waiting on their result, and may be reproposed (as a new proposal) with a new
 // lease index in case they apply with an illegal lease index (see
-// tryReproposeWithNewLeaseIndexV2).
+// tryReproposeWithNewLeaseIndex).
 func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
