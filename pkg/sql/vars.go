@@ -2803,6 +2803,14 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`max_connections`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			maxConn := maxNumNonAdminConnections.Get(&evalCtx.ExecCfg.Settings.SV)
+			return strconv.FormatInt(maxConn, 10), nil
+		},
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.
