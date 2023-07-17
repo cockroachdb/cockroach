@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
+
+var defaultEnabled = util.ConstantWithMetamorphicTestBool("kv.prober.*.enabled", false)
 
 // kv.prober.bypass_admission_control controls whether kvprober's requests
 // should bypass kv layer's admission control. Setting this value to true
@@ -27,14 +30,13 @@ var bypassAdmissionControl = settings.RegisterBoolSetting(
 	"set to bypass admission control queue for kvprober requests; "+
 		"note that dedicated clusters should have this set as users own capacity planning "+
 		"but serverless clusters should not have this set as SREs own capacity planning",
-	true,
-)
+	util.ConstantWithMetamorphicTestBool("kv.prober.bypass_admission_control.enabled", true))
 
 var readEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.read.enabled",
 	"whether the KV read prober is enabled",
-	false)
+	defaultEnabled)
 
 // TODO(josh): Another option is for the cluster setting to be a QPS target
 // for the cluster as a whole.
@@ -44,7 +46,7 @@ var readInterval = settings.RegisterDurationSetting(
 	"how often each node sends a read probe to the KV layer on average (jitter is added); "+
 		"note that a very slow read can block kvprober from sending additional probes; "+
 		"kv.prober.read.timeout controls the max time kvprober can be blocked",
-	1*time.Minute, func(duration time.Duration) error {
+	1*time.Second, func(duration time.Duration) error {
 		if duration <= 0 {
 			return errors.New("param must be >0")
 		}
@@ -70,7 +72,7 @@ var writeEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.write.enabled",
 	"whether the KV write prober is enabled",
-	false)
+	defaultEnabled)
 
 var writeInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
@@ -78,7 +80,7 @@ var writeInterval = settings.RegisterDurationSetting(
 	"how often each node sends a write probe to the KV layer on average (jitter is added); "+
 		"note that a very slow read can block kvprober from sending additional probes; "+
 		"kv.prober.write.timeout controls the max time kvprober can be blocked",
-	10*time.Second, func(duration time.Duration) error {
+	5*time.Second, func(duration time.Duration) error {
 		if duration <= 0 {
 			return errors.New("param must be >0")
 		}
@@ -148,7 +150,7 @@ var quarantineWriteEnabled = settings.RegisterBoolSetting(
 		"quarantine pool holds a separate group of ranges that have previously failed "+
 		"a probe which are continually probed. This helps determine outages for ranges "+
 		" with a high level of confidence",
-	false)
+	defaultEnabled)
 
 var quarantineWriteInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,

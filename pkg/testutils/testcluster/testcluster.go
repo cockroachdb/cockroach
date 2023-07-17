@@ -1906,29 +1906,7 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 	t *testing.T, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
 ) {
 	for i, ts := range tc.Servers {
-		testutils.SucceedsSoon(t, func() error {
-			if tenID.IsSystem() {
-				return nil
-			}
-
-			if len(targetCaps) > 0 {
-				missingCapabilityError := func(capID tenantcapabilities.ID) error {
-					return errors.Newf("server=%d tenant %s cap %q not at expected value", i, tenID, capID)
-				}
-				capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
-				if !found {
-					return errors.Newf("capabilities not ready for tenant %s", tenID)
-				}
-
-				for capID, expectedValue := range targetCaps {
-					curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
-					if curVal != expectedValue {
-						return missingCapabilityError(capID)
-					}
-				}
-			}
-			return nil
-		})
+		serverutils.WaitForTenantCapabilities(t, ts, tenID, targetCaps, fmt.Sprintf("server %d", i))
 	}
 }
 

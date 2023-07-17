@@ -39,6 +39,8 @@ import (
 
 func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -261,6 +263,8 @@ func TestServerQuery(t *testing.T) {
 // query request has more queries than the server's MaxWorkers count.
 func TestServerQueryStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	workerCount := 20
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax: workerCount,
@@ -298,18 +302,18 @@ func TestServerQueryStarvation(t *testing.T) {
 
 func TestServerQueryTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					DisableTimeSeriesMaintenanceQueue: true,
-				},
+	defer log.Scope(t).Close(t)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
 			},
 		},
 	})
-	defer testCluster.Stopper().Stop(context.Background())
-	tsrv := testCluster.Server(0).(*server.TestServer)
+	defer s.Stopper().Stop(context.Background())
+	tsrv := s.(*server.TestServer)
 	systemDB := serverutils.OpenDBConn(
 		t,
 		tsrv.ServingSQLAddr(),
@@ -487,13 +491,13 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	}
 
-	tenant, _ := serverutils.StartTenant(t, testCluster.Server(0), base.TestTenantArgs{TenantID: tenantID})
+	tenant, _ := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
 	if err != nil {
 		t.Fatal(err)
 	}
 	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
-	testCluster.WaitForTenantCapabilities(t, tenantID, capability)
+	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, tsrv.NodeID(), rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -526,6 +530,7 @@ func TestServerQueryTenant(t *testing.T) {
 // constrained memory requirements.
 func TestServerQueryMemoryManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Number of workers that will be available to process data.
 	workerCount := 20
@@ -581,6 +586,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 func TestServerDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	seriesCount := 10
@@ -752,6 +758,8 @@ func TestServerDump(t *testing.T) {
 }
 
 func BenchmarkServerQuery(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
