@@ -319,6 +319,8 @@ func (r *Replica) evalAndPropose(
 		// directly. The raftMu must be locked to modify the context of a
 		// proposal because as soon as we propose a command to Raft, ownership
 		// passes to the "below Raft" machinery.
+		//
+		// See the comment on ProposalData.
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		r.mu.Lock()
