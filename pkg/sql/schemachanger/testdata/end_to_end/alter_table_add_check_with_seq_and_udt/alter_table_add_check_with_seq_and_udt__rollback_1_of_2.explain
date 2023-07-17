@@ -11,7 +11,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j-), ReferencedSequenceIDs: [104 (s)]}
+           │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (_typ)], IndexID: 0, ConstraintID: 2 (check_i_j-), ReferencedSequenceIDs: [104 (s)]}
            │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 107 (t), Name: "check_i_j", ConstraintID: 2 (check_i_j-)}
            └── 9 Mutation operations
                 ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":107}

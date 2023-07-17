@@ -68,12 +68,25 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	default:
 		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
 	}
+	checkForConcurrentSchemaChanges := func() {
+		// Check that the descriptors relevant to this element are not undergoing
+		// any concurrent schema changes.
+		screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+			b.ensureDescriptor(id)
+			if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
+				panic(scerrors.ConcurrentSchemaChangeError(c.desc))
+			}
+		})
+	}
+
 	if dst == nil {
 		// We're adding both a new element and a target for it.
 		if target == scpb.ToAbsent {
 			// Ignore targets to remove something that doesn't exist yet.
 			return
 		}
+		// Set a target for the element but check for concurrent schema changes.
+		checkForConcurrentSchemaChanges()
 		b.addNewElementState(elementState{
 			element:  e,
 			initial:  scpb.Status_ABSENT,
@@ -89,14 +102,9 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		return
 	}
 
-	// Check that the descriptors relevant to this element are not undergoing any
-	// concurrent schema changes.
-	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
-		b.ensureDescriptor(id)
-		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
-		}
-	})
+	// Check that there are no concurrent schema changes on the descriptors
+	// referenced by this element.
+	checkForConcurrentSchemaChanges()
 	// Re-assign dst because the above function may have mutated the builder
 	// state. Specifically, the output slice, to which dst points to, might
 	// have grown and might have been reallocated.
