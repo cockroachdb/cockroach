@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/r3"
 	"github.com/golang/geo/s2"
@@ -277,6 +279,14 @@ func (s *s2GeometryIndex) DFullyWithin(
 
 // Converts to geom.T and clips to the rectangle bounds of the index.
 func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool, error) {
+	// Anything with a NaN coordinate should be marked as clipped.
+	if bbox := g.BoundingBoxRef(); bbox != nil && (math.IsNaN(bbox.LoX) || math.IsNaN(bbox.HiX) ||
+		math.IsNaN(bbox.LoY) || math.IsNaN(bbox.HiY)) {
+		return nil, false, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"cannot index a geometry with NaN coordinates",
+		)
+	}
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return nil, false, err
