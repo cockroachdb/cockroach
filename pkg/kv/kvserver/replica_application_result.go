@@ -179,7 +179,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				}
 			}
 			if pErr == nil { // since we might have injected an error
-				pErr = kvpb.NewError(r.tryReproposeWithNewLeaseIndexV2(ctx, cmd))
+				pErr = kvpb.NewError(r.tryReproposeWithNewLeaseIndex(ctx, cmd))
 				if pErr == nil {
 					// Avoid falling through below. We managed to repropose, but this
 					// proposal is still erroring out. We don't want to assign to
@@ -273,9 +273,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 }
 
-func (r *Replica) tryReproposeWithNewLeaseIndexV2(
-	ctx context.Context, origCmd *replicatedCmd,
-) error {
+func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *replicatedCmd) error {
 	// NB: `origCmd` remains "Local". It's just not going to signal anyone
 	// or release any latches.
 
