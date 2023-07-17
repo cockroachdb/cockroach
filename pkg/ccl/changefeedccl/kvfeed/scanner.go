@@ -63,8 +63,9 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 	defer cancel()
 
 	if log.V(2) {
-		log.Infof(ctx, "performing scan on %v at %v withDiff %v",
-			cfg.Spans, cfg.Timestamp, cfg.WithDiff)
+		var sp roachpb.Spans = cfg.Spans
+		log.Infof(ctx, "performing scan on %s at %v withDiff %v",
+			sp, cfg.Timestamp, cfg.WithDiff)
 	}
 
 	sender := p.db.NonTransactionalSender()
@@ -311,6 +312,9 @@ func slurpScanResponse(
 			keyBytes, ts, valBytes, br, err = enginepb.ScanDecodeKeyValue(br)
 			if err != nil {
 				return errors.Wrapf(err, `decoding changes for %s`, span)
+			}
+			if log.V(3) {
+				log.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
 			}
 			if err = sink.Add(ctx, kvevent.NewBackfillKVEvent(keyBytes, ts, valBytes, withDiff, backfillTS)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)
