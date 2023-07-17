@@ -82,6 +82,8 @@ export type LocalStorageState = {
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
   [LocalStorageKeys.DB_DETAILS_VIEW_MODE]: ViewMode;
+  "requestTime/StatementsPage": moment.Moment;
+  "requestTime/TransactionsPage": moment.Moment;
 };
 
 type Payload = {
@@ -273,6 +275,8 @@ const initialState: LocalStorageState = {
   [LocalStorageKeys.DB_DETAILS_VIEW_MODE]:
     JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_VIEW_MODE)) ||
     defaultDatabaseDetailsViewMode,
+  "requestTime/StatementsPage": null,
+  "requestTime/TransactionsPage": null,
 };
 
 const localStorageSlice = createSlice({

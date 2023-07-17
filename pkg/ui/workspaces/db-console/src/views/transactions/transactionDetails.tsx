@@ -26,6 +26,7 @@ import {
   selectData,
   selectLastError,
   limitSetting,
+  requestTimeLocalSetting,
 } from "src/views/transactions/transactionsPage";
 import {
   TransactionDetailsStateProps,
@@ -103,6 +104,7 @@ export default withRouter(
         isDataValid: isValid,
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
+        requestTime: requestTimeLocalSetting.selector(state),
       };
     },
     {
@@ -111,6 +113,7 @@ export default withRouter(
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
       refreshTransactionInsights: refreshTxnInsights,
+      onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
     },
   )(TransactionDetails),
 );

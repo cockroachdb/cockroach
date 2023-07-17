@@ -121,6 +121,12 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
+export const requestTimeLocalSetting = new LocalSetting(
+  "requestTime/StatementsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
 export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/StatementsPage",
   (state: AdminUIState) => state.localSettings,
@@ -183,6 +189,7 @@ const fingerprintsPageActions = {
       ascending: ascending,
       columnTitle: columnName,
     }),
+  onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
   onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
   onSelectDiagnosticsReportDropdownOption: (
     report: clusterUiApi.StatementDiagnosticsReport,
@@ -247,6 +254,7 @@ export default withRouter(
         isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
+        requestTime: requestTimeLocalSetting.selector(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
