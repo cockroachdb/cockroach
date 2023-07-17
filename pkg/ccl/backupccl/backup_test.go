@@ -247,7 +247,6 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, numNodes, numAccounts, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					DistSQL: &execinfra.TestingKnobs{
 						SetupFlowCb: func(ctx context.Context, _ base.SQLInstanceID, _ *execinfrapb.SetupFlowRequest) error {
@@ -1004,6 +1003,7 @@ func backupAndRestore(
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	storageConn := tc.StorageClusterConn()
 	storageSQLDB := sqlutils.MakeSQLRunner(storageConn)
+	storageSQLDB.Exec(t, "SET DATABASE=defaultdb")
 	{
 		sqlDB.Exec(t, `CREATE INDEX balance_idx ON data.bank (balance)`)
 		testutils.SucceedsSoon(t, func() error {
