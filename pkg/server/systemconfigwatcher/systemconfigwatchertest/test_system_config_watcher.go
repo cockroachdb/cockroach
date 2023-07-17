@@ -48,9 +48,7 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Test runs against tenant, so no need to create the default
-			// test tenant.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	)
 	defer s.Stopper().Stop(ctx)
