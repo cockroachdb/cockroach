@@ -374,7 +374,7 @@ describe("Database Details Page", function () {
         replicationSizeInBytes: 100,
         rangeCount: 400,
         nodes: [1, 2, 3],
-        nodesByRegionString: "undefined(n1,n2,n3)",
+        nodesByRegionString: "",
       },
     });
 
@@ -397,7 +397,7 @@ describe("Database Details Page", function () {
         replicationSizeInBytes: 10,
         rangeCount: 50,
         nodes: [1, 2, 3, 4, 5],
-        nodesByRegionString: "undefined(n1,n2,n3,n4,n5)",
+        nodesByRegionString: "",
       },
     });
   });

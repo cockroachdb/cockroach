@@ -287,7 +287,7 @@ describe("Database Table Page", function () {
       totalBytes: 45,
       sizeInBytes: 23,
       rangeCount: 56,
-      nodesByRegionString: "undefined(n1,n2,n3,n4,n5)",
+      nodesByRegionString: "",
     });
   });
 
