@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -125,8 +126,17 @@ func TestDataDriven(t *testing.T) {
 						case "copy-from", "copy-from-error", "copy-from-kvtrace":
 							kvtrace := d.Cmd == "copy-from-kvtrace"
 							lines := strings.Split(d.Input, "\n")
+							expectedRows := len(lines) - 1
 							stmt := lines[0]
 							data := strings.Join(lines[1:], "\n")
+							st, err := parser.ParseOne(stmt)
+							require.NoError(t, err)
+							if copy, ok := st.AST.(*tree.CopyFrom); ok {
+								if copy.Options.HasHeader {
+									expectedRows--
+								}
+							}
+
 							if kvtrace {
 								err := conn.Exec(ctx, "SET TRACING=on,kv")
 								require.NoError(t, err)
@@ -139,7 +149,7 @@ func TestDataDriven(t *testing.T) {
 							switch d.Cmd {
 							case "copy-from":
 								require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
-								require.Equal(t, int(rows), len(lines)-1, "Not all rows were inserted")
+								require.Equal(t, int(rows), expectedRows, "Not all rows were inserted")
 								return fmt.Sprintf("%d", rows)
 							case "copy-from-error":
 								require.Error(t, err, "copy-from-error didn't return and error!")
