@@ -92,6 +92,19 @@ var L0CompactionAlpha = settings.RegisterFloatSetting(
 	"exponential smoothing term used when measuring L0 compactions to generate IO tokens",
 	0.5, settings.PositiveFloat)
 
+// L0ReductionFactor is the exponential smoothing term used when measuring L0
+// compactions, which in turn is used to generate IO tokens.
+var L0ReductionFactor = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"admission.l0_reduction_factor",
+	"once overloaded, factor by which we reduce L0 compaction tokens based on observed compactions",
+	2.0, func(v float64) error {
+		if v <= 1.0 {
+			return errors.Errorf("cannot set to a value <= 1: %f", v)
+		}
+		return nil
+	})
+
 // Experimental observations:
 //   - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
 //     4s. With a setting that limits sub-level count to 10, before the system
@@ -828,6 +841,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	// threshold.
 	var totalNumByteTokens int64
 	var smoothedCompactionByteTokens float64
+	l0ReductionFactor := L0ReductionFactor.Get(&io.settings.SV)
 
 	score, _ := ioThreshold.Score()
 	// Multiplying score by 2 for ease of calculation. We're under medium load
@@ -853,13 +867,13 @@ func (io *ioLoadListener) adjustTokensInner(
 			// Don't admit more byte work than we can remove via compactions.
 			// totalNumByteTokens tracks our goal for admission. Scale down
 			// since we want to get under the thresholds over time.
-			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
+			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes) / l0ReductionFactor
 		} else {
 			// Medium load. score in [1, 2). We use linear interpolation from
 			// medium load to overload, to slowly give out fewer tokens as we
 			// move towards overload.
-			halfSmoothedBytes := float64(smoothedIntL0CompactedBytes / 2.0)
-			fTotalNumByteTokens = -score*halfSmoothedBytes + 3*halfSmoothedBytes
+			reducedSmoothedBytes := float64(smoothedIntL0CompactedBytes) / l0ReductionFactor
+			fTotalNumByteTokens = -score*reducedSmoothedBytes + 3*reducedSmoothedBytes
 		}
 		smoothedCompactionByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedCompactionByteTokens
 		if float64(math.MaxInt64) < smoothedCompactionByteTokens {
@@ -963,7 +977,7 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.Printf("%s (rate %s/s)", ib(n), ib(n/adjustmentInterval))
 		switch res.aux.tokenKind {
 		case compactionTokenKind:
-			p.Printf(" due to L0 growth")
+			p.Printf(" due to L0 growth [≈%s]", ib(int64(res.smoothedCompactionByteTokens)))
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
