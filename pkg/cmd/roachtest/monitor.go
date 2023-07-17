@@ -13,7 +13,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -178,7 +177,7 @@ func (m *monitorImpl) wait() error {
 			m.cancel()
 			wg.Done()
 		}()
-		setErr(errors.Wrap(m.g.Wait(), "monitor task failed"))
+		setErr(errors.Wrap(m.g.Wait(), "function passed to monitor.Go failed"))
 	}()
 
 	// 2. The second goroutine reads from the monitoring channel, watching for any
@@ -190,28 +189,24 @@ func (m *monitorImpl) wait() error {
 			wg.Done()
 		}()
 
-		messagesChannel, err := roachprod.Monitor(m.ctx, m.l, m.nodes, install.MonitorOpts{})
+		eventsCh, err := roachprod.Monitor(m.ctx, m.l, m.nodes, install.MonitorOpts{})
 		if err != nil {
 			setErr(errors.Wrap(err, "monitor command failure"))
 			return
 		}
-		var monitorErr error
-		for msg := range messagesChannel {
-			if msg.Err != nil {
-				msg.Msg += "error: " + msg.Err.Error()
+
+		for info := range eventsCh {
+			_, isDeath := info.Event.(install.MonitorNodeDead)
+			isExpectedDeath := isDeath && atomic.AddInt32(&m.expDeaths, -1) >= 0
+			var expectedDeathStr string
+			if isExpectedDeath {
+				expectedDeathStr = ": expected"
 			}
-			thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
-			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-				monitorErr = errors.CombineErrors(monitorErr, thisError)
-			}
-			var id int
-			var s string
-			newMsg := thisError.Error()
-			if n, _ := fmt.Sscanf(newMsg, "%d: %s", &id, &s); n == 2 {
-				if strings.Contains(s, "dead") && atomic.AddInt32(&m.expDeaths, -1) < 0 {
-					setErr(errors.Wrap(fmt.Errorf("unexpected node event: %s", newMsg), "monitor command failure"))
-					return
-				}
+			m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+
+			if isDeath && !isExpectedDeath {
+				setErr(fmt.Errorf("unexpected node event: %s", info))
+				return
 			}
 		}
 	}()
