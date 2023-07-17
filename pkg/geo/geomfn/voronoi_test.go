@@ -36,7 +36,7 @@ func TestVoronoiPolygons(t *testing.T) {
 		skipPpc64le bool
 	}{
 		{
-			name: "Computes Voronoi Polygons for a given MultiPoint",
+			name: "Computes Voronoi Polygons for a given MultiPoint 1",
 			args: args{
 				a:         geo.MustParseGeometry("POINT(10 20)"),
 				tol:       0,
@@ -45,16 +45,16 @@ func TestVoronoiPolygons(t *testing.T) {
 			expected: geo.MustParseGeometry("MULTILINESTRING EMPTY"),
 		},
 		{
-			name: "Computes Voronoi Polygons for a given MultiPoint",
+			name: "Computes Voronoi Polygons for a given MultiPoint 2",
 			args: args{
 				a:         geo.MustParseGeometry("MULTIPOINT(50 30, 60 30, 100 100,10 150, 110 120)"),
 				tol:       0,
 				onlyEdges: false,
 			},
-			expected: geo.MustParseGeometry("GEOMETRYCOLLECTION (POLYGON ((-110 43.333333333333321, -110 270, 100.5 270, 59.347826086956523 132.826086956521749, 36.81818181818182 92.272727272727266, -110 43.333333333333321)), POLYGON ((55 -90, -110 -90, -110 43.333333333333321, 36.81818181818182 92.272727272727266, 55 79.285714285714278, 55 -90)), POLYGON ((230 47.5, 230 -20.714285714285733, 55 79.285714285714278, 36.81818181818182 92.272727272727266, 59.347826086956523 132.826086956521749, 230 47.5)), POLYGON ((230 -20.714285714285733, 230 -90, 55 -90, 55 79.285714285714278, 230 -20.714285714285733)), POLYGON ((100.5 270, 230 270, 230 47.5, 59.347826086956523 132.826086956521749, 100.5 270)))"),
+			expected: geo.MustParseGeometry("GEOMETRYCOLLECTION (POLYGON ((-110 270, 100.50000000000003 270, 59.34782608695652 132.82608695652175, 36.81818181818182 92.27272727272727, -110 43.33333333333333, -110 270)), POLYGON ((-110 -90, -110 43.33333333333333, 36.81818181818182 92.27272727272727, 55 79.28571428571429, 55 -90, -110 -90)), POLYGON ((230 -20.71428571428571, 55 79.28571428571429, 36.81818181818182 92.27272727272727, 59.34782608695652 132.82608695652175, 230 47.50000000000002, 230 -20.71428571428571)), POLYGON ((230 -90, 55 -90, 55 79.28571428571429, 230 -20.71428571428571, 230 -90)), POLYGON ((230 270, 230 47.50000000000002, 59.34782608695652 132.82608695652175, 100.50000000000003 270, 230 270)))"),
 		},
 		{
-			name: "Computes Voronoi Polygons for a given MultiPoint",
+			name: "Computes Voronoi Polygons for a given MultiPoint 3",
 			args: args{
 				a:         geo.MustParseGeometry("MULTIPOINT ((170 270), (270 270), (230 310), (180 330), (250 340), (315 318), (330 260), (240 170), (220 220), (270 220))"),
 				tol:       0,
@@ -72,13 +72,13 @@ func TestVoronoiPolygons(t *testing.T) {
 			expected: geo.MustParseGeometry("MULTILINESTRING ((185 215, 187.9268292682927 235.4878048780488), (187.9268292682927 235.4878048780488, 290 252.5), (185 140, 185 215), (185 215, 80 215), (100.8333333333334 340, 187.9268292682927 235.4878048780488))"),
 		},
 		{
-			name: "Computes Voronoi Polygons for a given MultiPoint",
+			name: "Computes Voronoi Polygons for a given MultiPoint 4",
 			args: args{
 				a:         geo.MustParseGeometry("MULTIPOINT ((280 300), (420 330), (380 230), (320 160))"),
 				tol:       0,
 				onlyEdges: true,
 			},
-			expected:    geo.MustParseGeometry("MULTILINESTRING ((310.3571428571428 500, 353.515625 298.59375), (353.515625 298.59375, 306.875 231.9642857142857), (306.875 231.9642857142857, 110 175.7142857142857), (589.1666666666666 -10, 306.875 231.9642857142857), (353.515625 298.59375, 590 204))"),
+			expected:    geo.MustParseGeometry("MULTILINESTRING ((310.3571428571429 500, 353.515625 298.59375), (353.515625 298.59375, 306.875 231.96428571428572), (306.875 231.96428571428572, 110 175.71428571428572), (589.1666666666666 -10, 306.875 231.96428571428572), (353.515625 298.59375, 590 204))"),
 			skipOnArm64: true,
 			skipPpc64le: true,
 		},
@@ -106,7 +106,7 @@ func TestVoronoiPolygons(t *testing.T) {
 				t.Errorf("VoronoiPolygons() error = %v, wantErr %v", err, tc.expectedErr)
 				return
 			}
-			require.Equal(t, true, EqualsExact(actual, tc.expected, 1e-6))
+			require.Equal(t, true, EqualsExact(actual, tc.expected, 1e-6), mustConvertToEWKT(actual))
 		})
 	}
 }

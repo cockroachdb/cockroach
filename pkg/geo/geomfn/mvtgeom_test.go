@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -294,7 +293,7 @@ func TestAsMVTGeometry(t *testing.T) {
 				buffer:       0,
 				clipGeometry: false,
 			},
-			want: geo.MustParseGeometry("MULTIPOLYGON(((20 -20, 30 -10, 20 0, 20 -20)),((30 -10, 40 -20, 40 0, 30 -10)))"),
+			want: geo.MustParseGeometry("MULTIPOLYGON (((30 -10, 20 0, 20 -20, 30 -10)), ((40 -20, 40 0, 30 -10, 40 -20)))"),
 		},
 		{
 			name: "clipping invalid Polygon (self intersection)",
@@ -311,7 +310,7 @@ func TestAsMVTGeometry(t *testing.T) {
 				buffer:       0,
 				clipGeometry: true,
 			},
-			want: geo.MustParseGeometry("MULTIPOLYGON(((17 3, 20 0, 20 6, 17 3)), ((10 0, 14 0, 17 3, 10 10, 10 0)))"),
+			want: geo.MustParseGeometry("POLYGON ((17 3, 14 0, 20 0, 20 6, 20 20, 0 20, 0 0, 10 0, 10 10, 17 3))"),
 		},
 		{
 			name: "clipping valid MultiLinestring",
@@ -427,7 +426,7 @@ func TestAsMVTGeometry(t *testing.T) {
 				buffer:       0,
 				clipGeometry: false,
 			},
-			want: geo.MustParseGeometry(`POLYGON((11 10, 24 10, 20 20, 8 20, 0 20, -4 10, 12 8, 11 10))`),
+			want: geo.MustParseGeometry(`POLYGON ((-4 10, 12 8, 11 10, 24 10, 20 20, 8 20, 0 20, -4 10))`),
 		},
 		{
 			name: "snapping to grid after clipping",
@@ -455,7 +454,7 @@ func TestAsMVTGeometry(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+			assertGeomEqual(t, tt.want, got)
 		})
 	}
 }

@@ -175,6 +175,7 @@ typedef char (*CR_GEOS_EqualsExact_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
 typedef CR_GEOS_Geometry (*CR_GEOS_MinimumRotatedRectangle_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Snap_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double);
+typedef const char* (*CR_GEOS_Version_r)();
 
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
@@ -287,6 +288,8 @@ struct CR_GEOS {
 
   CR_GEOS_Snap_r GEOSSnap_r;
 
+  CR_GEOS_Version_r GEOSversion;
+
   CR_GEOS(dlhandle geoscHandle, dlhandle geosHandle)
       : geoscHandle(geoscHandle), geosHandle(geosHandle) {}
 
@@ -390,6 +393,7 @@ struct CR_GEOS {
     INIT(GEOSClipByRect_r);
     INIT(GEOSNode_r);
     INIT(GEOSSnap_r);
+    INIT(GEOSversion);
     return nullptr;
 
 #undef INIT
@@ -469,6 +473,11 @@ CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle,
   auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, slice.data, slice.len);
   lib->GEOSWKBReader_destroy_r(handle, wkbReader);
   return geom;
+}
+
+void CR_GEOS_Version(CR_GEOS* lib, CR_GEOS_String* ret) {
+  auto version = lib->GEOSversion();
+  *ret = toGEOSString(version, strlen(version));
 }
 
 void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geometry geom,
