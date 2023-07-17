@@ -689,24 +689,20 @@ func TestMigrationFailure(t *testing.T) {
 	fenceVersion := upgrade.FenceVersionFor(ctx, clusterversion.ClusterVersion{Version: failVersion}).Version
 	t.Logf("test will fail at version: %s", failVersion.String())
 
-	// Create a storage cluster for the tenant
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Knobs: base.TestingKnobs{
-				SQLEvalContext: &eval.TestingKnobs{
-					TenantLogicalVersionKeyOverride: startVersionKey,
-				},
+	// Create a storage cluster for the tenant.
+	s, goDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				TenantLogicalVersionKeyOverride: startVersionKey,
 			},
 		},
 	})
-	defer testCluster.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(ctx)
 
 	// Set the version override so that the tenant is able to upgrade. If this is
 	// not set, the tenant treats the storage cluster as if it had the oldest
 	// supported binary version.
-	s := testCluster.Server(0)
-	goDB := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "system", false, s.Stopper())
 	_, err := goDB.Exec(`ALTER TENANT ALL SET CLUSTER SETTING version = $1`, endVersion.String())
 	require.NoError(t, err)
 
@@ -722,7 +718,7 @@ func TestMigrationFailure(t *testing.T) {
 		false,
 	)
 	require.NoError(t, clusterversion.Initialize(ctx, startVersion, &tenantSettings.SV))
-	tenant, db := serverutils.StartTenant(t, testCluster.Server(0), base.TestTenantArgs{
+	tenant, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10),
 		Settings: tenantSettings,
 		TestingKnobs: base.TestingKnobs{
@@ -773,7 +769,7 @@ func TestMigrationFailure(t *testing.T) {
 	checkActiveVersion(t, startVersion)
 	checkSettingVersion(t, startVersion)
 
-	// Try to finalize
+	// Try to finalize.
 	_, err = db.Exec(`SET CLUSTER SETTING version = $1`, endVersion.String())
 	require.Error(t, err)
 	checkActiveVersion(t, fenceVersion)
