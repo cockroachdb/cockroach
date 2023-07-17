@@ -100,6 +100,18 @@ func validateParquetFile(
 		validationStmt)
 	require.NoError(t, err)
 
+	// It's possible to have a set of rows where each row has no columns.
+	// Ex.    CREATE TABLE public.tabl͛e1 (
+	//                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	//                CONSTRAINT tabl͛e1_pkey PRIMARY KEY (rowid ASC)
+	//        )
+	// In this case, the parquet file will simply contain no datums, but
+	// the SELECT above returns a slice of empty slices [[], [], []...].
+	// Thus, we override the array of test datums as an empty slice [].
+	if len(test.datums) > 0 && len(test.datums[0]) == 0 {
+		test.datums = make([]tree.Datums, 0)
+	}
+
 	meta, readDatums, err := crlparquet.ReadFile(paths[0])
 	require.NoError(t, err)
 
