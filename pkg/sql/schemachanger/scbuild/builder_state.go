@@ -61,9 +61,16 @@ func (b *builderState) Ensure(
 	if e == nil {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
-	id := screl.GetDescID(e)
-	b.ensureDescriptor(id)
-	c := b.descCache[id]
+	b.ensureDescriptors(e)
+	// Check that there are no descriptors which are undergoing a concurrent
+	// schema change which might interfere with this one.
+	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
+		}
+	})
+
+	c := b.descCache[screl.GetDescID(e)]
 	key := screl.ElementString(e)
 	if i, ok := c.elementIndexMap[key]; ok {
 		es := &b.output[i]
@@ -71,19 +78,6 @@ func (b *builderState) Ensure(
 			panic(errors.AssertionFailedf("element key %v does not match element: %s",
 				key, screl.ElementString(es.element)))
 		}
-		// Check that the descriptors relevant to this element are not undergoing
-		// any concurrent schema changes.
-		screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
-			b.ensureDescriptor(id)
-			if rc := b.descCache[id]; rc != nil && rc.desc != nil && rc.desc.HasConcurrentSchemaChanges() {
-				panic(scerrors.ConcurrentSchemaChangeError(rc.desc))
-			}
-		})
-		// Re-assign es because the above function may have mutated the builder
-		// state. Specifically, the output slice, to which es points to, might
-		// have grown and might have been reallocated.
-		es = &b.output[i]
-
 		if current != scpb.Status_UNKNOWN {
 			es.current = current
 		}
@@ -107,6 +101,18 @@ func (b *builderState) Ensure(
 		})
 	}
 
+}
+
+// ensureDescriptors ensures the presence of all elements for all
+// descriptors referenced inside the element.
+//
+// This provides us with all of the ID -> name mappings required to
+// comprehensively decorate any EXPLAIN (DDL) output.
+func (b *builderState) ensureDescriptors(e scpb.Element) {
+	_ = screl.WalkDescIDs(e, func(id *catid.DescID) error {
+		b.ensureDescriptor(*id)
+		return nil
+	})
 }
 
 // ForEachElementStatus implements the scpb.ElementStatusIterator interface.

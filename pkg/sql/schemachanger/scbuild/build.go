@@ -163,7 +163,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		panic(err)
 	}
 	for _, t := range initial.TargetState.Targets {
-		bs.ensureDescriptor(screl.GetDescID(t.Element()))
+		bs.ensureDescriptors(t.Element())
 	}
 	for i, t := range initial.TargetState.Targets {
 		bs.Ensure(initial.Current[i], scpb.AsTargetStatus(t.TargetStatus), t.Element(), t.Metadata)
