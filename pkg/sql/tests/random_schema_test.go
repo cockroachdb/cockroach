@@ -17,7 +17,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,8 +38,6 @@ func TestCreateRandomSchema(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	defer ccl.TestingEnableEnterprise()()
-
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)

@@ -38,7 +38,6 @@ import (
 // pgx.
 func TestShowCommitTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
