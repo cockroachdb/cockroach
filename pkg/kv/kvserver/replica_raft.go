@@ -1069,8 +1069,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		if r.store.cfg.KVAdmissionController != nil &&
 			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
-			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
-				r.store.StoreID(), stats.apply.followerStoreWriteBytes)
+			//r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes( // XXX: Stop bypassing work. Where is it coming from though, in the clearrange test?
+			//	r.store.StoreID(), stats.apply.followerStoreWriteBytes)
 		}
 
 		// etcd raft occasionally adds a nil entry (our own commands are never

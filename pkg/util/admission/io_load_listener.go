@@ -978,6 +978,8 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		switch res.aux.tokenKind {
 		case compactionTokenKind:
 			p.Printf(" due to L0 growth [≈%s]", ib(int64(res.smoothedCompactionByteTokens)))
+			// XXX: Log res.smoothedCompactionByteTokens when using flush tokens
+			// so we can verify calculations when transitioning.
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}

@@ -210,7 +210,7 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
-		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`)
+		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`) // XXX: No max rate. Becomes a closed loop workload.
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
