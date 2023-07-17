@@ -15,7 +15,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"runtime/pprof"
@@ -1199,26 +1198,21 @@ func TestRegistryLifecycle(t *testing.T) {
 
 func checkTraceFiles(t *testing.T, registry *jobs.Registry, expectedNumFiles int) {
 	t.Helper()
-	// Check the configured inflight trace dir for dumped zip files.
-	expList := []string{"node1-trace.txt", "node1-jaeger.json"}
-	traceDumpDir := jobs.TestingGetTraceDumpDir(registry)
-	files := make([]string, 0)
-	require.NoError(t, filepath.Walk(traceDumpDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-		files = append(files, path)
-		return nil
-	}))
 
-	require.Equal(t, expectedNumFiles, len(files))
-	for _, file := range files {
-		checkBundle(t, file, expList)
+	recordings := make([]jobspb.TraceData, 0)
+	execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
+	require.NoError(t, err)
+
+	for _, f := range edFiles {
+		data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobID)
+		require.NoError(t, err)
+		td := jobspb.TraceData{}
+		require.NoError(t, protoutil.Unmarshal(data, &td))
+		recordings = append(recordings, td)
 	}
-
-	// Cleanup files for next iteration of the test.
-	for _, file := range files {
-		require.NoError(t, os.Remove(file))
+	if len(recordings) != expectedNumFiles {
+		t.Fatalf("expected %d entries but found %d", expectedNumFiles, len(recordings))
 	}
 }
 

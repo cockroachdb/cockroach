@@ -287,12 +287,12 @@ type JobsProfiler interface {
 	// execution details.
 	GenerateExecutionDetailsJSON(ctx context.Context, evalCtx *Context, jobID jobspb.JobID) ([]byte, error)
 
-	// RequestExecutionDetails triggers the collection of execution details for
-	// the specified jobID that are then persisted to `system.job_info`. This
+	// RequestExecutionDetailFiles triggers the collection of execution details
+	// for the specified jobID that are then persisted to `system.job_info`. This
 	// currently includes the following pieces of information:
 	//
 	// - Latest DistSQL diagram of the job
-	RequestExecutionDetails(ctx context.Context, jobID jobspb.JobID) error
+	RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.JobID) error
 }
 
 // DescIDGenerator generates unique descriptor IDs.
