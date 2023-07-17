@@ -2772,6 +2772,7 @@ locality                                                   region=test,dc=dc1  N
 locality_optimized_partitioned_index_scan                  on                  NULL      NULL        NULL        string
 lock_timeout                                               0                   NULL      NULL        NULL        string
 log_timezone                                               UTC                 NULL      NULL        NULL        string
+max_connections                                            -1                  NULL      NULL        NULL        string
 max_identifier_length                                      128                 NULL      NULL        NULL        string
 max_index_keys                                             32                  NULL      NULL        NULL        string
 node_id                                                    1                   NULL      NULL        NULL        string
@@ -2930,6 +2931,7 @@ locality                                                   region=test,dc=dc1  N
 locality_optimized_partitioned_index_scan                  on                  NULL  user     NULL      on                  on
 lock_timeout                                               0                   NULL  user     NULL      0s                  0s
 log_timezone                                               UTC                 NULL  user     NULL      UTC                 UTC
+max_connections                                            -1                  NULL  user     NULL      -1                  -1
 max_identifier_length                                      128                 NULL  user     NULL      128                 128
 max_index_keys                                             32                  NULL  user     NULL      32                  32
 node_id                                                    1                   NULL  user     NULL      1                   1
@@ -3085,6 +3087,7 @@ locality                                                   NULL    NULL     NULL
 locality_optimized_partitioned_index_scan                  NULL    NULL     NULL     NULL        NULL
 lock_timeout                                               NULL    NULL     NULL     NULL        NULL
 log_timezone                                               NULL    NULL     NULL     NULL        NULL
+max_connections                                            NULL    NULL     NULL     NULL        NULL
 max_identifier_length                                      NULL    NULL     NULL     NULL        NULL
 max_index_keys                                             NULL    NULL     NULL     NULL        NULL
 multiple_active_portals_enabled                            NULL    NULL     NULL     NULL        NULL
