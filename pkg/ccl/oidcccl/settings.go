@@ -182,7 +182,7 @@ var OIDCRedirectURL = func() *settings.StringSetting {
 		OIDCRedirectURLSettingName,
 		"sets OIDC redirect URL via a URL string or a JSON string containing a required "+
 			"`redirect_urls` key with an object that maps from region keys to URL strings "+
-			"(URLs should point to your load balancer and must route to the path /oidc/v1/callback) ",
+			"(URLs should point to your load balancer and must route to the path /oidc/v1/callback)",
 		"https://localhost:8080/oidc/v1/callback",
 		validateOIDCRedirectURL,
 	)
