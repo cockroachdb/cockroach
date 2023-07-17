@@ -41,6 +41,7 @@ func makeUICmd(d *dev) *cobra.Command {
 	uiCmd.AddCommand(makeUIWatchCmd(d))
 	uiCmd.AddCommand(makeUIE2eCmd(d))
 	uiCmd.AddCommand(makeMirrorDepsCmd(d))
+	uiCmd.AddCommand(makeUIStorybookCmd(d))
 
 	return uiCmd
 }
