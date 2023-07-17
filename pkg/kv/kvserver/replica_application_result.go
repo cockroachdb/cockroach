@@ -397,17 +397,17 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 }
 
 func (r *Replica) tryReproposeWithNewLeaseIndexShared(
-	ctx context.Context, p *ProposalData,
+	ctx context.Context, newProposal *ProposalData,
 ) *kvpb.Error {
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
 	// requests (e.g. EndTxn) don't care about closed timestamps.
-	minTS, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
+	minTS, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, newProposal.Request.WriteTimestamp())
 	defer tok.DoneIfNotMoved(ctx)
 
-	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
-	if p.Request.AppliesTimestampCache() && p.Request.WriteTimestamp().LessEq(minTS) {
+	// NB: newProposal.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
+	if newProposal.Request.AppliesTimestampCache() && newProposal.Request.WriteTimestamp().LessEq(minTS) {
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
@@ -424,13 +424,13 @@ func (r *Replica) tryReproposeWithNewLeaseIndexShared(
 
 	// See I7 from kvflowcontrol/doc.go: we don't re-deduct flow tokens on
 	// reproposals.
-	p.raftAdmissionMeta = nil
+	newProposal.raftAdmissionMeta = nil
 
-	pErr := r.propose(ctx, p, tok.Move(ctx))
+	pErr := r.propose(ctx, newProposal, tok.Move(ctx))
 	if pErr != nil {
 		return pErr
 	}
-	log.VEventf(ctx, 2, "reproposed command %x", p.idKey)
+	log.VEventf(ctx, 2, "reproposed command %x", newProposal.idKey)
 	return nil
 }
 
