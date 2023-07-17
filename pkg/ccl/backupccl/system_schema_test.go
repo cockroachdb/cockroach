@@ -13,6 +13,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,20 +32,32 @@ func TestAllSystemTablesHaveBackupConfig(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Disabling the test tenant due to test failures. More
-				// investigation is required. Tracked with #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	systemTableNames := sqlDB.QueryStr(t, `USE system; SELECT table_name FROM [SHOW TABLES];`)
-	for _, systemTableNameRow := range systemTableNames {
-		systemTableName := systemTableNameRow[0]
-		if systemTableBackupConfiguration[systemTableName].shouldIncludeInClusterBackup == invalidBackupInclusion {
-			t.Fatalf("cluster backup inclusion not specified for system table %s", systemTableName)
+	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID:     roachpb.MustMakeTenantID(10),
+		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	})
+	defer tSQL.Close()
+
+	secondaryTenantSQL := sqlutils.MakeSQLRunner(tSQL)
+
+	verifySystemTables := func(tableNames [][]string) {
+		for _, systemTableNameRow := range tableNames {
+			systemTableName := systemTableNameRow[0]
+			if systemTableBackupConfiguration[systemTableName].shouldIncludeInClusterBackup == invalidBackupInclusion {
+				t.Fatalf("cluster backup inclusion not specified for system table %s", systemTableName)
+			}
 		}
 	}
+	tableNamesQuery := `USE system; SELECT table_name FROM [SHOW TABLES];`
+
+	verifySystemTables(systemSQL.QueryStr(t, tableNamesQuery))
+	verifySystemTables(secondaryTenantSQL.QueryStr(t, tableNamesQuery))
+
 }
 
 func TestConfigurationDetailsOnlySetForIncludedTables(t *testing.T) {

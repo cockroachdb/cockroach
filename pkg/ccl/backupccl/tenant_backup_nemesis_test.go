@@ -62,7 +62,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	tc, hostSQLDB, hostClusterCleanupFn := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				},
@@ -137,7 +137,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	tc, hostSQLDB, hostClusterCleanupFn := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				},
