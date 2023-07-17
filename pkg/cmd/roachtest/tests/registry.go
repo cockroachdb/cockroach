@@ -133,7 +133,6 @@ func RegisterTests(r registry.Registry) {
 	registerSecure(r)
 	registerSequelize(r)
 	registerSlowDrain(r)
-	registerSyncTest(r)
 	registerSysbench(r)
 	registerTLP(r)
 	registerTPCC(r)
