@@ -120,7 +120,7 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 	if _, err := d.exec.CommandContextSilent(ctx, "bazel", args...); err != nil {
 		return err
 	}
-	if err := d.stageArtifacts(ctx, roachprodStressTarget); err != nil {
+	if err := d.stageArtifacts(ctx, roachprodStressTarget, []string{}); err != nil {
 		return err
 	}
 
