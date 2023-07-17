@@ -921,6 +921,7 @@ func resolveOptionsForRestoreJobDescription(
 		SchemaOnly:                       opts.SchemaOnly,
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		ExperimentalOnline:               opts.ExperimentalOnline,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -2032,6 +2033,7 @@ func doRestorePlan(
 		VerifyData:          restoreStmt.Options.VerifyData,
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 		ExecutionLocality:   execLocality,
+		ExperimentalOnline:  restoreStmt.Options.ExperimentalOnline,
 	}
 
 	jr := jobs.Record{

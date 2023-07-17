@@ -61,8 +61,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -399,6 +401,24 @@ func restore(
 	tasks = append(tasks, generativeCheckpointLoop)
 
 	runRestore := func(ctx context.Context) error {
+		if details.ExperimentalOnline {
+			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
+			return sendAddRemoteSSTs(
+				ctx,
+				execCtx,
+				job.ID(),
+				dataToRestore,
+				endTime,
+				encryption,
+				kmsEnv,
+				details.URIs,
+				backupLocalityInfo,
+				filter,
+				numImportSpans,
+				simpleImportSpans,
+				progCh,
+			)
+		}
 		return distRestore(
 			ctx,
 			execCtx,
@@ -3108,6 +3128,96 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
 	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery); err != nil {
 		return errors.Wrap(err, "dropping temporary system db")
+	}
+	return nil
+}
+
+var onlineRestoreGate = envutil.EnvOrDefaultBool("COCKROACH_UNSAFE_RESTORE", false)
+
+// sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
+// to test out ingesting "remote" SSTs. It will be replaced with a real distsql
+// plan and processors in the future.
+func sendAddRemoteSSTs(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	dataToRestore restorationData,
+	restoreTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	uris []string,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	spanFilter spanCoveringFilter,
+	numImportSpans int,
+	useSimpleImportSpans bool,
+	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) error {
+	defer close(progCh)
+
+	if !onlineRestoreGate {
+		return errors.AssertionFailedf("experimental restore mode not supported")
+	}
+
+	if encryption != nil {
+		return errors.AssertionFailedf("encryption not supported with online restore")
+	}
+
+	backups, _, err := backupinfo.LoadBackupManifestsAtTime(ctx, nil, uris,
+		execCtx.User(), execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, restoreTime)
+	if err != nil {
+		return err
+	}
+
+	layers, err := backupinfo.GetBackupManifestIterFactories(ctx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage,
+		backups, encryption, kmsEnv)
+	if err != nil {
+		return err
+	}
+
+	for i, backup := range backups {
+		remainingBytesInTargetRange := int64(512 << 20)
+		iter, err := layers[i].NewFileIter(ctx)
+		if err != nil {
+			return err
+		}
+		for ; ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil || !ok {
+				return err
+			}
+
+			file := iter.Value()
+
+			log.Infof(ctx, "Experimental restore: sending span %s of file %s from backup %s",
+				file.Span, file.Path, backup.Dir.String(),
+			)
+			if file.EntryCounts.DataSize > remainingBytesInTargetRange {
+				log.Infof(ctx, "Experimental restore: need to split since %d > %d",
+					file.EntryCounts.DataSize, remainingBytesInTargetRange,
+				)
+				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, file.Span.Key, expiration); err != nil {
+					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+				}
+				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, file.Span.Key, 4<<20); err != nil {
+					log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+				}
+			}
+			loc := kvpb.AddSSTableRequest_RemoteFile{Locator: uris[i], Path: file.Path}
+			// TODO(dt): see if KV has any better ideas for making these up.
+			stats := &enginepb.MVCCStats{
+				ContainsEstimates: 1,
+				KeyBytes:          file.EntryCounts.DataSize / 2,
+				ValBytes:          file.EntryCounts.DataSize / 2,
+				LiveBytes:         file.EntryCounts.DataSize,
+				KeyCount:          file.EntryCounts.Rows + file.EntryCounts.IndexEntries,
+				LiveCount:         file.EntryCounts.Rows + file.EntryCounts.IndexEntries,
+			}
+			var err error
+			_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx, file.Span, loc, stats)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

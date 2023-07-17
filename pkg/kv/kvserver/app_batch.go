@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -154,6 +155,7 @@ type postAddEnv struct {
 	eng         storage.Engine
 	sideloaded  logstore.SideloadStorage
 	bulkLimiter *rate.Limiter
+	external    *cloud.ExternalStorageAccessor
 }
 
 func (b *appBatch) runPostAddTriggers(
@@ -177,13 +179,10 @@ func (b *appBatch) runPostAddTriggers(
 	if res.AddSSTable != nil {
 		copied := addSSTablePreApply(
 			ctx,
-			env.st,
-			env.eng,
-			env.sideloaded,
+			env,
 			kvpb.RaftTerm(cmd.Term),
 			cmd.Index(),
 			*res.AddSSTable,
-			env.bulkLimiter,
 		)
 		b.numAddSST++
 		if copied {
