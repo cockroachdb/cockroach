@@ -1327,10 +1327,8 @@ func (ec *endCmds) done(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
 ) {
 	if ec.repl == nil {
-		// The endCmds were cleared.
-		//
-		// TODO(tbg): we shouldn't double-clear a proposal under useReproposalsV2. Verify that.
-		_ = useReproposalsV2
+		// The endCmds were cleared. This may no longer be necessary, see the comment on
+		// ProposalData.endCmds.
 		return
 	}
 	defer ec.move() // clear
