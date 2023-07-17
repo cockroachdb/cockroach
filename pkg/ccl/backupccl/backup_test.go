@@ -6035,9 +6035,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	// This test instantiates its own secondary tenants below. No need to run
-	// it probabilistically under a test tenant.
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+	params.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 
@@ -6455,10 +6453,8 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	const numAccounts = 1
 	serverArgs := base.TestServerArgs{
-		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
-		// Disabled to probabilistically spin up a tenant in each server because the
-		// test explicitly sets up tenants to test on.
-		DefaultTestTenant: base.TODOTestTenantDisabled}
+		Knobs:             base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		DefaultTestTenant: base.TestControlsTenantsExplicitly}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	var numExportRequests int
 
@@ -6940,9 +6936,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			},
 		},
 
-		// Disabled to probabilistically spin up a tenant in each server because the
-		// test explicitly sets up tenants to test on.
-		DefaultTestTenant: base.TODOTestTenantDisabled},
+		DefaultTestTenant: base.TestControlsTenantsExplicitly},
 	}
 
 	const numAccounts = 1
@@ -7027,12 +7021,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-tenant10-to-latest", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
-				// This test already exercises the tenant codepaths explicitly
-				// by creating a tenant. Furthermore, the test requires that
-				// it run from the system tenant because it restores tenants.
-				// Disable the default test tenant because it's not necessary.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir:     dir,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs:             base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			}},
 		)
@@ -7244,13 +7234,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-all-from-cluster-backup", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
-				// This test already exercises the tenant codepaths explicitly
-				// by creating a tenant. Furthermore, the test requires that
-				// it run from the system tenant because it queries the
-				// system.tenants table. Disable the default test tenant because
-				// it's not necessary.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir:     dir,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 					TenantTestingKnobs: &sql.TenantTestingKnobs{
@@ -7354,12 +7339,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-tenant10-to-ts1", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
-				// This test already exercises the tenant codepaths explicitly
-				// by creating a tenant. Furthermore, the test requires that
-				// it run from the system tenant because it restores tenants.
-				// Disable the default test tenant because it's not necessary.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir:     dir,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
@@ -7379,12 +7360,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 	t.Run("restore-tenant20-to-latest", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
-				// This test already exercises the tenant codepaths explicitly
-				// by creating a tenant. Furthermore, the test requires that
-				// it run from the system tenant because it restores tenants.
-				// Disable the default test tenant because it's not necessary.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir:     dir,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
