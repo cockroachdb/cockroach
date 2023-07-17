@@ -712,3 +712,15 @@ SELECT * FROM tfam2
 1|2|1|4
 2|1|2|3
 3|5|2|1
+
+# regression test for #106913
+exec-ddl
+CREATE TABLE theader (n1 numeric(19, 2))
+----
+
+copy-from
+COPY theader FROM STDIN WITH CSV HEADER
+n1
+12.123
+----
+1
