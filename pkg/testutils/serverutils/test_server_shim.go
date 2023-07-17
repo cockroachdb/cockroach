@@ -22,17 +22,20 @@ import (
 	gosql "database/sql"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -310,6 +313,10 @@ type TestServerInterface interface {
 	// KvProber returns a *kvprober.Prober, which is useful when asserting the
 	//correctness of the prober from integration tests.
 	KvProber() *kvprober.Prober
+
+	// TenantCapabilitiesReader retrieves a reference to the
+	// capabilities reader.
+	TenantCapabilitiesReader() tenantcapabilities.Reader
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -544,4 +551,42 @@ func PostJSONProtoWithAdminOption(
 	fullURL := ts.AdminURL().WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.PostJSON(httpClient, fullURL, request, response)
+}
+
+// WaitForTenantCapabilities waits until the given set of capabilities have been cached.
+func WaitForTenantCapabilities(
+	t testing.TB,
+	s TestServerInterface,
+	tenID roachpb.TenantID,
+	targetCaps map[tenantcapabilities.ID]string,
+	errPrefix string,
+) {
+	if errPrefix != "" && !strings.HasSuffix(errPrefix, ": ") {
+		errPrefix += ": "
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if tenID.IsSystem() {
+			return nil
+		}
+		if len(targetCaps) == 0 {
+			return nil
+		}
+
+		missingCapabilityError := func(capID tenantcapabilities.ID) error {
+			return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
+		}
+		capabilities, found := s.TenantCapabilitiesReader().GetCapabilities(tenID)
+		if !found {
+			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
+		}
+
+		for capID, expectedValue := range targetCaps {
+			curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
+			if curVal != expectedValue {
+				return missingCapabilityError(capID)
+			}
+		}
+
+		return nil
+	})
 }
