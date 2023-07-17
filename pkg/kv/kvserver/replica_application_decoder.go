@@ -59,7 +59,7 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 	if err := d.decode(ctx, ents); err != nil {
 		return false, err
 	}
-	anyLocal := d.retrieveLocalProposalsV2()
+	anyLocal := d.retrieveLocalProposals()
 	d.createTracingSpans(ctx)
 	return anyLocal, nil
 }
@@ -83,7 +83,7 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 // have found a log entry that had a matching MaxLeaseIndex. This lead to the
 // complexity of having multiple entries associated to the same proposal during
 // application.
-func (d *replicaDecoder) retrieveLocalProposalsV2() (anyLocal bool) {
+func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
 
