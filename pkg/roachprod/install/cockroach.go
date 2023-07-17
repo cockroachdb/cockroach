@@ -819,7 +819,7 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
 ) error {
-	externalStoragePath := `gs://cockroachdb-backup-testing`
+	externalStoragePath := `gs://cockroach-backup-testing-private`
 	for _, cloud := range c.Clouds() {
 		if !strings.Contains(cloud, gce.ProviderName) {
 			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)
