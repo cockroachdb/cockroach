@@ -62,7 +62,7 @@ func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 	compareBin := filepath.Join(workspace, "artifacts", "compare_test")
 
 	var args []string
-	args = append(args, "run", "//pkg/compose:compose_test", "--config=test")
+	args = append(args, "test", "//pkg/compose:compose_test")
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
