@@ -463,7 +463,7 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 //
 // See https://github.com/bazelbuild/rules_nodejs/issues/2028
 func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
-	bazelBin, err := d.getBazelBin(d.cli.Context())
+	bazelBin, err := d.getBazelBin(d.cli.Context(), []string{})
 	if err != nil {
 		return err
 	}

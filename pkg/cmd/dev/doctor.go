@@ -503,7 +503,7 @@ func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	bazelBin, err := d.getBazelBin(ctx)
+	bazelBin, err := d.getBazelBin(ctx, []string{})
 	if err != nil {
 		return err
 	}
