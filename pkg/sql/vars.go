@@ -2033,6 +2033,36 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension. Configures the maximum number of automatic retries
+	// to perform for statements in explicit READ COMMITTED transactions that
+	// see a transaction retry error.
+	`max_retries_for_read_committed_transactions`: {
+		GetStringVal: makeIntGetStringValFn(`max_retries_for_read_committed_transactions`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set max_retries_for_read_committed_transactions to a negative value: %d", b)
+			}
+			if b > math.MaxInt32 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set max_retries_for_read_committed_transactions to a value greater than %d: %d", math.MaxInt32, b)
+			}
+
+			m.SetMaxRetriesForReadCommitted(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().MaxRetriesForReadCommitted), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "10"
+		},
+	},
+
 	// CockroachDB extension.
 	`join_reader_ordering_strategy_batch_size`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

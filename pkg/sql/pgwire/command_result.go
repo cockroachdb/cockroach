@@ -264,6 +264,24 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 	return r.conn.bufferBatch(ctx, batch, r)
 }
 
+// BufferedResultsLen is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) BufferedResultsLen() int {
+	return r.conn.writerState.buf.Len()
+}
+
+// TruncateBufferedResults is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) TruncateBufferedResults(pos int) bool {
+	r.assertNotReleased()
+	if r.conn.writerState.fi.lastFlushed >= r.pos {
+		return false
+	}
+	if pos < 0 || pos > r.conn.writerState.buf.Len() {
+		return false
+	}
+	r.conn.writerState.buf.Truncate(pos)
+	return true
+}
+
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) SupportsAddBatch() bool {
 	return true
