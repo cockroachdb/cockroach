@@ -162,6 +162,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"index_recommendations",
 			"retries",
 			"last_retry_reason",
+			"error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	"crdb_internal.cluster_locks": {
@@ -283,6 +285,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"problems",
 			"causes",
 			"stmt_execution_ids",
+			"last_error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	`"".crdb_internal.create_function_statements`: {
@@ -698,6 +702,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"priority",
 			"retries",
 			"exec_node_ids",
+			"error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	"crdb_internal.node_inflight_trace_spans": {
@@ -947,6 +953,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"problems",
 			"causes",
 			"stmt_execution_ids",
+			"last_error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	"crdb_internal.node_txn_stats": {
