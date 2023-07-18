@@ -4,7 +4,7 @@
 # Uncorrelated subqueries.
 # ------------------------------------------------------------------------------
 statement ok
-CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, FAMILY (a, b, c));
 CREATE TABLE abc2 (a INT PRIMARY KEY, b INT, c INT)
 
 query T
@@ -13,22 +13,12 @@ EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 distribution: local
 vectorized: true
 ·
-• root
+• split
+│ index: abc@abc_pkey
+│ expiry: CAST(NULL AS STRING)
 │
-├── • split
-│   │ index: abc@abc_pkey
-│   │ expiry: CAST(NULL AS STRING)
-│   │
-│   └── • values
-│         size: 1 column, 1 row
-│
-└── • subquery
-    │ id: @S1
-    │ original sql: (SELECT 42)
-    │ exec mode: one row
-    │
-    └── • values
-          size: 1 column, 1 row
+└── • values
+      size: 1 column, 1 row
 
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
@@ -39,23 +29,13 @@ EXPLAIN ALTER RANGE RELOCATE FROM 11 TO 22 FOR VALUES ((SELECT 1))
 distribution: local
 vectorized: true
 ·
-• root
+• relocate range
+│ replicas: VOTERS
+│ to: 22
+│ from: 11
 │
-├── • relocate range
-│   │ replicas: VOTERS
-│   │ to: 22
-│   │ from: 11
-│   │
-│   └── • values
-│         size: 1 column, 1 row
-│
-└── • subquery
-    │ id: @S1
-    │ original sql: (SELECT 1)
-    │ exec mode: one row
-    │
-    └── • values
-          size: 1 column, 1 row
+└── • values
+      size: 1 column, 1 row
 
 query T
 EXPLAIN ALTER RANGE 22 RELOCATE FROM ((SELECT 1)) TO ((SELECT 2))
@@ -63,31 +43,13 @@ EXPLAIN ALTER RANGE 22 RELOCATE FROM ((SELECT 1)) TO ((SELECT 2))
 distribution: local
 vectorized: true
 ·
-• root
+• relocate range
+│ replicas: VOTERS
+│ to: 2
+│ from: 1
 │
-├── • relocate range
-│   │ replicas: VOTERS
-│   │ to: @S1
-│   │ from: @S2
-│   │
-│   └── • values
-│         size: 1 column, 1 row
-│
-├── • subquery
-│   │ id: @S1
-│   │ original sql: ((SELECT 2))
-│   │ exec mode: one row
-│   │
-│   └── • values
-│         size: 1 column, 1 row
-│
-└── • subquery
-    │ id: @S2
-    │ original sql: ((SELECT 1))
-    │ exec mode: one row
-    │
-    └── • values
-          size: 1 column, 1 row
+└── • values
+      size: 1 column, 1 row
 
 query T
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
@@ -228,7 +190,7 @@ vectorized: true
 
 # the subquery's plan must be visible in EXPLAIN
 query T
-EXPLAIN VALUES (1), ((SELECT 2))
+EXPLAIN VALUES (1), ((SELECT random()::INT))
 ----
 distribution: local
 vectorized: true
@@ -240,7 +202,7 @@ vectorized: true
 │
 └── • subquery
     │ id: @S1
-    │ original sql: (SELECT 2)
+    │ original sql: (SELECT random()::INT8)
     │ exec mode: one row
     │
     └── • values
@@ -290,6 +252,33 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: tab4@tab4_pkey
                   spans: FULL SCAN
+
+# Subqueries with single, constant values can be inlined for index-acceleration.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM abc WHERE a = (SELECT 1)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 1 (missing stats)
+  table: abc@abc_pkey
+  spans: /1/0
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM abc WHERE a >= (SELECT 1)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c)
+  estimated row count: 333 (missing stats)
+  table: abc@abc_pkey
+  spans: /1-
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.

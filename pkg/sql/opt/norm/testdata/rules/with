@@ -143,27 +143,11 @@ norm expect=InlineWith
 WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT * FROM bar)
 ----
 values
- ├── columns: "?column?":5
+ ├── columns: "?column?":5!null
  ├── cardinality: [1 - 1]
- ├── immutable
  ├── key: ()
  ├── fd: ()-->(5)
- └── tuple
-      └── plus
-           ├── subquery
-           │    └── values
-           │         ├── columns: "?column?":3!null
-           │         ├── cardinality: [1 - 1]
-           │         ├── key: ()
-           │         ├── fd: ()-->(3)
-           │         └── (1,)
-           └── subquery
-                └── values
-                     ├── columns: "?column?":4!null
-                     ├── cardinality: [1 - 1]
-                     ├── key: ()
-                     ├── fd: ()-->(4)
-                     └── (2,)
+ └── (3,)
 
 norm expect=InlineWith
 WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT * FROM bar) + (SELECT * FROM bar)
@@ -190,20 +174,14 @@ with &2 (bar)
            └── plus
                 ├── plus
                 │    ├── subquery
-                │    │    └── values
-                │    │         ├── columns: "?column?":3!null
+                │    │    └── with-scan &2 (bar)
+                │    │         ├── columns: "?column?":4!null
+                │    │         ├── mapping:
+                │    │         │    └──  "?column?":2 => "?column?":4
                 │    │         ├── cardinality: [1 - 1]
                 │    │         ├── key: ()
-                │    │         ├── fd: ()-->(3)
-                │    │         └── (1,)
-                │    └── subquery
-                │         └── with-scan &2 (bar)
-                │              ├── columns: "?column?":4!null
-                │              ├── mapping:
-                │              │    └──  "?column?":2 => "?column?":4
-                │              ├── cardinality: [1 - 1]
-                │              ├── key: ()
-                │              └── fd: ()-->(4)
+                │    │         └── fd: ()-->(4)
+                │    └── 1
                 └── subquery
                      └── with-scan &2 (bar)
                           ├── columns: "?column?":5!null
@@ -417,14 +395,7 @@ anti-join-apply
  │    ├── outer: (2)
  │    ├── cardinality: [2 - 2]
  │    ├── (k:2,)
- │    └── tuple
- │         └── subquery
- │              └── values
- │                   ├── columns: column1:9!null
- │                   ├── cardinality: [1 - 1]
- │                   ├── key: ()
- │                   ├── fd: ()-->(9)
- │                   └── (1,)
+ │    └── (1,)
  └── filters
       └── column1:10 = k:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
 
