@@ -8018,6 +8018,7 @@ CREATE TABLE crdb_internal.%s (
   stmt_execution_ids         STRING[] NOT NULL,
   cpu_sql_nanos              INT8,
   last_error_code            STRING,
+  last_error                 STRING,
   status                     STRING NOT NULL
 )`
 
@@ -8043,11 +8044,11 @@ func populateTxnExecutionInsights(
 	addRow func(...tree.Datum) error,
 	request *serverpb.ListExecutionInsightsRequest,
 ) (err error) {
-	hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	// Check if the user has sufficient privileges.
+	hasPrivs, shouldRedactError, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return err
-	}
-	if !hasRoleOption {
+	} else if !hasPrivs {
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
@@ -8063,7 +8064,6 @@ func populateTxnExecutionInsights(
 			continue
 		}
 
-		var errorCode string
 		var queryBuilder strings.Builder
 		for i := range insight.Statements {
 			// Build query string.
@@ -8078,10 +8078,18 @@ func populateTxnExecutionInsights(
 				queryBuilder.WriteString(" ; ")
 			}
 			queryBuilder.WriteString(insight.Statements[i].Query)
+		}
 
-			if insight.Statements[i].ErrorCode != "" {
-				errorCode = insight.Statements[i].ErrorCode
-			}
+		errorCode := tree.DNull
+		if insight.Transaction.LastErrorCode != "" {
+			errorCode = tree.NewDString(insight.Transaction.LastErrorCode)
+		}
+
+		errorMsg := tree.DNull
+		if insight.Transaction.LastErrorMsg != "" && shouldRedactError {
+			errorMsg = tree.NewDString("<redacted>")
+		} else if insight.Transaction.LastErrorMsg != "" {
+			errorMsg = tree.NewDString(insight.Transaction.LastErrorMsg)
 		}
 
 		problems := tree.NewDArray(types.String)
@@ -8150,7 +8158,8 @@ func populateTxnExecutionInsights(
 			causes,
 			stmtIDs,
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
-			tree.NewDString(errorCode),
+			errorCode,
+			errorMsg,
 			tree.NewDString(insight.Transaction.Status.String()),
 		))
 
@@ -8191,7 +8200,8 @@ CREATE TABLE crdb_internal.%s (
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
 	cpu_sql_nanos              INT8,
-    error_code                 STRING
+	error_code                 STRING,
+	last_error                 STRING
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -8227,7 +8237,7 @@ func populateStmtInsights(
 	request *serverpb.ListExecutionInsightsRequest,
 ) (err error) {
 	// Check if the user has sufficient privileges.
-	hasPrivs, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	hasPrivs, shouldRedactError, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return err
 	} else if !hasPrivs {
@@ -8293,6 +8303,16 @@ func populateStmtInsights(
 				}
 			}
 
+			errorCode := tree.DNull
+			errorMsg := tree.DNull
+			if s.ErrorCode != "" {
+				errorCode = tree.NewDString(s.ErrorCode)
+				errorMsg = tree.NewDString(s.ErrorMsg)
+				if shouldRedactError {
+					errorMsg = tree.NewDString("<redacted>")
+				}
+			}
+
 			err = errors.CombineErrors(err, addRow(
 				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
 				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
@@ -8320,7 +8340,8 @@ func populateStmtInsights(
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
-				tree.NewDString(s.ErrorCode),
+				errorCode,
+				errorMsg,
 			))
 		}
 	}
