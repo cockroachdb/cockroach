@@ -45,6 +45,10 @@ message SpanStats {
 
   // The explicit jsontag prevents 'omitempty` from being added by default.
   uint64 approximate_disk_bytes = 3 [(gogoproto.jsontag) = "approximate_disk_bytes"];
+
+  int64 file_count = 4;
+  int64 remote_file_count = 5;
+  int64 external_file_count = 5;
 }
 
 message SpanStatsResponse {

@@ -988,8 +988,10 @@ type Engine interface {
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
 	PreIngestDelay(ctx context.Context)
-	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
-	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
+	// ApproximateDiskBytesAndFiles returns an approximation of the on-disk size
+	// and file counts for the given key span.
+	ApproximateDiskBytes(from, to roachpb.Key) (uint64, int64, int64, int64, error)
+
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
