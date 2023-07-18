@@ -3139,22 +3139,24 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// requireErrorSoon polls for the test feed for an error and asserts that
+// the error matches the provided regex.
 func requireErrorSoon(
 	ctx context.Context, t *testing.T, f cdctest.TestFeed, errRegex *regexp.Regexp,
 ) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		if _, err := f.Next(); err != nil {
-			assert.Regexp(t, errRegex, err)
-			done <- struct{}{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for changefeed to fail")
+		default:
+			if _, err := f.Next(); err != nil {
+				assert.Regexp(t, errRegex, err)
+				return
+			}
 		}
-	}()
-	select {
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for changefeed to fail")
-	case <-done:
 	}
 }
 
