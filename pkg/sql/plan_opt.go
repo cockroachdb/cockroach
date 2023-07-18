@@ -813,3 +813,8 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 
 	return indexRecs, nil
 }
+
+// Optimizer returns the Optimizer associated with this planning context.
+func (opc *optPlanningCtx) Optimizer() interface{} {
+	return &opc.optimizer
+}

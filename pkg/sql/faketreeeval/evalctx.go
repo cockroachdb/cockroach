@@ -320,6 +320,11 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
 }
 
+// Optimizer is part of the cat.Catalog interface.
+func (*DummyEvalPlanner) Optimizer() interface{} {
+	return nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
