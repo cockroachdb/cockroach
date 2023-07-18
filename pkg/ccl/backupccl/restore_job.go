@@ -406,7 +406,7 @@ func restore(
 			return sendAddRemoteSSTs(
 				ctx,
 				execCtx,
-				job.ID(),
+				job,
 				dataToRestore,
 				endTime,
 				encryption,
@@ -1539,12 +1539,17 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 }
 
 func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) error {
-	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
+	details := r.job.Details().(jobspb.RestoreDetails)
+
 	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
 		return err
+	}
+
+	if len(details.DownloadSpans) > 0 {
+		return r.doDownloadFiles(ctx, p)
 	}
 
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
@@ -2399,6 +2404,11 @@ func (r *restoreResumer) OnFailOrCancel(
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if len(details.DownloadSpans) > 0 {
+		return nil
+	}
+
 	// Emit to the event log that the job has started reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
@@ -2415,7 +2425,6 @@ func (r *restoreResumer) OnFailOrCancel(
 		return err
 	}
 
-	details := r.job.Details().(jobspb.RestoreDetails)
 	logutil.LogJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr, r.restoreStats.Rows)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
@@ -3140,7 +3149,7 @@ var onlineRestoreGate = envutil.EnvOrDefaultBool("COCKROACH_UNSAFE_RESTORE", fal
 func sendAddRemoteSSTs(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
+	job *jobs.Job,
 	dataToRestore restorationData,
 	restoreTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -3174,15 +3183,26 @@ func sendAddRemoteSSTs(
 		return err
 	}
 
+	var downloadSpans roachpb.Spans
+
 	for i, backup := range backups {
+		// TODO(dt, mb): downloadSpans must contain all spans into which any files
+		// were restored. NB: these must be the actual (post-rewrite) span written
+		// to. It can be overly broad, at the expense of making the check for the
+		// download completion check more expensive, though it should not overlap
+		// with the spans of another restore.
+		//downloadSpans = append(downloadSpans, backup.Spans...)
+
 		remainingBytesInTargetRange := int64(512 << 20)
 		iter, err := layers[i].NewFileIter(ctx)
 		if err != nil {
 			return err
 		}
 		for ; ; iter.Next() {
-			if ok, err := iter.Valid(); err != nil || !ok {
+			if ok, err := iter.Valid(); err != nil {
 				return err
+			} else if !ok {
+				break
 			}
 
 			file := iter.Value()
@@ -3219,7 +3239,22 @@ func sendAddRemoteSSTs(
 			}
 		}
 	}
-	return nil
+
+	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
+
+	downloadJobRecord := jobs.Record{
+		Description: fmt.Sprintf("Background Data Download for %s", job.Payload().Description),
+		Username:    job.Payload().UsernameProto.Decode(),
+		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
+		Progress:    jobspb.RestoreProgress{},
+	}
+
+	return execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		_, err := execCtx.ExecCfg().JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, job.ID()+1, txn)
+		return err
+	})
 }
 
 var _ jobs.Resumer = &restoreResumer{}
@@ -3235,4 +3270,79 @@ func init() {
 		},
 		jobs.UsesTenantCostControl,
 	)
+}
+
+func (r *restoreResumer) doDownloadFiles(
+	ctx context.Context, execCtx sql.JobExecContext,
+) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	total := r.job.Progress().Details.(*jobspb.Progress_Restore).Restore.TotalDownloadRequired
+
+	if total == 0 {
+		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus("Calculating total download size..."), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+
+		for _, span := range details.DownloadSpans {
+			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+				Spans: []roachpb.Span{span},
+			})
+			if err != nil {
+				return err
+			}
+			for _, stats := range resp.SpanToStats {
+				total += stats.ExternalFileBytes
+			}
+		}
+		if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			prog := details.(*jobspb.Progress_Restore).Restore
+			prog.TotalDownloadRequired = total
+			return 0.0
+		}); err != nil {
+			return err
+		}
+
+		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus("Downloading files..."), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second * 10):
+		}
+	}
+
+	var last time.Time
+	for rt := retry.StartWithCtx(
+		ctx, retry.Options{InitialBackoff: time.Second * 10, MaxBackoff: time.Minute * 5},
+	); ; rt.Next() {
+		var remaining uint64
+		for _, span := range details.DownloadSpans {
+			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+				Spans: []roachpb.Span{span},
+			})
+			if err != nil {
+				return err
+			}
+			for _, stats := range resp.SpanToStats {
+				remaining += stats.ExternalFileBytes
+			}
+		}
+		if remaining == 0 {
+			break
+		}
+		if timeutil.Since(last) > time.Minute {
+			if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				return float32(remaining) / float32(total)
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
