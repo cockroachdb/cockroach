@@ -11,11 +11,17 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestQueryForTable(t *testing.T) {
@@ -133,4 +139,37 @@ you must redact them at the SQL level.`
 			t.Fatalf(errFmtString, table)
 		}
 	}
+}
+
+func executeAllCustomQuerys(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry,
+) {
+	for table, regConfig := range tableRegistry {
+		if regConfig.customQueryRedacted != "" {
+			rows := sqlDB.Query(t, regConfig.customQueryRedacted)
+			require.NoError(t, rows.Err(), "failed to select for table %s redacted", table)
+		}
+
+		if regConfig.customQueryUnredacted != "" {
+			rows := sqlDB.Query(t, regConfig.customQueryUnredacted)
+			require.NoError(t, rows.Err(), "failed to select for table %s unredacted", table)
+		}
+	}
+}
+
+func TestCustomQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	testConn := cluster.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(testConn)
+	defer cluster.Stopper().Stop(ctx)
+
+	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerCluster)
+	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerNode)
+	executeAllCustomQuerys(t, sqlDB, zipSystemTables)
 }
