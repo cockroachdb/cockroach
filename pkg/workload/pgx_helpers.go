@@ -35,8 +35,11 @@ type MultiConnPool struct {
 		// preparedStatements is a map from name to SQL. The statements in the map
 		// are prepared whenever a new connection is acquired from the pool.
 		preparedStatements map[string]string
-		method             pgx.QueryExecMode
 	}
+
+	// NOTE(seanc@): method is on the hot-path, therefore make all reads to the
+	// query exec mode a dirty read.
+	method pgx.QueryExecMode
 }
 
 // MultiConnPoolCfg encapsulates the knobs passed to NewMultiConnPool.
@@ -166,7 +169,7 @@ func NewMultiConnPool(
 	if !ok {
 		return nil, errors.Errorf("unknown method %s", cfg.Method)
 	}
-	m.mu.method = queryMode
+	m.method = queryMode
 
 	for i := range urls {
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
@@ -246,9 +249,7 @@ func (m *MultiConnPool) Close() {
 
 // Method returns the query execution mode of the connection pool.
 func (m *MultiConnPool) Method() pgx.QueryExecMode {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.mu.method
+	return m.method
 }
 
 // WarmupConns warms up totalNumConns connections distributed across all pools
