@@ -34,9 +34,10 @@ func TestDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Five nodes is too much to reliably run under testrace with our aggressive
-	// liveness timings.
-	skip.UnderRace(t, "#39807 and #37811")
+	// Five nodes is too much to reliably run under race/deadlock with our
+	// aggressive liveness timings.
+	skip.UnderRaceWithIssue(t, 39807, "#39807 and #37811")
+	skip.UnderDeadlockWithIssue(t, 39807, "#39807 and #37811")
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
