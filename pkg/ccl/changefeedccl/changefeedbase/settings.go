@@ -74,7 +74,7 @@ var IdleTimeout = settings.RegisterDurationSetting(
 var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"changefeed.frontier_checkpoint_frequency",
-	"controls the frequency with which span level checkpoints will be written; if 0, disabled.",
+	"controls the frequency with which span level checkpoints will be written; if 0, disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
 )
@@ -297,7 +297,7 @@ var SinkIOWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.sink_io_workers",
 	"the number of workers used by changefeeds when sending requests to the sink "+
-		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value.",
+		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value",
 	0,
 ).WithPublic()
 
