@@ -108,3 +108,24 @@ func defaultPlotSettings() plotSettings {
 		width:  defaultWidth,
 	}
 }
+
+type rangeGenSettings struct {
+	rangeKeyGenType generatorType
+	keySpaceGenType generatorType
+	weightedRand    []float64
+}
+
+const (
+	defaultRangeKeyGenType = uniformGenerator
+	defaultKeySpaceGenType = uniformGenerator
+)
+
+var defaultWeightedRand []float64
+
+func defaultRangeGenSettings() rangeGenSettings {
+	return rangeGenSettings{
+		rangeKeyGenType: defaultRangeKeyGenType,
+		keySpaceGenType: defaultKeySpaceGenType,
+		weightedRand:    defaultWeightedRand,
+	}
+}
