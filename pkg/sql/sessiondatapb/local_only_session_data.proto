@@ -405,6 +405,10 @@ message LocalOnlySessionData {
   // ReplicationMode represents the replication parameter passed in during
   // connection time.
   ReplicationMode replication_mode = 106;
+  // MaxRetriesForReadCommittedTransactions indicates the maximum number of
+  // automatic retries to perform for statements in explicit READ COMMITTED
+  // transactions that see a transaction retry error.
+  int32 max_retries_for_read_committed_transactions = 107;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

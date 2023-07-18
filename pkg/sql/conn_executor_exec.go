@@ -977,14 +977,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	maxExecCount := 1
+	maxRetries := 0
 	if readCommittedSavePointToken != nil {
-		// TODO(rafi): Make this configurable.
-		const maxExecCountForReadCommitted = 5
-		maxExecCount = maxExecCountForReadCommitted
+		maxRetries = int(ex.sessionData().MaxRetriesForReadCommittedTransactions)
 	}
 
-	for attemptNum := 0; attemptNum < maxExecCount; attemptNum++ {
+	for attemptNum := 0; attemptNum <= maxRetries; attemptNum++ {
 		var bufferPos int
 		if readCommittedSavePointToken != nil {
 			bufferPos = res.BufferedResultsLen()

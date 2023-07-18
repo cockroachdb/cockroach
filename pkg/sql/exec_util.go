@@ -3442,6 +3442,10 @@ func (m *sessionDataMutator) SetInjectRetryErrorsEnabled(val bool) {
 	m.data.InjectRetryErrorsEnabled = val
 }
 
+func (m *sessionDataMutator) SetMaxRetriesForReadCommittedTransactions(val int32) {
+	m.data.MaxRetriesForReadCommittedTransactions = val
+}
+
 func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
 	m.data.JoinReaderOrderingStrategyBatchSize = val
 }
