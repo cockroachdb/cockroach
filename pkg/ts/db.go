@@ -59,24 +59,6 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 	resolution10sDefaultRollupThreshold,
 ).WithPublic()
 
-// deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
-var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		settings.TenantWritable,
-		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
-		resolution30mDefaultPruneThreshold,
-	)
-	s.SetRetired()
-	return s
-}()
-
-func init() {
-	// The setting is not used any more, but we need to keep its
-	// definition for backward compatibility until the next release
-	// cycle.
-	_ = deprecatedResolution30StoreDuration
-}
-
 // Resolution30mStorageTTL defines the maximum age of data that will be
 // retained at he 30 minute resolution. Data older than this is subject to
 // deletion.

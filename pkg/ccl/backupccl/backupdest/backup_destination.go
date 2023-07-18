@@ -62,7 +62,7 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
 	"when true, a backup command with a user specified subdirectory will create a full backup at"+
-		" the subdirectory if no backup already exists at that subdirectory.",
+		" the subdirectory if no backup already exists at that subdirectory",
 	false,
 ).WithPublic()
 

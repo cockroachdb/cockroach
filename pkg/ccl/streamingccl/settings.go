@@ -58,7 +58,7 @@ var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"stream_replication.min_checkpoint_frequency",
 	"controls minimum frequency the stream replication source cluster sends checkpoints "+
-		"to the destination cluster.",
+		"to the destination cluster",
 	10*time.Second,
 	settings.NonNegativeDuration,
 )
