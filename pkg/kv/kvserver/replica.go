@@ -2336,7 +2336,8 @@ func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 // GetApproximateDiskBytes returns an approximate measure of bytes in the store
 // in the specified key range.
 func (r *Replica) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
-	return r.store.TODOEngine().ApproximateDiskBytes(from, to)
+	bytes, _, _, err := r.store.TODOEngine().ApproximateDiskBytes(from, to)
+	return bytes, err
 }
 
 func init() {
