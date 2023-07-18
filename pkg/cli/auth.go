@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -117,7 +117,7 @@ func createAuthSessionToken(
 	}
 
 	// Make a secret.
-	secret, hashedSecret, err := server.CreateAuthSecret()
+	secret, hashedSecret, err := authserver.CreateAuthSecret()
 	if err != nil {
 		return -1, nil, err
 	}
@@ -185,7 +185,7 @@ RETURNING id
 
 	// Spell out the cookie.
 	sCookie := &serverpb.SessionCookie{ID: id, Secret: secret}
-	httpCookie, err = server.EncodeSessionCookie(sCookie, false /* forHTTPSOnly */)
+	httpCookie, err = authserver.EncodeSessionCookie(sCookie, false /* forHTTPSOnly */)
 	return id, httpCookie, err
 }
 

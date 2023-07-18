@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "rangetestutils",
+    srcs = ["rangetestutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/rangetestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/testutils/serverutils",
+    ],
+)

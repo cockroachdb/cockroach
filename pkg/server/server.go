@@ -69,8 +69,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -157,12 +159,12 @@ type Server struct {
 	ctSender         *sidetransport.Sender
 
 	http            *httpServer
-	adminAuthzCheck *adminPrivilegeChecker
+	adminAuthzCheck privchecker.CheckerForRPCHandlers
 	admin           *systemAdminServer
 	status          *systemStatusServer
 	drain           *drainServer
-	decomNodeMap    *decommissioningNodeMap
-	authentication  *authenticationServer
+	decomNodeMap    *DecommissioningNodeMap
+	authentication  authserver.Server
 	migrationServer *migrationServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
@@ -484,7 +486,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 
-	decomNodeMap := &decommissioningNodeMap{
+	decomNodeMap := &DecommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),
 	}
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
@@ -951,11 +953,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Instantiate the API privilege checker.
 	//
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminAuthzCheck := &adminPrivilegeChecker{
-		ie:          internalExecutor,
-		st:          st,
-		makePlanner: nil,
-	}
+	adminAuthzCheck := privchecker.NewChecker(internalExecutor, st)
 
 	// Instantiate the HTTP server.
 	// These callbacks help us avoid a dependency on gossip in httpServer.
@@ -1159,11 +1157,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	// Tell the authz server how to connect to SQL.
-	adminAuthzCheck.makePlanner = func(opName string) (interface{}, func()) {
+	adminAuthzCheck.SetAuthzAccessorFactory(func(opName string) (sql.AuthorizationAccessor, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
 		txn := db.NewTxn(ctx, "check-system-privilege")
-		return sql.NewInternalPlanner(
+		p, cleanup := sql.NewInternalPlanner(
 			opName,
 			txn,
 			username.RootUserName(),
@@ -1171,10 +1169,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
 		)
-	}
+		return p.(sql.AuthorizationAccessor), cleanup
+	})
 
 	// Create the authentication RPC server (login/logout).
-	sAuth := newAuthenticationServer(cfg.Config, sqlServer)
+	sAuth := authserver.NewServer(cfg.Config, sqlServer)
 
 	// Create a drain server.
 	drain := newDrainServer(cfg.BaseConfig, stopper, stopTrigger, grpcServer, sqlServer)

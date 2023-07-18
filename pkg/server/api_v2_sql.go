@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -358,7 +359,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The SQL username that owns this session.
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 
 	options := []isql.TxnOption{
 		isql.WithPriority(admissionpb.NormalPri),

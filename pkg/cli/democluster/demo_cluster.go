@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -2002,7 +2003,7 @@ func (c *transientCluster) addDemoLoginToURL(uiURL *url.URL, includeTenantName b
 		// in that case.
 		q.Add("username", c.adminUser.Normalized())
 		q.Add("password", c.adminPassword)
-		uiURL.Path = server.DemoLoginPath
+		uiURL.Path = authserver.DemoLoginPath
 	}
 
 	if !includeTenantName {

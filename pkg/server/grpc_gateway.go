@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -38,7 +39,7 @@ type grpcGatewayServer interface {
 
 var _ grpcGatewayServer = (*adminServer)(nil)
 var _ grpcGatewayServer = (*statusServer)(nil)
-var _ grpcGatewayServer = (*authenticationServer)(nil)
+var _ grpcGatewayServer = authserver.Server(nil)
 var _ grpcGatewayServer = (*ts.Server)(nil)
 
 // configureGRPCGateway initializes services necessary for running the
@@ -71,8 +72,8 @@ func configureGRPCGateway(
 		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
 		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
-		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
-		gwruntime.WithMetadata(translateHTTPAuthInfoToGRPCMetadata),
+		gwruntime.WithOutgoingHeaderMatcher(authserver.AuthenticationHeaderMatcher),
+		gwruntime.WithMetadata(authserver.TranslateHTTPAuthInfoToGRPCMetadata),
 	)
 	gwCtx, gwCancel := context.WithCancel(ambientCtx.AnnotateCtx(context.Background()))
 	stopper.AddCloser(stop.CloserFn(gwCancel))

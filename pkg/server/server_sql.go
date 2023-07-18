@@ -87,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -1888,4 +1889,14 @@ func (s *SQLServer) LogicalClusterID() uuid.UUID {
 // the server to be shut down.
 func (s *SQLServer) ShutdownRequested() <-chan ShutdownRequest {
 	return s.stopTrigger.C()
+}
+
+// ExecutorConfig is an accessor for the executor config.
+func (s *SQLServer) ExecutorConfig() *sql.ExecutorConfig {
+	return s.execCfg
+}
+
+// InternalExecutor returns an executor for internal SQL queries.
+func (s *SQLServer) InternalExecutor() isql.Executor {
+	return s.internalExecutor
 }

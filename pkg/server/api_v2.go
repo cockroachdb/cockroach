@@ -35,36 +35,22 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gorilla/mux"
 )
-
-const (
-	apiV2Path       = "/api/v2/"
-	apiV2AuthHeader = "X-Cockroach-API-Session"
-)
-
-func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	res, err := json.Marshal(payload)
-	if err != nil {
-		apiV2InternalError(ctx, err, w)
-		return
-	}
-	_, _ = w.Write(res)
-}
 
 type ApiV2System interface {
 	health(w http.ResponseWriter, r *http.Request)
@@ -80,7 +66,7 @@ type apiV2ServerOpts struct {
 	db               *kv.DB
 }
 
-// apiV2Server implements version 2 API endpoints, under apiV2Path. The
+// apiV2Server implements version 2 API endpoints, under apiconstants.APIV2Path. The
 // implementation of some endpoints is delegated to sub-servers (eg. auth
 // endpoints like `/login` and `/logout` are passed onto authServer), while
 // others are implemented directly by apiV2Server.
@@ -89,7 +75,7 @@ type apiV2ServerOpts struct {
 // registerRoutes().
 type apiV2Server struct {
 	admin            *adminServer
-	authServer       *authenticationV2Server
+	authServer       authserver.ServerV2
 	status           *statusServer
 	promRuleExporter *metric.PrometheusRuleExporter
 	mux              *mux.Router
@@ -112,9 +98,10 @@ var _ http.Handler = &apiV2Server{}
 
 // newAPIV2Server returns a new apiV2Server.
 func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
-	authServer := newAuthenticationV2Server(ctx, opts.sqlServer, opts.sqlServer.cfg.Config, apiV2Path)
+	authServer := authserver.NewV2Server(ctx, opts.sqlServer, opts.sqlServer.cfg.Config, apiconstants.APIV2Path)
 	innerMux := mux.NewRouter()
-	authMux := newAuthenticationV2Mux(authServer, innerMux)
+	allowAnonymous := opts.sqlServer.cfg.Insecure
+	authMux := authserver.NewV2Mux(authServer, innerMux, allowAnonymous)
 	outerMux := mux.NewRouter()
 
 	systemAdmin, saOk := opts.admin.(*systemAdminServer)
@@ -177,33 +164,33 @@ func registerRoutes(
 		url           string
 		handler       http.HandlerFunc
 		requiresAuth  bool
-		role          apiRole
+		role          authserver.APIRole
 		option        roleoption.Option
 		tenantEnabled bool
 	}{
 		// Pass through auth-related endpoints to the auth server.
-		{"login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
-		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
+		{"login/", a.authServer.ServeHTTP, false /* requiresAuth */, authserver.RegularRole, noOption, false},
+		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, authserver.RegularRole, noOption, false},
 
 		// Directly register other endpoints in the api server.
-		{"sessions/", a.listSessions, true /* requiresAuth */, adminRole, noOption, false},
-		{"nodes/", systemRoutes.listNodes, true, adminRole, noOption, false},
+		{"sessions/", a.listSessions, true /* requiresAuth */, authserver.AdminRole, noOption, false},
+		{"nodes/", systemRoutes.listNodes, true, authserver.AdminRole, noOption, false},
 		// Any endpoint returning range information requires an admin user. This is because range start/end keys
 		// are sensitive info.
-		{"nodes/{node_id}/ranges/", systemRoutes.listNodeRanges, true, adminRole, noOption, false},
-		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption, false},
-		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption, false},
-		{"health/", systemRoutes.health, false, regularRole, noOption, false},
-		{"users/", a.listUsers, true, regularRole, noOption, false},
-		{"events/", a.listEvents, true, adminRole, noOption, false},
-		{"databases/", a.listDatabases, true, regularRole, noOption, false},
-		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, regularRole, noOption, false},
-		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption, false},
-		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption, false},
-		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption, false},
-		{"rules/", a.listRules, false, regularRole, noOption, true},
+		{"nodes/{node_id}/ranges/", systemRoutes.listNodeRanges, true, authserver.AdminRole, noOption, false},
+		{"ranges/hot/", a.listHotRanges, true, authserver.AdminRole, noOption, false},
+		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.AdminRole, noOption, false},
+		{"health/", systemRoutes.health, false, authserver.RegularRole, noOption, false},
+		{"users/", a.listUsers, true, authserver.RegularRole, noOption, false},
+		{"events/", a.listEvents, true, authserver.AdminRole, noOption, false},
+		{"databases/", a.listDatabases, true, authserver.RegularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, authserver.RegularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, authserver.RegularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, authserver.RegularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, authserver.RegularRole, noOption, false},
+		{"rules/", a.listRules, false, authserver.RegularRole, noOption, true},
 
-		{"sql/", a.execSQL, true, regularRole, noOption, true},
+		{"sql/", a.execSQL, true, authserver.RegularRole, noOption, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
@@ -216,23 +203,23 @@ func registerRoutes(
 			inner:   route.handler,
 		}
 		if !route.tenantEnabled && !a.sqlServer.execCfg.Codec.ForSystemTenant() {
-			a.mux.Handle(apiV2Path+route.url, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			a.mux.Handle(apiconstants.APIV2Path+route.url, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				http.Error(w, "Not Available on Tenants", http.StatusNotImplemented)
 			}))
 		}
 		if route.requiresAuth {
-			a.mux.Handle(apiV2Path+route.url, authMux)
-			if route.role != regularRole {
-				handler = &roleAuthorizationMux{
-					ie:     a.sqlServer.internalExecutor,
-					role:   route.role,
-					option: route.option,
-					inner:  handler,
-				}
+			a.mux.Handle(apiconstants.APIV2Path+route.url, authMux)
+			if route.role != authserver.RegularRole {
+				handler = authserver.NewRoleAuthzMux(
+					a.sqlServer.internalExecutor,
+					route.role,
+					route.option,
+					handler,
+				)
 			}
-			innerMux.Handle(apiV2Path+route.url, handler)
+			innerMux.Handle(apiconstants.APIV2Path+route.url, handler)
 		} else {
-			a.mux.Handle(apiV2Path+route.url, handler)
+			a.mux.Handle(apiconstants.APIV2Path+route.url, handler)
 		}
 	}
 }
@@ -314,11 +301,11 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	reqExcludeClosed := r.URL.Query().Get("exclude_closed_sessions") == "true"
 	req := &serverpb.ListSessionsRequest{Username: reqUsername, ExcludeClosedSessions: reqExcludeClosed}
 	response := &listSessionsResponse{}
-	outgoingCtx := forwardHTTPAuthInfoToRPCCalls(ctx, r)
+	outgoingCtx := authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
 
 	responseProto, pagState, err := a.status.listSessionsHelper(outgoingCtx, req, limit, start)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	var nextBytes []byte
@@ -329,7 +316,7 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		response.Next = string(nextBytes)
 	}
 	response.ListSessionsResponse = *responseProto
-	writeJSONResponse(ctx, w, http.StatusOK, response)
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, response)
 }
 
 // swagger:operation GET /health/ health
@@ -375,19 +362,19 @@ func (a *apiV2SystemServer) health(w http.ResponseWriter, r *http.Request) {
 	// If Ready is not set, the client doesn't want to know whether this node is
 	// ready to receive client traffic.
 	if !ready {
-		writeJSONResponse(ctx, w, 200, resp)
+		apiutil.WriteJSONResponse(ctx, w, 200, resp)
 		return
 	}
 
 	if err := a.systemAdmin.checkReadinessForHealthCheck(ctx); err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
 // swagger:operation GET /rules/ rules
@@ -414,7 +401,7 @@ func (a *apiV2Server) listRules(w http.ResponseWriter, r *http.Request) {
 	a.promRuleExporter.ScrapeRegistry(r.Context())
 	response, err := a.promRuleExporter.PrintAsYAML()
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	}
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
