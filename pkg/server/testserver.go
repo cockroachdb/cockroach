@@ -414,10 +414,10 @@ func (ts *TestServer) SQLLivenessProvider() interface{} {
 
 // JobRegistry returns the *jobs.Registry as an interface{}.
 func (ts *TestServer) JobRegistry() interface{} {
-	if ts != nil {
-		return ts.sqlServer.jobRegistry
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].JobRegistry()
 	}
-	return nil
+	return ts.sqlServer.jobRegistry
 }
 
 // NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
@@ -504,10 +504,10 @@ func (ts *TestServer) PGServer() interface{} {
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
 // the TestServer.
 func (ts *TestServer) PGPreServer() interface{} {
-	if ts != nil {
-		return ts.pgPreServer
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].PGPreServer()
 	}
-	return nil
+	return ts.pgPreServer
 }
 
 // RaftTransport returns the RaftTransport used by the TestServer.
@@ -535,6 +535,9 @@ func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 
 // TenantStatusServer returns the TenantStatusServer used by the TestServer.
 func (ts *TestServer) TenantStatusServer() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].TenantStatusServer()
+	}
 	return ts.status
 }
 
@@ -1146,7 +1149,7 @@ func (ts *TestServer) StartTenant(
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
-	if ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
+	if ts.Cfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
 		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
 			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", params.TenantID.ToUint64())
 		if err != nil {
@@ -1285,6 +1288,9 @@ func (ts *TestServer) GetStores() interface{} {
 
 // ClusterSettings returns the ClusterSettings.
 func (ts *TestServer) ClusterSettings() *cluster.Settings {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].ClusterSettings()
+	}
 	return ts.Cfg.Settings
 }
 
@@ -1365,6 +1371,9 @@ func (ts *TestServer) UpdateChecker() interface{} {
 
 // DiagnosticsReporter implements the serverutils.TestServerInterface.
 func (ts *TestServer) DiagnosticsReporter() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].DiagnosticsReporter()
+	}
 	return ts.Server.sqlServer.diagnosticsReporter
 }
 
@@ -1488,6 +1497,9 @@ func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
 
 // SQLServer is part of the serverutils.TestTenantInterface.
 func (ts *TestServer) SQLServer() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].SQLServer()
+	}
 	return ts.sqlServer.pgServer.SQLServer
 }
 
@@ -1713,6 +1725,9 @@ func (ts *TestServer) GetRangeLease(
 
 // ExecutorConfig is part of the serverutils.TestTenantInterface.
 func (ts *TestServer) ExecutorConfig() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].ExecutorConfig()
+	}
 	return *ts.sqlServer.execCfg
 }
 
@@ -1741,6 +1756,9 @@ func (ts *TestServer) TracerI() interface{} {
 
 // Tracer is like TracerI(), but returns the actual type.
 func (ts *TestServer) Tracer() *tracing.Tracer {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].Tracer()
+	}
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
