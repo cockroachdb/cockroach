@@ -79,6 +79,8 @@ func TestVerifyPassword(t *testing.T) {
 		{"timelord", "12345", "", "VALID UNTIL $1",
 			[]interface{}{timeutil.Now().Add(59 * time.Minute).In(shanghaiLoc)}},
 
+		{"replication_user", "12345", "LOGIN REPLICATION", "", nil},
+
 		{"some_admin", "12345", "LOGIN", "", nil},
 	} {
 		cmd := fmt.Sprintf(
@@ -94,6 +96,9 @@ func TestVerifyPassword(t *testing.T) {
 		t.Fatalf("failed to grant admin: %s", err)
 	}
 
+	_, err = db.Exec("ALTER USER replication_user REPLICATION")
+	require.NoError(t, err)
+
 	// Set up NOSQLLOGIN global privilege.
 	_, err = db.Exec("GRANT SYSTEM NOSQLLOGIN TO has_global_nosqlogin")
 	require.NoError(t, err)
@@ -105,41 +110,44 @@ func TestVerifyPassword(t *testing.T) {
 		username                    string
 		password                    string
 		isSuperuser                 bool
+		canUseReplicationMode       bool
 		shouldAuthenticateSQL       bool
 		shouldAuthenticateDBConsole bool
 	}{
-		{"valid login", "azure_diamond", "hunter2", false, true, true},
-		{"wrong password", "azure_diamond", "hunter", false, false, false},
-		{"empty password", "azure_diamond", "", false, false, false},
-		{"wrong emoji password", "azure_diamond", "🍦", false, false, false},
-		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false, false, false},
-		{"correct password with prefix should fail", "azure_diamond", "shunter2", false, false, false},
-		{"wrong password all numeric", "azure_diamond", "12345", false, false, false},
-		{"wrong password all stars", "azure_diamond", "*******", false, false, false},
-		{"valid login numeric password", "druidia", "12345", false, true, true},
-		{"wrong password matching other user", "druidia", "hunter2", false, false, false},
-		{"root with empty password should fail", "root", "", true, false, false},
-		{"some_admin with empty password should fail", "some_admin", "", true, false, false},
-		{"empty username and password should fail", "", "", false, false, false},
-		{"username does not exist should fail", "doesntexist", "zxcvbn", false, false, false},
+		{"valid login", "azure_diamond", "hunter2", false, false, true, true},
+		{"wrong password", "azure_diamond", "hunter", false, false, false, false},
+		{"empty password", "azure_diamond", "", false, false, false, false},
+		{"wrong emoji password", "azure_diamond", "🍦", false, false, false, false},
+		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false, false, false, false},
+		{"correct password with prefix should fail", "azure_diamond", "shunter2", false, false, false, false},
+		{"wrong password all numeric", "azure_diamond", "12345", false, false, false, false},
+		{"wrong password all stars", "azure_diamond", "*******", false, false, false, false},
+		{"valid login numeric password", "druidia", "12345", false, false, true, true},
+		{"wrong password matching other user", "druidia", "hunter2", false, false, false, false},
+		{"root with empty password should fail", "root", "", true, true, false, false},
+		{"some_admin with empty password should fail", "some_admin", "", true, false, false, false},
+		{"empty username and password should fail", "", "", false, false, false, false},
+		{"username does not exist should fail", "doesntexist", "zxcvbn", false, false, false, false},
 
-		{"user with NOLOGIN role option should fail", "richardc", "12345", false, false, false},
+		{"user with NOLOGIN role option should fail", "richardc", "12345", false, false, false, false},
 		// The NOSQLLOGIN cases are the only cases where SQL and DB Console login outcomes differ.
-		{"user with NOSQLLOGIN role option should fail SQL but succeed on DB Console", "richardc2", "12345", false, false, true},
-		{"user with NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "has_global_nosqlogin", "12345", false, false, true},
-		{"user who inherits NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "inherits_global_nosqlogin", "12345", false, false, true},
+		{"user with NOSQLLOGIN role option should fail SQL but succeed on DB Console", "richardc2", "12345", false, false, false, true},
+		{"user with NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "has_global_nosqlogin", "12345", false, false, false, true},
+		{"user who inherits NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "inherits_global_nosqlogin", "12345", false, false, false, true},
 
-		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false, false, false},
-		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false, false, false},
-		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", false, true, true},
-		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false, false, false},
-		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", false, true, true},
-		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", false, true, true},
+		{"replication user should succeed", "replication_user", "12345", false, true, true, true},
+
+		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false, false, false, false},
+		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false, false, false, false},
+		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", false, false, true, true},
+		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false, false, false, false},
+		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", false, false, true, true},
+		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", false, false, true, true},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLoginSQL, canLoginDBConsole, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLoginSQL, canLoginDBConsole, canUseReplicationMode, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, username, "", /* databaseName */
 			)
 
@@ -211,6 +219,7 @@ func TestVerifyPassword(t *testing.T) {
 				)
 			}
 			require.Equal(t, tc.isSuperuser, isSuperuser)
+			require.Equal(t, tc.canUseReplicationMode, canUseReplicationMode)
 		})
 	}
 }
