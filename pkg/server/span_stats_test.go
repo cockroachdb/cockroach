@@ -239,9 +239,8 @@ func BenchmarkSpanStats(b *testing.B) {
 					ts.numRanges,
 				), func(b *testing.B) {
 
-					tenant := tc.Server(0).TenantOrServer()
-					tenantCodec := keys.MakeSQLCodec(serverutils.TestTenantID())
-					tenantPrefix := tenantCodec.TenantPrefix()
+					tenantStatusServer := tc.Server(0).TenantStatusServer().(serverpb.TenantStatusServer)
+					tenantPrefix := tc.Server(0).Codec().TenantPrefix()
 
 					makeKey := func(keys ...[]byte) roachpb.Key {
 						return bytes.Join(keys, nil)
@@ -279,7 +278,7 @@ func BenchmarkSpanStats(b *testing.B) {
 					b.ReportAllocs()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						_, err := tenant.TenantStatusServer().(serverpb.TenantStatusServer).SpanStats(ctx,
+						_, err := tenantStatusServer.SpanStats(ctx,
 							&roachpb.SpanStatsRequest{
 								NodeID: "0", // 0 indicates we want stats from all nodes.
 								Spans:  spans,

@@ -1191,7 +1191,7 @@ func checkTraceFiles(
 	t.Helper()
 
 	recordings := make([]jobspb.TraceData, 0)
-	execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
 	require.NoError(t, err)
 

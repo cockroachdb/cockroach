@@ -283,14 +283,12 @@ func TestUsageQuantization(t *testing.T) {
 	r := diagutils.NewServer()
 	defer r.Close()
 
-	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 
 	url := r.URL()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106901),
 
-		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
@@ -331,18 +329,16 @@ func TestUsageQuantization(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ts := s.TenantOrServer()
-
 	// Flush the SQL stat pool.
-	ts.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+	s.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Collect a round of statistics.
-	ts.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
+	s.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 	// The stats "hide" the application name by hashing it. To find the
 	// test app name, we need to hash the ref string too prior to the
 	// comparison.
-	clusterSecret := sql.ClusterSecret.Get(&st.SV)
+	clusterSecret := sql.ClusterSecret.Get(&s.ClusterSettings().SV)
 	hashedAppName := sql.HashForReporting(clusterSecret, "test")
 	require.NotEqual(t, sql.FailedHashedValue, hashedAppName, "expected hashedAppName to not be 'unknown'")
 
