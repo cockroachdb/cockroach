@@ -11,6 +11,7 @@
 package gen
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"time"
@@ -148,6 +149,23 @@ type LoadedCluster struct {
 	Info state.ClusterInfo
 }
 
+// GetClusterInfo fetches ClusterInfo for a given configName and panics if no
+// match is found in existing configurations.
+func GetClusterInfo(configName string) state.ClusterInfo {
+	switch configName {
+	case "single_region":
+		return state.SingleRegionConfig
+	case "single_region_multi_store":
+		return state.SingleRegionMultiStoreConfig
+	case "multi_region":
+		return state.MultiRegionConfig
+	case "complex":
+		return state.ComplexConfig
+	default:
+		panic(fmt.Sprintf("unknown cluster config %s", configName))
+	}
+}
+
 // Generate returns a new simulator state, where the cluster is loaded based on
 // the cluster info the loaded cluster generator is created with. There is no
 // randomness in this cluster generation.
@@ -193,13 +211,54 @@ const (
 	Skewed
 )
 
-// BasicRanges implements the RangeGen interface.
-type BasicRanges struct {
+// BaseRanges provides basic ranges functionality and are embedded in
+// other specialized range structs.
+type BaseRanges struct {
 	Ranges            int
-	PlacementType     PlacementType
 	KeySpace          int
 	ReplicationFactor int
 	Bytes             int64
+}
+
+// getRangesInfo generates RangesInfo, with its distribution defined by
+// PlacementType and other configurations determined by BaseRanges fields.
+func (b BaseRanges) getRangesInfo(pType PlacementType, numOfStores int) state.RangesInfo {
+	switch pType {
+	case Uniform:
+		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case Skewed:
+		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	default:
+		panic(fmt.Sprintf("unexpected range placement type %v", pType))
+	}
+}
+
+// LoadRangeInfo loads the given state with the specified rangesInfo.
+func (b BaseRanges) loadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
+	for _, rangeInfo := range rangesInfo {
+		rangeInfo.Size = b.Bytes
+	}
+	state.LoadRangeInfo(s, rangesInfo...)
+}
+
+// BasicRanges implements the RangeGen interface.
+type BasicRanges struct {
+	BaseRanges
+	PlacementType PlacementType
+}
+
+func NewBasicRanges(
+	ranges int, placementType PlacementType, keySpace int, replicationFactor int, bytes int64,
+) BasicRanges {
+	return BasicRanges{
+		BaseRanges: BaseRanges{
+			Ranges:            ranges,
+			KeySpace:          keySpace,
+			ReplicationFactor: replicationFactor,
+			Bytes:             bytes,
+		},
+		PlacementType: placementType,
+	}
 }
 
 // Generate returns an updated simulator state, where the cluster is loaded
@@ -207,18 +266,8 @@ type BasicRanges struct {
 func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
-	stores := len(s.Stores())
-	var rangesInfo state.RangesInfo
-	switch br.PlacementType {
-	case Uniform:
-		rangesInfo = state.RangesInfoEvenDistribution(stores, br.Ranges, br.KeySpace, br.ReplicationFactor, br.Bytes)
-	case Skewed:
-		rangesInfo = state.RangesInfoSkewedDistribution(stores, br.Ranges, br.KeySpace, br.ReplicationFactor, br.Bytes)
-	}
-	for _, rangeInfo := range rangesInfo {
-		rangeInfo.Size = br.Bytes
-	}
-	state.LoadRangeInfo(s, rangesInfo...)
+	rangesInfo := br.getRangesInfo(br.PlacementType, len(s.Stores()))
+	br.loadRangeInfo(s, rangesInfo)
 	return s
 }
 

@@ -12,6 +12,7 @@ package state
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -58,6 +59,53 @@ func exactDistribution(counts []int) []float64 {
 	}
 	for i, count := range counts {
 		distribution[i] = float64(count) / float64(total)
+	}
+	return distribution
+}
+
+type Weighted struct {
+	cumulativeWeights []float64
+}
+
+func NewWeighted(weightedStores []float64) Weighted {
+	cumulativeWeights := make([]float64, len(weightedStores))
+	prefixSumWeight := float64(0)
+	for i, item := range weightedStores {
+		prefixSumWeight += item
+		cumulativeWeights[i] = prefixSumWeight
+	}
+	return Weighted{cumulativeWeights: cumulativeWeights}
+}
+
+func (w Weighted) Random(randSource *rand.Rand) int {
+	r := randSource.Float64()
+	index := sort.Search(len(w.cumulativeWeights), func(i int) bool { return w.cumulativeWeights[i] >= r })
+	return index
+}
+
+func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) []float64 {
+	w := NewWeighted(weightedStores)
+	// Vote for 10 times and give a distribution.
+	numSamples := 10
+	votes := make([]int, len(weightedStores))
+	for i := 0; i < numSamples; i++ {
+		index := w.Random(randSource)
+		votes[index] += 1
+	}
+	return exactDistribution(votes)
+}
+
+func randDistribution(randSource *rand.Rand, n int) []float64 {
+	total := float64(0)
+	distribution := make([]float64, n)
+	for i := 0; i < n; i++ {
+		num := float64(randSource.Intn(10))
+		distribution[i] = num
+		total += num
+	}
+
+	for i := 0; i < n; i++ {
+		distribution[i] = distribution[i] / total
 	}
 	return distribution
 }
@@ -236,6 +284,59 @@ func RangesInfoEvenDistribution(
 	stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
 ) RangesInfo {
 	distribution := evenDistribution(stores)
+	storeList := makeStoreList(stores)
+
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+
+	return RangesInfoWithDistribution(
+		storeList, distribution, distribution, ranges, spanConfig,
+		int64(MinKey), int64(keyspace), rangeSize)
+}
+
+// Weighted distribution: vote for 10 times and see which bucket the number falls under
+func RangesInfoWeightedRandDistribution(
+	randSource *rand.Rand,
+	weightedStores []float64,
+	ranges int,
+	keyspace int,
+	replicationFactor int,
+	rangeSize int64,
+) RangesInfo {
+	if randSource == nil || len(weightedStores) == 0 {
+		panic("unexpected arguments for weighted random ranges info")
+	}
+	distribution := weightedRandDistribution(randSource, weightedStores)
+	storeList := makeStoreList(len(weightedStores))
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+	return RangesInfoWithDistribution(
+		storeList,
+		distribution,
+		distribution,
+		ranges,
+		spanConfig,
+		int64(MinKey),
+		int64(keyspace),
+		rangeSize, /* rangeSize */
+	)
+}
+
+func RangesInfoRandDistribution(
+	randSource *rand.Rand,
+	stores int,
+	ranges int,
+	keyspace int,
+	replicationFactor int,
+	rangeSize int64,
+) RangesInfo {
+	if randSource == nil {
+		// BETTER NAME HERE
+		panic("unexpected arguments for weighted random ranges info")
+	}
+	distribution := randDistribution(randSource, stores)
 	storeList := makeStoreList(stores)
 
 	spanConfig := defaultSpanConfig

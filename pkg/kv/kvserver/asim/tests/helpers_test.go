@@ -11,11 +11,17 @@
 package tests
 
 import (
+	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/datadriven"
+	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,4 +75,53 @@ func scanThreshold(t *testing.T, d *datadriven.TestData) (th threshold) {
 	scanArg(t, d, "lower_bound", &th.value)
 	th.thresholdType = lowerBound
 	return th
+}
+
+// loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
+// the given configNam, or panics if no match is found in existing
+// configurations.
+func loadClusterInfo(configName string) gen.LoadedCluster {
+	clusterInfo := gen.GetClusterInfo(configName)
+	return gen.LoadedCluster{
+		Info: clusterInfo,
+	}
+}
+
+// PlotAllHistory outputs stat plots for the provided asim history array into
+// the given strings.Builder buf.
+func plotAllHistory(runs []asim.History, buf *strings.Builder) {
+	settings := defaultPlotSettings()
+	stat, height, width := settings.stat, settings.height, settings.width
+	for i := 0; i < len(runs); i++ {
+		history := runs[i]
+		ts := metrics.MakeTS(history.Recorded)
+		statTS := ts[stat]
+		buf.WriteString("\n")
+		buf.WriteString(asciigraph.PlotMany(
+			statTS,
+			asciigraph.Caption(stat),
+			asciigraph.Height(height),
+			asciigraph.Width(width),
+		))
+		buf.WriteString("\n")
+	}
+}
+
+// checkAssertions checks the given history and assertions, returning (bool,
+// reason) indicating any failures and reasons if any assertions fail.
+func checkAssertions(
+	ctx context.Context, history asim.History, assertions []SimulationAssertion,
+) (bool, string) {
+	assertionFailures := []string{}
+	failureExists := false
+	for _, assertion := range assertions {
+		if holds, reason := assertion.Assert(ctx, history); !holds {
+			failureExists = true
+			assertionFailures = append(assertionFailures, reason)
+		}
+	}
+	if failureExists {
+		return true, strings.Join(assertionFailures, "")
+	}
+	return false, ""
 }
