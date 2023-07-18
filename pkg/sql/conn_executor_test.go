@@ -1508,6 +1508,36 @@ func TestInjectRetryErrors(t *testing.T) {
 		_, err = db.ExecContext(ctx, "DROP TABLE t")
 		require.NoError(t, err)
 	})
+
+	t.Run("read_committed_txn", func(t *testing.T) {
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit())
+		require.Equal(t, 3, txRes)
+	})
+
+	t.Run("read_committed_txn_retries_exceeded", func(t *testing.T) {
+		// inject_retry_errors_enabled is hardcoded to always inject an error
+		// 3 times, so if we lower max_retries_for_read_committed,
+		// the error should bubble up to the client.
+		_, err := db.Exec("SET max_retries_for_read_committed = 2")
+		require.NoError(t, err)
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pqErr)
+		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+		require.NoError(t, tx.Rollback())
+	})
 }
 
 func TestInjectRetryOnCommitErrors(t *testing.T) {
