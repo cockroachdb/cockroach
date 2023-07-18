@@ -420,8 +420,11 @@ func requireReplicatedTime(targetTime hlc.Timestamp, progress *jobspb.Progress) 
 }
 
 func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int) {
-	// Create a source table with multiple ranges spread across multiple nodes
-	numRanges := 10
+	// Create a source table with multiple ranges spread across multiple nodes. We
+	// need around 50 or more ranges because there are already over 50 system
+	// ranges, so if we write just a few ranges those might all be on a single
+	// server, which will cause the test to flake.
+	numRanges := 50
 	rowsPerRange := 20
 	c.SrcTenantSQL.Exec(t, "CREATE TABLE d.scattered (key INT PRIMARY KEY)")
 	c.SrcTenantSQL.Exec(t, "INSERT INTO d.scattered (key) SELECT * FROM generate_series(1, $1)",
