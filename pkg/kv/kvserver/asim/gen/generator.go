@@ -209,6 +209,8 @@ type PlacementType int
 const (
 	Uniform PlacementType = iota
 	Skewed
+	Random
+	WeightedRandom
 )
 
 // BaseRanges provides basic ranges functionality and are embedded in
@@ -222,12 +224,18 @@ type BaseRanges struct {
 
 // getRangesInfo generates RangesInfo, with its distribution defined by
 // PlacementType and other configurations determined by BaseRanges fields.
-func (b BaseRanges) getRangesInfo(pType PlacementType, numOfStores int) state.RangesInfo {
+func (b BaseRanges) getRangesInfo(
+	pType PlacementType, randSource *rand.Rand, weightedRandom []float64, stores int,
+) state.RangesInfo {
 	switch pType {
 	case Uniform:
 		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	case Skewed:
-		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoSkewedDistribution(stores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case WeightedRandom:
+		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case Random:
+		return state.RangesInfoRandDistribution(randSource, stores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	default:
 		panic(fmt.Sprintf("unexpected range placement type %v", pType))
 	}
@@ -250,6 +258,9 @@ type BasicRanges struct {
 func NewBasicRanges(
 	ranges int, placementType PlacementType, keySpace int, replicationFactor int, bytes int64,
 ) BasicRanges {
+	if placementType == WeightedRandom || placementType == Random {
+		panic(fmt.Sprintf("basic ranges cannot use randomized type %v", placementType))
+	}
 	return BasicRanges{
 		BaseRanges: BaseRanges{
 			Ranges:            ranges,
