@@ -42,8 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
+	"github.com/klauspost/compress/zip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -219,6 +222,81 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		require.True(t, strings.Contains(string(goroutines), fmt.Sprintf("labels: {\"foo\":\"bar\", \"job\":\"IMPORT id=%d\", \"n\":\"1\"}", importJobID)))
 		require.True(t, strings.Contains(string(goroutines), "github.com/cockroachdb/cockroach/pkg/sql_test.fakeExecResumer.Resume"))
+	})
+
+	t.Run("read/write terminal trace", func(t *testing.T) {
+		jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return fakeExecResumer{
+				OnResume: func(ctx context.Context) error {
+					sp := tracing.SpanFromContext(ctx)
+					require.NotNil(t, sp)
+					sp.RecordStructured(&types.StringValue{Value: "should see this"})
+					return nil
+				},
+			}
+		}, jobs.UsesTenantCostControl)
+		var importJobID int
+		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
+		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
+		trace := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "resumer-trace")
+		require.True(t, strings.Contains(string(trace), "should see this"))
+	})
+
+	t.Run("read/write active trace", func(t *testing.T) {
+		blockCh := make(chan struct{})
+		continueCh := make(chan struct{})
+		defer close(blockCh)
+		defer close(continueCh)
+		jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return fakeExecResumer{
+				OnResume: func(ctx context.Context) error {
+					_, childSp := tracing.ChildSpan(ctx, "child")
+					defer childSp.Finish()
+					blockCh <- struct{}{}
+					<-continueCh
+					return nil
+				},
+			}
+		}, jobs.UsesTenantCostControl)
+		var importJobID int
+		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
+		<-blockCh
+		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
+		activeTraces := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "trace")
+		continueCh <- struct{}{}
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
+		unzip, err := zip.NewReader(bytes.NewReader(activeTraces), int64(len(activeTraces)))
+		require.NoError(t, err)
+
+		// Make sure the bundle contains the expected list of files.
+		var files []string
+		for _, f := range unzip.File {
+			t.Logf("found file: %s", f.Name)
+			if f.UncompressedSize64 == 0 {
+				t.Fatalf("file %s is empty", f.Name)
+			}
+			files = append(files, f.Name)
+
+			r, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			contents := string(bytes)
+
+			// Verify some contents in the active traces.
+			if strings.Contains(f.Name, ".txt") {
+				require.Regexp(t, "[child: {count: 1, duration.*, unfinished}]", contents)
+			} else if strings.Contains(f.Name, ".json") {
+				require.True(t, strings.Contains(contents, "\"operationName\": \"child\""))
+			}
+		}
+		require.Equal(t, []string{"node1-trace.txt", "node1-jaeger.json"}, files)
 	})
 }
 

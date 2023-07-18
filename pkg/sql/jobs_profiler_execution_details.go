@@ -29,7 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
 )
 
@@ -186,6 +189,7 @@ func (p *planner) RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.
 	// parallelize the collection of the various pieces.
 	e.addDistSQLDiagram(ctx)
 	e.addLabelledGoroutines(ctx)
+	e.addClusterWideTraces(ctx)
 
 	return nil
 }
@@ -220,12 +224,12 @@ func (e *executionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
 	}
 	resp, err := e.srv.Profile(ctx, &profileRequest)
 	if err != nil {
-		log.Errorf(ctx, "failed to collect goroutines for job %d: %+v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to collect goroutines for job %d: %v", e.jobID, err.Error())
 		return
 	}
 	filename := fmt.Sprintf("goroutines.%s.txt", timeutil.Now().Format("20060102_150405.00"))
 	if err := jobs.WriteExecutionDetailFile(ctx, filename, resp.Data, e.db, e.jobID); err != nil {
-		log.Errorf(ctx, "failed to write goroutine for job %d: %+v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to write goroutine for job %d: %v", e.jobID, err.Error())
 	}
 }
 
@@ -235,7 +239,7 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	row, err := e.db.Executor().QueryRowEx(ctx, "profiler-bundler-add-diagram", nil, /* txn */
 		sessiondata.NoSessionDataOverride, query, e.jobID)
 	if err != nil {
-		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
 		return
 	}
 	if row[0] != tree.DNull {
@@ -244,7 +248,45 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 		if err := jobs.WriteExecutionDetailFile(ctx, filename,
 			[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL)),
 			e.db, e.jobID); err != nil {
-			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
+			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
 		}
+	}
+}
+
+// addClusterWideTraces generates and persists a `trace.<timestamp>.zip` file
+// that captures the active tracing spans of a job on all nodes in the cluster.
+func (e *executionDetailsBuilder) addClusterWideTraces(ctx context.Context) {
+	z := zipper.MakeInternalExecutorInflightTraceZipper(e.db.Executor())
+
+	var traceID tracingpb.TraceID
+	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
+		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.Newf("progress not found found job %d", e.jobID)
+		}
+		var progress jobspb.Progress
+		if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+			return errors.New("failed to unmarshal progress bytes")
+		}
+		traceID = progress.TraceID
+		return nil
+	}); err != nil {
+		log.Errorf(ctx, "failed to fetch trace ID for job %d: %v", e.jobID, err.Error())
+		return
+	}
+
+	zippedTrace, err := z.Zip(ctx, int64(traceID))
+	if err != nil {
+		log.Errorf(ctx, "failed to collect cluster wide traces for job %d: %v", e.jobID, err.Error())
+		return
+	}
+
+	filename := fmt.Sprintf("trace.%s.zip", timeutil.Now().Format("20060102_150405.00"))
+	if err := jobs.WriteExecutionDetailFile(ctx, filename, zippedTrace, e.db, e.jobID); err != nil {
+		log.Errorf(ctx, "failed to write traces for job %d: %v", e.jobID, err.Error())
 	}
 }
