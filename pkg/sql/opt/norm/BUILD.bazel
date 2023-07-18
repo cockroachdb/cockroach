@@ -24,6 +24,7 @@ go_library(
         "scalar_funcs.go",
         "select_funcs.go",
         "set_funcs.go",
+        "subquery_funcs.go",
         "window_funcs.go",
         "with_funcs.go",
         ":gen-factory",  # keep

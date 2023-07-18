@@ -1,0 +1,14 @@
+# =============================================================================
+# subquery.opt contains normalization patterns that try to simplify subqueries.
+# =============================================================================
+
+# EliminateConstValuesSubquery replaces a subquery with a constant value if the
+# subquery's input is a single-row, single-column Values expression with a
+# constant value.
+[EliminateConstValueSubquery, Normalize]
+(Subquery
+    (Values $rows:*) &
+        (Let ($constant $ok):(SingleConstValue $rows) $ok)
+)
+=>
+$constant
