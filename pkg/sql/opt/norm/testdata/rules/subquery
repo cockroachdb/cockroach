@@ -1,0 +1,105 @@
+exec-ddl
+CREATE TABLE t (
+  a INT,
+  b INT
+)
+----
+
+# --------------------------------------------------
+# EliminateConstValueSubquery
+# --------------------------------------------------
+
+norm expect=EliminateConstValueSubquery
+SELECT (SELECT 1)
+----
+values
+ ├── columns: "?column?":2!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── (1,)
+
+norm expect=EliminateConstValueSubquery
+SELECT * FROM t WHERE a = (SELECT 1)
+----
+select
+ ├── columns: a:1!null b:2
+ ├── fd: ()-->(1)
+ ├── scan t
+ │    └── columns: a:1 b:2
+ └── filters
+      └── a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect=EliminateConstValueSubquery
+SELECT * FROM t WHERE a >= (SELECT 1)
+----
+select
+ ├── columns: a:1!null b:2
+ ├── scan t
+ │    └── columns: a:1 b:2
+ └── filters
+      └── a:1 >= 1 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+
+# Cannot eliminate multi-row values subquery.
+norm expect-not=EliminateConstValueSubquery
+SELECT (VALUES (1), (2))
+----
+values
+ ├── columns: column1:2
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: column1:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── values
+                     ├── columns: column1:1!null
+                     ├── cardinality: [2 - 2]
+                     ├── (1,)
+                     └── (2,)
+
+# Cannot eliminate multi-column values subquery.
+norm expect-not=EliminateConstValueSubquery
+SELECT (1, 2) = (SELECT 1, 2)
+----
+values
+ ├── columns: "?column?":4
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── eq
+           ├── (1, 2)
+           └── subquery
+                └── values
+                     ├── columns: column3:3
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(3)
+                     └── ((1, 2),)
+
+# Cannot eliminate non-constant values subquery.
+norm expect-not=EliminateConstValueSubquery
+SELECT (SELECT gen_random_uuid())
+----
+values
+ ├── columns: gen_random_uuid:2
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: gen_random_uuid:1
+                ├── cardinality: [1 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── (gen_random_uuid(),)

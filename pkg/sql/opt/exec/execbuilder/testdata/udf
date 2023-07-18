@@ -9,7 +9,7 @@ CREATE TABLE t (
 INSERT INTO t VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1);
 
 statement ok
-CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+CREATE FUNCTION one() RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT 1';
 
 query T
 EXPLAIN SELECT one()
@@ -27,7 +27,7 @@ distribution: local
 vectorized: true
 ·
 • filter
-│ filter: a = one()
+│ filter: a = 1
 │
 └── • scan
       missing stats
@@ -258,6 +258,51 @@ vectorized: true
     │
     └── • emptyrow
           columns: ()
+
+# Immutable UDFs can be inlined for index-acceleration.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM t WHERE k = one()
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, a)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+
+statement ok
+CREATE FUNCTION num(n INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT n
+$$
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM t WHERE k = num(2)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, a)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /2/0
+
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM t WHERE k >= num(2)
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, a)
+  estimated row count: 333 (missing stats)
+  table: t@t_pkey
+  spans: /2-
 
 
 subtest regressions
