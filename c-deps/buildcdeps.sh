@@ -11,10 +11,7 @@ bundle() {
 }
 
 for CONFIG in $CONFIGS; do
-    TARGETS="libproj libjemalloc"
-    if [[ $CONFIG != windows ]]; then
-        TARGETS="$TARGETS libgeos"
-    fi
+    TARGETS="libgeos libproj libjemalloc"
     if [[ $CONFIG == linux* ]]; then
         TARGETS="$TARGETS libkrb5"
     fi
