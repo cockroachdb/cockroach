@@ -286,18 +286,23 @@ func (g *gcsStorage) ReadFile(
 	}
 
 	r := cloud.NewResumingReader(ctx,
-		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+		func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
 			length := int64(-1)
 			if endPos != 0 {
 				length = endPos - pos
 				if length <= 0 {
-					return nil, io.EOF
+					return nil, 0, io.EOF
 				}
 			}
-			return g.bucket.Object(object).NewRangeReader(ctx, pos, length)
+			r, err := g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
+			if err != nil {
+				return nil, 0, err
+			}
+			return r, r.Attrs.Size, nil
 		}, // opener
 		nil, //  reader
 		opts.Offset,
+		0,
 		object,
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, g.settings),
 		nil, // errFn
