@@ -541,3 +541,8 @@ func (ep *fakeGetMultiregionConfigPlanner) GetRangeDescByID(
 ) (rangeDesc roachpb.RangeDescriptor, err error) {
 	return
 }
+
+// Optimizer is part of the cat.Catalog interface.
+func (ep *fakeGetMultiregionConfigPlanner) Optimizer() interface{} {
+	return nil
+}
