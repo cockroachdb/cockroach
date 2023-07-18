@@ -417,6 +417,7 @@ func restore(
 				numImportSpans,
 				simpleImportSpans,
 				progCh,
+				genSpan,
 			)
 		}
 		return distRestore(
@@ -3151,6 +3152,7 @@ func sendAddRemoteSSTs(
 	numImportSpans int,
 	useSimpleImportSpans bool,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) error {
 	defer close(progCh)
 
@@ -3161,59 +3163,59 @@ func sendAddRemoteSSTs(
 	if encryption != nil {
 		return errors.AssertionFailedf("encryption not supported with online restore")
 	}
-
-	backups, _, err := backupinfo.LoadBackupManifestsAtTime(ctx, nil, uris,
-		execCtx.User(), execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, restoreTime)
-	if err != nil {
-		return err
+	if useSimpleImportSpans {
+		return errors.AssertionFailedf("useSimpleImportSpans is not supported with online restore")
+	}
+	if len(uris) > 1 {
+		return errors.AssertionFailedf("online restore can only restore data from a full backup")
 	}
 
-	layers, err := backupinfo.GetBackupManifestIterFactories(ctx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage,
-		backups, encryption, kmsEnv)
-	if err != nil {
-		return err
-	}
+	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
 
-	for i, backup := range backups {
-		remainingBytesInTargetRange := int64(512 << 20)
-		iter, err := layers[i].NewFileIter(ctx)
-		if err != nil {
-			return err
-		}
-		for ; ; iter.Next() {
-			if ok, err := iter.Valid(); err != nil || !ok {
-				return err
-			}
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		return genSpan(ctx, restoreSpanEntriesCh)
+	})
+	remainingBytesInTargetRange := int64(512 << 20)
+	for entry := range restoreSpanEntriesCh {
+		for i, file := range entry.Files {
 
-			file := iter.Value()
+			log.Infof(ctx, "Experimental restore: sending span %s of file %s",
+				file.BackupFileEntrySpan, file.Path)
 
-			log.Infof(ctx, "Experimental restore: sending span %s of file %s from backup %s",
-				file.Span, file.Path, backup.Dir.String(),
-			)
-			if file.EntryCounts.DataSize > remainingBytesInTargetRange {
+			restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
+
+			// NB: Since the restored span is a subset of the BackupFileEntrySpan,
+			// these counts may be an overestimate of what actually gets restored.
+			counts := file.BackupFileEntryCounts
+
+			if counts.DataSize > remainingBytesInTargetRange {
 				log.Infof(ctx, "Experimental restore: need to split since %d > %d",
-					file.EntryCounts.DataSize, remainingBytesInTargetRange,
+					counts.DataSize, remainingBytesInTargetRange,
 				)
 				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, file.Span.Key, expiration); err != nil {
+				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
 					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 				}
-				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, file.Span.Key, 4<<20); err != nil {
+				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
 					log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 				}
 			}
+
 			loc := kvpb.AddSSTableRequest_RemoteFile{Locator: uris[i], Path: file.Path}
 			// TODO(dt): see if KV has any better ideas for making these up.
-			stats := &enginepb.MVCCStats{
+			fileStats := &enginepb.MVCCStats{
 				ContainsEstimates: 1,
-				KeyBytes:          file.EntryCounts.DataSize / 2,
-				ValBytes:          file.EntryCounts.DataSize / 2,
-				LiveBytes:         file.EntryCounts.DataSize,
-				KeyCount:          file.EntryCounts.Rows + file.EntryCounts.IndexEntries,
-				LiveCount:         file.EntryCounts.Rows + file.EntryCounts.IndexEntries,
+				KeyBytes:          counts.DataSize / 2,
+				ValBytes:          counts.DataSize / 2,
+				LiveBytes:         counts.DataSize,
+				KeyCount:          counts.Rows + counts.IndexEntries,
+				LiveCount:         counts.Rows + counts.IndexEntries,
 			}
 			var err error
-			_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx, file.Span, loc, stats)
+			_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
+				restoringSubspan, loc,
+				fileStats)
 			if err != nil {
 				return err
 			}
