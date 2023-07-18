@@ -5841,9 +5841,8 @@ func TestBatchedInsertStats(t *testing.T) {
 	params := base.TestServerArgs{Knobs: base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}}
-	server, db, _ := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
-	s := server.TenantOrServer()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)

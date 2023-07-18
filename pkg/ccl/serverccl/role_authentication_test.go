@@ -33,20 +33,13 @@ func TestVerifyPassword(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			// One of the sub-tests fails.
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106903),
-		},
-	)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-
-	ts := s.TenantOrServer()
 
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the
 		// race detector is on.
-		security.BcryptCost.Override(ctx, &ts.ClusterSettings().SV, int64(bcrypt.MinCost))
+		security.BcryptCost.Override(ctx, &s.ClusterSettings().SV, int64(bcrypt.MinCost))
 	}
 
 	//location is used for timezone testing.

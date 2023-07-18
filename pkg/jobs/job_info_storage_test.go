@@ -319,7 +319,6 @@ func TestJobInfoUpgradeRegressionTests(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
-	tenantOrServer := s.TenantOrServer()
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -371,7 +370,7 @@ func TestJobInfoUpgradeRegressionTests(t *testing.T) {
 	// Now that we have 2 rows for each payload and progress, let us test that we
 	// read the latest one. Note, running the Update should also get rid of the
 	// older revisions of the payload and progress.
-	execCfg := tenantOrServer.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
 	require.NoError(t, err)
 	err = j.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
