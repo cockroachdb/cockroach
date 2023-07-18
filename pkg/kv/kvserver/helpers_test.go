@@ -319,7 +319,7 @@ func (r *Replica) RaftUnlock() {
 }
 
 func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
-	return r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportUnreachable(uint64(id))
 		return false /* unquiesceAndWakeLeader */, nil
 	})
@@ -360,7 +360,7 @@ func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var appliedIndex kvpb.RaftIndex
-	err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
+	err := r.withRaftGroupLocked(func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
 		appliedIndex = kvpb.RaftIndex(r.BasicStatus().Applied)
 		return false, nil
 	})
@@ -437,12 +437,6 @@ func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.lastTermNotDurable
-}
-
-func (r *Replica) IsRaftGroupInitialized() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.internalRaftGroup != nil
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
@@ -557,7 +551,7 @@ func (r *Replica) MaybeUnquiesceAndPropose() (bool, error) {
 	if !r.canUnquiesceRLocked() {
 		return false, nil
 	}
-	return true, r.withRaftGroupLocked(false, func(r *raft.RawNode) (bool, error) {
+	return true, r.withRaftGroupLocked(func(r *raft.RawNode) (bool, error) {
 		if err := r.Propose(nil); err != nil {
 			return false, err
 		}

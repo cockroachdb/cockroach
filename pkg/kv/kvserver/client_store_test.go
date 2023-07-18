@@ -112,7 +112,7 @@ func TestStoreRaftReplicaID(t *testing.T) {
 }
 
 // TestStoreLoadReplicaQuiescent tests whether replicas are initially quiescent
-// when loaded during store start, with lazy Raft group initialization. Epoch
+// when loaded during store start, with eager Raft group initialization. Epoch
 // lease ranges should be quiesced, but expiration leases shouldn't.
 func TestStoreLoadReplicaQuiescent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -173,12 +173,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		var err error
 		repl, _, err = tc.Server(0).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
-		if expOnly {
-			require.False(t, repl.IsQuiescent())
-			require.NotNil(t, repl.RaftStatus())
-		} else {
-			require.True(t, repl.IsQuiescent())
-			require.Nil(t, repl.RaftStatus())
-		}
+		require.NotNil(t, repl.RaftStatus())
+		require.Equal(t, !expOnly, repl.IsQuiescent())
 	})
 }

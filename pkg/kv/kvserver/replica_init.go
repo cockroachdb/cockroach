@@ -58,7 +58,7 @@ func loadInitializedReplicaForTesting(
 
 // newInitializedReplica creates an initialized Replica from its loaded state.
 func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*Replica, error) {
-	r := newUninitializedReplica(store, loaded.ReplState.Desc.RangeID, loaded.ReplicaID)
+	r := newUninitializedReplicaWithoutRaftGroup(store, loaded.ReplState.Desc.RangeID, loaded.ReplicaID)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -71,11 +71,31 @@ func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*
 
 // newUninitializedReplica constructs an uninitialized Replica with the given
 // range/replica ID. The returned replica remains uninitialized until
-// Replica.loadRaftMuLockedReplicaMuLocked() is called.
+// Replica.initRaftMuLockedReplicaMuLocked() is called, but has a temporary Raft
+// group that can be used e.g. for elections or snapshot application.
 //
 // TODO(#94912): we actually have another initialization path which should be
 // refactored: Replica.initFromSnapshotLockedRaftMuLocked().
 func newUninitializedReplica(
+	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) (*Replica, error) {
+	r := newUninitializedReplicaWithoutRaftGroup(store, rangeID, replicaID)
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.initRaftGroupRaftMuLockedReplicaMuLocked(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// newUninitializedReplicaWithoutRaftGroup creates a new uninitialized replica
+// without a Raft group. Use either newInitializedReplica() or
+// newUninitializedReplica() instead. This only exists for
+// newInitializedReplica() to avoid creating the Raft group twice (once when
+// creating the uninitialized replica, and once when initializing it).
+func newUninitializedReplicaWithoutRaftGroup(
 	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) *Replica {
 	uninitState := stateloader.UninitializedReplicaState(rangeID)
@@ -186,10 +206,6 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 
 // initRaftMuLockedReplicaMuLocked initializes the Replica using the state
 // loaded from storage. Must not be called more than once on a Replica.
-//
-// This method is called in:
-// - loadInitializedReplicaForTesting, to finalize creating an initialized replica;
-// - splitPostApply, to initialize a previously uninitialized replica.
 func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState) error {
 	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
@@ -206,14 +222,18 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 
 	r.setStartKeyLocked(desc.StartKey)
 
-	// Clear the internal raft group in case we're being reset. Since we're
-	// reloading the raft state below, it isn't safe to use the existing raft
-	// group.
-	r.mu.internalRaftGroup = nil
-
 	r.mu.state = s.ReplState
 	r.mu.lastIndexNotDurable = s.LastIndex
 	r.mu.lastTermNotDurable = invalidLastTerm
+
+	// Initialize the Raft group. This may replace a Raft group that was installed
+	// for the uninitialized replica to process Raft requests or snapshots.
+	//
+	// We do this before the call to setDescLockedRaftMuLocked(), since it flips
+	// isInitialized and we'd like the Raft group to be in place before then.
+	if err := r.initRaftGroupRaftMuLockedReplicaMuLocked(); err != nil {
+		return err
+	}
 
 	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
 
@@ -229,6 +249,23 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
+	return nil
+}
+
+// initRaftGroupRaftMuLockedReplicaMuLocked initializes a Raft group for the
+// replica, replacing the existing Raft group if any.
+func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
+	rg, err := raft.NewRawNode(newRaftConfig(
+		raft.Storage((*replicaRaftStorage)(r)),
+		uint64(r.replicaID),
+		r.mu.state.RaftAppliedIndex,
+		r.store.cfg,
+		&raftLogger{ctx: r.AnnotateCtx(context.Background())},
+	))
+	if err != nil {
+		return err
+	}
+	r.mu.internalRaftGroup = rg
 	return nil
 }
 
@@ -264,38 +301,6 @@ func (r *Replica) TenantID() (roachpb.TenantID, bool) {
 
 func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
 	return r.mu.tenantID, r.mu.tenantID != (roachpb.TenantID{})
-}
-
-// maybeInitializeRaftGroup check whether the internal Raft group has
-// not yet been initialized. If not, it is created and set to campaign
-// if this replica is the most recent owner of the range lease.
-func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
-	r.mu.RLock()
-	// If this replica hasn't initialized the Raft group, create it and
-	// unquiesce and wake the leader to ensure the replica comes up to date.
-	initialized := r.mu.internalRaftGroup != nil
-	// If this replica has been removed or is in the process of being removed
-	// then it'll never handle any raft events so there's no reason to initialize
-	// it now.
-	removed := !r.mu.destroyStatus.IsAlive()
-	r.mu.RUnlock()
-	if initialized || removed {
-		return
-	}
-
-	// Acquire raftMu, but need to maintain lock ordering (raftMu then mu).
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// If we raced on checking the destroyStatus above that's fine as
-	// the below withRaftGroupLocked will no-op.
-	if err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		return true, nil
-	}); err != nil && !errors.Is(err, errRemoved) {
-		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
-	}
 }
 
 // setDescRaftMuLocked atomically sets the replica's descriptor. It requires raftMu to be
