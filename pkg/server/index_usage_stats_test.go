@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -261,7 +263,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 
 	// Test cluster-wide RPC.
 	var resp serverpb.IndexUsageStatisticsResponse
-	err = getStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
+	err = srvtestutils.GetStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
 	require.NoError(t, err)
 
 	statsEntries := 0
@@ -292,7 +294,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	_, err = secondServerSQLConn.Exec("SELECT k, a FROM t WHERE a = 0")
 	require.NoError(t, err)
 
-	err = getStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
+	err = srvtestutils.GetStatusJSONProto(thirdServer, "indexusagestatistics", &resp)
 	require.NoError(t, err)
 
 	statsEntries = 0
@@ -360,7 +362,7 @@ CREATE TABLE schema.test_table (
 `)
 
 	// Get Table IDs.
-	userName, err := userFromIncomingRPCContext(ctx)
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
 	require.NoError(t, err)
 
 	testCases := []struct {

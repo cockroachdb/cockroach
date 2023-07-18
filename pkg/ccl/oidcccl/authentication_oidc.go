@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -293,7 +293,7 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-) (server.OIDC, error) {
+) (authserver.OIDC, error) {
 	oidcAuthentication := &oidcAuthenticationServer{}
 
 	// Don't want to use GRPC here since these endpoints require HTTP-Redirect behaviors and the
@@ -719,5 +719,5 @@ var ConfigureOIDC = func(
 }
 
 func init() {
-	server.ConfigureOIDC = ConfigureOIDC
+	authserver.ConfigureOIDC = ConfigureOIDC
 }
