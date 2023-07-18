@@ -3157,6 +3157,7 @@ authentication failure.
 | 5 | PRE_HOOK_ERROR | occurs when the authentication handshake encountered a protocol error. |
 | 6 | CREDENTIALS_INVALID | occurs when the client-provided credentials were invalid. |
 | 7 | CREDENTIALS_EXPIRED | occur when the credentials provided by the client are expired. |
+| 8 | NO_REPLICATION_ROLEOPTION | occurs when the connection requires a replication role option, but the user does not have it. |
 
 
 

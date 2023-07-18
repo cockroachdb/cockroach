@@ -12,6 +12,7 @@ package pgrepl_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 
@@ -28,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConnect(t *testing.T) {
+func TestReplicationConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -38,23 +39,57 @@ func TestConnect(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE USER testuser`)
+
+	sqlDB.Exec(t, `CREATE ROLE replicationsystempriv`)
+	sqlDB.Exec(t, `GRANT SYSTEM REPLICATION TO replicationsystempriv`)
 
 	for _, tc := range []struct {
 		replicationMode    string
 		expectedSessionVar string
-		expectError        bool
+		useRoot            bool
+		hasPrivilege       bool
+		hasGrant           bool
+		expectErrorCode    pgcode.Code
 	}{
+		{replicationMode: "", hasPrivilege: true, expectedSessionVar: "off"},
+		{replicationMode: "0", hasPrivilege: true, expectedSessionVar: "off"},
+		{replicationMode: "1", hasPrivilege: true, expectedSessionVar: "on"},
+		{replicationMode: "false", hasPrivilege: true, expectedSessionVar: "off"},
+		{replicationMode: "true", hasPrivilege: true, expectedSessionVar: "on"},
+		{replicationMode: "database", hasPrivilege: true, expectedSessionVar: "database"},
+		{replicationMode: "asdf", hasPrivilege: true, expectErrorCode: pgcode.InvalidParameterValue},
+
+		{replicationMode: "true", hasGrant: true, expectedSessionVar: "on"},
+		{replicationMode: "database", hasGrant: true, expectedSessionVar: "database"},
+
+		{replicationMode: "true", useRoot: true, expectedSessionVar: "on"},
+		{replicationMode: "database", useRoot: true, expectedSessionVar: "database"},
+
 		{replicationMode: "", expectedSessionVar: "off"},
-		{replicationMode: "0", expectedSessionVar: "off"},
-		{replicationMode: "1", expectedSessionVar: "on"},
 		{replicationMode: "false", expectedSessionVar: "off"},
-		{replicationMode: "true", expectedSessionVar: "on"},
-		{replicationMode: "database", expectedSessionVar: "database"},
-		{replicationMode: "asdf", expectError: true},
+		{replicationMode: "true", expectErrorCode: pgcode.InsufficientPrivilege},
+		{replicationMode: "database", expectErrorCode: pgcode.InsufficientPrivilege},
+		{replicationMode: "asdf", expectErrorCode: pgcode.InvalidParameterValue},
 	} {
-		t.Run(tc.replicationMode, func(t *testing.T) {
-			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "pgrepl_conn_test", url.User(username.TestUser))
+		t.Run(fmt.Sprintf("hasPrivilege=%t/useRoot=%t/hasGrant=%t/replicationMode=%s", tc.hasPrivilege, tc.useRoot, tc.hasGrant, tc.replicationMode), func(t *testing.T) {
+			sqlDB.Exec(t, `DROP USER IF EXISTS testuser`)
+			sqlDB.Exec(t, `CREATE USER testuser LOGIN`)
+
+			if tc.hasPrivilege {
+				sqlDB.Exec(t, `ALTER USER testuser REPLICATION`)
+			} else {
+				sqlDB.Exec(t, `ALTER USER testuser NOREPLICATION`)
+			}
+
+			if tc.hasGrant {
+				sqlDB.Exec(t, `GRANT replicationsystempriv TO testuser`)
+			}
+
+			u := url.User(username.TestUser)
+			if tc.useRoot {
+				u = url.User(username.RootUser)
+			}
+			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "pgrepl_conn_test", u)
 			defer cleanup()
 
 			cfg, err := pgx.ParseConfig(pgURL.String())
@@ -65,11 +100,11 @@ func TestConnect(t *testing.T) {
 
 			ctx := context.Background()
 			conn, err := pgx.ConnectConfig(ctx, cfg)
-			if tc.expectError {
+			if tc.expectErrorCode != (pgcode.Code{}) {
 				require.Error(t, err)
 				var pgErr *pgconn.PgError
 				require.True(t, errors.As(err, &pgErr))
-				require.Equal(t, pgcode.InvalidParameterValue.String(), pgErr.Code)
+				require.Equal(t, tc.expectErrorCode.String(), pgErr.Code)
 				return
 			}
 			require.NoError(t, err)

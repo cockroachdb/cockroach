@@ -183,3 +183,19 @@ CREATE USER foo WITH VALID UNTIL '1970-01-01' -- normalized!
 CREATE USER foo WITH VALID UNTIL ('1970-01-01') -- fully parenthesized
 CREATE USER foo WITH VALID UNTIL '_' -- literals removed
 CREATE USER _ WITH VALID UNTIL '1970-01-01' -- identifiers removed
+
+parse
+CREATE USER foo REPLICATION
+----
+CREATE USER foo WITH REPLICATION -- normalized!
+CREATE USER foo WITH REPLICATION -- fully parenthesized
+CREATE USER foo WITH REPLICATION -- literals removed
+CREATE USER _ WITH REPLICATION -- identifiers removed
+
+parse
+CREATE USER foo NOREPLICATION
+----
+CREATE USER foo WITH NOREPLICATION -- normalized!
+CREATE USER foo WITH NOREPLICATION -- fully parenthesized
+CREATE USER foo WITH NOREPLICATION -- literals removed
+CREATE USER _ WITH NOREPLICATION -- identifiers removed
