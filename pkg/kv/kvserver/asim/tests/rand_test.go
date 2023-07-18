@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultNumIterations = 5
+	defaultNumIterations = 3
 	defaultSeed          = 42
 	defaultDuration      = 30 * time.Minute
 )
@@ -33,6 +33,7 @@ type settings struct {
 	duration      time.Duration
 	randSource    *rand.Rand
 	verbose       bool
+	weightedRand  []float64 // TODO: set to empty if rangeGen is not randomized
 }
 
 func defaultSettings(randSource *rand.Rand) *settings {
@@ -41,6 +42,7 @@ func defaultSettings(randSource *rand.Rand) *settings {
 		duration:      defaultDuration,
 		randSource:    randSource,
 		verbose:       false,
+		weightedRand:  []float64{},
 	}
 }
 
@@ -48,12 +50,13 @@ func runRandTest(
 	randSource *rand.Rand, duration time.Duration, randOptions map[string]bool,
 ) (asim.History, bool, string) {
 	ctx := context.Background()
-	cluster := getCluster(randSource, randOptions["cluster"])
-	ranges := getRanges(randOptions["ranges"])
-	load := getLoad(randOptions["load"])
-	staticSettings := getStaticSettings(randOptions["static_settings"])
-	staticEvents := getStaticEvents(randOptions["static_events"])
-	assertions := getAssertions(randOptions["assertions"])
+	f := newRandTestingFramework(randSource, randOptions)
+	cluster := f.getCluster()
+	ranges := f.getRanges()
+	load := f.getLoad()
+	staticSettings := f.getStaticSettings()
+	staticEvents := f.getStaticEvents()
+	assertions := f.getAssertions()
 	simulator := gen.GenerateSimulation(duration, cluster, ranges, load, staticSettings, staticEvents, randSource.Int63())
 	simulator.RunSim(ctx)
 	history := simulator.History()
@@ -96,10 +99,11 @@ func runRandTestRepeated(t *testing.T, settings *settings, randOptions map[strin
 // verbose - Boolean to enable detailed failure output.
 // randOptions - A map with (key: option, value: boolean indicating if the key
 // option should be randomized).
+// TODO(wenyihu6): print more useful info for output
 func TestRandomized(t *testing.T) {
 	randOptions := map[string]bool{
 		"cluster":         true,
-		"ranges":          false,
+		"ranges":          true,
 		"load":            false,
 		"static_settings": false,
 		"static_events":   false,

@@ -13,6 +13,7 @@ package tests
 import (
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
@@ -24,44 +25,71 @@ func randomClusterInfoGen(randSource *rand.Rand) gen.LoadedCluster {
 	return loadClusterInfo(chosenType)
 }
 
-func getCluster(randSource *rand.Rand, useRandom bool) gen.ClusterGen {
-	if !useRandom {
-		return defaultBasicClusterGen()
-	}
-	return randomClusterInfoGen(randSource)
+type RandomizedBasicRanges struct {
+	gen.BaseRanges
+	placementType gen.PlacementType
+	randSource    *rand.Rand
 }
 
-func getRanges(useRandom bool) gen.RangeGen {
-	if !useRandom {
-		return defaultBasicRangesGen()
+func NewRandomizedBasicRanges(
+	randSource *rand.Rand,
+	ranges int,
+	keySpace int,
+	placementType gen.PlacementType,
+	replicationFactor int,
+	bytes int64,
+) RandomizedBasicRanges {
+	if placementType == gen.WeightedRandom {
+		// BETTER WARNING
+		panic("cannot use randomized basic ranges")
 	}
-	return gen.BasicRanges{}
+	return RandomizedBasicRanges{
+		BaseRanges: gen.BaseRanges{
+			Ranges:            ranges,
+			KeySpace:          keySpace,
+			ReplicationFactor: replicationFactor,
+			Bytes:             bytes,
+		},
+		placementType: placementType,
+		randSource:    randSource,
+	}
 }
 
-func getLoad(useRandom bool) gen.LoadGen {
-	if !useRandom {
-		return defaultLoadGen()
-	}
-	return gen.BasicLoad{}
+var _ gen.RangeGen = &RandomizedBasicRanges{}
+
+func (r RandomizedBasicRanges) Generate(
+	seed int64, settings *config.SimulationSettings, s state.State,
+) state.State {
+	rangesInfo := r.GetRangesInfo(r.placementType, len(s.Stores()), r.randSource, []float64{})
+	r.LoadRangeInfo(s, rangesInfo)
+	return s
 }
 
-func getStaticSettings(useRandom bool) gen.StaticSettings {
-	if !useRandom {
-		return defaultStaticSettingsGen()
-	}
-	return gen.StaticSettings{}
+type WeightedRandomizedBasicRanges struct {
+	RandomizedBasicRanges
+	weightedRand []float64
 }
 
-func getStaticEvents(useRandom bool) gen.StaticEvents {
-	if !useRandom {
-		return defaultStaticEventsGen()
+var _ gen.RangeGen = &WeightedRandomizedBasicRanges{}
+
+func NewWeightedRandomizedBasicRanges(
+	randSource *rand.Rand,
+	weightedRand []float64,
+	ranges int,
+	keySpace int,
+	replicationFactor int,
+	bytes int64,
+) WeightedRandomizedBasicRanges {
+	return WeightedRandomizedBasicRanges{
+		RandomizedBasicRanges: NewRandomizedBasicRanges(randSource, ranges, keySpace, gen.WeightedRandom, replicationFactor, bytes),
+		weightedRand:          weightedRand,
 	}
-	return gen.StaticEvents{}
 }
 
-func getAssertions(useRandom bool) []SimulationAssertion {
-	if !useRandom {
-		return defaultAssertions()
-	}
-	return []SimulationAssertion{}
+func (wr WeightedRandomizedBasicRanges) Generate(
+	seed int64, settings *config.SimulationSettings, s state.State,
+) state.State {
+	rangesInfo := wr.GetRangesInfo(wr.placementType, len(s.Stores()), wr.randSource, wr.weightedRand)
+	wr.LoadRangeInfo(s, rangesInfo)
+	return s
 }

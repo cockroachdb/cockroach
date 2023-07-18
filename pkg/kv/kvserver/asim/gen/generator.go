@@ -213,6 +213,10 @@ const (
 	WeightedRandom
 )
 
+func GetAvailablePlacementTypes() []PlacementType {
+	return []PlacementType{Uniform, Skewed, Random}
+}
+
 // BaseRanges provides basic ranges functionality and are embedded in
 // other specialized range structs.
 type BaseRanges struct {
@@ -222,10 +226,10 @@ type BaseRanges struct {
 	Bytes             int64
 }
 
-// getRangesInfo generates RangesInfo, with its distribution defined by
+// GetRangesInfo generates RangesInfo, with its distribution defined by
 // PlacementType and other configurations determined by BaseRanges fields.
-func (b BaseRanges) getRangesInfo(
-	pType PlacementType, randSource *rand.Rand, weightedRandom []float64, stores int,
+func (b BaseRanges) GetRangesInfo(
+	pType PlacementType, stores int, randSource *rand.Rand, weightedRandom []float64,
 ) state.RangesInfo {
 	switch pType {
 	case Uniform:
@@ -242,7 +246,7 @@ func (b BaseRanges) getRangesInfo(
 }
 
 // LoadRangeInfo loads the given state with the specified rangesInfo.
-func (b BaseRanges) loadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
+func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 	for _, rangeInfo := range rangesInfo {
 		rangeInfo.Size = b.Bytes
 	}
@@ -277,8 +281,8 @@ func NewBasicRanges(
 func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
-	rangesInfo := br.getRangesInfo(br.PlacementType, len(s.Stores()))
-	br.loadRangeInfo(s, rangesInfo)
+	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
+	br.LoadRangeInfo(s, rangesInfo)
 	return s
 }
 

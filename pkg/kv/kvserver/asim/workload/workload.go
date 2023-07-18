@@ -164,6 +164,7 @@ func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
 
 // KeyGenerator generates read and write keys.
 type KeyGenerator interface {
+	Num() int64
 	writeKey() int64
 	readKey() int64
 	rand() *rand.Rand
@@ -188,6 +189,10 @@ func NewUniformKeyGen(min, max int64, rand *rand.Rand) KeyGenerator {
 		max:    max,
 		random: rand,
 	}
+}
+
+func (g *uniformGenerator) Num() int64 {
+	return g.random.Int63n(g.max-g.min) + g.min
 }
 
 func (g *uniformGenerator) writeKey() int64 {
@@ -227,6 +232,10 @@ func NewZipfianKeyGen(min, max int64, s float64, v float64, random *rand.Rand) K
 		random: random,
 		zipf:   rand.NewZipf(random, s, v, uint64(max-min)),
 	}
+}
+
+func (g *zipfianGenerator) Num() int64 {
+	return int64(g.zipf.Uint64()) + g.min
 }
 
 func (g *zipfianGenerator) writeKey() int64 {
