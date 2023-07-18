@@ -218,6 +218,9 @@ type TestTenantInterface interface {
 	// Tracer returns a reference to the tenant's Tracer.
 	Tracer() *tracing.Tracer
 
+	// TracerI is the same as Tracer but returns an interface{}.
+	TracerI() interface{}
+
 	// MigrationServer returns the tenant's migration server, which is used in
 	// upgrade testing.
 	MigrationServer() interface{}
