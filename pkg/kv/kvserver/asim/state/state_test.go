@@ -384,13 +384,20 @@ func TestOrderedStateLists(t *testing.T) {
 	// Test a skewed distribution with 100 stores, 10k ranges and 1m keyspace.
 	s = NewStateSkewedDistribution(100, 10000, 3, 1000000, settings)
 	assertListsOrdered(s)
+
+	const defaultSeed = 42
+	s = NewStateRandDistribution(defaultSeed, 7, 1400, 10000, 3, settings)
+	assertListsOrdered(s)
+
+	s = NewStateWeightedRandDistribution(defaultSeed, []float64{0.0, 0.1, 0.3, 0.6}, 1400, 10000, 3, settings)
+	assertListsOrdered(s)
 }
 
 // TestNewStateDeterministic asserts that the state returned from the new state
 // utility functions is deterministic.
 func TestNewStateDeterministic(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
-
+	const defaultSeed = 42
 	testCases := []struct {
 		desc       string
 		newStateFn func() State
@@ -409,6 +416,18 @@ func TestNewStateDeterministic(t *testing.T) {
 				return NewStateWithDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000, settings)
 			},
 		},
+		{
+			desc: "rand distribution ",
+			newStateFn: func() State {
+				return NewStateRandDistribution(defaultSeed, 7, 1400, 10000, 3, settings)
+			},
+		},
+		{
+			desc: "weighted rand distribution ",
+			newStateFn: func() State {
+				return NewStateWeightedRandDistribution(defaultSeed, []float64{0.0, 0.1, 0.3, 0.6}, 1400, 10000, 3, settings)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -417,6 +436,35 @@ func TestNewStateDeterministic(t *testing.T) {
 			for i := 0; i < 5; i++ {
 				require.Equal(t, ref.Ranges(), tc.newStateFn().Ranges())
 			}
+		})
+	}
+}
+
+// TestRandDistribution asserts that the distribution returned from
+// randDistribution and weightedRandDistribution sum up to 1.
+func TestRandDistribution(t *testing.T) {
+	const defaultSeed = 42
+	randSource := rand.New(rand.NewSource(defaultSeed))
+	testCases := []struct {
+		desc         string
+		distribution []float64
+	}{
+		{
+			desc:         "random distribution",
+			distribution: randDistribution(randSource, 7),
+		},
+		{
+			desc:         "weighted random distribution",
+			distribution: weightedRandDistribution(randSource, []float64{0.0, 0.1, 0.3, 0.6}),
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			total := float64(0)
+			for i := 0; i < len(tc.distribution); i++ {
+				total += tc.distribution[i]
+			}
+			require.Equal(t, float64(1), total)
 		})
 	}
 }
