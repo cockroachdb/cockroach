@@ -867,6 +867,14 @@ func (o *Optimizer) MaybeGetBestCostRelation(
 	return state.best, true
 }
 
+// GetLookupJoinLookupTableDistribution returns the distribution of the lookup
+// table in a lookup join.
+func (o *Optimizer) GetLookupJoinLookupTableDistribution(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (provided physical.Distribution) {
+	return o.coster.GetLookupJoinLookupTableDistribution(join, required)
+}
+
 // lookupOptState looks up the state associated with the given group and
 // properties. If no state exists yet, then lookupOptState returns nil.
 func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {

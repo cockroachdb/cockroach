@@ -64,6 +64,10 @@ type Coster interface {
 	// group if the group has been fully optimized for the `required` physical
 	// properties.
 	MaybeGetBestCostRelation(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool)
+
+	// GetLookupJoinLookupTableDistribution returns the distribution of the lookup
+	// table in a lookup join.
+	GetLookupJoinLookupTableDistribution(*memo.LookupJoinExpr, *physical.Required) physical.Distribution
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -514,6 +518,16 @@ func (c *coster) MaybeGetBestCostRelation(
 	grp memo.RelExpr, required *physical.Required,
 ) (best memo.RelExpr, ok bool) {
 	return c.o.MaybeGetBestCostRelation(grp, required)
+}
+
+// GetLookupJoinLookupTableDistribution is part of the xform.Coster interface.
+func (c *coster) GetLookupJoinLookupTableDistribution(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (provided physical.Distribution) {
+	crdbRegionColSet, inputDistribution := c.getCRBDRegionColSetFromInput(join, required)
+	_, provided = distribution.BuildLookupJoinLookupTableDistribution(
+		c.ctx, c.evalCtx, join, crdbRegionColSet, inputDistribution)
+	return provided
 }
 
 // ComputeCost calculates the estimated cost of the top-level operator in a

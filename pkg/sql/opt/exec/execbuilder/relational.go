@@ -2344,7 +2344,19 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 			}
 		}
 	}
-
+	// If the specialized methods of setting the home region above, see if
+	// `GetLookupJoinLookupTableDistribution` can find the lookup table's
+	// distribution.
+	// TODO(msirek): Check if the specialized methods above are even needed any
+	// more.
+	if homeRegion == "" {
+		physicalDistribution := b.optimizer.GetLookupJoinLookupTableDistribution(
+			join, join.RequiredPhysical(),
+		)
+		if len(physicalDistribution.Regions) == 1 {
+			homeRegion = physicalDistribution.Regions[0]
+		}
+	}
 	if homeRegion != "" {
 		if foundLocalRegion {
 			if queryHasHomeRegion {

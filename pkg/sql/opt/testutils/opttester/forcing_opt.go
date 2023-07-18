@@ -196,3 +196,10 @@ func (fc *forcingCoster) MaybeGetBestCostRelation(
 ) (best memo.RelExpr, ok bool) {
 	return fc.o.MaybeGetBestCostRelation(grp, required)
 }
+
+// GetLookupJoinLookupTableDistribution is part of the xform.Coster interface.
+func (fc *forcingCoster) GetLookupJoinLookupTableDistribution(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (provided physical.Distribution) {
+	return fc.inner.GetLookupJoinLookupTableDistribution(join, required)
+}
