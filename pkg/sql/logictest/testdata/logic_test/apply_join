@@ -467,7 +467,7 @@ VALUES
           FROM
             (VALUES (tab_54747.col_95055)) AS tab_54752 (col_95061)
           WHERE
-            (SELECT 0) < tab_54752.col_95061
+            (SELECT random()::INT) < tab_54752.col_95061
         )
       FROM
         (VALUES (0:::OID), (3790322641:::OID)) AS tab_54747 (col_95055)
