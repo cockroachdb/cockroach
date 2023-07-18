@@ -123,6 +123,9 @@ enum AuthFailReason {
   CREDENTIALS_INVALID = 6;
   // CREDENTIALS_EXPIRED occur when the credentials provided by the client are expired.
   CREDENTIALS_EXPIRED = 7;
+  // NO_REPLICATION_ROLEOPTION occurs when the connection requires a replication role option,
+  // but the user does not have it.
+  NO_REPLICATION_ROLEOPTION = 8;
 }
 
 // ClientAuthenticationFailed is reported when a client session
