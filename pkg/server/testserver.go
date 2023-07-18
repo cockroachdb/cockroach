@@ -1714,7 +1714,7 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 
 // StartedDefaultTestTenant is part of the serverutils.TestServerInterface.
 func (ts *TestServer) StartedDefaultTestTenant() bool {
-	return !ts.cfg.DisableDefaultTestTenant
+	return len(ts.testTenants) > 0
 }
 
 // TenantOrServer is part of the serverutils.TestServerInterface.
