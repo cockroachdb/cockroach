@@ -30,6 +30,7 @@ import (
 func TestEmptyQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false, UseDatabase: "defaultdb"})
 	defer s.Stopper().Stop(context.Background())
 
