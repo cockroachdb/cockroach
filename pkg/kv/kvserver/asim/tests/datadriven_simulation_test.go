@@ -161,11 +161,7 @@ func TestDataDriven(t *testing.T) {
 		const defaultKeyspace = 10000
 		loadGen := gen.BasicLoad{}
 		var clusterGen gen.ClusterGen
-		var rangeGen gen.RangeGen = gen.BasicRanges{
-			Ranges:            1,
-			ReplicationFactor: 1,
-			KeySpace:          defaultKeyspace,
-		}
+		rangeGen := defaultBasicRangesGen()
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
 		assertions := []SimulationAssertion{}
@@ -212,11 +208,13 @@ func TestDataDriven(t *testing.T) {
 					placementType = gen.Uniform
 				}
 				rangeGen = gen.BasicRanges{
-					Ranges:            ranges,
-					PlacementType:     placementType,
-					KeySpace:          keyspace,
-					ReplicationFactor: replFactor,
-					Bytes:             bytes,
+					BaseRanges: gen.BaseRanges{
+						Ranges:            ranges,
+						KeySpace:          keyspace,
+						ReplicationFactor: replFactor,
+						Bytes:             bytes,
+					},
+					PlacementType: placementType,
 				}
 				return ""
 			case "topology":
@@ -236,25 +234,8 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "load_cluster":
 				var config string
-				var clusterInfo state.ClusterInfo
 				scanArg(t, d, "config", &config)
-
-				switch config {
-				case "single_region":
-					clusterInfo = state.SingleRegionConfig
-				case "single_region_multi_store":
-					clusterInfo = state.SingleRegionMultiStoreConfig
-				case "multi_region":
-					clusterInfo = state.MultiRegionConfig
-				case "complex":
-					clusterInfo = state.ComplexConfig
-				default:
-					panic(fmt.Sprintf("unknown cluster config %s", config))
-				}
-
-				clusterGen = gen.LoadedCluster{
-					Info: clusterInfo,
-				}
+				clusterGen = loadClusterInfo(config)
 				return ""
 			case "add_node":
 				var delay time.Duration
