@@ -489,6 +489,13 @@ func serializeIntArray[I int | int32 | uint32](ints []I) string {
 // 32]" to an array of ints.
 func deserializeIntArray(s string) ([]int, error) {
 	vals := strings.Split(strings.Trim(s, "[]"), " ")
+
+	// If there are no values, strings.Split returns an array of length 1
+	// containing the empty string.
+	if len(vals) == 0 || (len(vals) == 1 && vals[0] == "") {
+		return []int{}, nil
+	}
+
 	result := make([]int, 0, len(vals))
 	for _, val := range vals {
 		intVal, err := strconv.Atoi(val)
