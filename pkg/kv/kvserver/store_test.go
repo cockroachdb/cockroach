@@ -764,7 +764,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
-	err = repl1.withRaftGroup(true, func(r *raft.RawNode) (bool, error) {
+	err = repl1.withRaftGroup(func(r *raft.RawNode) (bool, error) {
 		return true, errors.Errorf("unexpectedly created a raft group")
 	})
 	require.Equal(t, errRemoved, err)
@@ -901,7 +901,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	require.NoError(t,
 		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 
-	r := newUninitializedReplica(store, newRangeID, replicaID)
+	r, err := newUninitializedReplica(store, newRangeID, replicaID)
 	require.NoError(t, err)
 
 	store.mu.Lock()
