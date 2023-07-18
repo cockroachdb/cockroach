@@ -34,6 +34,7 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 			if c.Spec().Cloud != spec.GCE {
 				t.Skip("uses gs://cockroach-corpus; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
+			t.Skip("backwards compatibility testing can be disabled, now that 22.1 is out of support.")
 			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, *t.BuildVersion())
 		},
 	})
