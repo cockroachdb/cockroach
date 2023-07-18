@@ -33,12 +33,17 @@ import (
 // can be rewritten as a lower level query. If it can, returns a new AST which
 // is equivalent to the original statement. Otherwise, returns nil.
 func TryDelegate(
-	ctx context.Context, catalog cat.Catalog, evalCtx *eval.Context, stmt tree.Statement,
+	ctx context.Context,
+	catalog cat.Catalog,
+	evalCtx *eval.Context,
+	stmt tree.Statement,
+	qualifyDataSourceNamesInAST bool,
 ) (tree.Statement, error) {
 	d := delegator{
-		ctx:     ctx,
-		catalog: catalog,
-		evalCtx: evalCtx,
+		ctx:                         ctx,
+		catalog:                     catalog,
+		evalCtx:                     evalCtx,
+		qualifyDataSourceNamesInAST: qualifyDataSourceNamesInAST,
 	}
 	switch t := stmt.(type) {
 	case *tree.ShowClusterSettingList:
@@ -197,9 +202,10 @@ func TryDelegate(
 }
 
 type delegator struct {
-	ctx     context.Context
-	catalog cat.Catalog
-	evalCtx *eval.Context
+	ctx                         context.Context
+	catalog                     cat.Catalog
+	evalCtx                     *eval.Context
+	qualifyDataSourceNamesInAST bool
 }
 
 func (d *delegator) parse(sql string) (tree.Statement, error) {
@@ -209,4 +215,65 @@ func (d *delegator) parse(sql string) (tree.Statement, error) {
 	}
 	d.evalCtx.Planner.MaybeReallocateAnnotations(s.NumAnnotations)
 	return s.AST, err
+}
+
+// We avoid the cache so that we can observe the details without
+// taking a lease, like other SHOW commands.
+var resolveFlags = cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
+
+// resolveAndModifyUnresolvedObjectName may modify the name input
+// if d.qualifyDataSourceNamesInAST == true
+func (d *delegator) resolveAndModifyUnresolvedObjectName(
+	name *tree.UnresolvedObjectName,
+) (cat.DataSource, cat.DataSourceName, error) {
+	tn := name.ToTableName()
+	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, resolveFlags, &tn)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	// Use qualifyDataSourceNamesInAST similarly to the Builder so that
+	// CREATE TABLE AS can source from a delegated expression.
+	// For example: CREATE TABLE t2 AS SELECT * FROM [SHOW CREATE t1];
+	if d.qualifyDataSourceNamesInAST {
+		resName.ExplicitSchema = true
+		resName.ExplicitCatalog = true
+		*name = *resName.ToUnresolvedObjectName()
+	}
+	return dataSource, resName, nil
+}
+
+// resolveAndModifyTableIndexName may modify the name input
+// if d.qualifyDataSourceNamesInAST == true
+func (d *delegator) resolveAndModifyTableIndexName(
+	name *tree.TableIndexName,
+) (cat.DataSource, cat.DataSourceName, error) {
+
+	tn := name.Table
+	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, resolveFlags, &tn)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+
+	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+
+	// Force resolution of the index.
+	_, _, err = cat.ResolveTableIndex(d.ctx, d.catalog, resolveFlags, name)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+
+	// Use qualifyDataSourceNamesInAST similarly to the Builder so that
+	// CREATE TABLE AS can source from a delegated expression.
+	// For example: CREATE TABLE t2 AS SELECT * FROM [SHOW PARTITIONS FROM INDEX t1@t1_pkey];
+	if d.qualifyDataSourceNamesInAST {
+		resName.ExplicitSchema = true
+		resName.ExplicitCatalog = true
+		(*name).Table = resName.ToUnresolvedObjectName().ToTableName()
+	}
+	return dataSource, resName, nil
 }

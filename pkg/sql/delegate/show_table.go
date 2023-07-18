@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -297,18 +296,11 @@ func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
 func (d *delegator) showTableDetails(
 	name *tree.UnresolvedObjectName, query string,
 ) (tree.Statement, error) {
-	// We avoid the cache so that we can observe the details without
-	// taking a lease, like other SHOW commands.
-	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
-	tn := name.ToTableName()
-	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
+
+	dataSource, resName, err := d.resolveAndModifyUnresolvedObjectName(name)
 	if err != nil {
 		return nil, err
 	}
-	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
-		return nil, err
-	}
-
 	fullQuery := fmt.Sprintf(query,
 		lexbase.EscapeSQLString(resName.Catalog()),
 		lexbase.EscapeSQLString(resName.Table()),
