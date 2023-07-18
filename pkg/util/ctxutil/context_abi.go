@@ -18,13 +18,13 @@ import (
 )
 
 // WhenDoneCause is the same as WhenDone, but accepts WhenDoneCauseFunc as a callback.
-func WhenDoneCause(parent context.Context, done WhenDoneCauseFunc) error {
+func WhenDoneCause(parent context.Context, done WhenDoneCauseFunc) bool {
 	if parent.Done() == nil {
-		return ErrNeverCompletes
+		return false
 	}
 	c := &whenDone{Context: parent, notify: done}
 	context_propagateCancel(parent, c)
-	return nil
+	return true
 }
 
 // Gross hack to access internal context function.  Sometimes, go makes things
