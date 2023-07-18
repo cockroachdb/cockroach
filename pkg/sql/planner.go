@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -297,6 +298,11 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	defer cleanup()
 	flow.Resume(recv)
 	return recv.commErr
+}
+
+// coster returns the Coster used by the join planner.
+func (p *planner) coster() xform.Coster {
+	return p.optPlanningCtx.optimizer.Coster()
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each

@@ -316,6 +316,13 @@ func (tc *Catalog) RoleExists(ctx context.Context, role username.SQLUsername) (b
 	return true, nil
 }
 
+// GetLookupJoinLookupTableDistribution is part of the cat.Catalog interface.
+func (tc *Catalog) GetLookupJoinLookupTableDistribution(
+	ctx context.Context, relExpr interface{},
+) interface{} {
+	return nil
+}
+
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidSchemaName,

@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -487,6 +489,22 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 // RoleExists is part of the cat.Catalog interface.
 func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
 	return RoleExists(ctx, oc.planner.InternalSQLTxn(), role)
+}
+
+// GetLookupJoinLookupTableDistribution is part of the cat.Catalog interface.
+func (oc *optCatalog) GetLookupJoinLookupTableDistribution(
+	ctx context.Context, relExpr interface{},
+) interface{} {
+	var lookupJoin *memo.LookupJoinExpr
+	lookupJoin, ok := relExpr.(*memo.LookupJoinExpr)
+	if !ok {
+		return nil
+	}
+
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
+		ctx, oc.planner.EvalContext(), lookupJoin,
+		lookupJoin.RequiredPhysical(), oc.planner.coster().MaybeGetBestCostRelation)
+	return &provided
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.

@@ -865,6 +865,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !required.Distribution.Any() {
 			tp.Childf("distribution: %s", required.Distribution.String())
 		}
+		// Show the lookup table distribution of a lookup join, if it has been set.
+		if lookupJoinExpr, ok := e.(*LookupJoinExpr); ok && f.Catalog != nil {
+			distribution := f.Catalog.GetLookupJoinLookupTableDistribution(f.Ctx, lookupJoinExpr)
+			var providedDistribution *physical.Distribution
+			providedDistribution, ok = distribution.(*physical.Distribution)
+			if ok && !providedDistribution.Any() {
+				tp.Childf("lookup table distribution: %s", providedDistribution.String())
+			}
+		}
 		if distribute, ok := e.(*DistributeExpr); ok {
 			tp.Childf("input distribution: %s", distribute.Input.ProvidedPhysical().Distribution.String())
 		}

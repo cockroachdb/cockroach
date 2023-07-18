@@ -200,4 +200,9 @@ type Catalog interface {
 
 	// RoleExists returns true if the role exists.
 	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
+
+	// GetLookupJoinLookupTableDistribution returns the physical distribution of
+	// the lookup table of a lookup join, where relExpr is expected to be a
+	// *memo.LookupJoinExpr and the return value is a *physical.Distribution.
+	GetLookupJoinLookupTableDistribution(ctx context.Context, relExpr interface{}) interface{}
 }
