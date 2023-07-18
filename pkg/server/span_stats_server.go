@@ -85,8 +85,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 			if !exists {
 				res.SpanToStats[spanStr] = spanStats
 			} else {
-				res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
-				res.SpanToStats[spanStr].TotalStats.Add(spanStats.TotalStats)
+				res.SpanToStats[spanStr].Add(spanStats)
 			}
 		}
 	}
@@ -218,11 +217,14 @@ func (s *systemStatusServer) statsForSpan(
 	}
 	// Finally, get the approximate disk bytes from each store.
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		approxDiskBytes, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
+		approxDiskBytes, files, remoteFiles, externalFiles, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
 		if err != nil {
 			return err
 		}
 		spanStats.ApproximateDiskBytes += approxDiskBytes
+		spanStats.FileCount += files
+		spanStats.RemoteFileCount += remoteFiles
+		spanStats.ExternalFileCount += externalFiles
 		return nil
 	})
 
