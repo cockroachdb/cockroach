@@ -64,7 +64,7 @@ func defaultLoadGen() gen.BasicLoad {
 const (
 	defaultRanges            = 1
 	defaultPlacementType     = gen.Uniform
-	defaultReplicationFactor = 1
+	defaultReplicationFactor = 3
 	defaultBytes             = 0
 )
 
@@ -106,5 +106,26 @@ func defaultPlotSettings() plotSettings {
 		stat:   defaultStat,
 		height: defaultHeight,
 		width:  defaultWidth,
+	}
+}
+
+type rangeGenSettings struct {
+	rangeKeyGenType generatorType
+	keySpaceGenType generatorType
+	weightedRand    []float64
+}
+
+const (
+	defaultRangeKeyGenType = uniformGenerator
+	defaultKeySpaceGenType = uniformGenerator
+)
+
+var defaultWeightedRand []float64
+
+func defaultRangeGenSettings() rangeGenSettings {
+	return rangeGenSettings{
+		rangeKeyGenType: defaultRangeKeyGenType,
+		keySpaceGenType: defaultKeySpaceGenType,
+		weightedRand:    defaultWeightedRand,
 	}
 }
