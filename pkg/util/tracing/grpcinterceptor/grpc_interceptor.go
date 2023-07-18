@@ -12,9 +12,12 @@ package grpcinterceptor
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -327,8 +330,6 @@ func StreamClientInterceptor(
 func newTracingClientStream(
 	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *tracing.Span,
 ) grpc.ClientStream {
-	finishChan := make(chan struct{})
-
 	isFinished := new(int32)
 	*isFinished = 0
 	finishFunc := func(err error) {
@@ -338,19 +339,26 @@ func newTracingClientStream(
 		if !atomic.CompareAndSwapInt32(isFinished, 0, 1) {
 			return
 		}
-		close(finishChan)
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
 			setGRPCErrorTag(clientSpan, err)
 		}
 	}
-	go func() {
-		select {
-		case <-finishChan:
-			// The client span is being finished by another code path; hence, no
-			// action is necessary.
-		case <-ctx.Done():
+
+	if ctx.Done() != nil {
+		// All contexts that complete (ctx.Done() != nil) used in cockroach should support
+		// direct cancellation detection, since they should be derived from one of the
+		// standard context.Context.
+		// But, be safe and loudly fail tests in case somebody introduces strange
+		// context implementation.
+		if buildutil.CrdbTestBuild && !ctxutil.CanDirectlyDetectCancellation(ctx) {
+			panic(fmt.Sprintf(
+				"expected context that supports direct cancellation detection, found %T with done=%v",
+				ctx, ctx.Done()))
+		}
+
+		_ = ctxutil.WhenDone(ctx, func(err error) {
 			// A streaming RPC can be finished by the caller cancelling the ctx. If
 			// the ctx is cancelled, the caller doesn't necessarily need to interact
 			// with the stream anymore (see [1]), so finishChan might never be
@@ -358,8 +366,9 @@ func newTracingClientStream(
 			//
 			// [1] https://pkg.go.dev/google.golang.org/grpc#ClientConn.NewStream
 			finishFunc(nil /* err */)
-		}
-	}()
+		})
+	}
+
 	return &tracingClientStream{
 		ClientStream: cs,
 		desc:         desc,
