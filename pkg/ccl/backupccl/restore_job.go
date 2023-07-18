@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -406,7 +407,7 @@ func restore(
 			return sendAddRemoteSSTs(
 				ctx,
 				execCtx,
-				job.ID(),
+				job,
 				dataToRestore,
 				endTime,
 				encryption,
@@ -1540,12 +1541,17 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 }
 
 func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) error {
-	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
+	details := r.job.Details().(jobspb.RestoreDetails)
+
 	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
 		return err
+	}
+
+	if len(details.DownloadSpans) > 0 {
+		return r.doDownloadFiles(ctx, p)
 	}
 
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
@@ -2400,6 +2406,13 @@ func (r *restoreResumer) OnFailOrCancel(
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
+	details := r.job.Details().(jobspb.RestoreDetails)
+
+	// If this is a download-only job, there's no cleanup to do on cancel.
+	if len(details.DownloadSpans) > 0 {
+		return nil
+	}
+
 	// Emit to the event log that the job has started reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
@@ -2416,7 +2429,6 @@ func (r *restoreResumer) OnFailOrCancel(
 		return err
 	}
 
-	details := r.job.Details().(jobspb.RestoreDetails)
 	logutil.LogJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr, r.restoreStats.Rows)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
@@ -3141,7 +3153,7 @@ var onlineRestoreGate = envutil.EnvOrDefaultBool("COCKROACH_UNSAFE_RESTORE", fal
 func sendAddRemoteSSTs(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
+	job *jobs.Job,
 	dataToRestore restorationData,
 	restoreTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -3225,7 +3237,23 @@ func sendAddRemoteSSTs(
 			}
 		}
 	}
-	return nil
+
+	downloadSpans := dataToRestore.getSpans()
+
+	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
+	downloadJobRecord := jobs.Record{
+		Description: fmt.Sprintf("Background Data Download for %s", job.Payload().Description),
+		Username:    job.Payload().UsernameProto.Decode(),
+		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
+		Progress:    jobspb.RestoreProgress{},
+	}
+
+	return execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		_, err := execCtx.ExecCfg().JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, job.ID()+1, txn)
+		return err
+	})
 }
 
 var _ jobs.Resumer = &restoreResumer{}
@@ -3242,3 +3270,94 @@ func init() {
 		jobs.UsesTenantCostControl,
 	)
 }
+
+func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	total := r.job.Progress().Details.(*jobspb.Progress_Restore).Restore.TotalDownloadRequired
+
+	// If this is the first resumption of this job, we need to find out the total
+	// amount we expect to download and persist it so that we can indiciate our
+	// progress as that number goes down later.
+	if total == 0 {
+		log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
+		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus("Calculating total download size..."), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+
+		for _, span := range details.DownloadSpans {
+			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+				Spans: []roachpb.Span{span},
+			})
+			if err != nil {
+				return err
+			}
+			for _, stats := range resp.SpanToStats {
+				total += stats.ExternalFileBytes
+			}
+		}
+
+		if total == 0 {
+			return nil
+		}
+
+		if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			prog := details.(*jobspb.Progress_Restore).Restore
+			prog.TotalDownloadRequired = total
+			return 0.0
+		}); err != nil {
+			return err
+		}
+
+		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(fmt.Sprintf("Downloading %s of restored data...", sz(total))), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+	}
+
+	var lastProgressUpdate time.Time
+	for rt := retry.StartWithCtx(
+		ctx, retry.Options{InitialBackoff: time.Second * 10, Multiplier: 1.2, MaxBackoff: time.Minute * 5},
+	); ; rt.Next() {
+
+		var remaining uint64
+		for _, span := range details.DownloadSpans {
+			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+				Spans: []roachpb.Span{span},
+			})
+			if err != nil {
+				return err
+			}
+			for _, stats := range resp.SpanToStats {
+				remaining += stats.ExternalFileBytes
+			}
+		}
+
+		fractionComplete := float32(total-remaining) / float32(total)
+		log.Infof(ctx, "restore download phase, %s downloaded, %s remaining of %s total (%.1f complete)",
+			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
+		)
+
+		if remaining == 0 {
+			return nil
+		}
+
+		if timeutil.Since(lastProgressUpdate) > time.Minute {
+			if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				return fractionComplete
+			}); err != nil {
+				return err
+			}
+			lastProgressUpdate = timeutil.Now()
+		}
+	}
+}
+
+type sz int64
+
+func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
+
+// TODO(dt): move this to humanizeutil and allow-list it there.
+//func (b sz) SafeValue()     {}
