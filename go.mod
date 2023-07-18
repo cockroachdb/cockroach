@@ -386,7 +386,7 @@ replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-0
 
 // Use the CRDB fork of etcd/raft, at crdb-release-22.2 branch which includes
 // cherry-picked fixes for this release.
-replace go.etcd.io/etcd/raft/v3 => github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230713102455-f61509e7f127
+replace go.etcd.io/etcd/raft/v3 => github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230718104326-dbe02a550754
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
