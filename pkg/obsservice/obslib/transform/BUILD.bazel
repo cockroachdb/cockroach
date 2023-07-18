@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "transform",
-    srcs = ["log_record_to_event.go"],
+    srcs = [
+        "log_record_to_event.go",
+        "transformer.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/transform",
     visibility = ["//visibility:public"],
     deps = [
