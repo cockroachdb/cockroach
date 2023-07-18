@@ -373,3 +373,16 @@ func errHasCode(err error, code ...pgcode.Code) bool {
 	}
 	return false
 }
+
+// NewSecondaryIndexDataLossError creates an error if dropping a secondary
+// index could lead to losing a column.
+func NewSecondaryIndexDataLossError(indexName string) error {
+	return errors.WithIssueLink(errors.Newf("index %s cannot be safely dropped, "+
+		"since doing so will lose data in certain columns", indexName),
+		errors.IssueLink{
+			IssueURL: "https://www.cockroachlabs.com/docs/advisories/a99561",
+			Detail: "Dropping this secondary index may lead to data loss, please " +
+				"contact support.",
+		},
+	)
+}
