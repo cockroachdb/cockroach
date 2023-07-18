@@ -42,7 +42,7 @@ func defaultSettings(randOptions map[string]bool) testSettings {
 // for output + add more tests to cover cases that are not tested by default
 func TestRandomized(t *testing.T) {
 	randOptions := map[string]bool{
-		"cluster":         false,
+		"cluster":         true,
 		"ranges":          false,
 		"load":            false,
 		"static_settings": false,

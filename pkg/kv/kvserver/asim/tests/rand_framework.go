@@ -58,7 +58,7 @@ func (f randTestingFramework) getCluster() gen.ClusterGen {
 	if !f.s.randOptions["cluster"] {
 		return defaultBasicClusterGen()
 	}
-	return gen.BasicCluster{}
+	return f.randomClusterInfoGen(f.s.randSource)
 }
 
 func (f randTestingFramework) getRanges() gen.RangeGen {
@@ -134,7 +134,7 @@ func (f randTestingFramework) runRandTestRepeated(t *testing.T) {
 	}
 }
 
-// Helper Functo
+// Helper Function
 // loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
 // the given configNam, or panics if no match is found in existing
 // configurations.
