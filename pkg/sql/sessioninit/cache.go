@@ -75,6 +75,8 @@ type AuthInfo struct {
 	CanLoginSQLRoleOpt bool
 	// CanLoginDBConsoleRoleOpt is set to false if the user has NOLOGIN role option.
 	CanLoginDBConsoleRoleOpt bool
+	// CanUseReplicationRoleOpt is set to true if the user has the REPLICATION role option.
+	CanUseReplicationRoleOpt bool
 	// HashedPassword is the hashed password and can be nil.
 	HashedPassword password.PasswordHash
 	// ValidUntil is the VALID UNTIL role option.

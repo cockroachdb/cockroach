@@ -66,6 +66,8 @@ const (
 	NOMODIFYCLUSTERSETTING
 	VIEWACTIVITYREDACTED
 	NOVIEWACTIVITYREDACTED
+	REPLICATION
+	NOREPLICATION
 	SQLLOGIN
 	NOSQLLOGIN
 	VIEWCLUSTERSETTING
@@ -103,6 +105,8 @@ var toSQLStmts = map[Option]string{
 	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'MODIFYCLUSTERSETTING'`,
 	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'NOSQLLOGIN'`,
 	NOSQLLOGIN:             `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'NOSQLLOGIN', $2) ON CONFLICT DO NOTHING`,
+	REPLICATION:            `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'REPLICATION', $2) ON CONFLICT DO NOTHING`,
+	NOREPLICATION:          `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'REPLICATION'`,
 	VIEWACTIVITYREDACTED:   `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWACTIVITYREDACTED', $2) ON CONFLICT DO NOTHING`,
 	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND user_id = $2 AND option = 'VIEWACTIVITYREDACTED'`,
 	VIEWCLUSTERSETTING:     `INSERT INTO system.role_options (username, option, user_id) VALUES ($1, 'VIEWCLUSTERSETTING', $2) ON CONFLICT DO NOTHING`,
@@ -138,6 +142,8 @@ var ByName = map[string]Option{
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
 	"VIEWACTIVITYREDACTED":   VIEWACTIVITYREDACTED,
 	"NOVIEWACTIVITYREDACTED": NOVIEWACTIVITYREDACTED,
+	"REPLICATION":            REPLICATION,
+	"NOREPLICATION":          NOREPLICATION,
 	"SQLLOGIN":               SQLLOGIN,
 	"NOSQLLOGIN":             NOSQLLOGIN,
 	"VIEWCLUSTERSETTING":     VIEWCLUSTERSETTING,
@@ -289,7 +295,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&SQLLOGIN.Mask() != 0 &&
 			roleOptionBits&NOSQLLOGIN.Mask() != 0) ||
 		(roleOptionBits&VIEWCLUSTERSETTING.Mask() != 0 &&
-			roleOptionBits&NOVIEWCLUSTERSETTING.Mask() != 0) {
+			roleOptionBits&NOVIEWCLUSTERSETTING.Mask() != 0) ||
+		(roleOptionBits&REPLICATION.Mask() != 0 &&
+			roleOptionBits&NOREPLICATION.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil
