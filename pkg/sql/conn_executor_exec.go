@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -956,9 +957,72 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if err = ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
-		stmtThresholdSpan.Finish()
-		return nil, nil, err
+	var readCommittedSavePointToken kv.SavepointToken
+	if ex.state.mu.txn.IsOpen() &&
+		ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
+		!ex.implicitTxn() &&
+		ex.executorType != executorTypeInternal {
+		// Each statement in an explicit READ COMMITTED transaction has a
+		// SAVEPOINT. This allows for TransactionRetry errors to be retried
+		// automatically. We don't do this for implicit transactions because
+		// the conn_executor state machine already has retry logic for implicit
+		// transactions. To avoid having to implement the retry logic in the state
+		// machine, we use the KV savepoint API directly.
+		//
+		// TODO(rafi): Find a way to perform retries in the internal executor
+		// also.
+		readCommittedSavePointToken, err = ex.state.mu.txn.CreateSavepoint(ctx)
+		if err != nil {
+			return makeErrEvent(err)
+		}
+	}
+
+	maxExecCount := 1
+	if readCommittedSavePointToken != nil {
+		// TODO(rafi): Make this configurable.
+		const maxExecCountForReadCommitted = 5
+		maxExecCount = maxExecCountForReadCommitted
+	}
+
+	for attemptNum := 0; attemptNum < maxExecCount; attemptNum++ {
+		var bufferPos int
+		if readCommittedSavePointToken != nil {
+			bufferPos = res.BufferedResultsLen()
+		}
+		if err = ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
+			stmtThresholdSpan.Finish()
+			return nil, nil, err
+		}
+		if readCommittedSavePointToken != nil {
+			maybeRetriableErr := res.Err()
+			if maybeRetriableErr == nil {
+				// If there was no error, then we must release the savepoint and break.
+				if err := ex.state.mu.txn.ReleaseSavepoint(ctx, readCommittedSavePointToken); err != nil {
+					return makeErrEvent(err)
+				}
+				break
+			}
+			if !errIsRetriable(maybeRetriableErr) || attemptNum == maxRetries {
+				// If the error is not retriable or we reached the maximum number of
+				// retries, then we must break.
+				break
+			}
+
+			// In order to retry the statement, we need to clear any results and
+			// errors that were buffered, prepare the kv.txn, then rollback to the
+			// savepoint.
+			if ableToClear := res.TruncateBufferedResults(bufferPos); !ableToClear {
+				// If the buffer exceeded the maximum size, then it might have been
+				// flushed and sent back to the client already. In that case, we can't
+				// retry the statement.
+				break
+			}
+			res.SetError(nil)
+			ex.state.mu.txn.PrepareForRetry(ctx)
+			if err := ex.state.mu.txn.RollbackToSavepoint(ctx, readCommittedSavePointToken); err != nil {
+				return makeErrEvent(err)
+			}
+		}
 	}
 
 	if stmtThresholdSpan != nil {
