@@ -261,6 +261,18 @@ type ClusterInfo struct {
 	Regions        []Region
 }
 
+// GetNumOfStores computes store count of this ClusterInfo, following how
+// LoadClusterInfo adds stores to State.
+func (c ClusterInfo) GetNumOfStores() (totalStores int) {
+	for _, r := range c.Regions {
+		for _, z := range r.Zones {
+			storesRequired := z.StoresPerNode
+			totalStores += storesRequired * z.NodeCount
+		}
+	}
+	return totalStores
+}
+
 type RangeInfo struct {
 	Descriptor  roachpb.RangeDescriptor
 	Config      *roachpb.SpanConfig
