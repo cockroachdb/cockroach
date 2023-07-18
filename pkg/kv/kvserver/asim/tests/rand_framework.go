@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/guptarohit/asciigraph"
 )
 
@@ -40,10 +42,28 @@ type testSettings struct {
 	randSource    *rand.Rand
 	assertions    []SimulationAssertion
 	randOptions   testRandOptions
+	rangeGen      rangeGenSettings
 }
 
 type randTestingFramework struct {
-	s testSettings
+	s                 testSettings
+	rangeGenerator    generator
+	keySpaceGenerator generator
+}
+
+func newRandTestingFramework(settings testSettings) randTestingFramework {
+	if int64(defaultMaxRange) > defaultMinKeySpace {
+		panic(fmt.Sprintf(
+			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
+			defaultMaxRange, defaultMinKeySpace))
+	}
+	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeKeyGenType)
+	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
+	return randTestingFramework{
+		s:                 settings,
+		rangeGenerator:    rangeGenerator,
+		keySpaceGenerator: keySpaceGenerator,
+	}
 }
 
 func (f randTestingFramework) getCluster() gen.ClusterGen {
@@ -57,7 +77,7 @@ func (f randTestingFramework) getRanges() gen.RangeGen {
 	if !f.s.randOptions.ranges {
 		return defaultBasicRangesGen()
 	}
-	return gen.BasicRanges{}
+	return f.randomBasicRangesGen()
 }
 
 func (f randTestingFramework) getLoad() gen.LoadGen {
@@ -165,4 +185,69 @@ func checkAssertions(
 		return true, strings.Join(assertionFailures, "")
 	}
 	return false, ""
+}
+
+type generator interface {
+	Num() int64
+}
+
+type generatorType int
+
+const (
+	uniformGenerator generatorType = iota
+	zipfGenerator
+)
+
+func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generatorType) generator {
+	switch gType {
+	case uniformGenerator:
+		return workload.NewUniformKeyGen(iMin, iMax, randSource)
+	case zipfGenerator:
+		return workload.NewZipfianKeyGen(iMin, iMax, 1.1, 1, randSource)
+	default:
+		panic(fmt.Sprintf("unexpected generator type %v", gType))
+	}
+}
+
+const (
+	defaultMinRange    = 1
+	defaultMaxRange    = 1000
+	defaultMinKeySpace = 1000
+	defaultMaxKeySpace = 200000
+)
+
+func convertInt64ToInt(num int64) int {
+	if num < math.MinInt32 || num > math.MaxUint32 {
+		// Theoretically, this should be impossible given that we have defined
+		// min and max boundaries for ranges and key space.
+		panic(fmt.Sprintf("num overflows the max value or min value of int32 %d", num))
+	}
+	return int(num)
+}
+
+func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
+	if len(f.s.rangeGen.weightedRand) == 0 {
+		return RandomizedBasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            convertInt64ToInt(f.rangeGenerator.Num()),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.Num()),
+				ReplicationFactor: defaultReplicationFactor,
+				Bytes:             defaultBytes,
+			},
+			placementType: gen.Random,
+			randSource:    f.s.randSource,
+		}
+	} else {
+		return WeightedRandomizedBasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            convertInt64ToInt(f.rangeGenerator.Num()),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.Num()),
+				ReplicationFactor: defaultReplicationFactor,
+				Bytes:             defaultBytes,
+			},
+			placementType: gen.WeightedRandom,
+			randSource:    f.s.randSource,
+			weightedRand:  f.s.rangeGen.weightedRand,
+		}
+	}
 }

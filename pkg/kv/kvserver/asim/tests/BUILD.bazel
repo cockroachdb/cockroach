@@ -46,6 +46,7 @@ go_library(
         "//pkg/kv/kvserver/asim/gen",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/util/log",
