@@ -48,7 +48,7 @@ func runRandTest(
 	randSource *rand.Rand, duration time.Duration, randOptions map[string]bool,
 ) (asim.History, bool, string) {
 	ctx := context.Background()
-	cluster := getCluster(randOptions["cluster"])
+	cluster := getCluster(randSource, randOptions["cluster"])
 	ranges := getRanges(randOptions["ranges"])
 	load := getLoad(randOptions["load"])
 	staticSettings := getStaticSettings(randOptions["static_settings"])
@@ -98,7 +98,7 @@ func runRandTestRepeated(t *testing.T, settings *settings, randOptions map[strin
 // option should be randomized).
 func TestRandomized(t *testing.T) {
 	randOptions := map[string]bool{
-		"cluster":         false,
+		"cluster":         true,
 		"ranges":          false,
 		"load":            false,
 		"static_settings": false,

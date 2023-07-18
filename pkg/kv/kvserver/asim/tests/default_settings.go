@@ -69,7 +69,6 @@ const (
 )
 
 func defaultBasicRangesGen() gen.BasicRanges {
-	// No WeightedRand needed since the defaultPlacementType is uniform.
 	return gen.NewBasicRanges(defaultRanges, defaultPlacementType, defaultKeyspace, defaultReplicationFactor, defaultBytes)
 }
 
@@ -99,5 +98,15 @@ func defaultPlotSettings() plotSettings {
 		stat:   defaultStat,
 		height: defaultHeight,
 		width:  defaultWidth,
+	}
+}
+
+// loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
+// the given configNam, or panics if no match is found in existing
+// configurations.
+func loadClusterInfo(configName string) gen.LoadedCluster {
+	clusterInfo := gen.GetClusterInfo(configName)
+	return gen.LoadedCluster{
+		Info: clusterInfo,
 	}
 }

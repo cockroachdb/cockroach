@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
@@ -75,16 +74,6 @@ func scanThreshold(t *testing.T, d *datadriven.TestData) (th threshold) {
 	scanArg(t, d, "lower_bound", &th.value)
 	th.thresholdType = lowerBound
 	return th
-}
-
-// loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
-// the given configNam, or panics if no match is found in existing
-// configurations.
-func loadClusterInfo(configName string) gen.LoadedCluster {
-	clusterInfo := gen.GetClusterInfo(configName)
-	return gen.LoadedCluster{
-		Info: clusterInfo,
-	}
 }
 
 // PlotAllHistory outputs stat plots for the provided asim history array into

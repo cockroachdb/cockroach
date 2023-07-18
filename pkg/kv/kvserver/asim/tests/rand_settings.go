@@ -10,13 +10,25 @@
 
 package tests
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+import (
+	"math/rand"
 
-func getCluster(useRandom bool) gen.ClusterGen {
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+)
+
+// randomClusterInfoGen randomly picks a predefined configuration.
+func randomClusterInfoGen(randSource *rand.Rand) gen.LoadedCluster {
+	chosenIndex := randSource.Intn(len(state.ClusterOptions))
+	chosenType := state.ClusterOptions[chosenIndex]
+	return loadClusterInfo(chosenType)
+}
+
+func getCluster(randSource *rand.Rand, useRandom bool) gen.ClusterGen {
 	if !useRandom {
 		return defaultBasicClusterGen()
 	}
-	return gen.BasicCluster{}
+	return randomClusterInfoGen(randSource)
 }
 
 func getRanges(useRandom bool) gen.RangeGen {
