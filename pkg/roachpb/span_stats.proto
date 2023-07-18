@@ -48,9 +48,9 @@ message SpanStats {
 }
 
 message SpanStatsResponse {
-  cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
-  // See the range_count comment for the SpanStats proto.
-  int32 range_count = 2;
-  uint64 approximate_disk_bytes = 3;
+  reserved 1;
+  reserved 2;
+  reserved 3;
+
   map<string, SpanStats> span_to_stats = 4;
 }
