@@ -77,7 +77,7 @@ func NewWeighted(weightedStores []float64) Weighted {
 	return Weighted{cumulativeWeights: cumulativeWeights}
 }
 
-func (w Weighted) Random(randSource *rand.Rand) int {
+func (w Weighted) Rand(randSource *rand.Rand) int {
 	r := randSource.Float64()
 	index := sort.Search(len(w.cumulativeWeights), func(i int) bool { return w.cumulativeWeights[i] >= r })
 	return index
@@ -89,7 +89,7 @@ func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) [
 	numSamples := 10
 	votes := make([]int, len(weightedStores))
 	for i := 0; i < numSamples; i++ {
-		index := w.Random(randSource)
+		index := w.Rand(randSource)
 		votes[index] += 1
 	}
 	return exactDistribution(votes)
