@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
+var ClusterOptions = [...]string{"single_region", "single_region_multi_store", "multi_region", "complex"}
+
 // TODO(kvoli): Add a loader/translator for the existing
 // []*roachpb.StoreDescriptor configurations in kvserver/*_test.go and
 // allocatorimpl/*_test.go.
@@ -198,6 +200,23 @@ var MultiRangeConfig = []RangeInfo{
 	},
 }
 
+// GetClusterInfo returns ClusterInfo for a given configName and panics if no
+// match is found in existing configurations.
+func GetClusterInfo(configName string) ClusterInfo {
+	switch configName {
+	case "single_region":
+		return SingleRegionConfig
+	case "single_region_multi_store":
+		return SingleRegionMultiStoreConfig
+	case "multi_region":
+		return MultiRegionConfig
+	case "complex":
+		return ComplexConfig
+	default:
+		panic(fmt.Sprintf("no matching cluster info found for %s", configName))
+	}
+}
+
 // RangeInfoWithReplicas returns a new RangeInfo using the supplied arguments.
 func RangeInfoWithReplicas(
 	startKey Key, voters, nonVoters []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
@@ -240,6 +259,21 @@ type Region struct {
 type ClusterInfo struct {
 	DiskCapacityGB int
 	Regions        []Region
+}
+
+// GetNumOfStores computes store count of this ClusterInfo, following how
+// LoadClusterInfo adds stores to State.
+func (c ClusterInfo) GetNumOfStores() (totalStores int) {
+	for _, r := range c.Regions {
+		for _, z := range r.Zones {
+			storesRequired := z.StoresPerNode
+			if storesRequired < 1 {
+				storesRequired = 1
+			}
+			totalStores += storesRequired * z.NodeCount
+		}
+	}
+	return totalStores
 }
 
 type RangeInfo struct {
