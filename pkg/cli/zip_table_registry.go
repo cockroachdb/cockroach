@@ -217,12 +217,12 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_settings": {
-		customQueryRedacted: `SELECT * FROM (
+		customQueryRedacted: `SELECT variable, value, type, public, description, default_value, origin FROM (
     		SELECT * 
     		FROM crdb_internal.cluster_settings
     		WHERE type <> 's'
 		) UNION (
-		    SELECT variable, '<redacted>' as value, type, public, description
+		    SELECT variable, '<redacted>' as value, type, public, description, default_value, origin
 			FROM crdb_internal.cluster_settings g
 			WHERE type = 's'
 		)`,
