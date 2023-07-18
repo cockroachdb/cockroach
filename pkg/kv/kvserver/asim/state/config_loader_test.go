@@ -56,6 +56,7 @@ func TestLoadClusterInfo(t *testing.T) {
 			state := LoadClusterInfo(tc.clusterInfo, config.DefaultSimulationSettings())
 			require.Equal(t, tc.expectedNodeCount, len(state.Nodes()))
 			require.Equal(t, tc.expectedStoreCount, len(state.Stores()))
+			require.Equal(t, tc.expectedStoreCount, tc.clusterInfo.GetNumOfStores())
 		})
 	}
 }
