@@ -222,8 +222,9 @@ func (d *dev) crossBuild(
 				libDir = "bin"
 			}
 			script.WriteString(fmt.Sprintf("for LIB in `ls $EXECROOT/external/archived_cdep_libgeos_%s/%s`; do\n", strings.TrimPrefix(crossConfig, "cross"), libDir))
-			script.WriteString(fmt.Sprintf("cp $EXECROOT/external/archived_cdep_libgeos_%s/%s/$LIB /artifacts\n", strings.TrimPrefix(crossConfig, "cross"), libDir))
-			script.WriteString("chmod a+w -R /artifacts/$LIB\n")
+			script.WriteString(fmt.Sprintf("cp $EXECROOT/external/archived_cdep_libgeos_%s/%s/$LIB /tmp\n", strings.TrimPrefix(crossConfig, "cross"), libDir))
+			script.WriteString("chmod a+w /tmp/$LIB\n")
+			script.WriteString("mv /tmp/$LIB /artifacts\n")
 			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/$LIB\"\n", target.fullName))
 			script.WriteString("done")
 			continue
@@ -235,8 +236,9 @@ func (d *dev) crossBuild(
 			}
 			output := bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(crossConfig, "windows"))
 			baseOutput := filepath.Base(output)
-			script.WriteString(fmt.Sprintf("cp -R $BAZELBIN/%s /artifacts\n", output))
-			script.WriteString(fmt.Sprintf("chmod a+w /artifacts/%s\n", baseOutput))
+			script.WriteString(fmt.Sprintf("cp -R $BAZELBIN/%s /tmp\n", output))
+			script.WriteString(fmt.Sprintf("chmod a+w /tmp/%s\n", baseOutput))
+			script.WriteString(fmt.Sprintf("mv /tmp/%s /artifacts\n\n", baseOutput))
 			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/%s\"\n", target.fullName, baseOutput))
 			continue
 		}
@@ -246,8 +248,9 @@ func (d *dev) crossBuild(
 		// going to have some extra garbage. We grep ^/ to select out
 		// only the filename we're looking for.
 		script.WriteString(fmt.Sprintf("BIN=$(bazel run %s %s --run_under=realpath | grep ^/ | tail -n1)\n", target.fullName, shellescape.QuoteCommand(configArgs)))
-		script.WriteString("cp $BIN /artifacts\n")
-		script.WriteString("chmod a+w /artifacts/$(basename $BIN)\n")
+		script.WriteString("cp $BIN /tmp\n")
+		script.WriteString("chmod a+w /tmp/$(basename $BIN)\n")
+		script.WriteString("mv /tmp/$(basename $BIN) /artifacts\n")
 		script.WriteString(fmt.Sprintf("echo \"Successfully built binary for target %s at artifacts/$(basename $BIN)\"\n", target.fullName))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
