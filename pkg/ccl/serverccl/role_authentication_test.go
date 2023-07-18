@@ -33,12 +33,7 @@ func TestVerifyPassword(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			// One of the sub-tests fails.
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106903),
-		},
-	)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	ts := s.TenantOrServer()
@@ -145,7 +140,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", false, false, true, true},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+			execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
 			exists, canLoginSQL, canLoginDBConsole, canUseReplicationMode, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, username, "", /* databaseName */
