@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Owner:             registry.OwnerMultiTenant,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runMultiTenantUpgrade(ctx, t, c, *t.BuildVersion())
+			runMultiTenantUpgrade(ctx, t, c, t.BuildVersion())
 		},
 	})
 }
@@ -68,8 +69,10 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 13 and make sure it still works.
 //   - Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
-func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, v version.Version) {
-	predecessor, err := version.PredecessorVersion(v)
+func runMultiTenantUpgrade(
+	ctx context.Context, t test.Test, c cluster.Cluster, v *version.Version,
+) {
+	predecessor, err := release.LatestPredecessor(v)
 	require.NoError(t, err)
 
 	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)

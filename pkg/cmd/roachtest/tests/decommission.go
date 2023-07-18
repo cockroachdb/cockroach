@@ -101,7 +101,7 @@ func registerDecommission(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
+				runDecommissionMixedVersions(ctx, t, c, t.BuildVersion())
 			},
 		})
 	}

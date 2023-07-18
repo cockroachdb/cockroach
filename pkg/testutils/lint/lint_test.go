@@ -1367,7 +1367,10 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`nolint:yaml`),
+		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'yaml.UnmarshalStrict' instead", s)
 		}); err != nil {
 			t.Error(err)

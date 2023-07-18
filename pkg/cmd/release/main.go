@@ -40,7 +40,7 @@ func init() {
 	rootCmd.AddCommand(postReleaseSeriesBlockersCmd)
 	rootCmd.AddCommand(cancelReleaseSeriesDateCmd)
 	rootCmd.AddCommand(setOrchestrationVersionCmd)
-	rootCmd.AddCommand(roachtestPredecessorsCmd)
+	rootCmd.AddCommand(updateReleasesTestFileCmd)
 	rootCmd.AddCommand(setCockroachVersionCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
 }

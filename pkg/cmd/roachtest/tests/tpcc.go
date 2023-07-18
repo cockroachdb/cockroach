@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -396,7 +398,9 @@ func runTPCCMixedHeadroom(
 		bankRows = 1000
 	}
 
-	history, err := version.PredecessorHistory(*t.BuildVersion(), versionsToUpgrade)
+	rng, seed := randutil.NewLockedPseudoRand()
+	t.L().Printf("using random seed %d", seed)
+	history, err := release.RandomPredecessorHistory(rng, t.BuildVersion(), versionsToUpgrade)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,178 @@
+- release_name: beta-20160829
+  major_version: v1.0
+  release_date: '2016-08-29'
+  release_type: Testing
+  go_version: go1.8.3
+  sha: ce2bc501f35e5a0d5707fd11d88ca28224aa34b9
+  docker:
+    docker_image: cockroachdb/cockroach-unstable
+  previous_release: beta-20160728
+
+- release_name: v2.1.0-rc.2
+  major_version: v2.1
+  release_date: '2018-10-25'
+  release_type: Testing
+  go_version: go1.10.3
+  sha: f0dd1dc2d2500155c8b36330ae3d6932c13c1027
+  docker:
+    docker_image: cockroachdb/cockroach-unstable
+  source: true
+  previous_release: v2.1.0-rc.1
+
+- release_name: v2.1.0
+  major_version: v2.1
+  release_date: '2018-10-30'
+  release_type: Production
+  go_version: go1.10.3
+  sha: f0dd1dc2d2500155c8b36330ae3d6932c13c1027
+  docker:
+    docker_image: cockroachdb/cockroach
+  source: true
+  previous_release: v2.1.0-rc.2
+
+- release_name: v21.2.0
+  major_version: v21.2
+  release_date: '2021-11-16'
+  release_type: Production
+  go_version: go1.16.6
+  sha: 79e5979416cb426092a83beff0be1c20aebf84c6
+  has_sha256sum: true
+  windows: true
+  docker:
+    docker_image: cockroachdb/cockroach
+  source: true
+  previous_release: v21.2.0-rc.3
+
+- release_name: v21.2.1
+  major_version: v21.2
+  release_date: '2021-11-29'
+  release_type: Production
+  go_version: go1.16.6
+  sha: d14d5f5d3a47b97cae149a43c590708008d2b5d3
+  has_sha256sum: true
+  windows: true
+  docker:
+    docker_image: cockroachdb/cockroach
+  source: true
+  previous_release: v21.2.0
+
+- release_name: v22.2.0
+  major_version: v22.2
+  release_date: '2022-12-06'
+  release_type: Production
+  go_version: go1.18
+  sha: 77667a1b0101cd323090011f50cf910aaa933654
+  has_sql_only: true
+  has_sha256sum: true
+  mac:
+    mac_arm: true
+  windows: true
+  linux:
+    linux_arm: true
+    linux_intel_fips: false
+    linux_arm_fips: false
+  docker:
+    docker_image: cockroachdb/cockroach
+    docker_arm: true
+  source: true
+  previous_release: v22.2.0-rc.3
+
+- release_name: v22.1.12
+  major_version: v22.1
+  release_date: '2022-12-12'
+  release_type: Production
+  go_version: go1.18
+  sha: 3b76f78d724dfc1e7bc8d697f5a7de960d8d1e98
+  withdrawn: true
+  has_sql_only: true
+  has_sha256sum: true
+  windows: true
+  docker:
+    docker_image: cockroachdb/cockroach
+  source: true
+  previous_release: v22.1.11
+
+- release_name: v23.1.0-alpha.9
+  major_version: v23.1
+  release_date: '2023-04-04'
+  release_type: Testing
+  go_version: go1.19
+  sha: 7e72aae900c3ff4b44f1643c2d7ba55fbb2cbe23
+  has_sql_only: true
+  has_sha256sum: true
+  mac:
+    mac_arm: true
+  windows: true
+  linux:
+    linux_arm: true
+    linux_intel_fips: false
+    linux_arm_fips: false
+  docker:
+    docker_image: cockroachdb/cockroach-unstable
+    docker_arm: true
+  source: true
+  previous_release: v23.1.0-alpha.8
+
+- release_name: v23.1.0-beta.1
+  major_version: v23.1
+  release_date: '2023-04-13'
+  release_type: Testing
+  go_version: go1.19
+  sha: aa1c57b36fab87222c82a4ca027b2275654401af
+  has_sql_only: true
+  has_sha256sum: true
+  mac:
+    mac_arm: true
+  windows: true
+  linux:
+    linux_arm: true
+    linux_intel_fips: false
+    linux_arm_fips: false
+  docker:
+    docker_image: cockroachdb/cockroach-unstable
+    docker_arm: true
+  source: true
+  previous_release: v23.1.0-alpha.9
+
+- release_name: v23.1.0
+  major_version: v23.1
+  release_date: '2023-05-15'
+  release_type: Production
+  go_version: go1.18
+  sha: 358e0d87912365b8976c55ab9b3292e999cf720d
+  has_sql_only: true
+  has_sha256sum: true
+  mac:
+    mac_arm: true
+  windows: true
+  linux:
+    linux_arm: true
+    linux_intel_fips: true
+    linux_arm_fips: false
+  docker:
+    docker_image: cockroachdb/cockroach
+    docker_arm: true
+  source: true
+  previous_release: v23.1.0-rc.2
+  withdrawn: true
+
+- release_name: v23.1.1
+  major_version: v23.1
+  release_date: '2023-05-16'
+  release_type: Production
+  go_version: go1.19
+  sha: 00f65ea04077b4256b4a351fd2703b81c7caed1e
+  has_sql_only: true
+  has_sha256sum: true
+  mac:
+    mac_arm: true
+  windows: true
+  linux:
+    linux_arm: true
+    linux_intel_fips: true
+    linux_arm_fips: false
+  docker:
+    docker_image: cockroachdb/cockroach
+    docker_arm: true
+  source: true
+  previous_release: v23.1.0
