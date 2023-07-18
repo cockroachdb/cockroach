@@ -512,6 +512,7 @@ func TestLint(t *testing.T) {
 					":!internal/team/team.go",                // For BAZEL_TEST.
 					":!util/log/test_log_scope.go",           // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
 					":!testutils/datapathutils/data_path.go", // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
+					":!testutils/backup.go",                  // For BACKUP_TESTING_BUCKET
 				},
 			},
 		} {

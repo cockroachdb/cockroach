@@ -82,12 +82,7 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
-var backupTestingBucket = func() string {
-	if env := os.Getenv("BACKUP_TESTING_BUCKET"); env != "" {
-		return env
-	}
-	return "cockroachdb-backup-testing"
-}()
+var backupTestingBucket = testutils.BackupTestingBucket()
 
 func destinationName(c cluster.Cluster) string {
 	dest := c.Name()
