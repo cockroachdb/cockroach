@@ -298,6 +298,13 @@ func TestDockerCLI_test_log_flags(t *testing.T) {
 	runTestDockerCLI(t, "test_log_flags", "../cli/interactive_tests/test_log_flags.tcl")
 }
 
+func TestDockerCLI_test_missing_log_output(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_missing_log_output", "../cli/interactive_tests/test_missing_log_output.tcl")
+}
+
 func TestDockerCLI_test_multiline_statements(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -819,7 +820,7 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
 ) error {
-	externalStoragePath := `gs://cockroach-backup-testing-private`
+	externalStoragePath := fmt.Sprintf("gs://%s", testutils.BackupTestingBucket())
 	for _, cloud := range c.Clouds() {
 		if !strings.Contains(cloud, gce.ProviderName) {
 			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)
