@@ -10,6 +10,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -48,6 +49,8 @@ func makeUICmd(d *dev) *cobra.Command {
 
 // UIDirectories contains the absolute path to the root of each UI sub-project.
 type UIDirectories struct {
+	workspace string
+	// workspace is the absolute path to ./ .
 	// root is the absolute path to ./pkg/ui.
 	root string
 	// clusterUI is the absolute path to ./pkg/ui/workspaces/cluster-ui.
@@ -58,6 +61,10 @@ type UIDirectories struct {
 	e2eTests string
 	// eslintPlugin is the absolute path to ./pkg/ui/workspaces/eslint-plugin-crdb.
 	eslintPlugin string
+	// protoOss is the absolute path to ./pkg/ui/workspaces/db-console/src/js/.
+	protoOss string
+	// protoCcl is the absolute path to ./pkg/ui/workspaces/db-console/ccl/src/js/.
+	protoCcl string
 }
 
 // getUIDirs computes the absolute path to the root of each UI sub-project.
@@ -68,12 +75,168 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}
 
 	return &UIDirectories{
+		workspace:    workspace,
 		root:         filepath.Join(workspace, "./pkg/ui"),
 		clusterUI:    filepath.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
 		dbConsole:    filepath.Join(workspace, "./pkg/ui/workspaces/db-console"),
 		e2eTests:     filepath.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
 		eslintPlugin: filepath.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
+		protoOss:     filepath.Join(workspace, "./pkg/ui/workspaces/db-console/src/js"),
+		protoCcl:     filepath.Join(workspace, "./pkg/ui/workspaces/db-console/ccl/src/js"),
 	}, nil
+}
+
+// assertNoLinkedNpmDeps looks for JS packages linked outside the Bazel
+// workspace (typically via `pnpm link`). It returns an error if:
+//
+// 'targets' contains a Bazel target that requires the web UI
+// AND
+// a node_modules/ tree exists within pkg/ui (or its subtrees)
+// AND
+// a @cockroachlabs-scoped package is symlinked to an external directory
+//
+// (or if any error occurs while performing one of those checks).
+func (d *dev) assertNoLinkedNpmDeps(targets []buildTarget) error {
+	uiWillBeBuilt := false
+	for _, target := range targets {
+		// TODO: This could potentially be a bazel query, e.g.
+		// 'somepath(${target.fullName}, //pkg/ui/workspaces/db-console:*)' or
+		// similar, but with only two eligible targets it doesn't seem quite
+		// worth it.
+		if target.fullName == cockroachTarget || target.fullName == cockroachTargetOss {
+			uiWillBeBuilt = true
+			break
+		}
+	}
+	if !uiWillBeBuilt {
+		// If no UI build is required, the presence of an externally-linked
+		// package doesn't matter.
+		return nil
+	}
+
+	// Find the current workspace and build some relevant absolute paths.
+	uiDirs, err := getUIDirs(d)
+	if err != nil {
+		return fmt.Errorf("could not check for linked NPM dependencies: %w", err)
+	}
+
+	jsPkgRoots := []string{
+		uiDirs.root,
+		uiDirs.eslintPlugin,
+		uiDirs.protoOss,
+		uiDirs.protoCcl,
+		uiDirs.clusterUI,
+		uiDirs.dbConsole,
+		uiDirs.e2eTests,
+	}
+
+	type LinkedPackage struct {
+		name string
+		dir  string
+	}
+
+	anyPackageEscapesWorkspace := false
+
+	// Check for symlinks in each package's node_modules/@cockroachlabs/ dir.
+	for _, jsPkgRoot := range jsPkgRoots {
+		crlModulesPath := filepath.Join(jsPkgRoot, "node_modules/@cockroachlabs")
+		crlDeps, err := d.os.ReadDir(crlModulesPath)
+
+		// If node_modules/@cockroachlabs doesn't exist, it's likely that JS
+		// dependencies haven't been installed outside the Bazel workspace.
+		// This is expected for non-UI devs, and is a safe state.
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("could not @cockroachlabs/ packages: %w", err)
+		}
+
+		linkedPackages := []LinkedPackage{}
+
+		// For each dependency in node_modules/@cockroachlabs/ ...
+		for _, depName := range crlDeps {
+			// Ignore empty strings, which are produced by d.os.ReadDir in
+			// dry-run mode.
+			if depName == "" {
+				continue
+			}
+
+			// Resolve the possible symlink.
+			depPath := filepath.Join(crlModulesPath, depName)
+			resolved, err := d.os.Readlink(depPath)
+			if err != nil {
+				return fmt.Errorf("could not evaluate symlink %s: %w", depPath, err)
+			}
+
+			// Convert it to a path relative to the Bazel workspace root to make
+			// it obvious when a link escapes the workspace.
+			relativeToWorkspace, err := filepath.Rel(
+				uiDirs.workspace,
+				filepath.Join(crlModulesPath, resolved),
+			)
+			if err != nil {
+				return fmt.Errorf("could not relativize path %s: %w", resolved, err)
+			}
+
+			// If it doesn't start with '..', it doesn't escape the Bazel
+			// workspace.
+			// TODO: Once Go 1.20 is supported here, switch to filepath.IsLocal.
+			if !strings.HasPrefix(relativeToWorkspace, "..") {
+				continue
+			}
+
+			// This package escapes the Bazel workspace! Add it to the queue
+			// with its absolute path for simpler presentation to users.
+			abs, err := filepath.Abs(relativeToWorkspace)
+			if err != nil {
+				return fmt.Errorf("could not absolutize path %s: %w", resolved, err)
+			}
+
+			linkedPackages = append(
+				linkedPackages,
+				LinkedPackage{
+					name: "@cockroachlabs/" + depName,
+					dir:  abs,
+				},
+			)
+		}
+
+		// If this internal package has no dependencies provided by pnpm link,
+		// move on without logging anything.
+		if len(linkedPackages) == 0 {
+			continue
+		}
+
+		if !anyPackageEscapesWorkspace {
+			anyPackageEscapesWorkspace = true
+			log.Println("Externally-linked package(s) detected:")
+		}
+
+		log.Printf("pkg/ui/workspaces/%s:", filepath.Base(jsPkgRoot))
+		for _, pkg := range linkedPackages {
+			log.Printf("    %s <- %s\n", pkg.name, pkg.dir)
+		}
+		log.Println()
+	}
+
+	if anyPackageEscapesWorkspace {
+		msg := strings.TrimSpace(`
+At least one JS dependency is linked to another directory on your machine.
+Bazel cannot see changes in these packages, which could lead to both
+false-positive and false-negative behavior in the UI.
+This build has been pre-emptively failed.
+
+To build without the UI, run:
+    dev build short
+To remove all linked dependencies, run:
+    dev ui clean --all
+`) + "\n"
+
+		return fmt.Errorf("%s", msg)
+	}
+
+	return nil
 }
 
 // makeUIWatchCmd initializes the 'ui watch' subcommand, which sets up a
