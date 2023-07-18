@@ -126,9 +126,6 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW CREATE TABLE show_create_tbl",
 			setup: "CREATE TABLE show_create_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_create_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW CREATE FUNCTION show_create_fn",
@@ -146,23 +143,14 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW INDEXES FROM show_indexes_tbl",
 			setup: "CREATE TABLE show_indexes_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_indexes_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW COLUMNS FROM show_columns_tbl",
 			setup: "CREATE TABLE show_columns_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_columns_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW CONSTRAINTS FROM show_constraints_tbl",
 			setup: "CREATE TABLE show_constraints_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_constraints_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql: "SHOW PARTITIONS FROM DATABASE defaultdb",
@@ -170,16 +158,10 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW PARTITIONS FROM TABLE show_partitions_tbl",
 			setup: "CREATE TABLE show_partitions_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_partitions_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW PARTITIONS FROM INDEX show_partitions_idx_tbl@show_partitions_idx_tbl_pkey",
 			setup: "CREATE TABLE show_partitions_idx_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_partitions_idx_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql: "SHOW GRANTS",
