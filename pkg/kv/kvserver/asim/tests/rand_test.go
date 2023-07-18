@@ -17,13 +17,13 @@ import (
 )
 
 const (
-	defaultNumIterations = 5
+	defaultNumIterations = 3
 	defaultSeed          = 42
 	defaultDuration      = 30 * time.Minute
 	defaultVerbosity     = false
 )
 
-func defaultSettings(randOptions testRandOptions) testSettings {
+func defaultSettings(randOptions testRandOptions, rGenSettings rangeGenSettings) testSettings {
 	return testSettings{
 		numIterations: defaultNumIterations,
 		duration:      defaultDuration,
@@ -31,6 +31,7 @@ func defaultSettings(randOptions testRandOptions) testSettings {
 		randSource:    rand.New(rand.NewSource(defaultSeed)),
 		assertions:    defaultAssertions(),
 		randOptions:   randOptions,
+		rangeGen:      rGenSettings,
 	}
 }
 
@@ -39,6 +40,7 @@ func defaultSettings(randOptions testRandOptions) testSettings {
 // allocator simulations, and validating assertions on the final state.
 //
 // Input of the framework (fields in the testSetting struct):
+//
 // 1. numIterations (int, default: 3): specifies number of test iterations to be
 // run, each with different random configurations generated
 // 2. duration (time.Duration, default: 30min): defined simulated duration of
@@ -49,6 +51,7 @@ func defaultSettings(randOptions testRandOptions) testSettings {
 // 4. assertions ([]SimulationAssertion, default: conformanceAssertion with 0
 // under-replication, 0 over-replication, 0 violating, and 0 unavailable):
 // defines criteria for validation assertions
+//
 // 5. randOptions: guides the aspect of the test configuration that should be
 // randomized. This includes:
 // - cluster (bool): indicates if the cluster configuration should be randomized
@@ -58,6 +61,15 @@ func defaultSettings(randOptions testRandOptions) testSettings {
 // be randomized
 // - staticEvents (bool): indicates if static events, including any delayed
 // events to be applied during the simulation, should be randomized
+//
+// 6. rangeGen (default: uniform rangeGenType, uniform keySpaceGenType, empty
+// weightedRand).
+// - rangeKeyGenType: determines range generator type across iterations
+// (default: uniformGenerator, min = 1, max = 1000)
+// - keySpaceGenType: determines key space generator type across iterations
+// (default: uniformGenerator, min = 1000, max = 200000)
+// - weightedRand: if non-empty, enables weighted randomization for range
+// distribution
 //
 // RandTestingFramework is initialized with a specified testSetting and
 // maintained its state across all iterations. Each iteration in
@@ -71,14 +83,13 @@ func defaultSettings(randOptions testRandOptions) testSettings {
 func TestRandomized(t *testing.T) {
 	randOptions := testRandOptions{
 		cluster:        true,
-		ranges:         false,
+		ranges:         true,
 		load:           false,
 		staticSettings: false,
 		staticEvents:   false,
 	}
-	settings := defaultSettings(randOptions)
-	f := randTestingFramework{
-		s: settings,
-	}
+	rangeGenSettings := defaultRangeGenSettings()
+	settings := defaultSettings(randOptions, rangeGenSettings)
+	f := newRandTestingFramework(settings)
 	f.runRandTestRepeated(t)
 }
