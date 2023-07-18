@@ -566,16 +566,16 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 
 // Format the array {type,othertype} as type, othertype.
 // If there are no args, output the empty string.
-const getFunctionArgStringQuery = `SELECT 
-										COALESCE(
-										    (SELECT trim('{}' FROM replace(
-										        array_agg(unnest(proargtypes)::REGTYPE::TEXT)::TEXT,
-										        ',', ', ')))
-										    , '')
-                    FROM pg_catalog.pg_proc
-                    WHERE oid=$1
-                    GROUP BY oid, proargtypes
-                    LIMIT 1`
+const getFunctionArgStringQuery = `
+SELECT COALESCE(
+    (SELECT trim('{}' FROM replace(
+        (
+            SELECT array_agg(unnested::REGTYPE::TEXT)
+            FROM unnest(proargtypes) AS unnested
+        )::TEXT, ',', ', '))
+    ), '')
+FROM pg_catalog.pg_proc WHERE oid=$1 GROUP BY oid, proargtypes LIMIT 1
+`
 
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.

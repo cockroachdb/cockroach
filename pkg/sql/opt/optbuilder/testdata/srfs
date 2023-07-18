@@ -66,7 +66,7 @@ ordinality
 build
 SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
 ----
-error (0A000): generate_series(): generator functions are not allowed in LIMIT
+error (0A000): generate_series(): set-returning functions are not allowed in LIMIT
 
 # multiple_SRFs
 
@@ -709,7 +709,7 @@ error (0A000): generate_series(): generate_series(): set-returning functions mus
 build
 SELECT max(a) FROM t HAVING max(a::int) > generate_series(0, a::int)
 ----
-error (0A000): generate_series(): generator functions are not allowed in HAVING
+error (0A000): generate_series(): set-returning functions are not allowed in HAVING
 
 build
 SELECT max(a) FROM t HAVING max(a::int) > (SELECT generate_series(0, b::int) FROM u limit 1)
@@ -861,7 +861,7 @@ error (42803): column "unnest" must appear in the GROUP BY clause or be used in 
 build
 SELECT 0, unnest(ARRAY[0]) GROUP BY 1, 2
 ----
-error (0A000): unnest(): generator functions are not allowed in GROUP BY
+error (0A000): unnest(): set-returning functions are not allowed in GROUP BY
 
 build
 SELECT 0, information_schema._pg_expandarray(ARRAY[0]) GROUP BY 1

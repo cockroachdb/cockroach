@@ -466,7 +466,7 @@ error (42803): sum(): aggregate functions are not allowed in RETURNING
 build
 INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 10)
 ----
-error (0A000): generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
 
 # Try to use non-returning INSERT as expression.
 build
@@ -641,7 +641,7 @@ error (0A000): WITH clause "cte" does not return any columns
 build
 INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 100)
 ----
-error (0A000): generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
 
 # ------------------------------------------------------------------------------
 # Tests with target column names.

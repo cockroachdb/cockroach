@@ -45,6 +45,11 @@ func (s *srf) Walk(v tree.Visitor) tree.Expr {
 func (s *srf) TypeCheck(
 	_ context.Context, ctx *tree.SemaContext, desired *types.T,
 ) (tree.TypedExpr, error) {
+	if ctx.Properties.IsSet(tree.RejectGenerators) {
+		// srf replacement can happen before type-checking, so we need to check
+		// invalid usage here.
+		return nil, tree.NewInvalidFunctionUsageError(tree.GeneratorClass, ctx.TypeCheckContext())
+	}
 	if ctx.Properties.Derived.SeenGenerator {
 		// This error happens if this srf struct is nested inside a raw srf that
 		// has not yet been replaced. This is possible since scope.replaceSRF first

@@ -2880,10 +2880,8 @@ SELECT string_agg('foo', CAST ((SELECT NULL) AS BYTES)) OVER ();
 foo
 
 # Regression test for #30166.
-query T
+statement error pq: array_agg\(\): set-returning functions are not allowed in aggregate
 SELECT array_agg(generate_series(1, 2))
-----
-{1,2}
 
 # Regression test for #31882.
 
