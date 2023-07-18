@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -297,6 +298,11 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	defer cleanup()
 	flow.Resume(recv)
 	return recv.commErr
+}
+
+// coster returns the Coster used by the join planner.
+func (p *planner) coster() xform.Coster {
+	return p.optPlanningCtx.optimizer.Coster()
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
@@ -963,4 +969,9 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 	}
 	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
 	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
+}
+
+// Optimizer is part of the eval.Planner interface.
+func (p *planner) Optimizer() interface{} {
+	return p.optPlanningCtx.Optimizer()
 }

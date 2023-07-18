@@ -563,3 +563,25 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
 }
+
+// GetLookupJoinLookupTableDistribution returns the Distribution of a lookup
+// table in a lookup join if that distribution can be statically determined.
+var GetLookupJoinLookupTableDistribution func(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	lookupJoin *LookupJoinExpr,
+	required *physical.Required,
+	optimizer interface{},
+) (physicalDistribution physical.Distribution)
+
+// BuildLookupJoinLookupTableDistribution returns the Distribution of a lookup
+// table in a lookup join if that distribution can be statically determined and
+// the `crdb_region` column set (see
+// distribution.BuildLookupJoinLookupTableDistribution).
+var BuildLookupJoinLookupTableDistribution func(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	lookupJoin *LookupJoinExpr,
+	required *physical.Required,
+	maybeGetBestCostRelation func(grp RelExpr, required *physical.Required) (best RelExpr, ok bool),
+) (crdbRegionColSet opt.ColSet, provided physical.Distribution)

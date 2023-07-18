@@ -867,6 +867,36 @@ func (o *Optimizer) MaybeGetBestCostRelation(
 	return state.best, true
 }
 
+var BuildLookupJoinLookupTableDistribution func(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	lookupJoin *memo.LookupJoinExpr,
+	required *physical.Required,
+	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
+) (crdbRegionColSet opt.ColSet, provided physical.Distribution)
+
+func init() {
+	memo.GetLookupJoinLookupTableDistribution = func(
+		ctx context.Context,
+		evalCtx *eval.Context,
+		lookupJoin *memo.LookupJoinExpr,
+		required *physical.Required,
+		optimizer interface{},
+	) (physicalDistribution physical.Distribution) {
+		if optimizer == nil {
+			return physicalDistribution
+		}
+		o, ok := optimizer.(*Optimizer)
+		if !ok {
+			return physicalDistribution
+		}
+		_, physicalDistribution = memo.BuildLookupJoinLookupTableDistribution(
+			ctx, evalCtx, lookupJoin, required, o.MaybeGetBestCostRelation,
+		)
+		return physicalDistribution
+	}
+}
+
 // lookupOptState looks up the state associated with the given group and
 // properties. If no state exists yet, then lookupOptState returns nil.
 func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {

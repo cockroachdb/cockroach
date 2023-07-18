@@ -331,6 +331,18 @@ func BuildLookupJoinLookupTableDistribution(
 	return crdbRegionColSet, provided
 }
 
+func init() {
+	memo.BuildLookupJoinLookupTableDistribution = func(
+		ctx context.Context,
+		evalCtx *eval.Context,
+		lookupJoin *memo.LookupJoinExpr,
+		required *physical.Required,
+		maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
+	) (crdbRegionColSet opt.ColSet, provided physical.Distribution) {
+		return BuildLookupJoinLookupTableDistribution(ctx, evalCtx, lookupJoin, required, maybeGetBestCostRelation)
+	}
+}
+
 // BuildInvertedJoinLookupTableDistribution builds the Distribution that results
 // from performing lookups of an inverted join, if that distribution can be
 // statically determined.
