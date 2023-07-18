@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
@@ -1120,4 +1121,29 @@ func FormatRetriableExecutionErrorLogToStringArray(
 		_ = arr.Append(tree.NewDString(msg))
 	}
 	return arr
+}
+
+// GetJobTraceID returns the current trace ID of the job from the job progress.
+func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracingpb.TraceID, error) {
+	var traceID tracingpb.TraceID
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfo := InfoStorageForJob(txn, jobID)
+		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("progress not found")
+		}
+		var progress jobspb.Progress
+		if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+			return errors.Wrap(err, "failed to unmarshal progress bytes")
+		}
+		traceID = progress.TraceID
+		return nil
+	}); err != nil {
+		return 0, errors.Wrapf(err, "failed to fetch trace ID for job %d", jobID)
+	}
+
+	return traceID, nil
 }
