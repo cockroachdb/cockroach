@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/quantile",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_prometheus_client_model//go",
     ],
 )
