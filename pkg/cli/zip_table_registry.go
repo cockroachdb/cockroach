@@ -217,15 +217,15 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_settings": {
-		customQueryRedacted: `SELECT * FROM (
-    		SELECT * 
-    		FROM crdb_internal.cluster_settings
-    		WHERE type <> 's'
-		) UNION (
-		    SELECT variable, '<redacted>' as value, type, public, description
-			FROM crdb_internal.cluster_settings g
-			WHERE type = 's'
-		)`,
+		customQueryRedacted: `SELECT
+			variable,
+			CASE WHEN type = 's' AND value != default_value THEN '<redacted>' ELSE value END value,
+			type,
+			public,
+			description,
+			default_value,
+			origin
+		FROM crdb_internal.cluster_settings`,
 	},
 	"crdb_internal.cluster_transactions": {
 		// `last_auto_retry_reason` contains error text that may contain
