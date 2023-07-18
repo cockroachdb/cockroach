@@ -544,6 +544,12 @@ func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
 // enterprise enabled build. This is due to licensing restrictions on the MT
 // capabilities.
 func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+	// If the flag has been set to disable the default test tenant, don't start
+	// it here.
+	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() || ts.cfg.DisableDefaultTestTenant {
+		return nil
+	}
+
 	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
 	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
 		log.Shoutf(ctx, severity.ERROR, "test tenant requested by configuration, but code organization prevents start!\n%v", err)
@@ -551,12 +557,6 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		// the error and return without creating/starting a SQL server.
 		ts.cfg.DisableDefaultTestTenant = true
 		return nil // nolint:returnerrcheck
-	}
-
-	// If the flag has been set to disable the default test tenant, don't start
-	// it here.
-	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() || ts.cfg.DisableDefaultTestTenant {
-		return nil
 	}
 
 	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
