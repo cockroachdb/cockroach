@@ -41,9 +41,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Test is designed to run with explicit tenants. No need to
-				// implicitly create a tenant.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
