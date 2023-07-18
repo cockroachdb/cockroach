@@ -2040,14 +2040,16 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 }
 
 // ApproximateDiskBytes implements the Engine interface.
-func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
+func (p *Pebble) ApproximateDiskBytes(
+	from, to roachpb.Key,
+) (bytes, remoteBytes, externalBytes uint64, _ error) {
 	fromEncoded := EngineKey{Key: from}.Encode()
 	toEncoded := EngineKey{Key: to}.Encode()
-	count, err := p.db.EstimateDiskUsage(fromEncoded, toEncoded)
+	bytes, remoteBytes, externalBytes, err := p.db.EstimateDiskUsageByBackingType(fromEncoded, toEncoded)
 	if err != nil {
-		return 0, err
+		return 0, 0, 0, err
 	}
-	return count, nil
+	return bytes, remoteBytes, externalBytes, nil
 }
 
 // Compact implements the Engine interface.

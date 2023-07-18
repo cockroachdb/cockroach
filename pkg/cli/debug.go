@@ -936,7 +936,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	}
 
 	{
-		approxBytesBefore, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		approxBytesBefore, _, _, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
 		if err != nil {
 			return errors.Wrap(err, "while computing approximate size before compaction")
 		}
@@ -966,7 +966,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	fmt.Printf("%s\n", db.GetMetrics())
 
 	{
-		approxBytesAfter, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		approxBytesAfter, _, _, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
 		if err != nil {
 			return errors.Wrap(err, "while computing approximate size after compaction")
 		}
