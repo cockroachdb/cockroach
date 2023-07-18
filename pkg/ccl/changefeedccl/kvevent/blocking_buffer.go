@@ -251,6 +251,10 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
+	if log.V(2) {
+		log.Infof(ctx, "Add event: %s", e.String())
+	}
+
 	// Immediately enqueue event if it already has allocation,
 	// or if it's a Flush request -- which has no allocations.
 	// Such events happen when we switch from backfill to rangefeed mode.

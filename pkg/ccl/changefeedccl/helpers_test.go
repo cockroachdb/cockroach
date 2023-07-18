@@ -94,8 +94,7 @@ func readNextMessages(
 			return nil, ctx.Err()
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "About to read a message (%d out of %d) from %v (%T)",
-				len(actual), numMessages, f, f)
+			log.Infof(context.Background(), "About to read a message (%d out of %d)", len(actual), numMessages)
 		}
 		m, err := f.Next()
 		if log.V(1) {

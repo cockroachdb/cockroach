@@ -158,6 +158,9 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 	// Fixme.
 	seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
 	if _, ok := t[seenKey]; ok {
+		if log.V(1) {
+			log.Infof(context.Background(), "skip dup %s", seenKey)
+		}
 		return false
 	}
 	t[seenKey] = struct{}{}
@@ -1080,7 +1083,6 @@ func (f *cloudFeedFactory) Feed(
 			parquetPossible = false
 		}
 		if parquetPossible {
-			log.Infof(context.Background(), "using parquet format")
 			createStmt.Options = append(
 				createStmt.Options,
 				tree.KVOption{
@@ -1137,8 +1139,9 @@ type cloudFeed struct {
 	dir    string
 	isBare bool
 
-	resolved string
-	rows     []*cdctest.TestFeedMessage
+	resolved  string
+	seenFiles map[string]struct{}
+	rows      []*cdctest.TestFeedMessage
 }
 
 var _ cdctest.TestFeed = (*cloudFeed)(nil)
@@ -1448,21 +1451,15 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
-	tsFromPath := func(p string) string {
-		return strings.Split(filepath.Base(p), "-")[0]
+	// Skip files we processed before.
+	if c.seenFiles == nil {
+		c.seenFiles = make(map[string]struct{})
 	}
-
-	// Skip files with timestamp greater than the previously observed timestamp.
-	// Note: theoretically, we should be able to skip any file with timestamp
-	// greater *or equal* to the previously observed timestamp.  However, alter
-	// changefeed pose a problem, since a table maybe added with initial scan
-	// option, causing new events (possibly including resolved event) to be
-	// emitted as of previously emitted timestamp.
-	// See https://github.com/cockroachdb/cockroach/issues/84102
-	if strings.Compare(tsFromPath(c.resolved), tsFromPath(path)) >= 0 {
-		// Already output this in a previous walkDir.
+	if _, seen := c.seenFiles[path]; seen {
+		log.Infof(context.Background(), "Skip file %s", path)
 		return nil
 	}
+	c.seenFiles[path] = struct{}{}
 
 	details, err := c.Details()
 	if err != nil {
