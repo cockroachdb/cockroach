@@ -872,3 +872,17 @@ SET enable_auto_rehoming = bogus
 
 statement error pq: parameter "enable_auto_rehoming" requires a Boolean value
 SET experimental_enable_auto_rehoming = bogus
+
+statement error cannot set max_retries_for_read_committed to a negative value: -1
+SET max_retries_for_read_committed = -1
+
+statement error cannot set max_retries_for_read_committed to a value greater than 2147483647: 2147483648
+SET max_retries_for_read_committed = 2147483648
+
+statement ok
+SET max_retries_for_read_committed = 5
+
+query T
+SHOW max_retries_for_read_committed
+----
+5

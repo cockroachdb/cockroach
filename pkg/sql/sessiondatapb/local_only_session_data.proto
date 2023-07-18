@@ -423,6 +423,10 @@ message LocalOnlySessionData {
   // require locking for correctness, so by default we use best-effor locks for
   // better performance.) Weaker isolation levels always use durable locking.
   bool durable_locking_for_serializable = 109;
+  // MaxRetriesForReadCommitted indicates the maximum number of
+  // automatic retries to perform for statements in explicit READ COMMITTED
+  // transactions that see a transaction retry error.
+  int32 max_retries_for_read_committed = 110;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

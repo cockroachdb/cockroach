@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
@@ -1044,9 +1045,23 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if err = ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
-		stmtThresholdSpan.Finish()
-		return nil, nil, err
+	if ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
+		!ex.implicitTxn() &&
+		ex.executorType != executorTypeInternal {
+		// If an internal executor query that is run as part of a larger statement
+		// throws a retryable error, that error should be returned up and retried by
+		// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
+		// TODO(rafi): The above should be happening already, but find a way to
+		// test it.
+		if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res); err != nil {
+			stmtThresholdSpan.Finish()
+			return nil, nil, err
+		}
+	} else {
+		if err := ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
+			stmtThresholdSpan.Finish()
+			return nil, nil, err
+		}
 	}
 
 	if stmtThresholdSpan != nil {
@@ -1486,6 +1501,77 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	}
 	// We're done with this txn.
 	return eventTxnFinishAborted{}, nil
+}
+
+// Each statement in an explicit READ COMMITTED transaction has a SAVEPOINT.
+// This allows for TransactionRetry errors to be retried automatically. We don't
+// do this for implicit transactions because the conn_executor state machine
+// already has retry logic for implicit transactions. To avoid having to
+// implement the retry logic in the state machine, we use the KV savepoint API
+// directly.
+func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
+	ctx context.Context, p *planner, res RestrictedCommandResult,
+) error {
+	readCommittedSavePointToken, err := ex.state.mu.txn.CreateSavepoint(ctx)
+	if err != nil {
+		return err
+	}
+
+	// TODO(rafi): Figure out observability for these retries. We might want to
+	// add a new field similar to ex.state.mu.autoRetryCounter.
+	maxRetries := int(ex.sessionData().MaxRetriesForReadCommitted)
+	for attemptNum := 0; ; attemptNum++ {
+		bufferPos := res.BufferedResultsLen()
+		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+			return err
+		}
+		maybeRetriableErr := res.Err()
+		if maybeRetriableErr == nil {
+			// If there was no error, then we must release the savepoint and break.
+			if err := ex.state.mu.txn.ReleaseSavepoint(ctx, readCommittedSavePointToken); err != nil {
+				return err
+			}
+			break
+		}
+		// If the error does not allow for a partial retry, then stop. The error
+		// is already set on res.Err() and will be returned to the client.
+		var txnRetryErr *kvpb.TransactionRetryWithProtoRefreshError
+		if !errors.As(maybeRetriableErr, &txnRetryErr) || txnRetryErr.TxnMustRestartFromBeginning() {
+			break
+		}
+
+		// If we reached the maximum number of retries, then we must stop.
+		if attemptNum == maxRetries {
+			res.SetError(errors.Wrapf(
+				maybeRetriableErr,
+				"read committed retry limit exceeded; set by max_retries_for_read_committed=%d",
+				maxRetries,
+			))
+			break
+		}
+
+		// In order to retry the statement, we need to clear any results and
+		// errors that were buffered, rollback to the savepoint, then prepare the
+		// kv.txn for the partial txn retry.
+		if ableToClear := res.TruncateBufferedResults(bufferPos); !ableToClear {
+			// If the buffer exceeded the maximum size, then it might have been
+			// flushed and sent back to the client already. In that case, we can't
+			// retry the statement.
+			res.SetError(errors.Wrapf(
+				maybeRetriableErr,
+				"cannot retry since some results were already sent to the client",
+			))
+			break
+		}
+		res.SetError(nil)
+		if err := ex.state.mu.txn.RollbackToSavepoint(ctx, readCommittedSavePointToken); err != nil {
+			return err
+		}
+		if err := ex.state.mu.txn.PrepareForPartialRetry(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // dispatchToExecutionEngine executes the statement, writes the result to res
