@@ -139,9 +139,8 @@ func TestProxyProtocol(t *testing.T) {
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := ts.PGServer().(*pgwire.Server)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
@@ -249,8 +248,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -422,8 +420,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -691,9 +688,8 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := ts.PGServer().(*pgwire.Server)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -888,9 +884,8 @@ func TestProxyTLSClose(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := ts.PGServer().(*pgwire.Server)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -939,9 +934,8 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := ts.PGServer().(*pgwire.Server)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
 
 	// Create some user with password authn.
@@ -997,9 +991,8 @@ func TestInsecureProxy(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
-	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	pgs := ts.PGServer().(*pgwire.Server)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -1172,9 +1165,7 @@ func TestDenylistUpdate(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	sql.(*server.TestServer).TenantOrServer().
-		PGPreServer().(*pgwire.PreServeConnHandler).
-		TestingSetTrustClientProvidedRemoteAddr(true)
+	sql.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create some user with password authn.
 	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
