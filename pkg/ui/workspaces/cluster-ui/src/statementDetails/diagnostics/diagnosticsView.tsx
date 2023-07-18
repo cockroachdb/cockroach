@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import classnames from "classnames/bind";
-import { Button, Icon } from "@cockroachlabs/ui-components";
+import { Button, Icon, InlineAlert } from "@cockroachlabs/ui-components";
 import { Button as CancelButton } from "src/button";
 import { SummaryCard } from "src/summaryCard";
 import {
@@ -32,13 +32,18 @@ import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import { DATE_FORMAT_24_TZ } from "../../util";
 import { Timestamp } from "../../timestamp";
 import moment from "moment-timezone";
+import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
+import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
+import classNames from "classnames/bind";
+
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 export interface DiagnosticsViewStateProps {
-  hasData: boolean;
   diagnosticsReports: StatementDiagnosticsReport[];
   showDiagnosticsViewLink?: boolean;
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
   currentScale: TimeScale;
+  requestTime: moment.Moment;
 }
 
 export interface DiagnosticsViewDispatchProps {
@@ -105,6 +110,45 @@ export const EmptyDiagnosticsView = ({
         </footer>
       }
     />
+  );
+};
+
+const StmtDiagnosticLabel = ({
+  currentScale,
+  requestTime,
+  undisplayedActiveReportExists,
+}: {
+  currentScale: TimeScale;
+  requestTime: moment.Moment;
+  undisplayedActiveReportExists: boolean;
+}): JSX.Element => {
+  return (
+    <>
+      <p className={timeScaleStylesCx("time-label", "label-margin")}>
+        Showing statement diagnostics from{" "}
+        <span className={timeScaleStylesCx("bold")}>
+          <FormattedTimescale
+            ts={currentScale}
+            requestTime={moment(requestTime)}
+          />
+        </span>
+      </p>
+      {undisplayedActiveReportExists && (
+        <InlineAlert
+          intent="info"
+          title={
+            <>
+              There is an active statement diagnostic request not displayed in
+              the selected time window.
+              <br />
+              Further attempts to activate a diagnostic for this statement will
+              fail.
+            </>
+          }
+          className={cx("margin-bottom")}
+        />
+      )}
+    </>
   );
 };
 
@@ -222,7 +266,6 @@ export class DiagnosticsView extends React.Component<
 
   render(): React.ReactElement {
     const {
-      hasData,
       diagnosticsReports,
       showDiagnosticsViewLink,
       statementFingerprint,
@@ -235,6 +278,7 @@ export class DiagnosticsView extends React.Component<
       diagnostic => diagnostic.completed,
     );
 
+    // Get diagnostic reports within the time window.
     const dataSource = filterByTimeScale(
       diagnosticsReports.map((diagnosticsReport, idx) => ({
         ...diagnosticsReport,
@@ -243,7 +287,14 @@ export class DiagnosticsView extends React.Component<
       currentScale,
     );
 
-    if (!hasData) {
+    // Get active report not within the time window if exists.
+    const undisplayedActiveReportExists: boolean =
+      diagnosticsReports.findIndex(
+        report =>
+          !report.completed && !dataSource.find(data => data.id === report.id),
+      ) !== -1;
+
+    if (dataSource.length === 0) {
       return (
         <>
           <TimeScaleDropdown
@@ -251,6 +302,11 @@ export class DiagnosticsView extends React.Component<
             currentScale={currentScale}
             setTimeScale={onChangeTimeScale}
             className={cx("timescale-small", "margin-bottom")}
+          />
+          <StmtDiagnosticLabel
+            currentScale={this.props.currentScale}
+            requestTime={moment(this.props.requestTime)}
+            undisplayedActiveReportExists={undisplayedActiveReportExists}
           />
           <SummaryCard>
             <EmptyDiagnosticsView {...this.props} />
@@ -282,6 +338,11 @@ export class DiagnosticsView extends React.Component<
             </Button>
           )}
         </div>
+        <StmtDiagnosticLabel
+          currentScale={this.props.currentScale}
+          requestTime={moment(this.props.requestTime)}
+          undisplayedActiveReportExists={undisplayedActiveReportExists}
+        />
         <SortedTable
           data={dataSource}
           columns={this.columns}

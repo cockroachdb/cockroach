@@ -943,8 +943,8 @@ export class StatementDetails extends React.Component<
         activateDiagnosticsRef={this.activateDiagnosticsRef}
         diagnosticsReports={this.props.diagnosticsReports}
         dismissAlertMessage={this.props.dismissStatementDiagnosticsAlertMessage}
-        hasData={this.hasDiagnosticReports()}
         statementFingerprint={fingerprint}
+        requestTime={moment(this.props.requestTime)}
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={report =>
           this.props.onDiagnosticCancelRequest(report)
