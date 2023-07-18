@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/redact"
 )
 
 // This registry is the central object in the insights subsystem. It observes
@@ -128,6 +129,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 
 	var lastErrorCode string
+	var lastErrorMessage redact.RedactableString
 	// The transaction status will reflect the status of its statements; it will
 	// default to completed unless a failed statement status is found. Note that
 	// this does not take into account the "Cancelled" transaction status.
@@ -140,6 +142,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
 				lastErrorCode = s.ErrorCode
+				lastErrorMessage = s.ErrorMsg
 				lastStatus = Transaction_Status(s.Status)
 				s.Problem = Problem_FailedExecution
 			}
@@ -156,6 +159,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 
 	insight.Transaction.LastErrorCode = lastErrorCode
+	insight.Transaction.LastErrorMsg = lastErrorMessage
 	insight.Transaction.Status = lastStatus
 	r.sink.AddInsight(insight)
 }
