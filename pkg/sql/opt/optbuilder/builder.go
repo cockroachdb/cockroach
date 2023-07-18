@@ -423,7 +423,13 @@ func (b *Builder) buildStmt(
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.
-		newStmt, err := delegate.TryDelegate(b.ctx, b.catalog, b.evalCtx, stmt)
+		newStmt, err := delegate.TryDelegate(
+			b.ctx,
+			b.catalog,
+			b.evalCtx,
+			stmt,
+			b.qualifyDataSourceNamesInAST,
+		)
 		if err != nil {
 			panic(err)
 		}
