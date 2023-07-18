@@ -464,6 +464,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 106865)
 	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
 	skip.UnderRace(t, "takes too long with multiple nodes")
 
