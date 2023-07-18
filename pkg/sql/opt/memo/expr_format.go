@@ -125,12 +125,13 @@ func FormatExpr(
 	redactableValues bool,
 	mem *Memo,
 	catalog cat.Catalog,
+	getLookupJoinLookupTableDistribution func(*LookupJoinExpr, *physical.Required) physical.Distribution,
 ) string {
 	if catalog == nil {
 		// Automatically hide qualifications if we have no catalog.
 		flags |= ExprFmtHideQualifications
 	}
-	f := MakeExprFmtCtx(ctx, flags, redactableValues, mem, catalog)
+	f := MakeExprFmtCtx(ctx, flags, redactableValues, mem, catalog, getLookupJoinLookupTableDistribution)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -164,6 +165,16 @@ type ExprFmtCtx struct {
 	// seenUDFs is used to ensure that formatting of recursive UDFs does not
 	// infinitely recurse.
 	seenUDFs map[*UDFDefinition]struct{}
+
+	// getLookupJoinLookupTableDistribution can find the distribution of the
+	// lookup table in a lookup join.
+	getLookupJoinLookupTableDistribution func(*LookupJoinExpr, *physical.Required) physical.Distribution
+}
+
+func dummyGetLookupJoinLookupTableDistribution(
+	*LookupJoinExpr, *physical.Required,
+) (provided physical.Distribution) {
+	return physical.Distribution{}
 }
 
 // makeExprFmtCtxForString creates an expression formatting context from a new
@@ -172,14 +183,22 @@ type ExprFmtCtx struct {
 func makeExprFmtCtxForString(flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) ExprFmtCtx {
 	return MakeExprFmtCtxBuffer(
 		context.Background(), &bytes.Buffer{}, flags, false /* redactableValues */, mem, catalog,
+		dummyGetLookupJoinLookupTableDistribution,
 	)
 }
 
 // MakeExprFmtCtx creates an expression formatting context from a new buffer.
 func MakeExprFmtCtx(
-	ctx context.Context, flags ExprFmtFlags, redactableValues bool, mem *Memo, catalog cat.Catalog,
+	ctx context.Context,
+	flags ExprFmtFlags,
+	redactableValues bool,
+	mem *Memo,
+	catalog cat.Catalog,
+	getLookupJoinLookupTableDistribution func(*LookupJoinExpr, *physical.Required) physical.Distribution,
 ) ExprFmtCtx {
-	return MakeExprFmtCtxBuffer(ctx, &bytes.Buffer{}, flags, redactableValues, mem, catalog)
+	return MakeExprFmtCtxBuffer(ctx, &bytes.Buffer{}, flags, redactableValues, mem, catalog,
+		getLookupJoinLookupTableDistribution,
+	)
 }
 
 // MakeExprFmtCtxBuffer creates an expression formatting context from an
@@ -191,20 +210,22 @@ func MakeExprFmtCtxBuffer(
 	redactableValues bool,
 	mem *Memo,
 	catalog cat.Catalog,
+	getLookupJoinLookupTableDistribution func(*LookupJoinExpr, *physical.Required) physical.Distribution,
 ) ExprFmtCtx {
 	var nameGen *ExprNameGenerator
 	if mem != nil && mem.saveTablesPrefix != "" {
 		nameGen = NewExprNameGenerator(mem.saveTablesPrefix)
 	}
 	return ExprFmtCtx{
-		Ctx:              ctx,
-		Buffer:           buf,
-		Flags:            flags,
-		RedactableValues: redactableValues,
-		Memo:             mem,
-		Catalog:          catalog,
-		nameGen:          nameGen,
-		seenUDFs:         make(map[*UDFDefinition]struct{}),
+		Ctx:                                  ctx,
+		Buffer:                               buf,
+		Flags:                                flags,
+		RedactableValues:                     redactableValues,
+		Memo:                                 mem,
+		Catalog:                              catalog,
+		nameGen:                              nameGen,
+		seenUDFs:                             make(map[*UDFDefinition]struct{}),
+		getLookupJoinLookupTableDistribution: getLookupJoinLookupTableDistribution,
 	}
 }
 
@@ -864,6 +885,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		// distribution if this is a Distribute expression.
 		if !required.Distribution.Any() {
 			tp.Childf("distribution: %s", required.Distribution.String())
+		}
+		// Show the lookup table distribution of a lookup join, if it has been set.
+		if lookupJoinExpr, ok := e.(*LookupJoinExpr); ok {
+			providedDistribution := f.getLookupJoinLookupTableDistribution(lookupJoinExpr, lookupJoinExpr.RequiredPhysical())
+			if !providedDistribution.Any() {
+				tp.Childf("lookup table distribution: %s", providedDistribution.String())
+			}
 		}
 		if distribute, ok := e.(*DistributeExpr); ok {
 			tp.Childf("input distribution: %s", distribute.Input.ProvidedPhysical().Distribution.String())

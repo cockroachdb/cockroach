@@ -1080,6 +1080,7 @@ project
       │    ├── fd: ()-->(11), (7)-->(9)
       │    ├── limit hint: 1.00
       │    ├── distribution: ap-southeast-2
+      │    ├── lookup table distribution: ap-southeast-2
       │    ├── prune: (7)
       │    ├── inner-join (inverted json_arr1_rbr@j_idx [as=t1])
       │    │    ├── columns: t2.j:3 t1.k:18 crdb_region:22

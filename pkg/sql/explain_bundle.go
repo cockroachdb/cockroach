@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -288,6 +289,12 @@ func (b *stmtBundleBuilder) addStatement() {
 	b.z.AddFile("statement.sql", output)
 }
 
+func dummyGetLookupJoinLookupTableDistribution(
+	*memo.LookupJoinExpr, *physical.Required,
+) (provided physical.Distribution) {
+	return physical.Distribution{}
+}
+
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
 func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
@@ -300,7 +307,7 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 	}
 
 	formatOptPlan := func(flags memo.ExprFmtFlags) string {
-		f := memo.MakeExprFmtCtx(ctx, flags, b.flags.RedactValues, b.plan.mem, b.plan.catalog)
+		f := memo.MakeExprFmtCtx(ctx, flags, b.flags.RedactValues, b.plan.mem, b.plan.catalog, dummyGetLookupJoinLookupTableDistribution)
 		f.FormatExpr(b.plan.mem.RootExpr())
 		output := f.Buffer.String()
 		if b.flags.RedactValues {

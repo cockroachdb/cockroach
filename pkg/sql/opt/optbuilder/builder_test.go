@@ -118,6 +118,7 @@ func TestBuilder(t *testing.T) {
 				}
 				f := memo.MakeExprFmtCtx(
 					ctx, tester.Flags.ExprFormat, false /* redactableValues */, o.Memo(), catalog,
+					o.GetLookupJoinLookupTableDistribution,
 				)
 				f.FormatExpr(o.Memo().RootExpr())
 				return f.Buffer.String()

@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -839,6 +840,9 @@ func (ot *OptTester) FormatExpr(e opt.Expr) string {
 	}
 	return memo.FormatExpr(
 		ot.ctx, e, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
+		func(join *memo.LookupJoinExpr, required *physical.Required) (provided physical.Distribution) {
+			return physical.Distribution{}
+		},
 	)
 }
 
@@ -1625,7 +1629,7 @@ func (ot *OptTester) optStepsExploreDiff() (string, error) {
 			name := et.LastRuleName().String()
 			after := memo.FormatExpr(
 				ot.ctx, newNodes[i], ot.Flags.ExprFormat, false /* redactableValues */, et.fo.o.Memo(),
-				ot.catalog,
+				ot.catalog, et.fo.o.GetLookupJoinLookupTableDistribution,
 			)
 
 			diff := difflib.UnifiedDiff{
@@ -1824,7 +1828,7 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
 			ot.indent(memo.FormatExpr(
 				ot.ctx, newNodes[i], ot.Flags.ExprFormat, false /* redactableValues */, et.fo.o.Memo(),
-				ot.catalog,
+				ot.catalog, et.fo.o.GetLookupJoinLookupTableDistribution,
 			))
 		}
 	}
