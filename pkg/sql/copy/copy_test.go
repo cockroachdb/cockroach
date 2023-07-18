@@ -788,7 +788,7 @@ func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 	})
 	defer s.Stopper().Stop(ctx)
 
