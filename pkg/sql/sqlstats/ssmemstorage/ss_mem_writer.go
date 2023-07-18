@@ -205,8 +205,10 @@ func (s *Container) RecordStatement(
 	}
 
 	var errorCode string
+	var errorMsg string
 	if value.StatementError != nil {
 		errorCode = pgerror.GetPGCode(value.StatementError).String()
+		errorMsg = value.StatementError.Error()
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -229,6 +231,7 @@ func (s *Container) RecordStatement(
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
+		ErrorMsg:             errorMsg,
 	})
 
 	return stats.ID, nil
