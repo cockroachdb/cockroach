@@ -788,7 +788,7 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	// the header row in all circumstances. Do the same.
 	if c.csvExpectHeader {
 		c.csvExpectHeader = false
-		return false, nil
+		return c.readCSVData(ctx, final)
 	}
 
 	c.csvInput.Write(fullLine)

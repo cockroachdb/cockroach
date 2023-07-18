@@ -23,6 +23,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltestutils",
