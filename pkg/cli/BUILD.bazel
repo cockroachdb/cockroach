@@ -406,6 +406,7 @@ go_test(
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
