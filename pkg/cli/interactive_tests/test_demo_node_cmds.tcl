@@ -5,7 +5,7 @@ source [file join [file dirname $argv0] common.tcl]
 start_test "Check \\demo commands work as expected"
 # Start a demo with 5 nodes. Set multitenant=false due to unsupported
 # gossip commands below.
-spawn $argv demo --empty --no-line-editor --nodes=5 --multitenant=false --log-dir=logs --log-dir=logs
+spawn $argv demo --empty --no-line-editor --nodes=5 --multitenant=false --log-dir=logs
 
 eexpect "defaultdb>"
 
