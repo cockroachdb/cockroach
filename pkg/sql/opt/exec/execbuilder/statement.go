@@ -125,7 +125,7 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 		planText.WriteString(memoStr)
 	}
 
-	f := memo.MakeExprFmtCtx(b.ctx, fmtFlags, redactValues, b.mem, b.catalog)
+	f := memo.MakeExprFmtCtx(b.ctx, fmtFlags, redactValues, b.mem, b.catalog, b.optimizer.GetLookupJoinLookupTableDistribution)
 	f.FormatExpr(explain.Input)
 	planStr := f.Buffer.String()
 	if redactValues {

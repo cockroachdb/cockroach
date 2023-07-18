@@ -3611,6 +3611,7 @@ project
       ├── cost: 122.141763
       ├── fd: ()-->(2,5,6,12,13,17,20,21), (1)-->(3,4), (1)==(11,16), (11)==(1,16), (5)==(12,20), (12)==(5,20), (6)==(13,21), (13)==(6,21), (16)-->(18,19), (16)==(1,11), (20)==(5,12), (21)==(6,13)
       ├── distribution: ap-southeast-2
+      ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
       ├── inner-join (lookup xyz@xyz_abc_id_id2_idx [as=x])
       │    ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 x.id:9 abc_id:11 x.id2:12 x.crdb_region:13 b.id:16 b.id1:17 b.created_at:18 b.updated_at:19 b.id2:20 b.crdb_region:21
       │    ├── key columns: [6 1 5] = [13 11 12]
@@ -3620,6 +3621,7 @@ project
       │    ├── key: (9)
       │    ├── fd: ()-->(2,5,6,12,13,17,20,21), (1)-->(3,4), (16)-->(18,19), (1)==(11,16), (16)==(1,11), (5)==(12,20), (20)==(5,12), (6)==(13,21), (21)==(6,13), (2)==(17), (17)==(2), (3)==(18), (18)==(3), (4)==(19), (19)==(4), (9)-->(11), (13)==(6,21), (11)==(1,16), (12)==(5,20)
       │    ├── distribution: ap-southeast-2
+      │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
       │    ├── inner-join (lookup abc [as=a])
       │    │    ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 b.id:16 b.id1:17 b.created_at:18 b.updated_at:19 b.id2:20 b.crdb_region:21
       │    │    ├── key columns: [6 1] = [6 1]
@@ -3630,6 +3632,7 @@ project
       │    │    ├── key: (16)
       │    │    ├── fd: ()-->(2,5,6,17,20,21), (1)-->(3,4), (16)-->(18,19), (1)==(16), (16)==(1), (5)==(20), (20)==(5), (6)==(21), (21)==(6), (2)==(17), (17)==(2), (3)==(18), (18)==(3), (4)==(19), (19)==(4)
       │    │    ├── distribution: ap-southeast-2
+      │    │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
       │    │    ├── interesting orderings: (+1 opt(2,5,6)) (+16 opt(17,20,21))
       │    │    ├── inner-join (lookup abc [as=b])
       │    │    │    ├── columns: a.id:1 a.id1:2 a.id2:5 a.crdb_region:6 b.id:16 b.id1:17 b.created_at:18 b.updated_at:19 b.id2:20 b.crdb_region:21

@@ -284,6 +284,7 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 	m := mf.o.mem
 	nf := memo.MakeExprFmtCtxBuffer(
 		mf.o.ctx, mf.buf, memo.ExprFmtHideAll, mf.redactableValues, m, nil, /* catalog */
+		mf.o.GetLookupJoinLookupTableDistribution,
 	)
 	memo.FormatPrivate(&nf, private, physProps)
 

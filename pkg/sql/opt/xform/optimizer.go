@@ -1165,7 +1165,7 @@ func (o *Optimizer) recomputeCostImpl(
 
 // FormatExpr is a convenience wrapper for memo.FormatExpr.
 func (o *Optimizer) FormatExpr(e opt.Expr, flags memo.ExprFmtFlags, redactableValues bool) string {
-	return memo.FormatExpr(o.ctx, e, flags, redactableValues, o.mem, o.catalog)
+	return memo.FormatExpr(o.ctx, e, flags, redactableValues, o.mem, o.catalog, o.GetLookupJoinLookupTableDistribution)
 }
 
 // CustomFuncs exports the xform.CustomFuncs for testing purposes.
