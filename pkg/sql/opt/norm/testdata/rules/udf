@@ -46,16 +46,9 @@ norm format=show-scalars
 SELECT strict_fn(1, 'foo', true)
 ----
 values
- ├── columns: strict_fn:5
+ ├── columns: strict_fn:5!null
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
  └── tuple
-      └── subquery
-           └── values
-                ├── columns: i:4!null
-                ├── cardinality: [1 - 1]
-                ├── key: ()
-                ├── fd: ()-->(4)
-                └── tuple
-                     └── const: 1
+      └── const: 1
