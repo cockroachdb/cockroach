@@ -113,7 +113,7 @@ func TestRegistry(t *testing.T) {
 
 		require.Equal(t, expected, actual)
 		require.Equal(t, transaction.LastErrorCode, statement.ErrorCode)
-		require.Equal(t, transaction.Status, Transaction_Status(statement.Status))
+		require.Equal(t, transaction.LastErrorMsg, statement.ErrorMsg)
 	})
 
 	t.Run("disabled", func(t *testing.T) {
