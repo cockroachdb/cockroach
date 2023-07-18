@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -385,18 +384,18 @@ func (ts *TestServer) Gossip() *gossip.Gossip {
 
 // RangeFeedFactory is part of serverutils.TestServerInterface.
 func (ts *TestServer) RangeFeedFactory() interface{} {
-	if ts != nil {
-		return ts.sqlServer.execCfg.RangeFeedFactory
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].RangeFeedFactory()
 	}
-	return (*rangefeed.Factory)(nil)
+	return ts.sqlServer.execCfg.RangeFeedFactory
 }
 
 // Clock returns the clock used by the TestServer.
 func (ts *TestServer) Clock() *hlc.Clock {
-	if ts != nil {
-		return ts.clock
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].Clock()
 	}
-	return nil
+	return ts.clock
 }
 
 // SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
@@ -460,15 +459,18 @@ func (ts *TestServer) SQLInstanceID() base.SQLInstanceID {
 
 // StatusServer is part of the serverutils.TestServerInterface.
 func (ts *TestServer) StatusServer() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].StatusServer()
+	}
 	return ts.status
 }
 
 // RPCContext returns the rpc context used by the TestServer.
 func (ts *TestServer) RPCContext() *rpc.Context {
-	if ts != nil {
-		return ts.rpcContext
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].RPCContext()
 	}
-	return nil
+	return ts.rpcContext
 }
 
 // TsDB returns the ts.DB instance used by the TestServer.
@@ -490,10 +492,10 @@ func (ts *TestServer) DB() *kv.DB {
 // PGServer exposes the pgwire.Server instance used by the TestServer as an
 // interface{}.
 func (ts *TestServer) PGServer() interface{} {
-	if ts != nil {
-		return ts.sqlServer.pgServer
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].PGServer()
 	}
-	return nil
+	return ts.sqlServer.pgServer
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
@@ -1280,6 +1282,9 @@ func (ts *TestServer) ClusterSettings() *cluster.Settings {
 
 // SettingsWatcher is part of the serverutils.TestTenantInterface.
 func (ts *TestServer) SettingsWatcher() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].SettingsWatcher()
+	}
 	return ts.sqlServer.settingsWatcher
 }
 
@@ -1443,6 +1448,9 @@ func (ts *TestServer) GetNode() *Node {
 
 // DistSenderI is part of DistSenderInterface.
 func (ts *TestServer) DistSenderI() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].DistSenderI()
+	}
 	return ts.distSender
 }
 
@@ -1501,6 +1509,9 @@ func (ts *TestServer) SQLServer() interface{} {
 
 // DistSQLServer is part of the serverutils.TestTenantInterface.
 func (ts *TestServer) DistSQLServer() interface{} {
+	if ts.StartedDefaultTestTenant() {
+		return ts.testTenants[0].DistSQLServer()
+	}
 	return ts.sqlServer.distSQLServer
 }
 
