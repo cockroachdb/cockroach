@@ -307,6 +307,10 @@ type TestServerInterface interface {
 	// TenantCapabilitiesReader retrieves a reference to the
 	// capabilities reader.
 	TenantCapabilitiesReader() tenantcapabilities.Reader
+
+	// SystemExecutorConfig returns a copy of the system tenant's
+	// ExecutorConfig. The real return type is sql.ExecutorConfig.
+	SystemExecutorConfig() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

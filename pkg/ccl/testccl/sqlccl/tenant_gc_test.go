@@ -60,7 +60,7 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 		},
 	})
 	defer ts.Stopper().Stop(ctx)
-	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := ts.SystemExecutorConfig().(sql.ExecutorConfig)
 	scKVAccessor := ts.SpanConfigKVAccessor().(spanconfig.KVAccessor)
 
 	gcClosure := func(tenID uint64, progress *jobspb.SchemaChangeGCProgress) error {

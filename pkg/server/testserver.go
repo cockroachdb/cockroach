@@ -1716,6 +1716,11 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
+// SystemExecutorConfig is part of the serverutils.TestServerInterface.
+func (ts *TestServer) SystemExecutorConfig() interface{} {
+	return *ts.sqlServer.execCfg
+}
+
 // StartedDefaultTestTenant is part of the serverutils.TestServerInterface.
 func (ts *TestServer) StartedDefaultTestTenant() bool {
 	return len(ts.testTenants) > 0
