@@ -104,11 +104,13 @@ func (s *Container) RecordStatement(
 	}
 
 	var errorCode string
+	var errorMsg string
 	if value.StatementError != nil {
 		errorCode = pgerror.GetPGCode(value.StatementError).String()
+		errorMsg = value.StatementError.Error()
 	}
 
-	s.observeInsightStatement(value, stmtFingerprintID, errorCode)
+	s.observeInsightStatement(value, stmtFingerprintID, errorCode, errorMsg)
 
 	var lastErrorCode string
 	if key.Failed {
@@ -222,7 +224,7 @@ func (s *Container) RecordStatement(
 func (s *Container) observeInsightStatement(
 	value sqlstats.RecordedStmtStats,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
-	errorCode string,
+	errorCode, errorMsg string,
 ) {
 	var autoRetryReason string
 	if value.AutoRetryReason != nil {
@@ -256,6 +258,7 @@ func (s *Container) observeInsightStatement(
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
+		ErrorMsg:             errorMsg,
 	})
 }
 

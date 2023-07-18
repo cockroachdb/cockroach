@@ -91,7 +91,9 @@ message Transaction {
   int64 cpu_sql_nanos = 17 [(gogoproto.customname) = "CPUSQLNanos"];
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
-  Status status = 19;
+  // The error message of the last failed statement in the transaction
+  string last_error_msg = 19;
+  Status status = 20;
 }
 
 message Statement {
@@ -128,6 +130,7 @@ message Statement {
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
   string error_code = 24;
+  string error_msg = 25;
 }
 
 

@@ -7776,6 +7776,7 @@ CREATE TABLE crdb_internal.%s (
   stmt_execution_ids         STRING[] NOT NULL,
   cpu_sql_nanos              INT8,
   last_error_code            STRING,
+	last_error_msg             STRING,
   status                     STRING NOT NULL
 )`
 
@@ -7801,14 +7802,27 @@ func populateTxnExecutionInsights(
 	addRow func(...tree.Datum) error,
 	request *serverpb.ListExecutionInsightsRequest,
 ) (err error) {
-	hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-	if err != nil {
+	shouldRedactError := false
+	// Check if the user is admin.
+	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
 		return err
+	} else if !isAdmin {
+		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
+		// privileges.
+		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+			return err
+		} else if hasViewActivityRedacted {
+			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+			// over VIEWACTIVITY.
+			shouldRedactError = true
+		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+			return err
+		} else if !hasViewActivity {
+			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
+			// return insufficient privileges error.
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
 	}
-	if !hasRoleOption {
-		return noViewActivityOrViewActivityRedactedRoleError(p.User())
-	}
-
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
 	if err != nil {
 		return err
@@ -7822,6 +7836,7 @@ func populateTxnExecutionInsights(
 		}
 
 		var errorCode string
+		var errorMsg string
 		var queryBuilder strings.Builder
 		for i := range insight.Statements {
 			// Build query string.
@@ -7839,6 +7854,10 @@ func populateTxnExecutionInsights(
 
 			if insight.Statements[i].ErrorCode != "" {
 				errorCode = insight.Statements[i].ErrorCode
+				errorMsg = insight.Statements[i].ErrorMsg
+				if shouldRedactError {
+					errorMsg = "<redacted>"
+				}
 			}
 		}
 
@@ -7909,6 +7928,7 @@ func populateTxnExecutionInsights(
 			stmtIDs,
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
 			tree.NewDString(errorCode),
+			tree.NewDString(errorMsg),
 			tree.NewDString(insight.Transaction.Status.String()),
 		))
 
@@ -7949,7 +7969,8 @@ CREATE TABLE crdb_internal.%s (
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
 	cpu_sql_nanos              INT8,
-    error_code                 STRING
+  error_code                 STRING,
+	error_msg                  STRING
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -7984,12 +8005,26 @@ func populateStmtInsights(
 	addRow func(...tree.Datum) error,
 	request *serverpb.ListExecutionInsightsRequest,
 ) (err error) {
-	hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-	if err != nil {
+	shouldRedactError := false
+	// Check if the user is admin.
+	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
 		return err
-	}
-	if !hasRoleOption {
-		return noViewActivityOrViewActivityRedactedRoleError(p.User())
+	} else if !isAdmin {
+		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
+		// privileges.
+		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+			return err
+		} else if hasViewActivityRedacted {
+			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+			// over VIEWACTIVITY.
+			shouldRedactError = true
+		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+			return err
+		} else if !hasViewActivity {
+			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
+			// return insufficient privileges error.
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
 	}
 
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
@@ -8051,6 +8086,11 @@ func populateStmtInsights(
 				}
 			}
 
+			errorMsg := "<redacted>"
+			if !shouldRedactError {
+				errorMsg = s.ErrorMsg
+			}
+
 			err = errors.CombineErrors(err, addRow(
 				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
 				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
@@ -8079,6 +8119,7 @@ func populateStmtInsights(
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
 				tree.NewDString(s.ErrorCode),
+				tree.NewDString(errorMsg),
 			))
 		}
 	}

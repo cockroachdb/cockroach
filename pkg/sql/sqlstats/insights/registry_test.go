@@ -86,6 +86,7 @@ func TestRegistry(t *testing.T) {
 			LatencyInSeconds: 2,
 			Status:           Statement_Failed,
 			ErrorCode:        "22012",
+			ErrorMsg:         "division by zero",
 		}
 
 		st := cluster.MakeTestingClusterSettings()
