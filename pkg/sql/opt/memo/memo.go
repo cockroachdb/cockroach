@@ -563,3 +563,11 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
 }
+
+// GetLookupJoinLookupTableDistribution returns the Distribution of a lookup
+// table in a lookup join if that distribution can be statically determined.
+var GetLookupJoinLookupTableDistribution func(
+	lookupJoin *LookupJoinExpr,
+	required *physical.Required,
+	optimizer interface{},
+) (physicalDistribution physical.Distribution)
