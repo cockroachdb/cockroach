@@ -466,3 +466,102 @@ t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 statement ok
 DROP TABLE t1_96731, t2_96731;
+
+
+# We had a bug where after adding a column it could have wound up only in a
+# secondary index as storing if the index was created as a side effect of
+# ALTER PRIMARY KEY on 20.2 and 21.1. Simulate this corruption and ensure
+# if such an index exists to prevent data loss drops are blocked with a link
+# to the technical advisory.
+subtest drop_index_data_loss_block
+
+statement ok
+CREATE TABLE t_with_idx_data_loss (n INT8 PRIMARY KEY, j INT8);
+CREATE INDEX ON t_with_idx_data_loss(n) STORING (j);
+
+# Corrupt the primary index to stop storing j, so the only source is storing
+# is a secondary index.
+statement ok
+WITH
+	to_json
+		AS (
+			SELECT
+				id,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor,
+					false
+				)
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id IN ('t_with_idx_data_loss'::regclass::oid::int,)
+		),
+	modified
+		AS (
+			SELECT
+				id,
+				json_set(
+					json_set(
+						json_remove_path(
+							json_remove_path(
+								d,
+								ARRAY[
+									'table',
+									'primaryIndex',
+									'storeColumnIds'
+								]
+							),
+							ARRAY[
+								'table',
+								'primaryIndex',
+								'storeColumnNames'
+							]
+						),
+						ARRAY['table', 'version'],
+						(
+							(d->'table'->>'version')::INT8
+							+ 1
+						)::STRING::JSONB
+					),
+					ARRAY['table', 'modificationTime'],
+					json_build_object(
+						'wallTime',
+						(
+							(
+								extract('epoch', now())
+								* 1000000
+							)::INT8
+							* 1000
+						)::STRING
+					)
+				)
+					AS d
+			FROM
+				to_json
+		)
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			d
+		),
+		false
+	)
+FROM
+	modified;
+
+# Drop INDEX will be blocked
+statement error pq: index t_with_idx_data_loss_n_idx cannot be safely dropped, since doing so will lose data in certain columns
+DROP INDEX t_with_idx_data_loss@t_with_idx_data_loss_n_idx;
+
+# Validate this object is seen as invalid.
+query TT
+SELECT obj_name, error FROM crdb_internal.invalid_objects
+----
+t_with_idx_data_loss  relation "t_with_idx_data_loss" (125): primary index "t_with_idx_data_loss_pkey" must contain column ID 2 in either key or store columns
+
+statement ok
+DROP TABLE t_with_idx_data_loss;
