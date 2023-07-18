@@ -1245,3 +1245,14 @@ func (o *Optimizer) getCRBDRegionColSetFromInput(
 	}
 	return crdbRegionColSet, inputDistribution
 }
+
+// GetLookupJoinLookupTableDistribution returns the distribution of the lookup
+// table in a lookup join.
+func (o *Optimizer) GetLookupJoinLookupTableDistribution(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (provided physical.Distribution) {
+	crdbRegionColSet, inputDistribution := o.getCRBDRegionColSetFromInput(join, required)
+	_, provided = distribution.BuildLookupJoinLookupTableDistribution(
+		o.ctx, o.evalCtx, join, crdbRegionColSet, inputDistribution)
+	return provided
+}
