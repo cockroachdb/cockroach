@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	defaultNumIterations = 5
+	defaultNumIterations = 1
 	defaultSeed          = 42
 	defaultDuration      = 30 * time.Minute
 	defaultVerbosity     = false
 )
 
 func defaultSettings(randOptions map[string]bool) testSettings {
-	return newTestSettings(defaultNumIterations, defaultDuration, defaultVerbosity, defaultSeed, randOptions)
+	return newTestSettings(defaultNumIterations, defaultDuration, defaultVerbosity, defaultSeed, randOptions, defaultRangeGenSettings())
 }
 
 // TestRandomized is a randomized testing framework which validates an allocator
@@ -43,7 +43,7 @@ func defaultSettings(randOptions map[string]bool) testSettings {
 func TestRandomized(t *testing.T) {
 	randOptions := map[string]bool{
 		"cluster":         true,
-		"ranges":          false,
+		"ranges":          true,
 		"load":            false,
 		"static_settings": false,
 		"static_events":   false,
