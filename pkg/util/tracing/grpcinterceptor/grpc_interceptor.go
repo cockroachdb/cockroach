@@ -15,6 +15,7 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -327,8 +328,6 @@ func StreamClientInterceptor(
 func newTracingClientStream(
 	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *tracing.Span,
 ) grpc.ClientStream {
-	finishChan := make(chan struct{})
-
 	isFinished := new(int32)
 	*isFinished = 0
 	finishFunc := func(err error) {
@@ -338,28 +337,25 @@ func newTracingClientStream(
 		if !atomic.CompareAndSwapInt32(isFinished, 0, 1) {
 			return
 		}
-		close(finishChan)
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
 			setGRPCErrorTag(clientSpan, err)
 		}
 	}
-	go func() {
-		select {
-		case <-finishChan:
-			// The client span is being finished by another code path; hence, no
-			// action is necessary.
-		case <-ctx.Done():
-			// A streaming RPC can be finished by the caller cancelling the ctx. If
-			// the ctx is cancelled, the caller doesn't necessarily need to interact
-			// with the stream anymore (see [1]), so finishChan might never be
-			// signaled). Thus, we listen for ctx cancellation and finish the span.
-			//
-			// [1] https://pkg.go.dev/google.golang.org/grpc#ClientConn.NewStream
-			finishFunc(nil /* err */)
-		}
-	}()
+
+	if err := ctxutil.WhenDone(ctx, func(err error) {
+		// A streaming RPC can be finished by the caller cancelling the ctx. If
+		// the ctx is cancelled, the caller doesn't necessarily need to interact
+		// with the stream anymore (see [1]), so finishChan might never be
+		// signaled). Thus, we listen for ctx cancellation and finish the span.
+		//
+		// [1] https://pkg.go.dev/google.golang.org/grpc#ClientConn.NewStream
+		finishFunc(nil /* err */)
+	}); err != nil && !errors.Is(err, ctxutil.ErrNeverCompletes) {
+		panic(err)
+	}
+
 	return &tracingClientStream{
 		ClientStream: cs,
 		desc:         desc,
