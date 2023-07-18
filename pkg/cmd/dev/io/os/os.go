@@ -208,6 +208,34 @@ func (o *OS) Readlink(filename string) (string, error) {
 	})
 }
 
+// ReadDir is a thin wrapper around os.ReadDir, which returns the names of files
+// or directories within dirname.
+func (o *OS) ReadDir(dirname string) ([]string, error) {
+	command := fmt.Sprintf("ls %s", dirname)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	output, err := o.Next(command, func() (string, error) {
+		var ret []string
+		entries, err := os.ReadDir(dirname)
+		if err != nil {
+			return "", err
+		}
+
+		for _, entry := range entries {
+			ret = append(ret, entry.Name())
+		}
+
+		return fmt.Sprintf("%s\n", strings.Join(ret, "\n")), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSpace(output), "\n"), nil
+}
+
 // IsDir wraps around os.Stat, which returns the os.FileInfo of the named
 // directory. IsDir returns true if and only if it is an existing directory.
 // If there is an error, it will be of type *PathError.
