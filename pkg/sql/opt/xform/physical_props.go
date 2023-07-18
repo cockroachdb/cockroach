@@ -298,3 +298,26 @@ func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *ph
 	}
 	return mem.InternPhysicalProps(&childProps)
 }
+
+func init() {
+	memo.GetLookupJoinLookupTableDistribution = func(
+		lookupJoin *memo.LookupJoinExpr,
+		required *physical.Required,
+		optimizer interface{},
+	) (physicalDistribution physical.Distribution) {
+		if optimizer == nil {
+			return physicalDistribution
+		}
+		o, ok := optimizer.(*Optimizer)
+		if !ok {
+			return physicalDistribution
+		}
+		if o.evalCtx == nil {
+			return physicalDistribution
+		}
+		_, physicalDistribution = distribution.BuildLookupJoinLookupTableDistribution(
+			o.ctx, o.evalCtx, lookupJoin, required, o.MaybeGetBestCostRelation,
+		)
+		return physicalDistribution
+	}
+}
