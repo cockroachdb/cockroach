@@ -26,7 +26,9 @@ type StartOpts struct {
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() StartOpts {
 	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
-	startOpts.RoachprodOpts.ScheduleBackups = true
+	// TODO(#107056): Change this back to true once the
+	// permissions issue is resolved.
+	startOpts.RoachprodOpts.ScheduleBackups = false
 	return startOpts
 }
 
