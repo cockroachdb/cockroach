@@ -967,3 +967,8 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
 	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
 }
+
+// Optimizer is part of the eval.Planner interface.
+func (p *planner) Optimizer() interface{} {
+	return p.optPlanningCtx.Optimizer()
+}
