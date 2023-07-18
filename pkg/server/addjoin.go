@@ -57,7 +57,7 @@ func (s *adminServer) RequestCA(
 
 func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security.JoinToken) error {
 	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		row, err := s.ie.QueryRow(
+		row, err := s.internalExecutor.QueryRow(
 			ctx, "select-consume-join-token", txn,
 			"SELECT id, secret FROM system.join_tokens WHERE id = $1 AND now() < expiration",
 			clientToken.TokenID.String())
@@ -72,7 +72,7 @@ func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security
 			return errors.New("invalid shared secret")
 		}
 
-		i, err := s.ie.Exec(ctx, "delete-consume-join-token", txn,
+		i, err := s.internalExecutor.Exec(ctx, "delete-consume-join-token", txn,
 			"DELETE FROM system.join_tokens WHERE id = $1",
 			clientToken.TokenID.String())
 		if err != nil {

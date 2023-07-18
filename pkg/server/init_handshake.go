@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -258,18 +259,18 @@ func (t *tlsInitHandshaker) onTrustInit(
 	select {
 	case t.trustedPeers <- challenge:
 	case <-ctx.Done():
-		apiV2InternalError(req.Context(), ctx.Err(), res)
+		srverrors.APIV2InternalError(req.Context(), ctx.Err(), res)
 		return
 	}
 
 	// Acknowledge validation to the client.
 	ack, err := createNodeHostnameAndCA(t.listenAddr, t.tempCerts.CACertificate, t.token)
 	if err != nil {
-		apiV2InternalError(req.Context(), err, res)
+		srverrors.APIV2InternalError(req.Context(), err, res)
 		return
 	}
 	if err := json.NewEncoder(res).Encode(ack); err != nil {
-		apiV2InternalError(req.Context(), err, res)
+		srverrors.APIV2InternalError(req.Context(), err, res)
 		return
 	}
 }

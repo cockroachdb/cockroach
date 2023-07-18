@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -110,6 +111,9 @@ type TestTenantInterface interface {
 	// interface{}.
 	TenantStatusServer() interface{}
 
+	// HTTPAuthServer returns the authserver.Server as an interface{}.
+	HTTPAuthServer() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
@@ -118,6 +122,11 @@ type TestTenantInterface interface {
 
 	// DistSenderI returns the *kvcoord.DistSender as an interface{}.
 	DistSenderI() interface{}
+
+	// InternalExecutor returns a *sql.InternalExecutor as an
+	// interface{} (which also implements insql.InternalExecutor if the
+	// test cannot depend on sql).
+	InternalExecutor() interface{}
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
@@ -181,21 +190,35 @@ type TestTenantInterface interface {
 
 	// AdminURL returns the URL for the admin UI.
 	AdminURL() *TestURL
+
 	// GetUnauthenticatedHTTPClient returns an http client configured with the client TLS
 	// config required by the TestServer's configuration.
 	// Discourages implementer from using unauthenticated http connections
 	// with verbose method name.
 	GetUnauthenticatedHTTPClient() (http.Client, error)
+
 	// GetAdminHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	// The user has admin privileges.
 	GetAdminHTTPClient() (http.Client, error)
+
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	GetAuthenticatedHTTPClient(isAdmin bool, sessionType SessionType) (http.Client, error)
-	// GetEncodedSession returns a byte array containing a valid auth
+
+	// GetAuthenticatedHTTPClientAndCookie returns an http client which
+	// has been authenticated to access Admin API methods and
+	// the corresponding session cookie.
+	GetAuthenticatedHTTPClientAndCookie(
+		authUser username.SQLUsername, isAdmin bool, session SessionType,
+	) (http.Client, *serverpb.SessionCookie, error)
+
+	// GetAuthSession returns a byte array containing a valid auth
 	// session.
 	GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error)
+
+	// CreateAuthUser is exported for use in tests.
+	CreateAuthUser(userName username.SQLUsername, isAdmin bool) error
 
 	// DrainClients shuts down client connections.
 	DrainClients(ctx context.Context) error
