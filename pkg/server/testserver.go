@@ -856,6 +856,11 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.sql.ambientCtx.Tracer
 }
 
+// TracerI is part of the serverutils.TestTenantInterface.
+func (t *TestTenant) TracerI() interface{} {
+	return t.Tracer
+}
+
 // SettingsWatcher is part of the serverutils.TestTenantInterface.
 func (t *TestTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
