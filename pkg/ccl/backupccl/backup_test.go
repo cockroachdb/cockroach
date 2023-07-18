@@ -1065,7 +1065,6 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 			backupManifest := &backuppb.BackupManifest{}
 			backupPayload, ok := payload.Details.(*jobspb.Payload_Backup)
 			if !ok {
-				t.Logf("job %T is not a backup: %v", payload.Details, payload.Details)
 				continue
 			}
 			backupDetails := backupPayload.Backup

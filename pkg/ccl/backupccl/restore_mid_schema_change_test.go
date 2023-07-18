@@ -17,8 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -135,13 +133,14 @@ func expectedSCJobCount(scName string, ver *version.Version) int {
 
 func validateTable(
 	t *testing.T,
-	kvDB *kv.DB,
+	tc *testcluster.TestCluster,
 	sqlDB *sqlutils.SQLRunner,
 	dbName string,
 	tableName string,
 	isSchemaOnly bool,
 ) {
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	srv := tc.TenantOrServer(0)
+	desc := desctestutils.TestingGetPublicTableDescriptor(srv.DB(), srv.Codec(), dbName, tableName)
 	// There should be no mutations on these table descriptors at this point.
 	require.Equal(t, 0, len(desc.TableDesc().Mutations))
 
@@ -176,7 +175,7 @@ func getTablesInTest(scName string) (tableNames []string) {
 func verifyMidSchemaChange(
 	t *testing.T,
 	scName string,
-	kvDB *kv.DB,
+	tc *testcluster.TestCluster,
 	sqlDB *sqlutils.SQLRunner,
 	isSchemaOnly bool,
 	majorVer *version.Version,
@@ -192,7 +191,7 @@ func verifyMidSchemaChange(
 		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, synthesizedSchemaChangeJobs)
 
 	for _, tableName := range tables {
-		validateTable(t, kvDB, sqlDB, "defaultdb", tableName, isSchemaOnly)
+		validateTable(t, tc, sqlDB, "defaultdb", tableName, isSchemaOnly)
 		// Ensure that a schema change can complete on the restored table.
 		schemaChangeQuery := fmt.Sprintf("ALTER TABLE defaultdb.%s ADD CONSTRAINT post_restore_const CHECK (a > 0)", tableName)
 		sqlDB.Exec(t, schemaChangeQuery)
@@ -213,12 +212,7 @@ func restoreMidSchemaChange(
 		params := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run within a tenant because
-				// it relies on TestingGetTableDescriptor which isn't supported
-				// in multi-tenancy. More work is required here. Tracked with
-				// #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				Knobs:             base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+				Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			},
 		}
 		tc := testcluster.StartTestCluster(t, singleNode, params)
@@ -227,7 +221,6 @@ func restoreMidSchemaChange(
 			dirCleanupFn()
 		}()
 		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-		kvDB := tc.Server(0).DB()
 
 		symlink := filepath.Join(dir, "foo")
 		err := os.Symlink(backupDir, symlink)
@@ -255,7 +248,7 @@ func restoreMidSchemaChange(
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
-		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isSchemaOnly, majorVer)
+		verifyMidSchemaChange(t, schemaChangeName, tc, sqlDB, isSchemaOnly, majorVer)
 
 		// Because crdb_internal.invalid_objects is a virtual table, by default, the
 		// query will take a lease on the database sqlDB is connected to and only run
