@@ -2413,7 +2413,7 @@ error (42804): argument of ON must be type bool, not type float
 build
 SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
 ----
-error (0A000): generate_series(): generator functions are not allowed in ON
+error (0A000): generate_series(): set-returning functions are not allowed in ON
 
 build
 SELECT * FROM foo JOIN bar ON max(foo.c) < 2
