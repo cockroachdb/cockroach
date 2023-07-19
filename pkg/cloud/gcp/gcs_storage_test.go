@@ -480,7 +480,7 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 	_, err = w.Write(data)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
-	reader, _, err := s.ReadFile(ctx, file, cloud.ReadOptions{NoFileSize: true})
+	reader, _, err := s.ReadFile(ctx, file, cloud.ReadOptions{})
 	require.NoError(t, err)
 
 	rr, ok := reader.(*cloud.ResumingReader)
