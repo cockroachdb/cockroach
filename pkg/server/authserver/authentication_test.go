@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package authserver_test
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,12 +35,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -137,11 +142,11 @@ func TestSSLEnforcement(t *testing.T) {
 		{"", insecureContext, http.StatusTemporaryRedirect},
 
 		// /_admin/: server.adminServer: no auth.
-		{adminPrefix + "health", rootCertsContext, http.StatusOK},
-		{adminPrefix + "health", nodeCertsContext, http.StatusOK},
-		{adminPrefix + "health", testCertsContext, http.StatusOK},
-		{adminPrefix + "health", noCertsContext, http.StatusOK},
-		{adminPrefix + "health", insecureContext, http.StatusTemporaryRedirect},
+		{apiconstants.AdminPrefix + "health", rootCertsContext, http.StatusOK},
+		{apiconstants.AdminPrefix + "health", nodeCertsContext, http.StatusOK},
+		{apiconstants.AdminPrefix + "health", testCertsContext, http.StatusOK},
+		{apiconstants.AdminPrefix + "health", noCertsContext, http.StatusOK},
+		{apiconstants.AdminPrefix + "health", insecureContext, http.StatusTemporaryRedirect},
 
 		// /debug/: server.adminServer: no auth.
 		{debug.Endpoint + "vars", rootCertsContext, http.StatusOK},
@@ -151,11 +156,11 @@ func TestSSLEnforcement(t *testing.T) {
 		{debug.Endpoint + "vars", insecureContext, http.StatusTemporaryRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{statusPrefix + "nodes", rootCertsContext, http.StatusOK},
-		{statusPrefix + "nodes", nodeCertsContext, http.StatusOK},
-		{statusPrefix + "nodes", testCertsContext, http.StatusOK},
-		{statusPrefix + "nodes", noCertsContext, http.StatusOK},
-		{statusPrefix + "nodes", insecureContext, http.StatusTemporaryRedirect},
+		{apiconstants.StatusPrefix + "nodes", rootCertsContext, http.StatusOK},
+		{apiconstants.StatusPrefix + "nodes", nodeCertsContext, http.StatusOK},
+		{apiconstants.StatusPrefix + "nodes", testCertsContext, http.StatusOK},
+		{apiconstants.StatusPrefix + "nodes", noCertsContext, http.StatusOK},
+		{apiconstants.StatusPrefix + "nodes", insecureContext, http.StatusTemporaryRedirect},
 
 		// /ts/: ts.Server: no auth.
 		{ts.URLPrefix, rootCertsContext, http.StatusNotFound},
@@ -175,7 +180,7 @@ func TestSSLEnforcement(t *testing.T) {
 			}
 			url := url.URL{
 				Scheme: tc.ctx.HTTPRequestScheme(),
-				Host:   s.(*TestServer).Cfg.HTTPAddr,
+				Host:   s.(*server.TestServer).Cfg.HTTPAddr,
 				Path:   tc.path,
 			}
 			resp, err := client.Get(url.String())
@@ -201,12 +206,12 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.(*TestServer)
+	ts := s.TenantOrServer()
 
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the
 		// race detector is on.
-		security.BcryptCost.Override(ctx, &ts.Cfg.Settings.SV, int64(bcrypt.MinCost))
+		security.BcryptCost.Override(ctx, &ts.ClusterSettings().SV, int64(bcrypt.MinCost))
 	}
 
 	//location is used for timezone testing.
@@ -290,7 +295,8 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			valid, expired, err := ts.authentication.verifyPasswordDBConsole(context.Background(), username, tc.password)
+			authServer := ts.HTTPAuthServer().(authserver.Server)
+			valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password)
 			if err != nil {
 				t.Errorf(
 					"credentials %s/%s failed with error %s, wanted no error",
@@ -317,21 +323,21 @@ func TestCreateSession(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+	ts := s.TenantOrServer()
 
 	username := username.TestUserName()
-	if err := ts.createAuthUser(username, false /* isAdmin */); err != nil {
+	if err := ts.CreateAuthUser(username, false /* isAdmin */); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create an authentication, noting the time before and after creation. This
 	// lets us ensure that the timestamps created are accurate.
-	timeBoundBefore := ts.clock.PhysicalTime()
-	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), username)
+	timeBoundBefore := ts.Clock().PhysicalTime()
+	id, origSecret, err := ts.HTTPAuthServer().(authserver.Server).NewAuthSession(context.Background(), username)
 	if err != nil {
 		t.Fatalf("error creating auth session: %s", err)
 	}
-	timeBoundAfter := ts.clock.PhysicalTime()
+	timeBoundAfter := ts.Clock().PhysicalTime()
 
 	// Query fields from created session.
 	query := `
@@ -391,7 +397,7 @@ WHERE id = $1`
 	if err := verifyTimestamp(sessLastUsed, timeBoundBefore, timeBoundAfter); err != nil {
 		t.Fatalf("bad lastUsedAt timestamp: %s", err)
 	}
-	timeout := webSessionTimeout.Get(&s.ClusterSettings().SV)
+	timeout := authserver.WebSessionTimeout.Get(&ts.ClusterSettings().SV)
 	if err := verifyTimestamp(
 		sessExpires, timeBoundBefore.Add(timeout), timeBoundAfter.Add(timeout),
 	); err != nil {
@@ -412,13 +418,15 @@ func TestVerifySession(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+	ts := s.TenantOrServer()
 
 	sessionUsername := username.TestUserName()
-	if err := ts.createAuthUser(sessionUsername, false /* isAdmin */); err != nil {
+	if err := ts.CreateAuthUser(sessionUsername, false /* isAdmin */); err != nil {
 		t.Fatal(err)
 	}
-	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), sessionUsername)
+
+	authServer := ts.HTTPAuthServer().(authserver.Server)
+	id, origSecret, err := authServer.NewAuthSession(context.Background(), sessionUsername)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +481,7 @@ func TestVerifySession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testname, func(t *testing.T) {
-			valid, username, err := ts.authentication.verifySession(context.Background(), &tc.cookie)
+			valid, username, err := authServer.VerifySession(context.Background(), &tc.cookie)
 			if err != nil {
 				t.Fatalf("test got error %s, wanted no error", err)
 			}
@@ -492,7 +500,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+	ts := s.TenantOrServer()
 
 	const (
 		validUsername = "testuser"
@@ -520,7 +528,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		}
 		var resp serverpb.UserLoginResponse
 		return httputil.PostJSONWithRequest(
-			httpClient, ts.AdminURL().WithPath(loginPath).String(), &req, &resp,
+			httpClient, ts.AdminURL().WithPath(authserver.LoginPath).String(), &req, &resp,
 		)
 	}
 
@@ -544,7 +552,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	if len(cookies) == 0 {
 		t.Fatalf("good login got no cookies: %v", response)
 	}
-	sessionCookie, err := findAndDecodeSessionCookie(context.Background(), ts.Cfg.Settings, cookies)
+	sessionCookie, err := authserver.FindAndDecodeSessionCookie(context.Background(), ts.ClusterSettings(), cookies)
 	if err != nil {
 		t.Fatalf("failed to decode session cookie: %s", err)
 	}
@@ -580,28 +588,47 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 func TestLogoutClearsCookies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
 
-	// Log in.
-	authHTTPClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(
-		authenticatedUserName(), true, serverutils.SingleTenantSession,
-	)
-	require.NoError(t, err)
+	testFunc := func(ts serverutils.TestTenantInterface, expectTenantCookieInClearList bool) {
+		// Log in.
+		authHTTPClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(
+			apiconstants.TestingUserName(), true, serverutils.SingleTenantSession,
+		)
+		require.NoError(t, err)
 
-	// Log out.
-	resp, err := authHTTPClient.Get(ts.AdminURL().WithPath(logoutPath).String())
-	require.NoError(t, err)
-	defer resp.Body.Close()
+		// Log out.
+		resp, err := authHTTPClient.Get(ts.AdminURL().WithPath(authserver.LogoutPath).String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
 
-	cookies := resp.Cookies()
-	cNames := make([]string, len(cookies))
-	for i, c := range cookies {
-		require.Equal(t, "", c.Value)
-		cNames[i] = c.Name
+		cookies := resp.Cookies()
+		cNames := make([]string, len(cookies))
+		for i, c := range cookies {
+			require.Equal(t, "", c.Value)
+			cNames[i] = c.Name
+		}
+		expected := []string{authserver.SessionCookieName}
+		if expectTenantCookieInClearList {
+			expected = append(expected, authserver.TenantSelectCookieName)
+		}
+		require.ElementsMatch(t, cNames, expected)
 	}
-	require.ElementsMatch(t, cNames, []string{SessionCookieName, TenantSelectCookieName})
+
+	t.Run("system tenant", func(t *testing.T) {
+		testFunc(s, true)
+	})
+
+	t.Run("secondary tenant", func(t *testing.T) {
+		ts, err := s.StartTenant(context.Background(), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		testFunc(ts, false)
+	})
 }
 
 func TestLogout(t *testing.T) {
@@ -609,11 +636,11 @@ func TestLogout(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+	ts := s.TenantOrServer()
 
 	// Log in.
-	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(
-		authenticatedUserName(), true, serverutils.SingleTenantSession,
+	authHTTPClient, cookie, err := ts.GetAuthenticatedHTTPClientAndCookie(
+		apiconstants.TestingUserName(), true, serverutils.SingleTenantSession,
 	)
 	if err != nil {
 		t.Fatal("error opening HTTP client", err)
@@ -621,7 +648,7 @@ func TestLogout(t *testing.T) {
 
 	// Log out.
 	var resp serverpb.UserLogoutResponse
-	if err := httputil.GetJSON(authHTTPClient, ts.AdminURL().WithPath(logoutPath).String(), &resp); err != nil {
+	if err := httputil.GetJSON(authHTTPClient, ts.AdminURL().WithPath(authserver.LogoutPath).String(), &resp); err != nil {
 		t.Fatal("logout request failed:", err)
 	}
 
@@ -651,7 +678,7 @@ func TestLogout(t *testing.T) {
 	}
 
 	// Try to use the revoked cookie; verify that it doesn't work.
-	encodedCookie, err := EncodeSessionCookie(cookie, false /* forHTTPSOnly */)
+	encodedCookie, err := authserver.EncodeSessionCookie(cookie, false /* forHTTPSOnly */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -689,7 +716,7 @@ func TestAuthenticationMux(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*TestServer)
+	tsrv := s.TenantOrServer()
 
 	// Both the normal and authenticated client will be used for each test.
 	normalClient, err := tsrv.GetUnauthenticatedHTTPClient()
@@ -745,12 +772,16 @@ func TestAuthenticationMux(t *testing.T) {
 		body         []byte
 		cookieHeader string
 	}{
-		{"GET", adminPrefix + "users", nil, ""},
-		{"GET", adminPrefix + "users", nil, "session=badcookie"},
-		{"GET", statusPrefix + "sessions", nil, ""},
+		{"GET", apiconstants.AdminPrefix + "users", nil, ""},
+		{"GET", apiconstants.AdminPrefix + "users", nil, "session=badcookie"},
+		{"GET", apiconstants.StatusPrefix + "sessions", nil, ""},
 		{"POST", ts.URLPrefix + "query", tsReqBuffer.Bytes(), ""},
 	} {
 		t.Run("path="+tc.path, func(t *testing.T) {
+			if strings.HasPrefix(tc.path, ts.URLPrefix) {
+				skip.WithIssue(t, 102378)
+			}
+
 			// Verify normal client returns 401 Unauthorized.
 			if err := runRequest(normalClient, tc.method, tc.path, tc.body, tc.cookieHeader, http.StatusUnauthorized); err != nil {
 				t.Fatalf("request %s failed when not authorized: %s", tc.path, err)
@@ -772,6 +803,8 @@ func TestGRPCAuthentication(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	ts := s.TenantOrServer()
+
 	// For each subsystem we pick a representative RPC. The idea is not to
 	// exhaustively test each RPC but to prevent server startup from being
 	// refactored in such a way that an entire subsystem becomes inadvertently
@@ -779,6 +812,8 @@ func TestGRPCAuthentication(t *testing.T) {
 	subsystems := []struct {
 		name    string
 		sendRPC func(context.Context, *grpc.ClientConn) error
+
+		storageOnly bool
 	}{
 		{"gossip", func(ctx context.Context, conn *grpc.ClientConn) error {
 			stream, err := gossip.NewGossipClient(conn).Gossip(ctx)
@@ -788,15 +823,15 @@ func TestGRPCAuthentication(t *testing.T) {
 			_ = stream.Send(&gossip.Request{})
 			_, err = stream.Recv()
 			return err
-		}},
+		}, true},
 		{"internal", func(ctx context.Context, conn *grpc.ClientConn) error {
 			_, err := kvpb.NewInternalClient(conn).Batch(ctx, &kvpb.BatchRequest{})
 			return err
-		}},
+		}, true},
 		{"perReplica", func(ctx context.Context, conn *grpc.ClientConn) error {
 			_, err := kvserver.NewPerReplicaClient(conn).CollectChecksum(ctx, &kvserver.CollectChecksumRequest{})
 			return err
-		}},
+		}, true},
 		{"raft", func(ctx context.Context, conn *grpc.ClientConn) error {
 			stream, err := kvserver.NewMultiRaftClient(conn).RaftMessageBatch(ctx)
 			if err != nil {
@@ -805,7 +840,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			_ = stream.Send(&kvserverpb.RaftMessageRequestBatch{})
 			_, err = stream.Recv()
 			return err
-		}},
+		}, true},
 		{"closedTimestamp", func(ctx context.Context, conn *grpc.ClientConn) error {
 			stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
 			if err != nil {
@@ -814,7 +849,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			_ = stream.Send(&ctpb.Update{})
 			_, err = stream.Recv()
 			return err
-		}},
+		}, true},
 		{"distSQL", func(ctx context.Context, conn *grpc.ClientConn) error {
 			stream, err := execinfrapb.NewDistSQLClient(conn).FlowStream(ctx)
 			if err != nil {
@@ -823,22 +858,22 @@ func TestGRPCAuthentication(t *testing.T) {
 			_ = stream.Send(&execinfrapb.ProducerMessage{})
 			_, err = stream.Recv()
 			return err
-		}},
+		}, false},
 		{"init", func(ctx context.Context, conn *grpc.ClientConn) error {
 			_, err := serverpb.NewInitClient(conn).Bootstrap(ctx, &serverpb.BootstrapRequest{})
 			return err
-		}},
+		}, true},
 		{"admin", func(ctx context.Context, conn *grpc.ClientConn) error {
 			_, err := serverpb.NewAdminClient(conn).Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
-		}},
+		}, false},
 		{"status", func(ctx context.Context, conn *grpc.ClientConn) error {
 			_, err := serverpb.NewStatusClient(conn).ListSessions(ctx, &serverpb.ListSessionsRequest{})
 			return err
-		}},
+		}, false},
 	}
 
-	conn, err := grpc.DialContext(ctx, s.ServingRPCAddr(),
+	conn, err := grpc.DialContext(ctx, ts.RPCAddr(),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
 		})))
@@ -849,6 +884,10 @@ func TestGRPCAuthentication(t *testing.T) {
 		_ = conn.Close() // nolint:grpcconnclose
 	}(conn)
 	for _, subsystem := range subsystems {
+		if subsystem.storageOnly && s.StartedDefaultTestTenant() {
+			// Subsystem only available on the system tenant.
+			continue
+		}
 		t.Run(fmt.Sprintf("no-cert/%s", subsystem.name), func(t *testing.T) {
 			err := subsystem.sendRPC(ctx, conn)
 			if exp := "TLSInfo is not available in request context"; !testutils.IsError(err, exp) {
@@ -857,7 +896,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		})
 	}
 
-	certManager, err := s.RPCContext().GetCertificateManager()
+	certManager, err := ts.RPCContext().GetCertificateManager()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -865,7 +904,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err = grpc.DialContext(ctx, s.ServingRPCAddr(),
+	conn, err = grpc.DialContext(ctx, ts.RPCAddr(),
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	if err != nil {
 		t.Fatal(err)
@@ -874,6 +913,10 @@ func TestGRPCAuthentication(t *testing.T) {
 		_ = conn.Close() // nolint:grpcconnclose
 	}(conn)
 	for _, subsystem := range subsystems {
+		if subsystem.storageOnly && s.StartedDefaultTestTenant() {
+			// Subsystem only available on the system tenant.
+			continue
+		}
 		t.Run(fmt.Sprintf("bad-user/%s", subsystem.name), func(t *testing.T) {
 			err := subsystem.sendRPC(ctx, conn)
 			if exp := `need root or node client cert to perform RPCs on this server`; !testutils.IsError(err, exp) {
@@ -889,19 +932,21 @@ func TestCreateAggregatedSessionCookieValue(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		mapArg      []sessionCookieValue
+		mapArg      []authserver.SessionCookieValue
 		resExpected string
 	}{
-		{"standard arg", []sessionCookieValue{
-			{name: "system", setCookie: "session=abcd1234"},
-			{name: "app", setCookie: "session=efgh5678"}},
+		{"standard arg",
+			[]authserver.SessionCookieValue{
+				authserver.MakeSessionCookieValue("system", "session=abcd1234"),
+				authserver.MakeSessionCookieValue("app", "session=efgh5678"),
+			},
 			"abcd1234,system,efgh5678,app",
 		},
-		{"empty arg", []sessionCookieValue{}, ""},
+		{"empty arg", []authserver.SessionCookieValue{}, ""},
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("create-session-cookie/%s", test.name), func(t *testing.T) {
-			res := createAggregatedSessionCookieValue(test.mapArg)
+			res := authserver.CreateAggregatedSessionCookieValue(test.mapArg)
 			require.Equal(t, test.resExpected, res)
 		})
 	}
@@ -921,7 +966,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 		{
 			name: "standard args",
 			sessionCookie: &http.Cookie{
-				Name:  SessionCookieName,
+				Name:  authserver.SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -939,7 +984,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 		{
 			name: "no tenant cookie",
 			sessionCookie: &http.Cookie{
-				Name:  SessionCookieName,
+				Name:  authserver.SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -949,7 +994,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 		{
 			name: "empty string tenant cookie",
 			sessionCookie: &http.Cookie{
-				Name:  SessionCookieName,
+				Name:  authserver.SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -960,7 +1005,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 		{
 			name: "no tenant name match",
 			sessionCookie: &http.Cookie{
-				Name:  SessionCookieName,
+				Name:  authserver.SessionCookieName,
 				Value: normalSessionStr,
 				Path:  "/",
 			},
@@ -971,7 +1016,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 		{
 			name: "legacy session cookie",
 			sessionCookie: &http.Cookie{
-				Name:  SessionCookieName,
+				Name:  authserver.SessionCookieName,
 				Value: "aaskjhf218==",
 				Path:  "/",
 			},
@@ -983,7 +1028,7 @@ func TestFindSessionCookieValue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("find-session-cookie/%s", test.name), func(t *testing.T) {
 			st := cluster.MakeClusterSettings()
-			res, err := findSessionCookieValueForTenant(st, test.sessionCookie, test.tenantSelectValue)
+			res, err := authserver.FindSessionCookieValueForTenant(st, test.sessionCookie, test.tenantSelectValue)
 			require.Equal(t, test.resExpected, res)
 			require.Equal(t, test.errorExpected, err != nil)
 		})

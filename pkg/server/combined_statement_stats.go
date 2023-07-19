@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -55,10 +57,10 @@ func closeIterator(it isql.Rows, err error) error {
 func (s *statusServer) CombinedStatementStats(
 	ctx context.Context, req *serverpb.CombinedStatementsStatsRequest,
 ) (*serverpb.StatementsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -126,7 +128,7 @@ func getCombinedStatementStats(
 			activityHasAllData,
 			tableSuffix)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -154,7 +156,7 @@ func getCombinedStatementStats(
 	}
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	stmtsRunTime, txnsRunTime, err := getTotalRuntimeSecs(
@@ -166,7 +168,7 @@ func getCombinedStatementStats(
 		tableSuffix)
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	response := &serverpb.StatementsResponse{
@@ -612,7 +614,7 @@ FROM (SELECT fingerprint_id,
 			aostClause,
 			orderAndLimit)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -632,7 +634,7 @@ FROM (SELECT fingerprint_id,
 			aostClause,
 			orderAndLimit)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -651,7 +653,7 @@ FROM (SELECT fingerprint_id,
 			aostClause,
 			orderAndLimit)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -669,7 +671,7 @@ FROM (SELECT fingerprint_id,
 
 		var statementFingerprintID uint64
 		if statementFingerprintID, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		var txnFingerprintID uint64
@@ -677,7 +679,7 @@ FROM (SELECT fingerprint_id,
 		txnFingerprintIDs := make([]appstatspb.TransactionFingerprintID, 0, txnFingerprintDatums.Array.Len())
 		for _, idDatum := range txnFingerprintDatums.Array {
 			if txnFingerprintID, err = sqlstatsutil.DatumToUint64(idDatum); err != nil {
-				return nil, serverError(ctx, err)
+				return nil, srverrors.ServerError(ctx, err)
 			}
 			txnFingerprintIDs = append(txnFingerprintIDs, appstatspb.TransactionFingerprintID(txnFingerprintID))
 		}
@@ -689,14 +691,14 @@ FROM (SELECT fingerprint_id,
 		var metadata appstatspb.CollectedStatementStatistics
 		metadataJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		metadata.Key.App = app
 
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		stmt := serverpb.StatementsResponse_CollectedStatementStatistics{
@@ -714,7 +716,7 @@ FROM (SELECT fingerprint_id,
 	}
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	return statements, nil
@@ -742,7 +744,7 @@ func getIterator(
 	it, err := ie.QueryIteratorEx(ctx, queryInfo, nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
 	if err != nil {
-		return it, serverError(ctx, err)
+		return it, srverrors.ServerError(ctx, err)
 	}
 
 	return it, nil
@@ -787,7 +789,7 @@ FROM (SELECT app_name,
 			aostClause,
 			orderAndLimit)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -811,7 +813,7 @@ FROM (SELECT app_name,
 			aostClause,
 			orderAndLimit)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -830,7 +832,7 @@ FROM (SELECT app_name,
 			aostClause,
 			orderAndLimit)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -851,18 +853,18 @@ FROM (SELECT app_name,
 		aggregatedTs := tree.MustBeDTimestampTZ(row[1]).Time
 		fingerprintID, err := sqlstatsutil.DatumToUint64(row[2])
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		var metadata appstatspb.CollectedTransactionStatistics
 		metadataJSON := tree.MustBeDJSON(row[3]).JSON
 		if err = sqlstatsutil.DecodeTxnStatsMetadataJSON(metadataJSON, &metadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		statsJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		txnStats := serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{
@@ -879,7 +881,7 @@ FROM (SELECT app_name,
 	}
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	return transactions, nil
@@ -929,7 +931,7 @@ GROUP BY
     app_name`, whereClause),
 			args...)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -939,7 +941,7 @@ GROUP BY
 		if it != nil {
 			err = closeIterator(it, err)
 			if err != nil {
-				return nil, serverError(ctx, err)
+				return nil, srverrors.ServerError(ctx, err)
 			}
 		}
 		query = fmt.Sprintf(
@@ -950,7 +952,7 @@ GROUP BY
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -959,7 +961,7 @@ GROUP BY
 	if !it.HasResults() {
 		err = closeIterator(it, err)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause)
 
@@ -967,7 +969,7 @@ GROUP BY
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -992,25 +994,25 @@ GROUP BY
 
 		var statementFingerprintID uint64
 		if statementFingerprintID, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		var txnFingerprintID uint64
 		if txnFingerprintID, err = sqlstatsutil.DatumToUint64(row[1]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		var metadata appstatspb.CollectedStatementStatistics
 		metadataJSON := tree.MustBeDJSON(row[2]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		metadata.Key.TransactionFingerprintID = appstatspb.TransactionFingerprintID(txnFingerprintID)
 
 		statsJSON := tree.MustBeDJSON(row[3]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		app := string(tree.MustBeDString(row[4]))
@@ -1029,7 +1031,7 @@ GROUP BY
 	}
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	return statements, nil
@@ -1038,10 +1040,10 @@ GROUP BY
 func (s *statusServer) StatementDetails(
 	ctx context.Context, req *serverpb.StatementDetailsRequest,
 ) (*serverpb.StatementDetailsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1064,7 +1066,7 @@ func getStatementDetails(
 	showInternal := SQLStatsShowInternal.Get(&settings.SV)
 	whereClause, args, err := getStatementDetailsQueryClausesAndArgs(req, testingKnobs, showInternal)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	// Used for mixed cluster version, where we need to use the persisted view with _v22_2.
@@ -1092,7 +1094,7 @@ func getStatementDetails(
 
 	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args, activityHasData, tableSuffix)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 	statementStatisticsPerAggregatedTs, err := getStatementDetailsPerAggregatedTs(
 		ctx,
@@ -1103,7 +1105,7 @@ func getStatementDetails(
 		activityHasData,
 		tableSuffix)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(
 		ctx,
@@ -1114,7 +1116,7 @@ func getStatementDetails(
 		activityHasData,
 		tableSuffix)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	// At this point the counts on statementTotal.metadata have the count for how many times we saw that value
@@ -1246,7 +1248,7 @@ GROUP BY
     fingerprint_id
 LIMIT 1`, whereClause), args...)
 		if err != nil {
-			return statement, serverError(ctx, err)
+			return statement, srverrors.ServerError(ctx, err)
 		}
 	}
 	// If there are no results from the activity table, retrieve the data from the persisted table.
@@ -1258,7 +1260,7 @@ LIMIT 1`, whereClause), args...)
 				"crdb_internal.statement_statistics_persisted"+tableSuffix,
 				whereClause), args...)
 		if err != nil {
-			return statement, serverError(ctx, err)
+			return statement, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1269,7 +1271,7 @@ LIMIT 1`, whereClause), args...)
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause), args...)
 		if err != nil {
-			return statement, serverError(ctx, err)
+			return statement, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1278,7 +1280,7 @@ LIMIT 1`, whereClause), args...)
 		return statement, nil
 	}
 	if row.Len() != expectedNumDatums {
-		return statement, serverError(ctx, errors.Newf(
+		return statement, srverrors.ServerError(ctx, errors.Newf(
 			"expected %d columns on getTotalStatementDetails, received %d", expectedNumDatums))
 	}
 
@@ -1287,7 +1289,7 @@ LIMIT 1`, whereClause), args...)
 	metadataJSON := tree.MustBeDJSON(row[0]).JSON
 
 	if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-		return statement, serverError(ctx, err)
+		return statement, srverrors.ServerError(ctx, err)
 	}
 
 	apps := tree.MustBeDArray(row[1])
@@ -1299,7 +1301,7 @@ LIMIT 1`, whereClause), args...)
 
 	statsJSON := tree.MustBeDJSON(row[2]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
-		return statement, serverError(ctx, err)
+		return statement, srverrors.ServerError(ctx, err)
 	}
 
 	aggregatedMetadata.FormattedQuery = aggregatedMetadata.Query
@@ -1357,7 +1359,7 @@ LIMIT $%d`, whereClause, len(args)),
 			args...)
 
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1377,7 +1379,7 @@ LIMIT $%d`, whereClause, len(args)),
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1389,7 +1391,7 @@ LIMIT $%d`, whereClause, len(args)),
 		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1411,12 +1413,12 @@ LIMIT $%d`, whereClause, len(args)),
 		var aggregatedMetadata appstatspb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[1]).JSON
 		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		statsJSON := tree.MustBeDJSON(row[2]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs{
@@ -1428,7 +1430,7 @@ LIMIT $%d`, whereClause, len(args)),
 		statements = append(statements, stmt)
 	}
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	return statements, nil
@@ -1555,7 +1557,7 @@ GROUP BY
     index_recommendations
 LIMIT $%d`, whereClause, len(args)), args...)
 		if iterErr != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1573,7 +1575,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-persisted-details-by-plan-hash", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if iterErr != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1585,7 +1587,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if iterErr != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 	}
 
@@ -1603,7 +1605,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 
 		var planHash uint64
 		if planHash, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 		planGist := string(tree.MustBeDStringOrDNull(row[1]))
 		var explainPlan string
@@ -1615,12 +1617,12 @@ LIMIT $%d`, whereClause, len(args)), args...)
 		var aggregatedMetadata appstatspb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[2]).JSON
 		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		statsJSON := tree.MustBeDJSON(row[3]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, srverrors.ServerError(ctx, err)
 		}
 
 		recommendations := tree.MustBeDArray(row[4])
@@ -1663,7 +1665,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 		statements = append(statements, stmt)
 	}
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	return statements, nil

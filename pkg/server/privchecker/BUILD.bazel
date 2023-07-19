@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "privchecker",
+    srcs = [
+        "api.go",
+        "privchecker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/privchecker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/server/authserver",
+        "//pkg/server/srverrors",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/syntheticprivilege",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "privchecker_test",
+    srcs = [
+        "main_test.go",
+        "privchecker_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":privchecker",
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//metadata",
+    ],
+)

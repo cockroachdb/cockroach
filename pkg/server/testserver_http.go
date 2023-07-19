@@ -21,6 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -33,7 +35,7 @@ type httpTestServer struct {
 	t struct {
 		// We need a sub-struct to avoid ambiguous overlap with the fields
 		// of *Server, which are also embedded in TestServer.
-		authentication *authenticationServer
+		authentication authserver.Server
 		sqlServer      *SQLServer
 		tenantName     roachpb.TenantName
 	}
@@ -89,8 +91,8 @@ func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
 
 // GetAdminHTTPClient implements the TestServerInterface.
 func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(
-		authenticatedUserName(), true, serverutils.SingleTenantSession,
+	httpClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(
+		apiconstants.TestingUserName(), true, serverutils.SingleTenantSession,
 	)
 	return httpClient, err
 }
@@ -99,25 +101,27 @@ func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
 func (ts *httpTestServer) GetAuthenticatedHTTPClient(
 	isAdmin bool, session serverutils.SessionType,
 ) (http.Client, error) {
-	authUser := authenticatedUserName()
+	authUser := apiconstants.TestingUserName()
 	if !isAdmin {
-		authUser = authenticatedUserNameNoAdmin()
+		authUser = apiconstants.TestingUserNameNoAdmin()
 	}
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, session)
+	httpClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(authUser, isAdmin, session)
 	return httpClient, err
 }
 
 // GetAuthenticatedHTTPClient implements the TestServerInterface.
 func (ts *httpTestServer) GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error) {
-	authUser := authenticatedUserName()
+	authUser := apiconstants.TestingUserName()
 	if !isAdmin {
-		authUser = authenticatedUserNameNoAdmin()
+		authUser = apiconstants.TestingUserNameNoAdmin()
 	}
-	_, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, serverutils.SingleTenantSession)
+	_, cookie, err := ts.GetAuthenticatedHTTPClientAndCookie(authUser, isAdmin, serverutils.SingleTenantSession)
 	return cookie, err
 }
 
-func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
+// GetAuthenticatedHTTPClientAndCookie returns an authenticated HTTP
+// client and the session cookie for the client.
+func (ts *httpTestServer) GetAuthenticatedHTTPClientAndCookie(
 	authUser username.SQLUsername, isAdmin bool, session serverutils.SessionType,
 ) (http.Client, *serverpb.SessionCookie, error) {
 	authIdx := 0
@@ -129,11 +133,11 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 		// Create an authentication session for an arbitrary admin user.
 		authClient.err = func() error {
 			// The user needs to exist as the admin endpoints will check its role.
-			if err := ts.createAuthUser(authUser, isAdmin); err != nil {
+			if err := ts.CreateAuthUser(authUser, isAdmin); err != nil {
 				return err
 			}
 
-			id, secret, err := ts.t.authentication.newAuthSession(context.TODO(), authUser)
+			id, secret, err := ts.t.authentication.NewAuthSession(context.TODO(), authUser)
 			if err != nil {
 				return err
 			}
@@ -142,7 +146,7 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 				Secret: secret,
 			}
 			// Encode a session cookie and store it in a cookie jar.
-			cookie, err := EncodeSessionCookie(rawCookie, false /* forHTTPSOnly */)
+			cookie, err := authserver.EncodeSessionCookie(rawCookie, false /* forHTTPSOnly */)
 			if err != nil {
 				return err
 			}
@@ -155,7 +159,7 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 				return err
 			}
 			if session == serverutils.MultiTenantSession {
-				cookie.Name = SessionCookieName
+				cookie.Name = authserver.SessionCookieName
 				cookie.Value = fmt.Sprintf("%s,%s", cookie.Value, ts.t.tenantName)
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
@@ -184,7 +188,8 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 	return authClient.httpClient, authClient.cookie, authClient.err
 }
 
-func (ts *httpTestServer) createAuthUser(userName username.SQLUsername, isAdmin bool) error {
+// CreateAuthUser is exported for use in tests.
+func (ts *httpTestServer) CreateAuthUser(userName username.SQLUsername, isAdmin bool) error {
 	if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sessiondata.RootUserSessionDataOverride,

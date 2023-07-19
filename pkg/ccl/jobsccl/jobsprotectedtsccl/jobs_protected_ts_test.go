@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -157,24 +157,20 @@ WHERE
 // reconciliation for jobs.
 func TestJobsProtectedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// Tests fail within a tenant. Disabling until we can
-			// investigate further. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
+	s0, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer s0.Stopper().Stop(ctx)
 
 	// Now I want to create some artifacts that should get reconciled away and
 	// then make sure that they do and others which should not do not.
-	s0 := tc.Server(0)
-	hostRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	hostRunner := sqlutils.MakeSQLRunner(db)
 
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
@@ -197,9 +193,8 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	t.Run("system-tenant", func(t *testing.T) {
 		ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
-		runner := sqlutils.MakeSQLRunner(tc.Conns[0])
 		jr := s0.JobRegistry().(*jobs.Registry)
-		testJobsProtectedTimestamp(ctx, t, runner, jr, &execCfg, ptp, s0.Clock())
+		testJobsProtectedTimestamp(ctx, t, hostRunner, jr, &execCfg, ptp, s0.Clock())
 	})
 }
 
@@ -283,21 +278,17 @@ WHERE
 // reconciliation for schedules.
 func TestSchedulesProtectedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// Test fails within a tenant. Disabling pending further
-			// investigation. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
+	s0, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer s0.Stopper().Stop(ctx)
 
 	// Now I want to create some artifacts that should get reconciled away and
 	// then make sure that they do and others which should not do not.
-	s0 := tc.Server(0)
-	hostRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	hostRunner := sqlutils.MakeSQLRunner(db)
 
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
@@ -319,7 +310,6 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	t.Run("system-tenant", func(t *testing.T) {
 		ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
-		runner := sqlutils.MakeSQLRunner(tc.Conns[0])
-		testSchedulesProtectedTimestamp(ctx, t, runner, &execCfg, ptp, s0.Clock())
+		testSchedulesProtectedTimestamp(ctx, t, hostRunner, &execCfg, ptp, s0.Clock())
 	})
 }

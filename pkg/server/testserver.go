@@ -25,6 +25,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -37,16 +38,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -753,6 +758,11 @@ func (t *TestTenant) DistSenderI() interface{} {
 	return t.sql.execCfg.DistSender
 }
 
+// InternalExecutor is part of the serverutils.TestTenantInterface.
+func (t *TestTenant) InternalExecutor() interface{} {
+	return t.sql.internalExecutor
+}
+
 // RPCContext is part of the serverutils.TestTenantInterface.
 func (t *TestTenant) RPCContext() *rpc.Context {
 	return t.sql.execCfg.RPCContext
@@ -976,6 +986,12 @@ func (ts *TestServer) DisableStartTenant(reason error) {
 // MigrationServer is part of the serverutils.TestTenantInterface.
 func (t *TestTenant) MigrationServer() interface{} {
 	return t.sql.migrationServer
+}
+
+// HTTPAuthServer is part of the serverutils.TestServerInterface.
+// HTTPAuthServer is part of the TestTenantInterface.
+func (t *TestTenant) HTTPAuthServer() interface{} {
+	return t.t.authentication
 }
 
 // StartTenant is part of the serverutils.TestServerInterface.
@@ -1352,18 +1368,6 @@ func (ts *TestServer) DiagnosticsReporter() interface{} {
 	return ts.Server.sqlServer.diagnosticsReporter
 }
 
-const authenticatedUser = "authentic_user"
-
-func authenticatedUserName() username.SQLUsername {
-	return username.MakeSQLUsernameFromPreNormalizedString(authenticatedUser)
-}
-
-const authenticatedUserNoAdmin = "authentic_user_noadmin"
-
-func authenticatedUserNameNoAdmin() username.SQLUsername {
-	return username.MakeSQLUsernameFromPreNormalizedString(authenticatedUserNoAdmin)
-}
-
 type v2AuthDecorator struct {
 	http.RoundTripper
 
@@ -1371,7 +1375,7 @@ type v2AuthDecorator struct {
 }
 
 func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
-	r.Header.Add(apiV2AuthHeader, v.session)
+	r.Header.Add(authserver.APIV2AuthHeader, v.session)
 	return v.RoundTripper.RoundTrip(r)
 }
 
@@ -1867,10 +1871,90 @@ func (ts *TestServer) KvProber() *kvprober.Prober {
 	return ts.Server.kvProber
 }
 
+// TestingQueryDatabaseID provides access to the database name-to-ID conversion function
+// for use in API tests.
+func (ts *TestServer) TestingQueryDatabaseID(
+	ctx context.Context, userName username.SQLUsername, dbName string,
+) (descpb.ID, error) {
+	return ts.admin.queryDatabaseID(ctx, userName, dbName)
+}
+
+// TestingQueryTableID provides access to the table name-to-ID conversion function
+// for use in API tests.
+func (ts *TestServer) TestingQueryTableID(
+	ctx context.Context, userName username.SQLUsername, dbName, tbName string,
+) (descpb.ID, error) {
+	return ts.admin.queryTableID(ctx, userName, dbName, tbName)
+}
+
+// TestingStatsForSpans provides access to the span stats inspection function
+// for use in API tests.
+func (ts *TestServer) TestingStatsForSpan(
+	ctx context.Context, span roachpb.Span,
+) (*serverpb.TableStatsResponse, error) {
+	return ts.admin.statsForSpan(ctx, span)
+}
+
+// TestingSetReady is exposed for use in health tests.
+func (ts *TestServer) TestingSetReady(ready bool) {
+	ts.sqlServer.isReady.Set(ready)
+}
+
+// HTTPAuthServer is part of the TestTenantInterface.
+func (ts *TestServer) HTTPAuthServer() interface{} {
+	return ts.t.authentication
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
+// and rangetestutils.InitTestServerFactory.
 var TestServerFactory = testServerFactoryImpl{}
+
+// MakeRangeTestServerargs is part of the rangetestutils.TestServerFactory interface.
+func (testServerFactoryImpl) MakeRangeTestServerArgs() base.TestServerArgs {
+	return base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				// Now that we allow same node rebalances, disable it in these tests,
+				// as they dont expect replicas to move.
+				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
+			},
+		},
+	}
+}
+
+// PrepareRangeTestServer is part of the rangetestutils.TestServerFactory interface.
+func (testServerFactoryImpl) PrepareRangeTestServer(srv interface{}) error {
+	ts := srv.(*TestServer)
+	kvDB := ts.TenantOrServer().DB()
+
+	// Make sure the range is spun up with an arbitrary read command. We do not
+	// expect a specific response.
+	if _, err := kvDB.Get(context.Background(), "a"); err != nil {
+		return err
+	}
+
+	// Make sure the node status is available. This is done by forcing stores to
+	// publish their status, synchronizing to the event feed with a canary
+	// event, and then forcing the server to write summaries immediately.
+	if err := ts.node.computeMetricsPeriodically(context.Background(), map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
+		return errors.Wrap(err, "error publishing store statuses")
+	}
+
+	if err := ts.WriteSummaries(); err != nil {
+		return errors.Wrap(err, "error writing summaries")
+	}
+
+	return nil
+}
 
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error) {
@@ -1958,4 +2042,23 @@ func mustGetSQLCounterForRegistry(registry *metric.Registry, name string) int64 
 		panic(fmt.Sprintf("couldn't find metric %s", name))
 	}
 	return c
+}
+
+// TestingMakeLoggingContexts is exposed for use in tests.
+func TestingMakeLoggingContexts(
+	appTenantID roachpb.TenantID,
+) (sysContext, appContext context.Context) {
+	ctxSysTenant := context.Background()
+	ctxSysTenant = context.WithValue(ctxSysTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:  roachpb.SystemTenantID,
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	})
+	ctxAppTenant := context.Background()
+	ctxAppTenant = context.WithValue(ctxAppTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:  appTenantID,
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	})
+	return ctxSysTenant, ctxAppTenant
 }

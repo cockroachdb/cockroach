@@ -215,7 +215,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
         "//pkg/roachprod/vm",
-        "//pkg/server",
+        "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/pgwire/pgcode",

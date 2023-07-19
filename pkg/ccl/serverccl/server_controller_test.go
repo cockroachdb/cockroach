@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -285,7 +286,7 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 	t.Logf("retrieving session list from system tenant via cookie")
 
 	c := &http.Cookie{
-		Name:     server.TenantSelectCookieName,
+		Name:     authserver.TenantSelectCookieName,
 		Value:    catconstants.SystemTenantName,
 		Path:     "/",
 		HttpOnly: true,
@@ -362,7 +363,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 
 	tenantCookie := ""
 	for _, c := range resp.Cookies() {
-		if c.Name == server.TenantSelectCookieName {
+		if c.Name == authserver.TenantSelectCookieName {
 			tenantCookie = c.Value
 		}
 	}
@@ -387,7 +388,7 @@ func TestServerControllerBadHTTPCookies(t *testing.T) {
 	require.NoError(t, err)
 
 	c := &http.Cookie{
-		Name:     server.TenantSelectCookieName,
+		Name:     authserver.TenantSelectCookieName,
 		Value:    "some-nonexistent-tenant",
 		Path:     "/",
 		HttpOnly: true,
