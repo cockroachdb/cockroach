@@ -253,7 +253,7 @@ func (tc testCase) runTest(
 
 	systemDB := serverutils.OpenDBConn(
 		t,
-		testServer.ServingSQLAddr(),
+		testServer.SQLAddr(),
 		"",    /* useDatabase */
 		false, /* insecure */
 		testServer.Stopper(),

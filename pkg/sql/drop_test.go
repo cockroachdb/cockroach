@@ -223,10 +223,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 func TestDropDatabaseEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+
 	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	codec := s.TenantOrServer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -234,7 +235,7 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	dKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, descpb.NameInfo{Name: "t"})
+	dKey := catalogkeys.EncodeNameKey(codec, descpb.NameInfo{Name: "t"})
 	r, err := kvDB.Get(ctx, dKey)
 	if err != nil {
 		t.Fatal(err)
