@@ -59,7 +59,7 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 	if err := d.decode(ctx, ents); err != nil {
 		return false, err
 	}
-	anyLocal := d.retrieveLocalProposals(ctx)
+	anyLocal := d.retrieveLocalProposals()
 	d.createTracingSpans(ctx)
 	return anyLocal, nil
 }
@@ -75,15 +75,13 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 	return nil
 }
 
-// retrieveLocalProposalsV2 is used with useReproposalsV2, replacing a call
-// to retrieveLocalProposals. The V2 implementation is simpler because a log
-// entry that comes up for a local proposal can always consume that proposal
-// from the map because V2 never mutates the MaxLeaseIndex for the same proposal.
-// In contrast, with V1, we can only remove the proposal from the map once we
-// have found a log entry that had a matching MaxLeaseIndex. This lead to the
-// complexity of having multiple entries associated to the same proposal during
-// application.
-func (d *replicaDecoder) retrieveLocalProposalsV2() (anyLocal bool) {
+// retrieveLocalProposals removes all proposals which have a log entry pending
+// immediate application from the proposals map. The entries which are paired up
+// with a proposal in that way are considered "local", meaning a client is
+// waiting on their result, and may be reproposed (as a new proposal) with a new
+// lease index in case they apply with an illegal lease index (see
+// tryReproposeWithNewLeaseIndex).
+func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
 
@@ -132,76 +130,6 @@ func (d *replicaDecoder) retrieveLocalProposalsV2() (anyLocal bool) {
 		// b.r.mu.proposalQuota. We can bring it back.
 		if d.r.mu.proposalQuota != nil {
 			d.r.mu.quotaReleaseQueue = append(d.r.mu.quotaReleaseQueue, alloc)
-		}
-	}
-	return anyLocal
-}
-
-// retrieveLocalProposals binds each of the decoder's commands to their local
-// proposals if they were proposed locally. The method also sets the ctx fields
-// on all commands.
-func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal bool) {
-	if useReproposalsV2 {
-		// NB: we *must* use this new code for correctness, since we have an invariant
-		// described within.
-		return d.retrieveLocalProposalsV2()
-	}
-	d.r.mu.Lock()
-	defer d.r.mu.Unlock()
-	// Assign all the local proposals first then delete all of them from the map
-	// in a second pass. This ensures that we retrieve all proposals correctly
-	// even if the applier has multiple entries for the same proposal, in which
-	// case the proposal was reproposed (either under its original or a new
-	// MaxLeaseIndex) which we handle in a second pass below.
-	var it replicatedCmdBufSlice
-	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
-		cmd := it.cur()
-		cmd.proposal = d.r.mu.proposals[cmd.ID]
-		anyLocal = anyLocal || cmd.IsLocal()
-	}
-	if !anyLocal && d.r.mu.proposalQuota == nil {
-		// Fast-path.
-		return false
-	}
-	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
-		cmd := it.cur()
-		var toRelease *quotapool.IntAlloc
-		shouldRemove := cmd.IsLocal() &&
-			// If this entry does not have the most up-to-date view of the
-			// corresponding proposal's maximum lease index then the proposal
-			// must have been reproposed with a higher lease index. (see
-			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
-			// version of the proposal in the pipeline, so don't remove the
-			// proposal from the map. We expect this entry to be rejected by
-			// checkForcedErr.
-			//
-			// Note that lease proposals always use a MaxLeaseIndex of zero (since
-			// they have their own replay protection), so they always meet this
-			// criterion. While such proposals can be reproposed, only the first
-			// instance that gets applied matters and so removing the command is
-			// always what we want to happen.
-			cmd.Cmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
-		if shouldRemove {
-			// Delete the proposal from the proposals map. There may be reproposals
-			// of the proposal in the pipeline, but those will all have the same max
-			// lease index, meaning that they will all be rejected after this entry
-			// applies (successfully or otherwise). If tryReproposeWithNewLeaseIndex
-			// picks up the proposal on failure, it will re-add the proposal to the
-			// proposal map, but this won't affect this replicaApplier.
-			//
-			// While here, add the proposal's quota size to the quota release queue.
-			// We check the proposal map again first to avoid double free-ing quota
-			// when reproposals from the same proposal end up in the same entry
-			// application batch.
-			delete(d.r.mu.proposals, cmd.ID)
-			toRelease = cmd.proposal.quotaAlloc
-			cmd.proposal.quotaAlloc = nil
-		}
-		// At this point we're not guaranteed to have proposalQuota initialized,
-		// the same is true for quotaReleaseQueues. Only queue the proposal's
-		// quota for release if the proposalQuota is initialized.
-		if d.r.mu.proposalQuota != nil {
-			d.r.mu.quotaReleaseQueue = append(d.r.mu.quotaReleaseQueue, toRelease)
 		}
 	}
 	return anyLocal
