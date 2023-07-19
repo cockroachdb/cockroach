@@ -1,5 +1,7 @@
 # LogicTest: !local-mixed-22.2-23.1
 
+subtest select_for_update
+
 # SELECT FOR UPDATE is prohibited under weaker isolation levels until we improve
 # locking. See #57031, #75457, #100144.
 
@@ -89,20 +91,25 @@ statement ok
 ROLLBACK
 
 statement ok
-SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
-
-# Creating a UDF using SELECT FOR UPDATE should succeed under read committed.
-statement ok
 CREATE FUNCTION wrangle (name STRING) RETURNS INT LANGUAGE SQL AS $$
   SELECT aisle FROM supermarket WHERE person = name FOR UPDATE
 $$
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
 # But calling that function should fail.
 query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
 INSERT INTO supermarket (person, aisle) VALUES ('grandma', wrangle('matilda'))
 
 statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
 DROP FUNCTION wrangle
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
 # Preparing a SELECT FOR UPDATE should succeed under read committed.
 statement ok
@@ -137,6 +144,93 @@ SELECT aisle
   FROM supermarket@{FORCE_ZIGZAG}
   WHERE starts_with = 'm' AND ends_with = 'lda'
   FOR UPDATE
+
+subtest end
+
+subtest schema_changes
+
+# Schema changes are prohibited under weaker isolation levels.
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+ALTER TABLE supermarket ADD COLUMN age INT
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE TABLE foo(a INT)
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+DROP TABLE supermarket
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE USER foo
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+DROP USER testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+GRANT admin TO testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+GRANT SELECT ON supermarket TO testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+GRANT USAGE ON SCHEMA public TO testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+GRANT CONNECT ON DATABASE postgres TO testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE INDEX foo ON supermarket(ends_with, starts_with)
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE FUNCTION f (x INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT x+1
+$$
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+CREATE FUNCTION f (x INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT x+1
+$$;
+COMMIT
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+ALTER FUNCTION f (x INT) RENAME TO g
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+GRANT EXECUTE ON FUNCTION f (x INT) TO testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE TYPE typ AS ENUM('a', 'b')
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+CREATE TYPE typ AS ENUM('a', 'b');
+COMMIT
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+ALTER TYPE typ ADD VALUE 'c'
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+GRANT USAGE ON TYPE typ TO testuser
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE DATABASE foo
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+ALTER DATABASE postgres RENAME TO foo
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+CREATE SCHEMA s
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+CREATE SCHEMA s;
+COMMIT
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+ALTER SCHEMA s RENAME TO foo
+
+subtest end
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE

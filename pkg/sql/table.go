@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -106,6 +108,11 @@ func (p *planner) createNonDropDatabaseChangeJob(
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *tabledesc.Mutable, jobDesc string, mutationID descpb.MutationID,
 ) error {
+	if p.Txn().IsoLevel().ToleratesWriteSkew() {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported, "transaction involving a schema change needs to be SERIALIZABLE",
+		)
+	}
 
 	// If there is a concurrent schema change using the declarative schema
 	// changer, then we must fail and wait for that schema change to conclude.
