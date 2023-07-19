@@ -162,7 +162,9 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 105
+  +      name: f
   +    revertible: true
   +  dependedOnBy:
   +  - constraintIds:
@@ -262,7 +264,9 @@ upsert descriptor #105
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 105
+  -      name: f
   -    revertible: true
      dependedOnBy:
      - constraintIds:

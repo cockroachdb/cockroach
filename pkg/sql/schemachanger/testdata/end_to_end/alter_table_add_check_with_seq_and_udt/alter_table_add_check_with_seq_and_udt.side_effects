@@ -155,7 +155,9 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 106
+  +      name: _typ
   +    revertible: true
      id: 106
      kind: ALIAS
@@ -301,7 +303,9 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 106
+  -      name: _typ
   -    revertible: true
      id: 106
      kind: ALIAS
