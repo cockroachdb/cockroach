@@ -63,6 +63,12 @@ type NewClusterFunc func(
 	t *testing.T, knobs *scexec.TestingKnobs,
 ) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func())
 
+// NewClusterOnlyConnFunc is the same as NewClusterFunc but only exposes the
+// connection to a single server.
+type NewClusterOnlyConnFunc func(
+	t *testing.T, knobs *scexec.TestingKnobs,
+) (_ *gosql.DB, cleanup func())
+
 // NewMixedClusterFunc provides functionality to construct a new cluster
 // given testing knobs.
 type NewMixedClusterFunc func(
@@ -256,7 +262,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, newCluster NewClus
 				}),
 				sctestdeps.WithStatements(stmtSqls...),
 				sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
-				sctestdeps.WithIDGenerator(s),
+				sctestdeps.WithIDGenerator(s.TenantOrServer()),
 				sctestdeps.WithReferenceProviderFactory(refFactory),
 			)
 			stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
