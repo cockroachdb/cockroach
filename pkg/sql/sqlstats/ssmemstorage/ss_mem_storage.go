@@ -95,9 +95,7 @@ type Container struct {
 	}
 
 	mu struct {
-		// TODO(arul): This can be refactored to have a RWLock instead, and have all
-		// usages acquire a read lock whenever appropriate. See #55285.
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// acc is the memory account that tracks memory allocations related to stmts
 		// and txns within this Container struct.
@@ -107,6 +105,12 @@ type Container struct {
 
 		stmts map[stmtKey]*stmtStats
 		txns  map[appstatspb.TransactionFingerprintID]*txnStats
+	}
+
+	// Use a separate lock to avoid lock contention. Don't block the statement
+	// stats just to update the sampled plan time.
+	muPlanCache struct {
+		syncutil.RWMutex
 
 		// sampledPlanMetadataCache records when was the last time the plan was
 		// sampled. This data structure uses a subset of stmtKey as the key into
@@ -156,7 +160,7 @@ func New(
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats)
-	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
+	s.muPlanCache.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
 
 	s.atomic.uniqueStmtFingerprintCount = uniqueStmtFingerprintCount
 	s.atomic.uniqueTxnFingerprintCount = uniqueTxnFingerprintCount
@@ -546,6 +550,18 @@ func (s *Container) getStatsForStmt(
 func (s *Container) getStatsForStmtWithKey(
 	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID, createIfNonexistent bool,
 ) (stats *stmtStats, created, throttled bool) {
+	// Use the read lock to get the key to avoid contention.
+	ok := func() (ok bool) {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		stats, ok = s.mu.stmts[key]
+		return ok
+	}()
+	if ok || !createIfNonexistent {
+		return stats, false /* created */, false /* throttled */
+	}
+
+	// Key does not exist in map. Take a full lock to add the key.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.getStatsForStmtWithKeyLocked(key, stmtFingerprintID, createIfNonexistent)
@@ -557,30 +573,32 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	stats, ok := s.mu.stmts[key]
-	if !ok && createIfNonexistent {
-		// If the uniqueStmtFingerprintCount is nil, then we don't check for
-		// fingerprint limit.
-		if s.atomic.uniqueStmtFingerprintCount != nil {
-			// We check if we have reached the limit of unique fingerprints we can
-			// store.
-			limit := s.uniqueStmtFingerprintLimit.Get(&s.st.SV)
-			incrementedFingerprintCount :=
-				atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(1) /* delts */)
-
-			// Abort if we have exceeded limit of unique statement fingerprints.
-			if incrementedFingerprintCount > limit {
-				atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, -int64(1) /* delts */)
-				return stats, false /* created */, true /* throttled */
-			}
-		}
-		stats = &stmtStats{}
-		stats.ID = stmtFingerprintID
-		s.mu.stmts[key] = stats
-		s.mu.sampledPlanMetadataCache[key.sampledPlanKey] = s.getTimeNow()
-
-		return stats, true /* created */, false /* throttled */
+	if ok || !createIfNonexistent {
+		return stats, false /* created */, false /* throttled */
 	}
-	return stats, false /* created */, false /* throttled */
+
+	// If the uniqueStmtFingerprintCount is nil, then we don't check for
+	// fingerprint limit.
+	if s.atomic.uniqueStmtFingerprintCount != nil {
+		// We check if we have reached the limit of unique fingerprints we can
+		// store.
+		limit := s.uniqueStmtFingerprintLimit.Get(&s.st.SV)
+		incrementedFingerprintCount :=
+			atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, int64(1) /* delts */)
+
+		// Abort if we have exceeded limit of unique statement fingerprints.
+		if incrementedFingerprintCount > limit {
+			atomic.AddInt64(s.atomic.uniqueStmtFingerprintCount, -int64(1) /* delts */)
+			return stats, false /* created */, true /* throttled */
+		}
+	}
+	stats = &stmtStats{}
+	stats.ID = stmtFingerprintID
+	s.mu.stmts[key] = stats
+
+	s.setLogicalPlanLastSampled(key.sampledPlanKey, s.getTimeNow())
+
+	return stats, true /* created */, false /* throttled */
 }
 
 func (s *Container) getStatsForTxnWithKey(
@@ -588,9 +606,20 @@ func (s *Container) getStatsForTxnWithKey(
 	stmtFingerprintIDs []appstatspb.StmtFingerprintID,
 	createIfNonexistent bool,
 ) (stats *txnStats, created, throttled bool) {
+	// Use the read lock to get the key to avoid contention
+	ok := func() (ok bool) {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		stats, ok = s.mu.txns[key]
+		return ok
+	}()
+	if ok || !createIfNonexistent {
+		return stats, false /* created */, false /* throttled */
+	}
+
+	// Key does not exist in map. Take a full lock to add the key.
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	return s.getStatsForTxnWithKeyLocked(key, stmtFingerprintIDs, createIfNonexistent)
 }
 
@@ -602,33 +631,34 @@ func (s *Container) getStatsForTxnWithKeyLocked(
 	// Retrieve the per-transaction statistic object, and create it if it doesn't
 	// exist yet.
 	stats, ok := s.mu.txns[key]
-	if !ok && createIfNonexistent {
-		// If the uniqueTxnFingerprintCount is nil, then we don't check for
-		// fingerprint limit.
-		if s.atomic.uniqueTxnFingerprintCount != nil {
-			limit := s.uniqueTxnFingerprintLimit.Get(&s.st.SV)
-			incrementedFingerprintCount :=
-				atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(1) /* delts */)
-
-			// If we have exceeded limit of fingerprint count, decrement the counter
-			// and abort.
-			if incrementedFingerprintCount > limit {
-				atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, -int64(1) /* delts */)
-				return nil /* stats */, false /* created */, true /* throttled */
-			}
-		}
-		stats = &txnStats{}
-		stats.statementFingerprintIDs = stmtFingerprintIDs
-		s.mu.txns[key] = stats
-		return stats, true /* created */, false /* throttled */
+	if ok || !createIfNonexistent {
+		return stats, false /* created */, false /* throttled */
 	}
-	return stats, false /* created */, false /* throttled */
+
+	// If the uniqueTxnFingerprintCount is nil, then we don't check for
+	// fingerprint limit.
+	if s.atomic.uniqueTxnFingerprintCount != nil {
+		limit := s.uniqueTxnFingerprintLimit.Get(&s.st.SV)
+		incrementedFingerprintCount :=
+			atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, int64(1) /* delts */)
+
+		// If we have exceeded limit of fingerprint count, decrement the counter
+		// and abort.
+		if incrementedFingerprintCount > limit {
+			atomic.AddInt64(s.atomic.uniqueTxnFingerprintCount, -int64(1) /* delts */)
+			return nil /* stats */, false /* created */, true /* throttled */
+		}
+	}
+	stats = &txnStats{}
+	stats.statementFingerprintIDs = stmtFingerprintIDs
+	s.mu.txns[key] = stats
+	return stats, true /* created */, false /* throttled */
 }
 
 // SaveToLog saves the existing statement stats into the info log.
 func (s *Container) SaveToLog(ctx context.Context, appName string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if len(s.mu.stmts) == 0 {
 		return
 	}
@@ -658,7 +688,10 @@ func (s *Container) Clear(ctx context.Context) {
 	// large for the likely future workload.
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
-	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+
+	s.muPlanCache.Lock()
+	defer s.muPlanCache.Unlock()
+	s.muPlanCache.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.muPlanCache.sampledPlanMetadataCache)/2)
 }
 
 // Free frees the accounted resources from the Container. The Container is
@@ -768,8 +801,8 @@ func (s *Container) MergeApplicationTransactionStats(
 // a lock on a will cause a deadlock.
 func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 	statMap := func() map[stmtKey]*stmtStats {
-		other.mu.Lock()
-		defer other.mu.Unlock()
+		other.mu.RLock()
+		defer other.mu.RUnlock()
 
 		statMap := make(map[stmtKey]*stmtStats)
 		for k, v := range other.mu.stmts {
@@ -946,16 +979,16 @@ func (s *transactionCounts) recordTransactionCounts(
 func (s *Container) getLogicalPlanLastSampled(
 	key sampledPlanKey,
 ) (lastSampled time.Time, found bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	lastSampled, found = s.mu.sampledPlanMetadataCache[key]
+	s.muPlanCache.RLock()
+	defer s.muPlanCache.RUnlock()
+	lastSampled, found = s.muPlanCache.sampledPlanMetadataCache[key]
 	return lastSampled, found
 }
 
 func (s *Container) setLogicalPlanLastSampled(key sampledPlanKey, time time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sampledPlanMetadataCache[key] = time
+	s.muPlanCache.Lock()
+	defer s.muPlanCache.Unlock()
+	s.muPlanCache.sampledPlanMetadataCache[key] = time
 }
 
 // shouldSaveLogicalPlanDescription returns whether we should save the sample

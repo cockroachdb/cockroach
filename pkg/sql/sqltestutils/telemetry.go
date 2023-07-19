@@ -98,6 +98,9 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 				// Index & multiregion are disabled because it requires
 				// multi-region syntax to be enabled for secondary tenants.
 				"testdata/telemetry/multiregion",
+				"testdata/telemetry/multiregion_db",
+				"testdata/telemetry/multiregion_table",
+				"testdata/telemetry/multiregion_row",
 				"testdata/telemetry/index",
 				"testdata/telemetry/planning",
 				"testdata/telemetry/sql-stats":

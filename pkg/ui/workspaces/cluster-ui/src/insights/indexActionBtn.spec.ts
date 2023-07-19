@@ -20,19 +20,20 @@ describe("Create index name", () => {
     {
       name: "one parameter no space",
       query: "CREATE INDEX ON t(i) STORING (k)",
-      expected: "CREATE INDEX IF NOT EXISTS t_i_rec_idx ON t(i) STORING (k)",
+      expected:
+        "CREATE INDEX IF NOT EXISTS t_i_storing_rec_idx ON t(i) STORING (k)",
     },
     {
       name: "two parameters",
       query: "CREATE INDEX ON t (i, j) STORING (k)",
       expected:
-        "CREATE INDEX IF NOT EXISTS t_i_j_rec_idx ON t (i, j) STORING (k)",
+        "CREATE INDEX IF NOT EXISTS t_i_j_storing_rec_idx ON t (i, j) STORING (k)",
     },
     {
       name: "one parameter, one expression",
       query: "CREATE INDEX ON t (i, (j + k)) STORING (k)",
       expected:
-        "CREATE INDEX IF NOT EXISTS t_i_expr_rec_idx ON t (i, (j + k)) STORING (k)",
+        "CREATE INDEX IF NOT EXISTS t_i_expr_storing_rec_idx ON t (i, (j + k)) STORING (k)",
     },
     {
       name: "one parameter, one expression no parenthesis",
@@ -43,7 +44,7 @@ describe("Create index name", () => {
       name: "two expressions",
       query: "CREATE INDEX ON t ((i+l), (j + k)) STORING (k)",
       expected:
-        "CREATE INDEX IF NOT EXISTS t_expr_expr1_rec_idx ON t ((i+l), (j + k)) STORING (k)",
+        "CREATE INDEX IF NOT EXISTS t_expr_expr1_storing_rec_idx ON t ((i+l), (j + k)) STORING (k)",
     },
     {
       name: "one expression, one parameter",
@@ -54,19 +55,19 @@ describe("Create index name", () => {
       name: "two expressions, one parameter",
       query: "CREATE INDEX ON t ((i + l), (j + k), a) STORING (k)",
       expected:
-        "CREATE INDEX IF NOT EXISTS t_expr_expr1_a_rec_idx ON t ((i + l), (j + k), a) STORING (k)",
+        "CREATE INDEX IF NOT EXISTS t_expr_expr1_a_storing_rec_idx ON t ((i + l), (j + k), a) STORING (k)",
     },
     {
       name: "invalid expression, missing )",
       query: "CREATE INDEX ON t ((i + l, (j + k), a) STORING (k)",
       expected:
-        "CREATE INDEX IF NOT EXISTS t_expr_expr1_expr2_rec_idx ON t ((i + l, (j + k), a) STORING (k)",
+        "CREATE INDEX IF NOT EXISTS t_expr_expr1_expr2_storing_rec_idx ON t ((i + l, (j + k), a) STORING (k)",
     },
     {
       name: "invalid expression, extra )",
       query: "CREATE INDEX ON t ((i + l)), (j + k), a) STORING (k)",
       expected:
-        "CREATE INDEX IF NOT EXISTS t_expr_rec_idx ON t ((i + l)), (j + k), a) STORING (k)",
+        "CREATE INDEX IF NOT EXISTS t_expr_storing_rec_idx ON t ((i + l)), (j + k), a) STORING (k)",
     },
   ];
 
