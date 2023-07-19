@@ -1,0 +1,31 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sched",
+    srcs = ["scheduler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/sched",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/ring",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "sched_test",
+    srcs = ["scheduler_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":sched"],
+    deps = [
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
+    ],
+)
+
+get_x_data(name = "get_x_data")
