@@ -625,6 +625,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 			Insecure: true,
 		}})
 	defer tc.Stopper().Stop(ctx)
+	SecondaryTenantSplitAtEnabled.Override(ctx, &tc.Server(0).TenantOrServer().ClusterSettings().SV, true)
 
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
