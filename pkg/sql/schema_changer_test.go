@@ -2983,9 +2983,9 @@ UPDATE t.test SET z = NULL, a = $1, b = NULL, c = NULL, d = $1 WHERE y = $2`, 2*
 func TestPrimaryKeyChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
@@ -2999,7 +2999,7 @@ COMMIT;
 	}
 	// Ensure that t.test doesn't have any pending mutations
 	// after the primary key change.
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "t", "test")
 	if len(desc.AllMutations()) != 0 {
 		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.AllMutations()))
 	}

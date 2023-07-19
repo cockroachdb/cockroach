@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -365,7 +364,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 	// as datums. The datums will correspond to each of the columns stored in the
 	// index, ordered by column ID.
 	fetchIndex := func(
-		ctx context.Context, t *testing.T, txn *kv.Txn, table *tabledesc.Mutable, indexID descpb.IndexID,
+		ctx context.Context, t *testing.T, codec keys.SQLCodec, txn *kv.Txn, table *tabledesc.Mutable, indexID descpb.IndexID,
 	) []tree.Datums {
 		t.Helper()
 
@@ -384,7 +383,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		}
 
 		require.NoError(t, err)
-		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, indexID)}
+		spans := []roachpb.Span{table.IndexSpan(codec, indexID)}
 		var fetcherCols []descpb.ColumnID
 		for _, col := range table.PublicColumns() {
 			if colIDsNeeded.Contains(col.GetID()) {
@@ -395,7 +394,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		var spec fetchpb.IndexFetchSpec
 		require.NoError(t, rowenc.InitIndexFetchSpec(
 			&spec,
-			keys.SystemSQLCodec,
+			codec,
 			table,
 			idx,
 			fetcherCols,
@@ -450,26 +449,24 @@ INSERT INTO foo VALUES (1), (10), (100);
 		blockChan := make(chan struct{})
 		var jobToBlock atomic.Value
 		jobToBlock.Store(jobspb.InvalidJobID)
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-						RunBeforeResume: func(jobID jobspb.JobID) error {
-							if jobID == jobToBlock.Load().(jobspb.JobID) {
-								<-blockChan
-								return errors.New("boom")
-							}
-							return nil
-						},
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+					RunBeforeResume: func(jobID jobspb.JobID) error {
+						if jobID == jobToBlock.Load().(jobspb.JobID) {
+							<-blockChan
+							return errors.New("boom")
+						}
+						return nil
 					},
 				},
 			},
 		})
-		defer tc.Stopper().Stop(ctx)
+		defer s.Stopper().Stop(ctx)
 		defer close(blockChan)
 
 		// Run the initial setupSQL.
-		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, test.setupSQL)
 
 		// Fetch the descriptor ID for the relevant table.
@@ -478,11 +475,12 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		// Run the testCase's setupDesc function to prepare an index backfill
 		// mutation. Also, create an associated job and set it up to be blocked.
-		s0 := tc.Server(0)
-		lm := s0.LeaseManager().(*lease.Manager)
-		settings := s0.ClusterSettings()
-		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
-		jr := s0.JobRegistry().(*jobs.Registry)
+		lm := s.LeaseManager().(*lease.Manager)
+		tt := s.TenantOrServer()
+		codec := tt.Codec()
+		settings := tt.ClusterSettings()
+		execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
+		jr := tt.JobRegistry().(*jobs.Registry)
 		var j *jobs.Job
 		var table catalog.TableDescriptor
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
@@ -531,7 +529,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		changer := sql.NewSchemaChangerForTesting(
 			tableID, 1, execCfg.NodeInfo.NodeID.SQLInstanceID(), execCfg.InternalDB, lm, jr, &execCfg, settings)
 		changer.SetJob(j)
-		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, test.indexToBackfill)}
+		spans := []roachpb.Span{table.IndexSpan(codec, test.indexToBackfill)}
 		require.NoError(t, changer.TestingDistIndexBackfill(ctx, table.GetVersion(), spans,
 			[]descpb.IndexID{test.indexToBackfill}, backfill.IndexMutationFilter))
 
@@ -550,7 +548,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 				require.NoError(t, table.MakeMutationComplete(mut))
 			}
 			table.Mutations = table.Mutations[toComplete:]
-			datums := fetchIndex(ctx, t, txn.KV(), table, test.indexToBackfill)
+			datums := fetchIndex(ctx, t, codec, txn.KV(), table, test.indexToBackfill)
 			require.Equal(t, test.expectedContents, datumSliceToStrMatrix(datums))
 			return nil
 		}))

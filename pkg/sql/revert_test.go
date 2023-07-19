@@ -43,10 +43,12 @@ func TestTableRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kv := serverutils.StartServer(
-		t, base.TestServerArgs{UseDatabase: "test"})
+	s, sqlDB, kv := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	tt := s.TenantOrServer()
+	codec, sv := tt.Codec(), &tt.ClusterSettings().SV
+	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, sv, true)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
@@ -87,9 +89,9 @@ func TestTableRollback(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kv, codec, "test", "test")
 		desc.TableDesc().State = descpb.DescriptorState_OFFLINE // bypass the offline check.
-		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
+		require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
@@ -101,11 +103,11 @@ func TestTableRollback(t *testing.T) {
 	t.Run("simple-delete-range-predicate", func(t *testing.T) {
 
 		// Delete all keys with values after the targetTime
-		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kv, codec, "test", "test")
 
 		predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
-		require.NoError(t, sql.DeleteTableWithPredicate(context.Background(), kv, execCfg.Codec,
-			&s.ClusterSettings().SV, execCfg.DistSender, desc, predicates, 10))
+		require.NoError(t, sql.DeleteTableWithPredicate(
+			ctx, kv, codec, sv, execCfg.DistSender, desc, predicates, 10))
 
 		db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
 	})
@@ -118,19 +120,19 @@ func TestTableRollbackMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kv := serverutils.StartServer(
-		t, base.TestServerArgs{UseDatabase: "test"})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	tt := s.TenantOrServer()
+	codec, kvDB := tt.Codec(), tt.DB()
+	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
 	db.Exec(t, "CREATE TABLE test (k INT PRIMARY KEY)")
 	db.Exec(t, "CREATE TABLE test2 (k INT PRIMARY KEY)")
 
-	kvDB := s.DB()
-	desc1 := desctestutils.TestingGetPublicTableDescriptor(kvDB, execCfg.Codec, "test", "test")
-	desc2 := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test2")
+	desc1 := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "test")
+	desc2 := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "test2")
 
 	tableID1 := desc1.GetID()
 	tableID2 := desc2.GetID()
@@ -165,7 +167,7 @@ func TestTableRollbackMultiTable(t *testing.T) {
 	desc1.TableDesc().State = descpb.DescriptorState_OFFLINE
 	desc2.TableDesc().State = descpb.DescriptorState_OFFLINE
 
-	require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []catalog.TableDescriptor{desc1, desc2}, targetTime, ignoreGC, 10))
+	require.NoError(t, sql.RevertTables(context.Background(), kvDB, &execCfg, []catalog.TableDescriptor{desc1, desc2}, targetTime, ignoreGC, 10))
 
 	reverted1, _ := fingerprintTableNoHistory(t, db, tableID1, "")
 	reverted2, _ := fingerprintTableNoHistory(t, db, tableID2, "")
