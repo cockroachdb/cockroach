@@ -601,7 +601,9 @@ func addSSTablePreApply(
 ) bool {
 	if sst.RemoteFilePath != "" {
 		// TODO(dt, bilal, msbutler): Replace this with eng.IngestRemoteFile()
-		log.Warningf(ctx, "EXPERIMENTAL AddSSTABLE REMOTE FILE UNSUPPORTED; downloading %s from %s and adding it whole, ignoring span %s", sst.RemoteFilePath, sst.RemoteFileLoc, sst.Span)
+		log.Warningf(ctx, "EXPERIMENTAL AddSSTABLE REMOTE FILE UNSUPPORTED; downloading %s ("+
+			"with size %d) from %s and adding it whole, ignoring span %s", sst.RemoteFilePath,
+			sst.BackingFileSize, sst.RemoteFileLoc, sst.Span)
 		s, err := env.external.OpenURL(ctx, sst.RemoteFileLoc, username.SQLUsername{})
 		if err != nil {
 			log.Fatalf(ctx, "failed to open remote location %q below raft: %v", sst.RemoteFileLoc, err)
