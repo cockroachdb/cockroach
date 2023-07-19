@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -181,16 +180,13 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 func TestRandomParquetExports(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	defer ccl.TestingEnableEnterprise()()
 	dbName := "rand"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Test fails when run within a test tenant. More
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		UseDatabase:       dbName,
-		ExternalIODir:     dir,
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -199,7 +195,7 @@ func TestRandomParquetExports(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	var tableName string
-	idb := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB
+	idb := srv.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
 		var (
@@ -281,15 +277,13 @@ func TestRandomParquetExports(t *testing.T) {
 func TestBasicParquetTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "baz"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Test fails when run within a test tenant. More
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		UseDatabase:       dbName,
-		ExternalIODir:     dir,
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -297,8 +291,8 @@ func TestBasicParquetTypes(t *testing.T) {
 
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
-	// instantiating an internal executor to easily get datums from the table
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
+	// Instantiating an internal executor to easily get datums from the table.
+	ie := srv.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)
