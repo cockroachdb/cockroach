@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -367,6 +368,12 @@ func (r *Replica) handleChangeReplicasResult(
 	// responsible.
 	if log.V(1) {
 		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
+	}
+
+	// This is currently executed before the conf change is applied to the Raft
+	// node, so we still see ourselves as the leader.
+	if r.raftBasicStatusRLocked().RaftState == raft.StateLeader {
+		r.store.metrics.RangeRaftLeaderRemovals.Inc(1)
 	}
 
 	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{

@@ -1849,6 +1849,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"range.raftleadertransfers"},
 			},
 			{
+				Title:   "Leader Removals",
+				Metrics: []string{"range.raftleaderremovals"},
+			},
+			{
 				Title:   "Leaders",
 				Metrics: []string{"replicas.leaders"},
 			},
