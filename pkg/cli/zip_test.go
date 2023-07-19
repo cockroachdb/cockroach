@@ -28,12 +28,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -43,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -299,7 +302,6 @@ create table defaultdb."../system"(x int);
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 107738, "flaky")
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
 	// unavailability.
@@ -317,35 +319,87 @@ func TestUnavailableZip(t *testing.T) {
 	close(closedCh)
 	unavailableCh.Store(closedCh)
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, _ *kvpb.BatchRequest) *kvpb.Error {
-			select {
-			case <-unavailableCh.Load().(chan struct{}):
-			case <-ctx.Done():
+		TestingRequestFilter: func(ctx context.Context,
+			br *kvpb.BatchRequest) *kvpb.Error {
+			if br.Header.GatewayNodeID == 2 {
+				// For node 2 connections, block all replica requests.
+				select {
+				case <-unavailableCh.Load().(chan struct{}):
+				case <-ctx.Done():
+				}
+			} else {
+				// For node 1 connections, only block requests to table data ranges.
+				if br.Requests[0].GetInner().Header().Key.Compare(keys.
+					TableDataMin) != -1 {
+					select {
+					case <-unavailableCh.Load().(chan struct{}):
+					case <-ctx.Done():
+					}
+				}
 			}
 			return nil
 		},
 	}
 
-	// Make a 2-node cluster, with an option to make the first node unavailable.
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Insecure: true, Knobs: base.TestingKnobs{Store: knobs}},
-			1: {Insecure: true},
-		},
-	})
+	// Make a 2-node cluster, with an option to block replica requests.
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{Insecure: true,
+			Knobs: base.TestingKnobs{Store: knobs}},
+		})
 	defer tc.Stopper().Stop(context.Background())
 
-	// Sanity test: check that a simple operation works.
-	if _, err := tc.ServerConn(0).Exec("SELECT * FROM system.users"); err != nil {
+	// Sanity test: check that a simple SQL operation works against node 1.
+	selectSystemUsers := "SELECT * FROM system.users"
+	if _, err := tc.ServerConn(0).Exec(selectSystemUsers); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make the first two nodes unavailable.
+	// Block querying table data from node 1.
+	// Block all replica requests from node 2.
 	ch := make(chan struct{})
 	unavailableCh.Store(ch)
 	defer close(ch)
 
-	// Zip it. We fake a CLI test context for this.
+	// Check that table data is unavailable to node 1.
+	ctx := context.Background()
+	if err := timeutil.RunWithTimeout(ctx, "query table data with SQL",
+		time.Second/2,
+		func(ctx context.Context) error {
+			_, err := tc.ServerConn(0).ExecContext(ctx, selectSystemUsers)
+			return err
+		}); err != nil && !errors.HasType(err,
+		&timeutil.TimeoutError{}) {
+		t.Fatal(err)
+	} else if err == nil {
+		t.Fatal("failed to make table data unavailable")
+	}
+
+	// Check that status server is unavailable to node 2.
+	var nodesList *serverpb.NodesListResponse
+	statusClient, err := tc.GetStatusClient(context.Background(), t, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := timeutil.RunWithTimeout(ctx,
+		"request node list from status server", time.Second/2,
+		func(ctx context.Context) error {
+			nodesList, err = statusClient.NodesList(ctx,
+				&serverpb.NodesListRequest{})
+			return err
+		}); err != nil && !errors.HasType(err,
+		&timeutil.TimeoutError{}) {
+		t.Fatal(err)
+	} else if nodesList != nil {
+		fmt.Print(nodesList)
+		t.Fatal("failed to make status server unavailable")
+	}
+
+	// Run debug zip against node 1.
+	debugZipCommand :=
+		"debug zip --concurrency=1 --cpu-profile-duration=0 " + os.
+			DevNull + " --timeout=.5s"
+
 	c := TestCLI{
 		t:          t,
 		TestServer: tc.Server(0).(*server.TestServer),
@@ -353,20 +407,39 @@ func TestUnavailableZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	// Keep the timeout short so that the test doesn't take forever.
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull + " --timeout=.5s")
+	out, err := c.RunWithCapture(debugZipCommand)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Strip any non-deterministic messages.
-	out = eraseNonDeterministicZipOutput(out)
-	out = eraseNonDeterministicErrors(out)
+	// Assert debug zip output for cluster, node 1, node 2.
+	assert.NotEmpty(t, out)
+	assert.Contains(t, out, "[cluster] retrieving")
+	assert.Contains(t, out, "[cluster] requesting")
+	assert.Contains(t, out, "[node 1] retrieving")
+	assert.Contains(t, out, "[node 1] requesting")
+	assert.Contains(t, out, "[node 2] retrieving")
+	assert.Contains(t, out, "[node 2] requesting")
 
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "unavailable"),
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
+	// Run debug zip against node 2.
+	c = TestCLI{
+		t:          t,
+		TestServer: tc.Server(1).(*server.TestServer),
+	}
+
+	out, err = c.RunWithCapture(debugZipCommand)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert debug zip output for cluster, node 2.
+	assert.NotEmpty(t, out)
+	assert.Contains(t, out, "[cluster] retrieving")
+	assert.Contains(t, out, "[cluster] requesting")
+	assert.Contains(t, out, "[node 2] retrieving")
+	assert.Contains(t, out, "[node 2] requesting")
+	assert.NotContains(t, out, "[node 1]")
+
 }
 
 func eraseNonDeterministicZipOutput(out string) string {
@@ -403,21 +476,6 @@ func eraseNonDeterministicZipOutput(out string) string {
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 
-	return out
-}
-
-func eraseNonDeterministicErrors(out string) string {
-	// In order to avoid non-determinism here, we erase the output of
-	// the range retrieval.
-	re := regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
-	out = re.ReplaceAllString(out, ``)
-
-	re = regexp.MustCompile(`(?m)^\[cluster\] requesting data for debug\/settings.*\n`)
-	out = re.ReplaceAllString(out, ``)
-
-	// In order to avoid non-determinism here, we truncate error messages.
-	re = regexp.MustCompile(`(?m)last request failed: .*$`)
-	out = re.ReplaceAllString(out, `last request failed: ...`)
 	return out
 }
 
