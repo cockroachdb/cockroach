@@ -27,8 +27,8 @@ mkdir -p "$PWD/bin"
 chmod o+rwx "$PWD/bin"
 
 # Build the roachtest binary.
-bazel build //pkg/cmd/roachtest --config ci
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
+bazel build //pkg/cmd/roachtest --config ci -c opt
+BAZEL_BIN=$(bazel info bazel-bin --config ci -c opt)
 cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin
 chmod a+w bin/roachtest
 
@@ -39,8 +39,8 @@ chmod a+w bin/roachtest
 bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@latest
 NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
-bazel build @com_github_cockroachdb_pebble//cmd/pebble --config race --config ci
-BAZEL_BIN=$(bazel info bazel-bin --config race --config ci)
+bazel build @com_github_cockroachdb_pebble//cmd/pebble --config race --config ci -c opt
+BAZEL_BIN=$(bazel info bazel-bin --config race --config ci -c opt)
 cp $BAZEL_BIN/external/com_github_cockroachdb_pebble/cmd/pebble/pebble_/pebble ./pebble.linux
 chmod a+w ./pebble.linux
 
