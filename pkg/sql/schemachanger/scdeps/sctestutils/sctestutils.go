@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -46,7 +47,7 @@ import (
 // scbuild.Dependencies object built using the test server interface and which
 // it passes to the callback.
 func WithBuilderDependenciesFromTestServer(
-	s serverutils.TestServerInterface, fn func(scbuild.Dependencies),
+	s serverutils.TestTenantInterface, nodeID roachpb.NodeID, fn func(scbuild.Dependencies),
 ) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -54,7 +55,7 @@ func WithBuilderDependenciesFromTestServer(
 	sd.Database = "defaultdb"
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
-		kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		kv.NewTxn(ctx, s.DB(), nodeID),
 		username.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
