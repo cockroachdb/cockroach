@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -171,7 +170,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "t")
-		tableStartKey.Store(keys.SystemSQLCodec.TablePrefix(tableID))
+		tableStartKey.Store(tc.TenantOrServer(0).Codec().TablePrefix(tableID))
 
 		// Wait for new table to split & replication.
 		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().(roachpb.Key)); err != nil {
