@@ -11,10 +11,14 @@
 package rditer
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 )
 
 // ReplicaDataIteratorOptions defines ReplicaMVCCDataIterator creation options.
@@ -315,6 +319,7 @@ func IterateReplicaKeySpans(
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	replicatedOnly bool,
+	replicatedSpansFilter ReplicatedSpansFilter,
 	visitor func(storage.EngineIterator, roachpb.Span, storage.IterKeyType) error,
 ) error {
 	if !reader.ConsistentIterators() {
@@ -322,9 +327,18 @@ func IterateReplicaKeySpans(
 	}
 	var spans []roachpb.Span
 	if replicatedOnly {
-		spans = MakeReplicatedKeySpans(desc)
+		spans = Select(desc.RangeID, SelectOpts{
+			ReplicatedSpansFilter: replicatedSpansFilter,
+			ReplicatedBySpan:      desc.RSpan(),
+			ReplicatedByRangeID:   true,
+		})
 	} else {
-		spans = makeAllKeySpans(desc)
+		spans = Select(desc.RangeID, SelectOpts{
+			ReplicatedBySpan:      desc.RSpan(),
+			ReplicatedSpansFilter: replicatedSpansFilter,
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+		})
 	}
 	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
 	for _, span := range spans {
@@ -348,6 +362,35 @@ func IterateReplicaKeySpans(
 		}
 	}
 	return nil
+}
+
+// IterateReplicaKeySpansShared iterates over the range's user key span,
+// skipping any keys present in shared files. It calls the appropriate visitor
+// function for the type of key visited, namely, point keys, range deletes and
+// range keys. Shared files that are skipped during this iteration are also
+// surfaced through a dedicated visitor. Note that this method only iterates
+// over a range's user key span; IterateReplicaKeySpans must be called to
+// iterate over the other key spans.
+//
+// Must use a reader with consistent iterators.
+func IterateReplicaKeySpansShared(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	visitPoint func(key *pebble.InternalKey, val pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start, end []byte, seqNum uint64) error,
+	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	if !reader.ConsistentIterators() {
+		panic("reader must provide consistent iterators")
+	}
+	spans := Select(desc.RangeID, SelectOpts{
+		ReplicatedSpansFilter: ReplicatedSpansUserOnly,
+		ReplicatedBySpan:      desc.RSpan(),
+	})
+	span := spans[0]
+	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // IterateOptions instructs how points and ranges should be presented to visitor
