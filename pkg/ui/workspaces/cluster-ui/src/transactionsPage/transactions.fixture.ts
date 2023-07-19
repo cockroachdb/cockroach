@@ -53,6 +53,7 @@ export const timeScale: TimeScale = {
 export const timestamp = new protos.google.protobuf.Timestamp({
   seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),
 });
+export const requestTime = moment.utc("2023.01.5");
 
 export const sortSetting: SortSetting = {
   ascending: false,

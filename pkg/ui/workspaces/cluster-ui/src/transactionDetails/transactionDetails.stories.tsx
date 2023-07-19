@@ -14,6 +14,7 @@ import { MemoryRouter } from "react-router-dom";
 import { noop } from "lodash";
 import {
   nodeRegions,
+  requestTime,
   routeProps,
   timeScale,
   transactionDetailsData,
@@ -46,6 +47,8 @@ storiesOf("Transactions Details", module)
       refreshTransactionInsights={noop}
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
+      requestTime={requestTime}
+      onRequestTimeChange={noop}
       txnStatsResp={{
         lastUpdated: moment(),
         error: null,
@@ -71,6 +74,8 @@ storiesOf("Transactions Details", module)
       refreshTransactionInsights={noop}
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
+      requestTime={requestTime}
+      onRequestTimeChange={noop}
       txnStatsResp={{
         lastUpdated: moment(),
         error: null,
@@ -96,6 +101,8 @@ storiesOf("Transactions Details", module)
       refreshTransactionInsights={noop}
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
+      requestTime={moment()}
+      onRequestTimeChange={noop}
       txnStatsResp={{
         lastUpdated: moment(),
         error: null,
@@ -122,6 +129,8 @@ storiesOf("Transactions Details", module)
         refreshTransactionInsights={noop}
         limit={100}
         reqSortSetting={StatsSortOptions.SERVICE_LAT}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         txnStatsResp={{
           lastUpdated: moment(),
           error: null,
