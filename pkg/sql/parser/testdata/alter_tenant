@@ -61,3 +61,11 @@ ALTER TENANT ALL SET CLUSTER SETTING a = DEFAULT -- normalized!
 ALTER TENANT ALL SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
 ALTER TENANT ALL SET CLUSTER SETTING a = DEFAULT -- literals removed
 ALTER TENANT ALL SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+
+parse
+ALTER TENANT INTERVAL 'string' RESET CLUSTER SETTING INTEGER . ident
+----
+ALTER TENANT ('string'::INTERVAL) SET CLUSTER SETTING "integer.ident" = DEFAULT -- normalized!
+ALTER TENANT ((('string')::INTERVAL)) SET CLUSTER SETTING "integer.ident" = (DEFAULT) -- fully parenthesized
+ALTER TENANT ('_'::INTERVAL) SET CLUSTER SETTING "integer.ident" = DEFAULT -- literals removed
+ALTER TENANT ('string'::INTERVAL) SET CLUSTER SETTING "integer.ident" = DEFAULT -- identifiers removed
