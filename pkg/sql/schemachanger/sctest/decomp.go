@@ -34,13 +34,13 @@ import (
 
 // DecomposeToElements exercises the descriptor-to-element decomposition
 // functionality in the form of a data-driven test.
-func DecomposeToElements(t *testing.T, dir string, newCluster NewClusterFunc) {
+func DecomposeToElements(t *testing.T, dir string, newCluster NewClusterOnlyConnFunc) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
-		_, db, cleanup := newCluster(t, nil /* knobs */)
+		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
 		defer cleanup()
 		// We need to disable the declarative schema changer so that we don't end
