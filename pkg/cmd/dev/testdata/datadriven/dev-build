@@ -49,6 +49,14 @@ cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkou
 exec
 dev build -- --verbose_failures --sandbox_debug
 ----
+bazel info workspace --color=no
+ls crdb-checkout/pkg/ui/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/eslint-plugin-crdb/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/db-console/src/js/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/cluster-ui/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/db-console/node_modules/@cockroachlabs
+ls crdb-checkout/pkg/ui/workspaces/e2e-tests/node_modules/@cockroachlabs
 bazel build //pkg/cmd/cockroach:cockroach --verbose_failures --sandbox_debug --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
