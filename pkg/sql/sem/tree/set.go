@@ -26,6 +26,7 @@ type SetVar struct {
 	Values   Exprs
 	Reset    bool
 	ResetAll bool
+	SetRow   bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -47,7 +48,7 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 	if node.Local {
 		ctx.WriteString("LOCAL ")
 	}
-	if node.Name == "" {
+	if node.SetRow {
 		ctx.WriteString("ROW (")
 		ctx.FormatNode(&node.Values)
 		ctx.WriteString(")")
