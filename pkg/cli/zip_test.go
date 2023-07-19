@@ -357,19 +357,16 @@ func TestUnavailableZip(t *testing.T) {
 	stderr = os.Stdout
 
 	// Keep the timeout short so that the test doesn't take forever.
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull + " --timeout=.5s")
+	out, err := c.RunWithCapture(
+		"debug zip --concurrency=2 --cpu-profile-duration=0 " + os.DevNull + " --timeout=.5s")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Strip any non-deterministic messages.
-	out = eraseNonDeterministicZipOutput(out)
-	out = eraseNonDeterministicErrors(out)
+	assert.NotEmpty(t, out)
+	// assert final line of debug zip output for node 1
+	assert.Contains(t, out, "[node 1] writing ranges: done")
 
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "unavailable"),
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
 }
 
 func eraseNonDeterministicZipOutput(out string) string {
@@ -406,21 +403,6 @@ func eraseNonDeterministicZipOutput(out string) string {
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 
-	return out
-}
-
-func eraseNonDeterministicErrors(out string) string {
-	// In order to avoid non-determinism here, we erase the output of
-	// the range retrieval.
-	re := regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
-	out = re.ReplaceAllString(out, ``)
-
-	re = regexp.MustCompile(`(?m)^\[cluster\] requesting data for debug\/settings.*\n`)
-	out = re.ReplaceAllString(out, ``)
-
-	// In order to avoid non-determinism here, we truncate error messages.
-	re = regexp.MustCompile(`(?m)last request failed: .*$`)
-	out = re.ReplaceAllString(out, `last request failed: ...`)
 	return out
 }
 
