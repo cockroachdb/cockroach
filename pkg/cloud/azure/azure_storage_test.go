@@ -66,14 +66,18 @@ func TestAzure(t *testing.T) {
 		return
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
-	cloudtestutils.CheckExportStore(t, cfg.filePath("backup-test"),
+	testID := cloudtestutils.NewTestID()
+	testPath := fmt.Sprintf("backup-test-%d", testID)
+	testListPath := fmt.Sprintf("listing-test-%d", testID)
+
+	cloudtestutils.CheckExportStore(t, cfg.filePath(testPath),
 		false, username.RootUserName(),
 		nil, /* ie */
 		nil, /* ief */
 		nil, /* kvDB */
 		testSettings,
 	)
-	cloudtestutils.CheckListFiles(t, cfg.filePath("listing-test"), username.RootUserName(),
+	cloudtestutils.CheckListFiles(t, cfg.filePath(testListPath), username.RootUserName(),
 		nil, /* ie */
 		nil, /* ief */
 		nil, /* kvDB */
@@ -90,9 +94,11 @@ func TestAntagonisticAzureRead(t *testing.T) {
 		return
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
+	testID := cloudtestutils.NewTestID()
+	antagonistPath := fmt.Sprintf("antagonistic-read-%d", testID)
 
 	conf, err := cloud.ExternalStorageConfFromURI(
-		cfg.filePath("antagonistic-read"), username.RootUserName())
+		cfg.filePath(antagonistPath), username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
