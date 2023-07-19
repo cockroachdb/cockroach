@@ -1190,7 +1190,7 @@ func checkTraceFiles(
 ) {
 	t.Helper()
 
-	recordings := make([]jobspb.TraceData, 0)
+	recordings := make([][]byte, 0)
 	execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
 	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
 	require.NoError(t, err)
@@ -1198,9 +1198,7 @@ func checkTraceFiles(
 	for _, f := range edFiles {
 		data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobID)
 		require.NoError(t, err)
-		td := jobspb.TraceData{}
-		require.NoError(t, protoutil.Unmarshal(data, &td))
-		recordings = append(recordings, td)
+		recordings = append(recordings, data)
 	}
 	if len(recordings) != expectedNumFiles {
 		t.Fatalf("expected %d entries but found %d", expectedNumFiles, len(recordings))

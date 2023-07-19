@@ -15,11 +15,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/klauspost/compress/gzip"
 )
@@ -82,6 +85,24 @@ func WriteExecutionDetailFile(
 	})
 }
 
+func maybePreProcessExecutionDetail(filename string, fileContents *bytes.Buffer) ([]byte, error) {
+	// If the file requested is stored in a `protobin` format we must stringify
+	// the contents of the file as it will be downloaded as `.txt`.
+	isProtoBin := regexp.MustCompile(`.*\.protobin\.txt`).MatchString(filename)
+	if isProtoBin {
+		if strings.HasPrefix(filename, "resumer-trace") {
+			td := &jobspb.TraceData{}
+			if err := protoutil.Unmarshal(fileContents.Bytes(), td); err != nil {
+				return nil, err
+			}
+			rec := tracingpb.Recording(td.CollectedSpans)
+			return []byte(rec.String()), nil
+		}
+	}
+
+	return fileContents.Bytes(), nil
+}
+
 // ReadExecutionDetailFile will stitch together all the chunks corresponding to the
 // filename and return the uncompressed data of the file.
 func ReadExecutionDetailFile(
@@ -124,7 +145,8 @@ func ReadExecutionDetailFile(
 	}); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+
+	return maybePreProcessExecutionDetail(filename, buf)
 }
 
 // ListExecutionDetailFiles lists all the files that have been generated as part

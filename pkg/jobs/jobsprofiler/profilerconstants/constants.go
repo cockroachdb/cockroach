@@ -37,14 +37,6 @@ func MakeNodeProcessorProgressInfoKey(flowID string, instanceID string, processo
 	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, flowID, instanceID, processorID)
 }
 
-const ResumerTraceInfoKeyPrefix = "~resumer-trace-"
-
-// MakeResumerTraceInfoKey returns the info_key used for rows that store the
-// traces on completion of a resumer's execution.
-func MakeResumerTraceInfoKey(traceID uint64, nodeID string) string {
-	return fmt.Sprintf("%s%d-%s", ResumerTraceInfoKeyPrefix, traceID, nodeID)
-}
-
 // ExecutionDetailsChunkKeyPrefix is the prefix of the info key used for rows that
 // store chunks of a job's execution details.
 const ExecutionDetailsChunkKeyPrefix = "~profiler/"

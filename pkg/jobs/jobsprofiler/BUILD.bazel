@@ -45,7 +45,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
