@@ -299,6 +299,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 }
 
 func newRaftConfig(
+	ctx context.Context,
 	strg raft.Storage,
 	id uint64,
 	appliedIndex kvpb.RaftIndex,
@@ -319,6 +320,19 @@ func newRaftConfig(
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
 		Logger:                      logger,
+
+		// StepDownOnRemoval requires 23.2. Otherwise, in a mixed-version cluster, a
+		// 23.2 leader may step down when it demotes itself to learner, but a
+		// designated follower (first in the range) running 23.1 will only campaign
+		// once the leader is entirely removed from the range descriptor (see
+		// shouldCampaignOnConfChange). This would leave the range without a leader,
+		// having to wait out an election timeout.
+		//
+		// We only set this on replica initialization, so replicas without
+		// StepDownOnRemoval may remain on 23.2 nodes until they restart. That's
+		// totally fine, we just can't rely on this behavior until 24.1, but
+		// we currently don't either.
+		StepDownOnRemoval: storeCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2),
 
 		PreVote:     true,
 		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
