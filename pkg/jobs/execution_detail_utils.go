@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/klauspost/compress/gzip"
 )
@@ -82,6 +84,19 @@ func WriteExecutionDetailFile(
 	})
 }
 
+func stringifyProtobinFile(filename string, fileContents *bytes.Buffer) ([]byte, error) {
+	if strings.HasPrefix(filename, "resumer-trace") {
+		td := &jobspb.TraceData{}
+		if err := protoutil.Unmarshal(fileContents.Bytes(), td); err != nil {
+			return nil, err
+		}
+		rec := tracingpb.Recording(td.CollectedSpans)
+		return []byte(rec.String()), nil
+	} else {
+		return nil, errors.AssertionFailedf("unknown file %s", filename)
+	}
+}
+
 // ReadExecutionDetailFile will stitch together all the chunks corresponding to the
 // filename and return the uncompressed data of the file.
 func ReadExecutionDetailFile(
@@ -91,37 +106,52 @@ func ReadExecutionDetailFile(
 	// to the job's execution details and return the zipped bundle instead.
 
 	buf := bytes.NewBuffer([]byte{})
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// Reset the buf inside the txn closure to guard against txn retries.
-		buf.Reset()
-		jobInfo := InfoStorageForJob(txn, jobID)
+	fetchFileContent := func(file string) error {
+		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Reset the buf inside the txn closure to guard against txn retries.
+			buf.Reset()
+			jobInfo := InfoStorageForJob(txn, jobID)
 
-		// Iterate over all the chunks of the requested file and return the unzipped
-		// chunks of data.
-		var lastInfoKey string
-		if err := jobInfo.Iterate(ctx, profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(filename),
-			func(infoKey string, value []byte) error {
-				lastInfoKey = infoKey
-				r, err := gzip.NewReader(bytes.NewBuffer(value))
-				if err != nil {
-					return err
-				}
-				decompressed, err := io.ReadAll(r)
-				if err != nil {
-					return err
-				}
-				buf.Write(decompressed)
-				return nil
-			}); err != nil {
-			return errors.Wrapf(err, "failed to iterate over chunks for job %d", jobID)
+			// Iterate over all the chunks of the requested file and return the unzipped
+			// chunks of data.
+			var lastInfoKey string
+			if err := jobInfo.Iterate(ctx, profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(file),
+				func(infoKey string, value []byte) error {
+					lastInfoKey = infoKey
+					r, err := gzip.NewReader(bytes.NewBuffer(value))
+					if err != nil {
+						return err
+					}
+					decompressed, err := io.ReadAll(r)
+					if err != nil {
+						return err
+					}
+					buf.Write(decompressed)
+					return nil
+				}); err != nil {
+				return errors.Wrapf(err, "failed to iterate over chunks for job %d", jobID)
+			}
+
+			if lastInfoKey != "" && !strings.Contains(lastInfoKey, finalChunkSuffix) {
+				return errors.Newf("failed to read all chunks for file %s, last info key read was %s", file, lastInfoKey)
+			}
+
+			return nil
+		})
+	}
+
+	// If the file requested is the `binpb.txt` format of a `binpb` file, we must
+	// fetch the `binpb` version of the file and stringify the contents before
+	// returning the response.
+	if strings.HasSuffix(filename, "binpb.txt") {
+		trimmedFilename := strings.TrimSuffix(filename, ".txt")
+		if err := fetchFileContent(trimmedFilename); err != nil {
+			return nil, err
 		}
+		return stringifyProtobinFile(filename, buf)
+	}
 
-		if lastInfoKey != "" && !strings.Contains(lastInfoKey, finalChunkSuffix) {
-			return errors.Newf("failed to read all chunks for file %s, last info key read was %s", filename, lastInfoKey)
-		}
-
-		return nil
-	}); err != nil {
+	if err := fetchFileContent(filename); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -143,7 +173,13 @@ func ListExecutionDetailFiles(
 			func(infoKey string, value []byte) error {
 				// Look for the final chunk of each file to find the unique file name.
 				if strings.HasSuffix(infoKey, finalChunkSuffix) {
-					files = append(files, strings.TrimPrefix(strings.TrimSuffix(infoKey, finalChunkSuffix), profilerconstants.ExecutionDetailsChunkKeyPrefix))
+					filename := strings.TrimPrefix(strings.TrimSuffix(infoKey, finalChunkSuffix), profilerconstants.ExecutionDetailsChunkKeyPrefix)
+					// If we see a `.binpb` file we also want to make the string version of
+					// the file available for consumption.
+					if strings.HasSuffix(filename, ".binpb") {
+						files = append(files, filename+".txt")
+					}
+					files = append(files, filename)
 				}
 				return nil
 			}); err != nil {

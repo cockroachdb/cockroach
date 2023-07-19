@@ -214,7 +214,7 @@ func TestTraceRecordingOnResumerCompletion(t *testing.T) {
 	// At this point there should have been two resumers, and so we expect two
 	// trace recordings.
 	testutils.SucceedsSoon(t, func() error {
-		recordings := make([]jobspb.TraceData, 0)
+		recordings := make([][]byte, 0)
 		execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
 		edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobspb.JobID(jobID))
 		if err != nil {
@@ -232,13 +232,16 @@ func TestTraceRecordingOnResumerCompletion(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			td := jobspb.TraceData{}
-			if err := protoutil.Unmarshal(data, &td); err != nil {
-				return err
+			recordings = append(recordings, data)
+			if strings.HasSuffix(f, "binpb") {
+				td := jobspb.TraceData{}
+				if err := protoutil.Unmarshal(data, &td); err != nil {
+					return err
+				}
+				require.NotEmpty(t, td.CollectedSpans)
 			}
-			recordings = append(recordings, td)
 		}
-		if len(recordings) != 2 {
+		if len(recordings) != 4 {
 			return errors.Newf("expected 2 entries but found %d", len(recordings))
 		}
 		return nil
