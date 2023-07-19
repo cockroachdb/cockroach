@@ -2,11 +2,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "produce",
-    srcs = ["producer.go"],
+    srcs = [
+        "mem_queue_producer.go",
+        "producer.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/produce",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/obsservice/obslib",
+        "//pkg/obsservice/obslib/queue",
         "//pkg/obsservice/obslib/transform",
         "//pkg/obsservice/obslib/validate",
         "//pkg/obsservice/obspb",
