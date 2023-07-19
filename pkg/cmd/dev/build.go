@@ -29,10 +29,12 @@ import (
 )
 
 const (
-	crossFlag       = "cross"
-	nogoDisableFlag = "--//build/toolchains:nogo_disable_flag"
-	geosTarget      = "//c-deps:libgeos"
-	devTarget       = "//pkg/cmd/dev:dev"
+	crossFlag          = "cross"
+	cockroachTargetOss = "//pkg/cmd/cockroach-oss:cockroach-oss"
+	cockroachTarget    = "//pkg/cmd/cockroach:cockroach"
+	nogoDisableFlag    = "--//build/toolchains:nogo_disable_flag"
+	geosTarget         = "//c-deps:libgeos"
+	devTarget          = "//pkg/cmd/dev:dev"
 )
 
 type buildTarget struct {
@@ -77,9 +79,9 @@ var buildTargetMapping = map[string]string{
 	"bazel-remote":         bazelRemoteTarget,
 	"buildifier":           "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":            "@com_github_bazelbuild_buildtools//buildozer:buildozer",
-	"cockroach":            "//pkg/cmd/cockroach:cockroach",
+	"cockroach":            cockroachTarget,
 	"cockroach-sql":        "//pkg/cmd/cockroach-sql:cockroach-sql",
-	"cockroach-oss":        "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"cockroach-oss":        cockroachTargetOss,
 	"cockroach-short":      "//pkg/cmd/cockroach-short:cockroach-short",
 	"crlfmt":               "@com_github_cockroachdb_crlfmt//:crlfmt",
 	"dev":                  devTarget,
@@ -95,7 +97,7 @@ var buildTargetMapping = map[string]string{
 	"obsservice":           "//pkg/obsservice/cmd/obsservice:obsservice",
 	"optgen":               "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":               "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
-	"oss":                  "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"oss":                  cockroachTargetOss,
 	"reduce":               "//pkg/cmd/reduce:reduce",
 	"roachprod":            "//pkg/cmd/roachprod:roachprod",
 	"roachprod-stress":     "//pkg/cmd/roachprod-stress:roachprod-stress",
@@ -173,6 +175,10 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	configArgs := getConfigArgs(args)
 	configArgs = append(configArgs, getConfigArgs(additionalBazelArgs)...)
 
+	if err := d.assertNoLinkedNpmDeps(buildTargets); err != nil {
+		return err
+	}
+
 	if cross == "" {
 		// Do not log --build_event_binary_file=... because it is not relevant to the actual call
 		// from the user perspective.
@@ -200,7 +206,7 @@ func (d *dev) crossBuild(
 	volume string,
 	dockerArgs []string,
 ) error {
-	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci")
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci", "-c", "opt")
 	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {

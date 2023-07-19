@@ -115,6 +115,7 @@ func TestComposeCompare(t *testing.T) {
 		fmt.Sprintf("COMPARE_DIR_PATH=%s", compareDir),
 		fmt.Sprintf("ARTIFACTS=%s", *flagArtifacts),
 		fmt.Sprintf("COCKROACH_DEV_LICENSE=%s", envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")),
+		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
