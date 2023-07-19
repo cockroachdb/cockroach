@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -299,7 +300,6 @@ create table defaultdb."../system"(x int);
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 107738, "flaky")
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
 	// unavailability.
@@ -317,35 +317,52 @@ func TestUnavailableZip(t *testing.T) {
 	close(closedCh)
 	unavailableCh.Store(closedCh)
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, _ *kvpb.BatchRequest) *kvpb.Error {
-			select {
-			case <-unavailableCh.Load().(chan struct{}):
-			case <-ctx.Done():
+		TestingRequestFilter: func(ctx context.Context,
+			br *kvpb.BatchRequest) *kvpb.Error {
+			if br.Header.GatewayNodeID == 2 {
+				// For node 2 connections, block all replica requests.
+				select {
+				case <-unavailableCh.Load().(chan struct{}):
+				case <-ctx.Done():
+				}
+			} else if br.Header.GatewayNodeID == 1 {
+				// For node 1 connections, only block requests to table data ranges.
+				if br.Requests[0].GetInner().Header().Key.Compare(keys.
+					TableDataMin) != -1 {
+					select {
+					case <-unavailableCh.Load().(chan struct{}):
+					case <-ctx.Done():
+					}
+				}
 			}
 			return nil
 		},
 	}
 
-	// Make a 2-node cluster, with an option to make the first node unavailable.
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Insecure: true, Knobs: base.TestingKnobs{Store: knobs}},
-			1: {Insecure: true},
-		},
-	})
+	// Make a 3-node cluster, with an option to block replica requests.
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{Insecure: true,
+			Knobs: base.TestingKnobs{Store: knobs}},
+		})
 	defer tc.Stopper().Stop(context.Background())
 
-	// Sanity test: check that a simple operation works.
-	if _, err := tc.ServerConn(0).Exec("SELECT * FROM system.users"); err != nil {
+	// Sanity test: check that a simple SQL operation works against node 1.
+	selectSystemUsers := "SELECT * FROM system.users"
+	if _, err := tc.ServerConn(0).Exec(selectSystemUsers); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make the first two nodes unavailable.
+	// Block querying table data from node 1.
+	// Block all replica requests from node 2.
 	ch := make(chan struct{})
 	unavailableCh.Store(ch)
 	defer close(ch)
 
-	// Zip it. We fake a CLI test context for this.
+	// Run debug zip against node 1.
+	debugZipCommand :=
+		"debug zip --concurrency=1 --cpu-profile-duration=0 " + os.
+			DevNull + " --timeout=.5s"
+
 	c := TestCLI{
 		t:        t,
 		Server:   tc.Server(0),
@@ -354,20 +371,37 @@ func TestUnavailableZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	// Keep the timeout short so that the test doesn't take forever.
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull + " --timeout=.5s")
+	out, err := c.RunWithCapture(debugZipCommand)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Strip any non-deterministic messages.
-	out = eraseNonDeterministicZipOutput(out)
-	out = eraseNonDeterministicErrors(out)
+	// Assert debug zip output for cluster, node 1, node 2, node 3.
+	assert.NotEmpty(t, out)
+	assert.Contains(t, out, "[cluster]")
+	assert.Contains(t, out, "[node 1]")
+	assert.Contains(t, out, "[node 2]")
+	assert.Contains(t, out, "[node 3]")
 
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "unavailable"),
-		func(t *testing.T, td *datadriven.TestData) string {
-			return out
-		})
+	// Run debug zip against node 2.
+	c = TestCLI{
+		t:        t,
+		Server:   tc.Server(1),
+		Insecure: true,
+	}
+
+	out, err = c.RunWithCapture(debugZipCommand)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert debug zip output for cluster, node 2.
+	assert.NotEmpty(t, out)
+	assert.Contains(t, out, "[cluster]")
+	assert.Contains(t, out, "[node 2]")
+	assert.NotContains(t, out, "[node 1]")
+	assert.NotContains(t, out, "[node 3]")
+
 }
 
 func eraseNonDeterministicZipOutput(out string) string {
@@ -404,21 +438,6 @@ func eraseNonDeterministicZipOutput(out string) string {
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 
-	return out
-}
-
-func eraseNonDeterministicErrors(out string) string {
-	// In order to avoid non-determinism here, we erase the output of
-	// the range retrieval.
-	re := regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
-	out = re.ReplaceAllString(out, ``)
-
-	re = regexp.MustCompile(`(?m)^\[cluster\] requesting data for debug\/settings.*\n`)
-	out = re.ReplaceAllString(out, ``)
-
-	// In order to avoid non-determinism here, we truncate error messages.
-	re = regexp.MustCompile(`(?m)last request failed: .*$`)
-	out = re.ReplaceAllString(out, `last request failed: ...`)
 	return out
 }
 
