@@ -84,6 +84,7 @@ go_library(
         "kv.go",
         "kvbench.go",
         "latency_verifier.go",
+        "lease_preferences.go",
         "ledger.go",
         "libpq.go",
         "libpq_blocklist.go",
