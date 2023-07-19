@@ -977,13 +977,17 @@ type Engine interface {
 	NewSnapshot() Reader
 	// Type returns engine type.
 	Type() enginepb.EngineType
-	// IngestExternalFiles atomically links a slice of files into the RocksDB
+	// IngestLocalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree.
-	IngestExternalFiles(ctx context.Context, paths []string) error
-	// IngestExternalFilesWithStats is a variant of IngestExternalFiles that
+	IngestLocalFiles(ctx context.Context, paths []string) error
+	// IngestLocalFilesWithStats is a variant of IngestLocalFiles that
 	// additionally returns ingestion stats.
-	IngestExternalFilesWithStats(
+	IngestLocalFilesWithStats(
 		ctx context.Context, paths []string) (pebble.IngestOperationStats, error)
+	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
+	// files. These files can be referred to by multiple stores, but are not
+	// modified or deleted by the Engine doing the ingestion.
+	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
