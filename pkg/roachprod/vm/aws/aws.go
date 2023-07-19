@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1200,6 +1201,38 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 		return "", err
 	}
 
+	{ // Wait for volumes to get attached.
+		waitForVolumeCloser := make(chan struct{})
+		waitForVolume := retry.Start(retry.Options{
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     500 * time.Millisecond,
+			MaxRetries:     10,
+			Closer:         waitForVolumeCloser,
+		})
+
+		var state []string
+		args := []string{
+			"ec2",
+			"describe-volumes",
+			"--volume-id", volume.ProviderResourceID,
+			"--query", "Volumes[*].State",
+		}
+		for waitForVolume.Next() {
+			if err := p.runJSONCommand(l, args, &state); err != nil {
+				return "", err
+			}
+			if len(state) > 0 && state[0] == "in-use" {
+				close(waitForVolumeCloser)
+			}
+		}
+
+		select {
+		case <-waitForVolumeCloser:
+		default:
+			return "", fmt.Errorf("indeterminate attach state for %s", volume.ProviderResourceID)
+		}
+	}
+
 	return "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_" +
 		strings.Replace(volume.ProviderResourceID, "-", "", 1), nil
 }
@@ -1219,12 +1252,6 @@ type createVolume struct {
 func (p *Provider) CreateVolume(
 	l *logger.Logger, vco vm.VolumeCreateOpts,
 ) (vol vm.Volume, err error) {
-	// TODO(leon): SourceSnapshotID and IOPS, are not handled
-	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
-		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
-		return vol, err
-	}
-
 	region := vco.Zone[:len(vco.Zone)-1]
 	args := []string{
 		"ec2",
@@ -1235,6 +1262,16 @@ func (p *Provider) CreateVolume(
 	if vco.Encrypted {
 		args = append(args, "--encrypted")
 	}
+	if vco.SourceSnapshotID != "" {
+		args = append(args, "--snapshot-id", vco.SourceSnapshotID)
+	}
+	if vco.IOPS != 0 {
+		args = append(args, "--iops", fmt.Sprintf("%d", vco.IOPS))
+	}
+	if vco.Throughput != 0 {
+		args = append(args, "--throughput", fmt.Sprintf("%d", vco.Throughput))
+	}
+
 	var tags Tags
 
 	if vco.Name != "" {
@@ -1313,11 +1350,71 @@ func (p *Provider) CreateVolume(
 }
 
 func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	panic("unimplemented")
+	{ // Detach disks.
+		args := []string{
+			"ec2", "detach-volume",
+			"--volume-id", volume.ProviderResourceID,
+		}
+		if _, err := p.runCommand(l, args); err != nil {
+			if strings.Contains(err.Error(), "InvalidVolume.NotFound") {
+				return nil
+			}
+			return err
+		}
+		l.Printf("detached existing volume %s from %s (%s)", volume.ProviderResourceID, vm.ProviderID, vm.Name)
+	}
+
+	{ // Wait for volumes to get detached.
+		waitForVolumeCloser := make(chan struct{})
+		waitForVolume := retry.Start(retry.Options{
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     500 * time.Millisecond,
+			MaxRetries:     10,
+			Closer:         waitForVolumeCloser,
+		})
+
+		var state []string
+		args := []string{
+			"ec2",
+			"describe-volumes",
+			"--volume-id", volume.ProviderResourceID,
+			"--query", "Volumes[*].State",
+		}
+		for waitForVolume.Next() {
+			if err := p.runJSONCommand(l, args, &state); err != nil {
+				return err
+			}
+			if len(state) > 0 && state[0] != "in-use" {
+				close(waitForVolumeCloser)
+			}
+		}
+
+		select {
+		case <-waitForVolumeCloser:
+		default:
+			return fmt.Errorf("indeterminate detach state for %s", volume.ProviderResourceID)
+		}
+	}
+
+	{ // Delete disks.
+		args := []string{
+			"ec2", "delete-volume",
+			"--volume-id", volume.ProviderResourceID,
+		}
+		if _, err := p.runCommand(l, args); err != nil {
+			return err
+		}
+		l.Printf("deleted volume %s (previously attached to %s, %s)", volume.ProviderResourceID, vm.ProviderID, vm.Name)
+	}
+	return nil
 }
 
 func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
 	return vm.NonBootAttachedVolumes, nil
+}
+
+type snapshotsOutput struct {
+	Snapshot []snapshotOutput `json:"Snapshots"`
 }
 
 type snapshotOutput struct {
@@ -1339,7 +1436,6 @@ type snapshotOutput struct {
 func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
-	region := volume.Zone[:len(volume.Zone)-1]
 	var tags []string
 	for k, v := range vsco.Labels {
 		tags = append(tags, fmt.Sprintf("{Key=%s,Value=%s}", k, v))
@@ -1349,9 +1445,13 @@ func (p *Provider) CreateVolumeSnapshot(
 	args := []string{
 		"ec2", "create-snapshot",
 		"--description", vsco.Description,
-		"--region", region,
 		"--volume-id", volume.ProviderResourceID,
 		"--tag-specifications", "ResourceType=snapshot,Tags=[" + strings.Join(tags, ",") + "]",
+	}
+
+	if len(volume.Zone) > 0 {
+		region := volume.Zone[:len(volume.Zone)-1]
+		args = append(args, "--region", region)
 	}
 
 	var so snapshotOutput
@@ -1367,9 +1467,80 @@ func (p *Provider) CreateVolumeSnapshot(
 func (p *Provider) ListVolumeSnapshots(
 	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	panic("unimplemented")
+	args := []string{
+		"ec2", "describe-snapshots",
+	}
+	var filters []string
+	filters = append(filters,
+		`{
+    "Name": "status",
+    "Values": ["completed"]
+  }`)
+
+	if vslo.NamePrefix != "" {
+		filters = append(filters, fmt.Sprintf(
+			`{
+    "Name": "tag:Name",
+    "Values": ["%s*"]
+  }`, vslo.NamePrefix))
+	}
+	for k, v := range vslo.Labels {
+		filters = append(filters, fmt.Sprintf(
+			`{
+    "Name": "tag:%s",
+    "Values": ["%s"]
+  }`, k, v))
+	}
+	if len(filters) > 0 {
+		args = append(args, "--filters", fmt.Sprintf("[%s]", strings.Join(filters, ",")))
+	}
+
+	var snapshotsJSONResponse snapshotsOutput
+	if err := p.runJSONCommand(l, args, &snapshotsJSONResponse); err != nil {
+		return nil, err
+	}
+
+	var snapshots []vm.VolumeSnapshot
+	for _, snapshotJson := range snapshotsJSONResponse.Snapshot {
+		snapshotName := ""
+		for _, t := range snapshotJson.Tags {
+			if t.Key != "Name" {
+				continue
+			}
+			if strings.HasPrefix(t.Value, vslo.NamePrefix) {
+				snapshotName = t.Value
+				break
+			}
+		}
+		if snapshotName == "" {
+			continue
+		}
+
+		if !vslo.CreatedBefore.IsZero() {
+			if snapshotJson.StartTime.After(vslo.CreatedBefore) {
+				continue
+			}
+		}
+		snapshots = append(snapshots, vm.VolumeSnapshot{
+			ID:   snapshotJson.SnapshotID,
+			Name: snapshotName,
+		})
+	}
+	sort.Sort(vm.VolumeSnapshots(snapshots))
+	return snapshots, nil
 }
 
 func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	panic("unimplemented")
+	if len(snapshots) == 0 {
+		return nil
+	}
+	for _, snapshot := range snapshots {
+		args := []string{
+			"ec2", "delete-snapshot", "--snapshot-id", snapshot.ID,
+		}
+		if _, err := p.runCommand(l, args); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -330,6 +330,12 @@ func (v VolumeSnapshots) Less(i, j int) bool {
 	// it's not expecting to have CRDB state. Nor should we expect the 9-node
 	// CRDB cluster to have to work out that now the 10th roachprod node should
 	// be running the CRDB process post snapshot application.
+	if strings.Contains(v[i].Name, "unknown") {
+		return false
+	}
+	if strings.Contains(v[j].Name, "unknown") {
+		return true
+	}
 	return strings.Compare(v[i].Name, v[j].Name) < 0
 }
 
@@ -378,6 +384,7 @@ type VolumeCreateOpts struct {
 	Encrypted        bool
 	Architecture     string
 	IOPS             int
+	Throughput       int
 	Size             int
 	Type             string
 	SourceSnapshotID string

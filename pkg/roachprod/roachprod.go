@@ -1661,7 +1661,7 @@ func CreateSnapshot(
 			for _, volume := range volumes {
 				snapshotFingerprintInfix := strings.ReplaceAll(
 					fmt.Sprintf("%s-n%d", crdbVersion, len(nodes)), ".", "-")
-				snapshotName := fmt.Sprintf("%s-%s-%04d", vsco.Name, snapshotFingerprintInfix, node)
+				snapshotName := fmt.Sprintf("%s-%04d-%s", vsco.Name, node, snapshotFingerprintInfix)
 				if len(snapshotName) > 63 {
 					return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapshotName)
 				}
@@ -1736,6 +1736,13 @@ func ApplySnapshots(
 	}
 
 	// Detach and delete existing volumes. This is destructive.
+	deletedVolumes := struct {
+		syncutil.Mutex
+		m map[string]struct{}
+	}{
+		m: map[string]struct{}{},
+	}
+
 	if err := c.Parallel(ctx, l, len(c.TargetNodes()), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 		node := c.TargetNodes()[i]
 		res := &install.RunResultDetails{Node: node}
@@ -1747,10 +1754,13 @@ func ApplySnapshots(
 				return err
 			}
 			for _, volume := range volumes {
+				// TODO(irfansharif): Unmount these volumes first?
 				if err := provider.DeleteVolume(l, volume, cVM); err != nil {
 					return err
 				}
-				l.Printf("detached and deleted volume %s from %s", volume.ProviderResourceID, cVM.Name)
+				deletedVolumes.Lock()
+				deletedVolumes.m[volume.ProviderResourceID] = struct{}{}
+				deletedVolumes.Unlock()
 			}
 			return nil
 		}); err != nil {
@@ -1784,7 +1794,16 @@ func ApplySnapshots(
 				return err
 			}
 			for _, vol := range volumes {
-				if vol.Name == volumeOpts.Name {
+				// TODO(irfansharif): Roachprod's cache of VM volume data is out
+				// of date by now (we've deleted volumes above). When using
+				// 'roachprod snapshot list aws <snap-name>' repeatedly, this
+				// stale cache prevents volume creation. It's fixable by another
+				// round of 'roachprod sync --include-volumes' and trying again,
+				// but instead of updating the cache directly, we'll instead
+				// create volumes as long as they're not the ones we just
+				// deleted.
+				_, deleted := deletedVolumes.m[vol.ProviderResourceID]
+				if vol.Name == volumeOpts.Name && !deleted {
 					l.Printf(
 						"volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, node)
 					return nil
@@ -1801,13 +1820,13 @@ func ApplySnapshots(
 			if err != nil {
 				return err
 			}
-			l.Printf("created volume %s", volume.ProviderResourceID)
+			l.Printf("created volume %s from %s (%s)", volume.ProviderResourceID, volumeOpts.SourceSnapshotID, volumeOpts.Name)
 
 			device, err := cVM.AttachVolume(l, volume)
 			if err != nil {
 				return err
 			}
-			l.Printf("attached volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
+			l.Printf("attached volume %s (%s) to %s (%s)", volume.ProviderResourceID, volumeOpts.Name, cVM.ProviderID, cVM.Name)
 
 			// Save the cluster to cache.
 			if err := saveCluster(l, &c.Cluster); err != nil {
@@ -1820,7 +1839,7 @@ func ApplySnapshots(
 				l.Printf(buf.String())
 				return err
 			}
-			l.Printf("mounted %s to %s", volume.ProviderResourceID, cVM.ProviderID)
+			l.Printf("mounted %s (%s) to %s (%s) at /mnt/data1", volume.ProviderResourceID, volumeOpts.Name, cVM.ProviderID, cVM.Name)
 
 			return nil
 		}); err != nil {

@@ -276,6 +276,20 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	snapshotDeleteCmd.Flags().BoolVar(&dryrun,
 		"dry-run", false, "dry run (don't perform any actions)")
+
+	snapshotApplyCmd.Flags().IntVar(&volumeCreateOpts.Size,
+		"volume-size", 500,
+		"the size of the volume in gigabytes (GB) created")
+	snapshotApplyCmd.Flags().IntVar(&volumeCreateOpts.IOPS,
+		"volume-iops", 0,
+		"the IOPS to provision for the volume")
+	snapshotApplyCmd.Flags().IntVar(&volumeCreateOpts.Throughput,
+		"volume-throughput", 0,
+		"the throughput to provision for the volume")
+	snapshotApplyCmd.Flags().StringVar(&volumeCreateOpts.Type,
+		"volume-type", "",
+		"the volume type that should be created (specific to cloud provider)")
+
 	snapshotCmd.AddCommand(snapshotCreateCmd)
 	snapshotCmd.AddCommand(snapshotListCmd)
 	snapshotCmd.AddCommand(snapshotDeleteCmd)

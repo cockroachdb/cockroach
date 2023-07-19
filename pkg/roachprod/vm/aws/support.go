@@ -217,7 +217,9 @@ func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-			l.Printf("%s", string(exitErr.Stderr))
+			if string(exitErr.Stderr) != "" {
+				l.Printf("%s", string(exitErr.Stderr))
+			}
 		}
 		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
 			strings.Join(args, " "), stderrBuf.String())

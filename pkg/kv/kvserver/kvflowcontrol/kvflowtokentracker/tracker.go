@@ -88,6 +88,8 @@ func (dt *Tracker) Track(
 		//     Handle.ConnectStream).
 		// - token returns upto some log position don't precede deductions at
 		//   lower log positions (see Handle.ReturnTokensUpto);
+		//
+		// XXX: Positions are sometimes empty. Why?
 		logFn := log.Errorf
 		if buildutil.CrdbTestBuild {
 			logFn = log.Fatalf

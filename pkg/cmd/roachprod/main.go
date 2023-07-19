@@ -1175,7 +1175,10 @@ var snapshotApplyCmd = &cobra.Command{
 		}
 
 		return roachprod.ApplySnapshots(ctx, config.Logger, cluster, snapshots, vm.VolumeCreateOpts{
-			Size: 500, // TODO(irfansharif): Make this configurable?
+			Size:       volumeCreateOpts.Size,
+			IOPS:       volumeCreateOpts.IOPS,
+			Type:       volumeCreateOpts.Type,
+			Throughput: volumeCreateOpts.Throughput,
 			Labels: map[string]string{
 				vm.TagUsage: "roachprod",
 			},
