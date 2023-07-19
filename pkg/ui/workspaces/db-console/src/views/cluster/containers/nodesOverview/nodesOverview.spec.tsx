@@ -313,7 +313,7 @@ describe("Nodes Overview page", () => {
       ));
       const columnAttributes = wrapper.find("table colgroup col");
       columnAttributes.forEach(node =>
-        expect(node.hostNodes().props().style.width).toBeDefined(),
+        expect(node.hostNodes().props().style).toHaveProperty("width"),
       );
     });
   });
