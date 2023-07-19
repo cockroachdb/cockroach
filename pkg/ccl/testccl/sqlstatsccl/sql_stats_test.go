@@ -63,7 +63,8 @@ func TestSQLStatsRegions(t *testing.T) {
 	for i := 0; i < numServers; i++ {
 		signalAfter[i] = make(chan struct{})
 		args := base.TestServerArgs{
-			Settings: st,
+			Settings:        st,
+			ScanMaxIdleTime: 1 * time.Millisecond,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i%len(regionNames)]}},
 			},
@@ -98,6 +99,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+
 	// Lengthen the lead time for the global tables to prevent overload from
 	// resulting in delays in propagating closed timestamps and, ultimately
 	// forcing requests from being redirected to the leaseholder. Without this
@@ -123,13 +125,23 @@ func TestSQLStatsRegions(t *testing.T) {
 		tenantDbs = append(tenantDbs, tenantDb)
 	}
 
+	systemDbName := "testDbSystem"
+	createMultiRegionDbAndTable(t, tdb, regionNames, systemDbName)
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDbs[1])
+	tenantDbName := "testDbTenant"
+	createMultiRegionDbAndTable(t, tenantRunner, regionNames, tenantDbName)
+
+	require.NoError(t, host.WaitForFullReplication())
+
 	testCases := []struct {
-		name string
-		db   func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner
+		name   string
+		dbName string
+		db     func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner
 	}{{
 		// This test runs against the system tenant, opening a database
 		// connection to the first node in the cluster.
-		name: "system tenant",
+		name:   "system tenant",
+		dbName: systemDbName,
 		db: func(t *testing.T, host *testcluster.TestCluster, _ *cluster.Settings) *sqlutils.SQLRunner {
 			return sqlutils.MakeSQLRunner(host.ServerConn(0))
 		},
@@ -137,37 +149,23 @@ func TestSQLStatsRegions(t *testing.T) {
 		// This test runs against a secondary tenant, launching a SQL instance
 		// for each node in the underlying cluster and returning a database
 		// connection to the first one.
-		name: "secondary tenant",
+		name:   "secondary tenant",
+		dbName: tenantDbName,
 		db: func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner {
-			return sqlutils.MakeSQLRunner(tenantDbs[1])
+			return tenantRunner
 		},
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := tc.db(t, host, st)
 
-			db.Exec(t, "SET enable_multiregion_placement_policy = true")
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
-
-			db.Exec(t, fmt.Sprintf(`CREATE DATABASE testdb PRIMARY REGION "%s" PLACEMENT RESTRICTED`, regionNames[0]))
-			for i := 1; i < len(regionNames); i++ {
-				db.Exec(t, fmt.Sprintf(`ALTER DATABASE testdb ADD region "%s"`, regionNames[i]))
-			}
-
-			// Make a multi-region table and split its ranges across regions.
-			db.Exec(t, "USE testdb")
-			db.Exec(t, "CREATE TABLE test (a INT) LOCALITY REGIONAL BY ROW")
-
-			// Add some data to each region.
-			for i, regionName := range regionNames {
-				db.Exec(t, "INSERT INTO test (a, crdb_region) VALUES ($1, $2)", i, regionName)
-			}
 
 			// It takes a while for the region replication to complete.
 			testutils.SucceedsWithin(t, func() error {
 				var expectedNodes []int64
 				var expectedRegions []string
-				_, err := db.DB.ExecContext(ctx, `USE testdb`)
+				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
 				if err != nil {
 					return err
 				}
@@ -241,5 +239,25 @@ func TestSQLStatsRegions(t *testing.T) {
 				return nil
 			}, 3*time.Minute)
 		})
+	}
+}
+
+func createMultiRegionDbAndTable(
+	t *testing.T, db *sqlutils.SQLRunner, regionNames []string, dbName string,
+) {
+	db.Exec(t, "SET enable_multiregion_placement_policy = true")
+
+	db.Exec(t, fmt.Sprintf(`CREATE DATABASE %s PRIMARY REGION "%s" PLACEMENT RESTRICTED`, dbName, regionNames[0]))
+	for i := 1; i < len(regionNames); i++ {
+		db.Exec(t, fmt.Sprintf(`ALTER DATABASE %s ADD region "%s"`, dbName, regionNames[i]))
+	}
+
+	// Make a multi-region table and split its ranges across regions.
+	db.Exec(t, fmt.Sprintf("USE %s", dbName))
+	db.Exec(t, "CREATE TABLE test (a INT) LOCALITY REGIONAL BY ROW")
+
+	// Add some data to each region.
+	for i, regionName := range regionNames {
+		db.Exec(t, "INSERT INTO test (a, crdb_region) VALUES ($1, $2)", i, regionName)
 	}
 }
