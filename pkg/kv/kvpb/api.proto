@@ -2004,9 +2004,11 @@ message AddSSTableRequest {
   //
   // TODO(dt, msbutler, bilal): This is unsupported.
   // TOOD(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
+  // TODO(msbutler): rename to ExternalFile.
   message  RemoteFile {
     string locator = 1;
     string path = 2;
+    uint64 backing_file_size = 3;
   }
   RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
   
