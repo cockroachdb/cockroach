@@ -292,6 +292,8 @@ message RestoreFileSpec {
   optional string path = 2 [(gogoproto.nullable) = false];
   reserved 3;
   reserved 4;
+  optional roachpb.Span backup_file_entry_span = 5 [(gogoproto.nullable) = false];
+  optional roachpb.RowCount backup_file_entry_counts = 6 [(gogoproto.nullable) = false];
 }
 
 message TableRekey {

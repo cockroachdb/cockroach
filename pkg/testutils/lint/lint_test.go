@@ -2203,6 +2203,108 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// TODO(yuzefovich): remove this linter when #76378 is resolved.
+	t.Run("TestTODOTestTenantDisabled", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`base\.TODOTestTenantDisabled`,
+			"--",
+			"*",
+			":!ccl/backupccl/backup_test.go",
+			":!ccl/backupccl/backuprand/backup_rand_test.go",
+			":!ccl/backupccl/backuptestutils/testutils.go",
+			":!ccl/backupccl/create_scheduled_backup_test.go",
+			":!ccl/backupccl/datadriven_test.go",
+			":!ccl/backupccl/full_cluster_backup_restore_test.go",
+			":!ccl/backupccl/restore_old_versions_test.go",
+			":!ccl/backupccl/utils_test.go",
+			":!ccl/changefeedccl/alter_changefeed_test.go",
+			":!ccl/changefeedccl/changefeed_test.go",
+			":!ccl/changefeedccl/helpers_test.go",
+			":!ccl/changefeedccl/parquet_test.go",
+			":!ccl/changefeedccl/scheduled_changefeed_test.go",
+			":!ccl/changefeedccl/schemafeed/table_event_filter_datadriven_test.go",
+			":!ccl/importerccl/ccl_test.go",
+			":!ccl/kvccl/kvfollowerreadsccl/boundedstaleness_test.go",
+			":!ccl/kvccl/kvfollowerreadsccl/followerreads_test.go",
+			":!ccl/kvccl/kvtenantccl/upgradeccl/tenant_upgrade_test.go",
+			":!ccl/multiregionccl/cold_start_latency_test.go",
+			":!ccl/multiregionccl/datadriven_test.go",
+			":!ccl/multiregionccl/multiregionccltestutils/testutils.go",
+			":!ccl/multiregionccl/regional_by_row_test.go",
+			":!ccl/multiregionccl/unique_test.go",
+			":!ccl/partitionccl/drop_test.go",
+			":!ccl/partitionccl/partition_test.go",
+			":!ccl/partitionccl/zone_test.go",
+			":!ccl/serverccl/admin_test.go",
+			":!ccl/streamingccl/replicationtestutils/testutils.go",
+			":!ccl/streamingccl/streamclient/partitioned_stream_client_test.go",
+			":!ccl/streamingccl/streamingest/replication_random_client_test.go",
+			":!ccl/streamingccl/streamingest/stream_ingestion_job_test.go",
+			":!ccl/streamingccl/streamingest/stream_ingestion_processor_test.go",
+			":!ccl/streamingccl/streamproducer/producer_job_test.go",
+			":!ccl/streamingccl/streamproducer/replication_stream_test.go",
+			":!ccl/testccl/sqlccl/run_control_test.go",
+			":!ccl/testccl/sqlccl/temp_table_clean_test.go",
+			":!ccl/testccl/sqlccl/tenant_gc_test.go",
+			":!ccl/testccl/sqlstatsccl/sql_stats_test.go",
+			":!ccl/workloadccl/allccl/all_test.go",
+			":!cli/democluster/demo_cluster.go",
+			":!cli/democluster/demo_cluster_test.go",
+			":!server/application_api/config_test.go",
+			":!server/application_api/dbconsole_test.go",
+			":!server/application_api/events_test.go",
+			":!server/application_api/insights_test.go",
+			":!server/application_api/jobs_test.go",
+			":!server/application_api/query_plan_test.go",
+			":!server/application_api/schema_inspection_test.go",
+			":!server/application_api/security_test.go",
+			":!server/application_api/zcfg_test.go",
+			":!server/grpc_gateway_test.go",
+			":!server/multi_store_test.go",
+			":!server/storage_api/decommission_test.go",
+			":!server/storage_api/health_test.go",
+			":!server/storage_api/rangelog_test.go",
+			":!sql/catalog/internal/catkv/catalog_reader_test.go",
+			":!sql/importer/import_processor_test.go",
+			":!sql/importer/import_stmt_test.go",
+			":!sql/importer/read_import_mysql_test.go",
+			":!sql/schemachanger/scbuild/builder_test.go",
+			":!sql/schemachanger/scdecomp/decomp_test.go",
+			":!sql/schemachanger/sctest/end_to_end.go",
+			":!sql/sqlinstance/instancestorage/instancecache_test.go",
+			":!sql/sqltestutils/telemetry.go",
+			":!sql/tests/server_params.go",
+			":!sql/ttl/ttljob/ttljob_test.go",
+			":!testutils/lint/lint_test.go",
+			":!ts/server_test.go",
+			":!upgrade/upgrademanager/manager_external_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- new usages of base.TODOTestTenantDisabled are forbidden", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
