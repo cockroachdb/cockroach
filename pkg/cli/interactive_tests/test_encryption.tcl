@@ -52,7 +52,7 @@ end_test
 
 start_test "Run pebble debug tool."
 send "$argv debug pebble db lsm $storedir --store=$storedir\r"
-eexpect "__level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp\r"
+eexpect "level | tables  size val-bl | score |   in  | tables  size | tables  size | tables  size |  read |   r   w\r"
 end_test
 
 start_test "Restart with plaintext."
@@ -106,7 +106,7 @@ end_test
 
 start_test "Run pebble debug tool with AES-256."
 send "$argv debug pebble db lsm $storedir --store=$storedir --enterprise-encryption=path=$storedir,key=$keydir/aes-256.key,old-key=$keydir/aes-256.key\r"
-eexpect "__level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp\r"
+eexpect "level | tables  size val-bl | score |   in  | tables  size | tables  size | tables  size |  read |   r   w\r"
 # Try running without the encryption flag.
 send "$argv debug pebble db lsm $storedir --store=$storedir\r"
 eexpect "encryption was used on this store before, but no encryption flags specified."
