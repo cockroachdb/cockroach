@@ -294,7 +294,7 @@ func (g *gcsStorage) ReadFile(
 					return nil, 0, io.EOF
 				}
 			}
-			r, err := g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
+			r, err := g.bucket.Object(object).NewRangeReader(ctx, pos, length)
 			if err != nil {
 				return nil, 0, err
 			}
