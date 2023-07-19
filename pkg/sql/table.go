@@ -106,7 +106,6 @@ func (p *planner) createNonDropDatabaseChangeJob(
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *tabledesc.Mutable, jobDesc string, mutationID descpb.MutationID,
 ) error {
-
 	// If there is a concurrent schema change using the declarative schema
 	// changer, then we must fail and wait for that schema change to conclude.
 	// The error here will be dealt with in
