@@ -31,6 +31,7 @@ type SSTWriter struct {
 	DataSize int64
 	scratch  []byte
 
+	Meta              *sstable.WriterMetadata
 	supportsRangeKeys bool // TODO(erikgrinaker): remove after 22.2
 }
 
@@ -135,8 +136,10 @@ func (fw *SSTWriter) Finish() error {
 	if err := fw.fw.Close(); err != nil {
 		return err
 	}
+	var err error
+	fw.Meta, err = fw.fw.Metadata()
 	fw.fw = nil
-	return nil
+	return err
 }
 
 // ClearRawRange implements the Engine interface.

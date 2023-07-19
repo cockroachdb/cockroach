@@ -48,6 +48,7 @@ message BackupManifest {
     util.hlc.Timestamp start_time = 7 [(gogoproto.nullable) = false];
     util.hlc.Timestamp end_time = 8 [(gogoproto.nullable) = false];
     string locality_kv = 9 [(gogoproto.customname) = "LocalityKV"];
+    uint64 backing_file_size = 10;
   }
 
   message DescriptorRevision {
