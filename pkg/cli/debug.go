@@ -1561,13 +1561,13 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 				})
 				pebbleTool.ConfigureSharedStorage(factory, true /* createOnShared */, "" /* createOnSharedLocator */)
 			}
-			return pebbleCryptoInitializer()
+			return pebbleCryptoInitializer(cmd.Context())
 		}
 		initPebbleCmds(c, pebbleTool)
 	}
 }
 
-func pebbleCryptoInitializer() error {
+func pebbleCryptoInitializer(ctx context.Context) error {
 	storageConfig := base.StorageConfig{
 		Settings: serverCfg.Settings,
 		Dir:      serverCfg.Stores.Specs[0].Path,
@@ -1579,7 +1579,8 @@ func pebbleCryptoInitializer() error {
 		}
 	}
 
-	_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(&storageConfig, vfs.Default, false /* readOnly */)
+	_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(
+		ctx, &storageConfig, vfs.Default, false /* readOnly */)
 	if err != nil {
 		return err
 	}
