@@ -3202,7 +3202,11 @@ func sendAddRemoteSSTs(
 				}
 			}
 
-			loc := kvpb.AddSSTableRequest_RemoteFile{Locator: uris[i], Path: file.Path}
+			loc := kvpb.AddSSTableRequest_RemoteFile{
+				Locator:         uris[i],
+				Path:            file.Path,
+				BackingFileSize: file.BackingFileSize,
+			}
 			// TODO(dt): see if KV has any better ideas for making these up.
 			fileStats := &enginepb.MVCCStats{
 				ContainsEstimates: 1,
