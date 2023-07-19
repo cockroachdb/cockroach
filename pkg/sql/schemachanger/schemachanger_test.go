@@ -129,6 +129,7 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	defer cancel()
+	codec := s.TenantOrServer().Codec()
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
@@ -178,7 +179,7 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	// * the final version of the new primary index keyed on k and not including rowid,
 	// * the final version of the secondary index for v with k as the key suffix.
 	testutils.SucceedsSoon(t, func() error {
-		return sqltestutils.CheckTableKeyCount(ctx, kvDB, 5, maxValue)
+		return sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 5, maxValue)
 	})
 }
 

@@ -139,6 +139,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	codec := s.TenantOrServer().Codec()
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
@@ -170,7 +171,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, func() {
+	addIndexSchemaChange(t, sqlDB, kvDB, codec, maxValue, 2, func() {
 		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
 			t.Fatal(err)
 		}
@@ -354,13 +355,14 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
+	codec := tc.Server(0).TenantOrServer().Codec()
 	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 
 	splitTemporaryIndex = func() error {
-		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "t", "public", "test")
 		tempIdx, err := findCorrespondingTemporaryIndex(tableDesc, idxName)
 		if err != nil {
 			return err
@@ -408,7 +410,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
@@ -421,6 +423,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 		t,
 		sqlDB,
 		kvDB,
+		codec,
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		2,
@@ -435,6 +438,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 		t,
 		sqlDB,
 		kvDB,
+		codec,
 		"CREATE INDEX bar ON t.test(k) STORING (v)",
 		maxValue,
 		3,
@@ -590,6 +594,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	codec := s.TenantOrServer().Codec()
 	var err error
 	scratch, err = s.ScratchRange()
 	require.NoError(t, err)
@@ -609,7 +614,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue+additionalRowsForMerge, 2, func() {
+	addIndexSchemaChange(t, sqlDB, kvDB, codec, maxValue+additionalRowsForMerge, 2, func() {
 		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
 			t.Fatal(err)
 		}
