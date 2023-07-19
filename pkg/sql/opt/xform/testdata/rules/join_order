@@ -3381,8 +3381,8 @@ CREATE TABLE t106371 (x INT NOT NULL, y INT NOT NULL);
 
 # Don't add an "a.y = b.y" filter.
 reorderjoins
-SELECT * FROM (SELECT * FROM t106371 ORDER BY y DESC LIMIT 1) a
-JOIN (SELECT DISTINCT ON (x) * FROM t106371) b ON a.x = b.x;
+SELECT * FROM (SELECT * FROM t106371 ORDER BY y LIMIT 1) a
+JOIN (SELECT DISTINCT ON (x) * FROM (SELECT * FROM t106371 WHERE y = 2)) b ON a.x = b.x;
 ----
 --------------------------------------------------------------------------------
 Join Tree #1
@@ -3392,7 +3392,10 @@ Join Tree #1
    │    ├── scan t106371
    │    └── 1
    ├── distinct-on
-   │    ├── scan t106371
+   │    ├── select
+   │    │    ├── scan t106371
+   │    │    └── filters
+   │    │         └── y = 2
    │    └── aggregations
    │         └── first-agg
    │              └── y
@@ -3405,7 +3408,10 @@ Vertexes
      └── 1
   B:
     distinct-on
-     ├── scan t106371
+     ├── select
+     │    ├── scan t106371
+     │    └── filters
+     │         └── y = 2
      └── aggregations
           └── first-agg
                └── y
@@ -3428,15 +3434,20 @@ inner-join (hash)
  │    ├── columns: x:6!null y:7!null
  │    ├── grouping columns: x:6!null
  │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    ├── scan t106371
- │    │    └── columns: x:6!null y:7!null
+ │    ├── fd: ()-->(7)
+ │    ├── select
+ │    │    ├── columns: x:6!null y:7!null
+ │    │    ├── fd: ()-->(7)
+ │    │    ├── scan t106371
+ │    │    │    └── columns: x:6!null y:7!null
+ │    │    └── filters
+ │    │         └── y:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
  │    └── aggregations
  │         └── first-agg [as=y:7, outer=(7)]
  │              └── y:7
  ├── top-k
  │    ├── columns: x:1!null y:2!null
- │    ├── internal-ordering: -2
+ │    ├── internal-ordering: +2
  │    ├── k: 1
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
