@@ -35,21 +35,21 @@ for platform in "${cross_builds[@]}"; do
 
   echo "Building $platform, os=$os, arch=$arch..."
   # Build cockroach, workload and geos libs.
-  bazel build --config $platform --config ci --config force_build_cdeps \
+  bazel build --config $platform --config ci -c opt --config force_build_cdeps \
         //pkg/cmd/cockroach //pkg/cmd/workload \
         //c-deps:libgeos
-  BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci)
+  BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci -c opt)
 
   # N.B. roachtest is built once, for the host architecture.
   if [[ $os == "linux" && $arch == $host_arch ]]; then
-    bazel build --config $platform --config ci //pkg/cmd/roachtest
+    bazel build --config $platform --config ci  -c opt //pkg/cmd/roachtest
 
     cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin/roachtest
     # Make it writable to simplify cleanup and copying (e.g., scp retry).
     chmod a+w bin/roachtest
   fi
   # Build cockroach-short with assertions enabled.
-  bazel build --config $platform --config ci //pkg/cmd/cockroach-short --crdb_test
+  bazel build --config $platform --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
   # Copy the binaries.
   cp $BAZEL_BIN/pkg/cmd/cockroach/cockroach_/cockroach bin/cockroach.$os-$arch
   cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin/workload.$os-$arch
