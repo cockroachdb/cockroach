@@ -573,6 +573,7 @@ describe("Routing to", () => {
     test("routes to <Network> component", () => {
       navigateToPath("/reports/network");
       screen.getByText(NETWORK_DIAGNOSTICS_REPORT_HEADER);
+      expect(history.location.pathname).toBe("/reports/network/region");
     });
   });
 
