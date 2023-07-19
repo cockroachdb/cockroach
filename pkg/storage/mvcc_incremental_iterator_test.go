@@ -1371,7 +1371,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		if err := fs.WriteFile(db2, `ingest`, memFile.Data()); err != nil {
 			t.Fatal(err)
 		}
-		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}); err != nil {
+		if err := db2.IngestLocalFiles(ctx, []string{`ingest`}); err != nil {
 			t.Fatal(err)
 		}
 	}
