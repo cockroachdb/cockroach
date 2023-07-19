@@ -55,9 +55,7 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 	recCh := make(chan tracingpb.Recording, 1)
 
 	args := base.TestServerArgs{
-		// Test hangs within a tenant. More investigation is required.
-		// Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
