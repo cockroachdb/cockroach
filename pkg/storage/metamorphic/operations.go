@@ -779,7 +779,7 @@ func (i ingestOp) run(ctx context.Context) string {
 	}
 	sstWriter.Close()
 
-	if err := i.m.engine.IngestExternalFiles(ctx, []string{sstPath}); err != nil {
+	if err := i.m.engine.IngestLocalFiles(ctx, []string{sstPath}); err != nil {
 		return fmt.Sprintf("error = %s", err.Error())
 	}
 

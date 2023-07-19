@@ -577,7 +577,7 @@ func (r *Replica) applySnapshot(
 		// TODO: separate ingestions for log and statemachine engine. See:
 		//
 		// https://github.com/cockroachdb/cockroach/issues/93251
-		r.store.TODOEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 	}
 	if r.store.cfg.KVAdmissionController != nil {

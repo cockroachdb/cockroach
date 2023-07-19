@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -27,19 +26,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage/shared"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
@@ -600,29 +599,36 @@ func addSSTablePreApply(
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) bool {
 	if sst.RemoteFilePath != "" {
-		// TODO(dt, bilal, msbutler): Replace this with eng.IngestRemoteFile()
 		log.Warningf(ctx, "EXPERIMENTAL AddSSTABLE REMOTE FILE UNSUPPORTED; downloading %s ("+
 			"with size %d) from %s and adding it whole, ignoring span %s", sst.RemoteFilePath,
 			sst.BackingFileSize, sst.RemoteFileLoc, sst.Span)
-		s, err := env.external.OpenURL(ctx, sst.RemoteFileLoc, username.SQLUsername{})
-		if err != nil {
-			log.Fatalf(ctx, "failed to open remote location %q below raft: %v", sst.RemoteFileLoc, err)
+		start := storage.EngineKey{Key: sst.Span.Key}
+		end := storage.EngineKey{Key: sst.Span.EndKey}
+		externalFile := pebble.ExternalFile{
+			Locator: shared.Locator(sst.RemoteFileLoc),
+			ObjName: sst.RemoteFilePath,
+			// TODO(bilal): Fix this size.
+			Size:            sst.BackingFileSize,
+			SmallestUserKey: start.Encode(),
+			LargestUserKey:  end.Encode(),
 		}
-		r, _, err := s.ReadFile(ctx, sst.RemoteFilePath, cloud.ReadOptions{})
-		if err != nil {
-			log.Fatalf(ctx, "failed to open remote file path %q in %q below raft: %v", sst.RemoteFilePath, sst.RemoteFileLoc, err)
+		tBegin := timeutil.Now()
+		defer func() {
+			if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+				log.Infof(ctx,
+					"ingesting SST of size %s at index %d took %.2fs",
+					humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
+				)
+			}
+		}()
+
+		_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
+		if ingestErr != nil {
+			log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
 		}
-		content, err := ioctx.ReadAll(ctx, r)
-		r.Close(ctx)
-		if err != nil {
-			log.Fatalf(ctx, "failed to read remote file %q in %q below raft: %v", sst.RemoteFilePath, sst.RemoteFileLoc, err)
-		}
-		sst.Data = content
-		sst.CRC32 = util.CRC32(content)
-		log.Infof(ctx, "Unsupported RemoteFile AddSSTABLE downloaded %q, read %d bytes", sst.RemoteFileLoc, len(content))
-		if err := env.sideloaded.Put(ctx, index, term, content); err != nil {
-			log.Fatalf(ctx, "failed to write downloaded remote file %q in %q below raft: %v", sst.RemoteFilePath, sst.RemoteFileLoc, err)
-		}
+		// Adding without modification succeeded, no copy necessary.
+		log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
+		return false
 	}
 	checksum := util.CRC32(sst.Data)
 
@@ -667,7 +673,7 @@ func addSSTablePreApply(
 	}
 
 	// Regular path - we made a hard link, so we can ingest the hard link now.
-	ingestErr := env.eng.IngestExternalFiles(ctx, []string{ingestPath})
+	ingestErr := env.eng.IngestLocalFiles(ctx, []string{ingestPath})
 	if ingestErr != nil {
 		log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 	}
@@ -708,7 +714,7 @@ func ingestViaCopy(
 	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
-	if err := eng.IngestExternalFiles(ctx, []string{ingestPath}); err != nil {
+	if err := eng.IngestLocalFiles(ctx, []string{ingestPath}); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)

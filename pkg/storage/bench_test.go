@@ -1940,7 +1940,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		}
 		require.NoError(b, writer.Close())
 		batch.Close()
-		require.NoError(b, eng.IngestExternalFiles(ctx, []string{sstFileName}))
+		require.NoError(b, eng.IngestLocalFiles(ctx, []string{sstFileName}))
 	}
 	for i := 0; i < b.N; i++ {
 		rw := eng.NewReadOnly(StandardDurability)
