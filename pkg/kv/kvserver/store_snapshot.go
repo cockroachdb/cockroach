@@ -579,7 +579,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		return nil
 	}
 
-	err := rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+	err := rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			timingTag.start("iter")
 			defer timingTag.stop("iter")
