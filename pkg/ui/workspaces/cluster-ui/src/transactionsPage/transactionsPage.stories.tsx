@@ -18,6 +18,7 @@ import {
   filters,
   lastUpdated,
   nodeRegions,
+  requestTime,
   routeProps,
   sortSetting,
   timeScale,
@@ -69,6 +70,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -99,6 +102,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -136,6 +141,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -166,6 +173,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
@@ -200,6 +209,8 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
         {...defaultLimitAndSortProps}
       />
     );
