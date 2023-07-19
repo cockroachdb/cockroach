@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -977,27 +978,16 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// Test is designed to run with explicit tenants. No need to
-				// implicitly create a tenant.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
-	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID: roachpb.MustMakeTenantID(10),
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantAlwaysEnabled,
 	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	conn, err := tSQL.Conn(ctx)
-	require.NoError(t, err)
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	defer tSQL.Close()
-
-	testTxnContentionEventsTableHelper(t, ctx, tSQL, sqlDB)
+	testTxnContentionEventsTableHelper(t, ctx, db, sqlDB)
 }
 
 func causeContention(

@@ -1189,15 +1189,11 @@ func TestTransactionDeadline(t *testing.T) {
 			SessionOverride: sessionOverrideKnob,
 		},
 	}
-	testClusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Knobs:             knobs,
-		},
-	}
-	tc := serverutils.StartNewTestCluster(t, 1, testClusterArgs)
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		Knobs:             knobs,
+	})
+	defer s.Stopper().Stop(ctx)
 
 	// Setup a dynamic session override which will be used in subsequent tests to ensure the transaction
 	// deadline is set accurately. Use clusterSQLLiveness for bootstrapping the tenant.

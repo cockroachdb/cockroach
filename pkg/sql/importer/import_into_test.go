@@ -22,7 +22,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -37,7 +39,7 @@ import (
 // TestProtectedTimestampsDuringImportInto ensures that the timestamp at which
 // a table is taken offline is protected during an IMPORT INTO job to ensure
 // that if data is imported into a range it can be reverted in the case of
-// cancelation or failure.
+// cancellation or failure.
 func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -59,12 +61,15 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	defer cancel()
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			//  Test hangs within a test tenant. More investigation is required.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107141),
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0).TenantOrServer()
+	tenantSettings := s.ClusterSettings()
+	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, 100*time.Millisecond)
+	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
 
 	tc.WaitForNodeLiveness(t)
 	require.NoError(t, tc.WaitForFullReplication())
@@ -72,7 +77,6 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	rRand, _ := randutil.NewTestRand()
 	writeGarbage := func(from, to int) {
@@ -112,9 +116,9 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 		importErrCh <- err
 	}()
 
-	var jobID string
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+		var jobID string
 		return row.Scan(&jobID)
 	})
 
@@ -130,11 +134,7 @@ ORDER BY raw_start_key ASC`)
 		for rows.Next() {
 			var startKey roachpb.Key
 			require.NoError(t, rows.Scan(&startKey))
-			r := tc.LookupRangeOrFatal(t, startKey)
-			l, _, err := tc.FindRangeLease(r, nil)
-			require.NoError(t, err)
-			lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-			s, repl := getFirstStoreReplica(t, lhServer, startKey)
+			s, repl := getFirstStoreReplica(t, tc.Server(0), startKey)
 			trace, _, err := s.Enqueue(ctx, "mvccGC", repl, skipShouldQueue, false /* async */)
 			require.NoError(t, err)
 			fmt.Fprintf(&traceBuf, "%s\n", trace.String())
