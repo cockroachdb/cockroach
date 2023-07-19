@@ -71,7 +71,7 @@ func TestShowTransferState(t *testing.T) {
 		err = rows.Scan(&errVal, &sessionState, &sessionRevivalToken)
 		require.NoError(t, err, "unexpected error while reading transfer state")
 
-		require.False(t, errVal.Valid)
+		require.Falsef(t, errVal.Valid, "expected null error, got %s", errVal.String)
 		require.True(t, sessionState.Valid)
 		require.True(t, sessionRevivalToken.Valid)
 	})
