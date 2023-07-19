@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -224,7 +224,7 @@ const (
 	Split
 
 	// ReplicationCutover is when the DatumToHLC() is used for an
-	// ALTER TENANT ... COMPLETE REPLICATION statement.
+	// ALTER VIRTUAL CLUSTER ... COMPLETE REPLICATION statement.
 	ReplicationCutover
 )
 

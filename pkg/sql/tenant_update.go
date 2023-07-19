@@ -208,7 +208,7 @@ func (p *planner) setTenantService(
 	ctx context.Context, info *mtinfopb.TenantInfo, newMode mtinfopb.TenantServiceMode,
 ) error {
 	if p.EvalContext().TxnReadOnly {
-		return readOnlyError("ALTER TENANT SERVICE")
+		return readOnlyError("ALTER VIRTUAL CLUSTER SERVICE")
 	}
 
 	if err := CanManageTenant(ctx, p); err != nil {
@@ -230,7 +230,7 @@ func (p *planner) setTenantService(
 		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot change service mode %v to %v directly",
 			info.ServiceMode, newMode),
-			"Use ALTER TENANT STOP SERVICE first.")
+			"Use ALTER VIRTUAL CLUSTER STOP SERVICE first.")
 	}
 
 	info.ServiceMode = newMode
@@ -241,7 +241,7 @@ func (p *planner) renameTenant(
 	ctx context.Context, info *mtinfopb.TenantInfo, newName roachpb.TenantName,
 ) error {
 	if p.EvalContext().TxnReadOnly {
-		return readOnlyError("ALTER TENANT RENAME TO")
+		return readOnlyError("ALTER VIRTUAL CLUSTER RENAME TO")
 	}
 	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "rename tenant"); err != nil {
 		return err
@@ -266,7 +266,7 @@ func (p *planner) renameTenant(
 	if info.ServiceMode != mtinfopb.ServiceModeNone {
 		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot rename tenant in service mode %v", info.ServiceMode),
-			"Use ALTER TENANT STOP SERVICE before renaming a tenant.")
+			"Use ALTER VIRTUAL CLUSTER STOP SERVICE before renaming a tenant.")
 	}
 
 	info.Name = newName
