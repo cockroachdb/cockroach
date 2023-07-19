@@ -2106,33 +2106,31 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 	}
 }
 
-// Test schema changes that require a backfill when the backfill option is
-// allowed.
+// TestChangefeedSchemaChangeAllowBackfill tests schema changes that require a
+// backfill when the backfill option is allowed.
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		// Expected semantics:
 		//
 		// 1) DROP COLUMN
+		//
 		// If the table descriptor is at version 1 when the `ALTER TABLE` stmt is issued,
 		// we expect the changefeed level backfill to be triggered at the `ModificationTime` of
 		// version 2 of the said descriptor. This is because this is the descriptor
-		// version at which the dropped column stops being visible to SELECTs. Note that
-		// this means we will see row updates resulting from the schema-change level
-		// backfill _after_ the changefeed level backfill.
+		// version at which the dropped column stops being visible to SELECTs.
 		//
 		// 2) ADD COLUMN WITH DEFAULT & ADD COLUMN AS ... STORED
-		// If the table descriptor is at version 1 when the `ALTER TABLE` stmt is issued,
-		// we expect the changefeed level backfill to be triggered at the
-		// `ModificationTime` of version 4 of said descriptor. This is because this is the
-		// descriptor version which makes the schema-change level backfill for the
-		// newly-added column public. This means we wil see row updates resulting from the
-		// schema-change level backfill _before_ the changefeed level backfill.
+		//
+		// If the table descriptor is at version 1 when the `ALTER TABLE` stmt
+		// is issued, we expect the backfill to be triggered at the
+		// `ModificationTime` of version 7 of said descriptor. This is because
+		// this is the descriptor version at which the KV-level backfill is finished and
+		// the primary index swap takes place to make the newly-added column public.
 
 		t.Run(`add column with default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
@@ -2145,13 +2143,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`add_column_def: [2]->{"after": {"a": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
-			ts := fetchDescVersionModificationTime(t, s, `add_column_def`, 4)
-			// Schema change backfill
-			assertPayloadsStripTs(t, addColumnDef, []string{
-				`add_column_def: [1]->{"after": {"a": 1}}`,
-				`add_column_def: [2]->{"after": {"a": 2}}`,
-			})
-			// Changefeed level backfill
+			ts := fetchDescVersionModificationTime(t, s, `add_column_def`, 7)
 			assertPayloads(t, addColumnDef, []string{
 				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -2171,11 +2163,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
-			assertPayloadsStripTs(t, addColComp, []string{
-				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
-				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
-			})
-			ts := fetchDescVersionModificationTime(t, s, `add_col_comp`, 4)
+			ts := fetchDescVersionModificationTime(t, s, `add_col_comp`, 7)
 			assertPayloads(t, addColComp, []string{
 				fmt.Sprintf(`add_col_comp: [1]->{"after": {"a": 1, "b": 6, "c": 11}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -2196,20 +2184,18 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
+			ts := fetchDescVersionModificationTime(t, s, `drop_column`, 2)
 
-			// since the changefeed level backfill (which flushes the sink before
-			// the backfill) occurs before the schema-change backfill for a drop
-			// column, the order in which the sink receives both backfills is
-			// uncertain. the only guarantee here is per-key ordering guarantees,
-			// so we must check both backfills in the same assertion.
-			assertPayloadsPerKeyOrderedStripTs(t, dropColumn, []string{
-				// Changefeed level backfill for DROP COLUMN b.
-				`drop_column: [1]->{"after": {"a": 1}}`,
-				`drop_column: [2]->{"after": {"a": 2}}`,
-				// Schema-change backfill for DROP COLUMN b.
-				`drop_column: [1]->{"after": {"a": 1}}`,
-				`drop_column: [2]->{"after": {"a": 2}}`,
-				// Insert 3 into drop_column
+			// Backfill for DROP COLUMN b.
+			assertPayloads(t, dropColumn, []string{
+				fmt.Sprintf(`drop_column: [1]->{"after": {"a": 1}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
+				fmt.Sprintf(`drop_column: [2]->{"after": {"a": 2}, "updated": "%s"}`,
+					ts.AsOfSystemTime()),
+			})
+
+			// Insert 3 into drop_column
+			assertPayloadsStripTs(t, dropColumn, []string{
 				`drop_column: [3]->{"after": {"a": 3}}`,
 			})
 		})
@@ -2245,36 +2231,21 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN d STRING DEFAULT 'dee'`)
 			wg.Done()
 
-			// assertions are grouped this way because the sink is flushed prior
-			// to a changefeed level backfill, ensuring all messages are received
-			// at the start of the assertion
-			assertPayloadsPerKeyOrderedStripTs(t, multipleAlters, []string{
-				// Changefeed level backfill for DROP COLUMN b.
-				`multiple_alters: [1]->{"after": {"a": 1}}`,
-				`multiple_alters: [2]->{"after": {"a": 2}}`,
-				// Schema-change backfill for DROP COLUMN b.
-				`multiple_alters: [1]->{"after": {"a": 1}}`,
-				`multiple_alters: [2]->{"after": {"a": 2}}`,
-				// Schema-change backfill for ADD COLUMN c.
-				`multiple_alters: [1]->{"after": {"a": 1}}`,
-				`multiple_alters: [2]->{"after": {"a": 2}}`,
-			})
-			assertPayloadsPerKeyOrderedStripTs(t, multipleAlters, []string{
-				// Changefeed level backfill for ADD COLUMN c.
-				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
-				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
-				// Schema change level backfill for ADD COLUMN d.
-				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
-				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
-			})
-			ts := fetchDescVersionModificationTime(t, s, `multiple_alters`, 10)
-			// Changefeed level backfill for ADD COLUMN d.
+			// When dropping the column, the desc goes from version 1->9 with the schema change being visible at
+			// version 2. Then, when adding column c, it goes from 9->17, with the schema change being visible at
+			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
+			// being visible at the 7th step (version 23).
+			dropTS := fetchDescVersionModificationTime(t, s, `multiple_alters`, 2)
+			addTS := fetchDescVersionModificationTime(t, s, `multiple_alters`, 15)
+			addTS2 := fetchDescVersionModificationTime(t, s, `multiple_alters`, 23)
+
 			assertPayloads(t, multipleAlters, []string{
-				// Backfill no-ops for column D (C schema change is complete)
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// Scan output for column C
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}, "updated": "%s"}`, addTS.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}, "updated": "%s"}`, addTS.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}, "updated": "%s"}`, addTS2.AsOfSystemTime()),
+				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}, "updated": "%s"}`, addTS2.AsOfSystemTime()),
 			})
 		})
 	}
@@ -2292,14 +2263,14 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	}
 }
 
-// Test schema changes that require a backfill on only some watched tables within a changefeed.
+// TestChangefeedSchemaChangeBackfillScope tests that when a changefeed is watching multiple tables and only
+// one needs a backfill, we only see backfill rows emitted for that one table.
 func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		t.Run(`add column with default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
@@ -2315,13 +2286,9 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 				`no_def_change: [3]->{"after": {"a": 3}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
-			ts := fetchDescVersionModificationTime(t, s, `add_column_def`, 4)
-			// Schema change backfill
-			assertPayloadsStripTs(t, combinedFeed, []string{
-				`add_column_def: [1]->{"after": {"a": 1}}`,
-				`add_column_def: [2]->{"after": {"a": 2}}`,
-			})
-			// Changefeed level backfill
+
+			// The primary index swap occurs at version 7.
+			ts := fetchDescVersionModificationTime(t, s, `add_column_def`, 7)
 			assertPayloads(t, combinedFeed, []string{
 				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
