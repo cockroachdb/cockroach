@@ -2273,8 +2273,6 @@ func TestLint(t *testing.T) {
 			":!sql/importer/import_processor_test.go",
 			":!sql/importer/import_stmt_test.go",
 			":!sql/importer/read_import_mysql_test.go",
-			":!sql/schemachanger/scbuild/builder_test.go",
-			":!sql/schemachanger/scdecomp/decomp_test.go",
 			":!sql/schemachanger/sctest/end_to_end.go",
 			":!sql/sqlinstance/instancestorage/instancecache_test.go",
 			":!sql/sqltestutils/telemetry.go",
