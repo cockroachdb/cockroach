@@ -1249,7 +1249,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						} else {
 							require.NotNil(t, result.Replicated.AddSSTable)
 							require.NoError(t, fs.WriteFile(engine, "sst", result.Replicated.AddSSTable.Data))
-							require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
+							require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 						}
 
 						var expect kvs
@@ -1652,7 +1652,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, fs.WriteFile(engine, "sst", sst))
-	require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
+	require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 
 	statsEvaled := statsBefore
 	statsEvaled.Add(*cArgs.Stats)
