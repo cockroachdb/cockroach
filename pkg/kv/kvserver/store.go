@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -1204,8 +1203,6 @@ type StoreConfig struct {
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
-
-	ExternalStorage *cloud.ExternalStorageAccessor
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
