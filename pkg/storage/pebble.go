@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -716,6 +717,9 @@ type PebbleConfig struct {
 	// stores on this node and on other nodes to store sstables.
 	SharedStorage cloud.ExternalStorage
 
+	// RemoteStorageFactory is used to pass the ExternalStorage factory.
+	RemoteStorageFactory *cloud.ExternalStorageAccessor
+
 	// onClose is a slice of functions to be invoked before the engine is closed.
 	onClose []func(*Pebble)
 }
@@ -879,6 +883,17 @@ func (p *Pebble) GetStoreID() (int32, error) {
 		return 0, errors.AssertionFailedf("GetStoreID must be called after calling SetStoreID")
 	}
 	return storeID, nil
+}
+
+type remoteStorageAdaptor struct {
+	p       *Pebble
+	ctx     context.Context
+	factory *cloud.ExternalStorageAccessor
+}
+
+func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Storage, error) {
+	es, err := r.factory.OpenURL(r.ctx, string(locator), username.SQLUsername{})
+	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 
 // ResolveEncryptedEnvOptions creates the EncryptionEnv and associated file
@@ -1138,6 +1153,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		})
 		opts.Experimental.CreateOnShared = true
 		opts.Experimental.CreateOnSharedLocator = ""
+	}
+
+	if cfg.RemoteStorageFactory != nil {
+		opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
 	}
 
 	// Read the current store cluster version.

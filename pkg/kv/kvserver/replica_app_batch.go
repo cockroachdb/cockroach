@@ -149,7 +149,6 @@ func (b *replicaAppBatch) Stage(
 		eng:         b.r.store.TODOEngine(),
 		sideloaded:  b.r.raftMu.sideloaded,
 		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
-		external:    b.r.store.cfg.ExternalStorage,
 	}); err != nil {
 		return nil, err
 	}
