@@ -8,17 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package authserver
 
 import (
 	"context"
 	"encoding/base64"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -29,35 +30,20 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	APIV2AuthHeader = "X-Cockroach-API-Session"
+)
+
 // authenticationV2Server is a sub-server under apiV2Server that handles
 // authentication-related endpoints, such as login and logout. The actual
 // verification of sessions for regular endpoints happens in authenticationV2Mux,
 // not here.
 type authenticationV2Server struct {
 	ctx        context.Context
-	sqlServer  *SQLServer
+	sqlServer  SQLServerInterface
 	authServer *authenticationServer
 	mux        *http.ServeMux
 	basePath   string
-}
-
-// newAuthenticationV2Server creates a new authenticationV2Server for the given
-// outer Server, and base path.
-func newAuthenticationV2Server(
-	ctx context.Context, s *SQLServer, cfg *base.Config, basePath string,
-) *authenticationV2Server {
-	simpleMux := http.NewServeMux()
-
-	authServer := &authenticationV2Server{
-		sqlServer:  s,
-		authServer: newAuthenticationServer(cfg, s),
-		mux:        simpleMux,
-		ctx:        ctx,
-		basePath:   basePath,
-	}
-
-	authServer.registerRoutes()
-	return authServer
 }
 
 func (a *authenticationV2Server) registerRoutes() {
@@ -76,9 +62,9 @@ func (a *authenticationV2Server) createSessionFor(
 	ctx context.Context, userName username.SQLUsername,
 ) (string, error) {
 	// Create a new database session, generating an ID and secret key.
-	id, secret, err := a.authServer.newAuthSession(ctx, userName)
+	id, secret, err := a.authServer.NewAuthSession(ctx, userName)
 	if err != nil {
-		return "", apiInternalError(ctx, err)
+		return "", srverrors.APIInternalError(ctx, err)
 	}
 
 	// Generate and set a session for the response. Because HTTP cookies
@@ -150,7 +136,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	}
 	if err := r.ParseForm(); err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	}
 	if r.Form.Get("username") == "" {
@@ -166,9 +152,9 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	username, _ := username.MakeSQLUsernameFromUserInput(r.Form.Get("username"), username.PurposeValidation)
 
 	// Verify the provided username/password pair.
-	verified, expired, err := a.authServer.verifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
+	verified, expired, err := a.authServer.VerifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	}
 	if expired {
@@ -182,11 +168,11 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 
 	session, err := a.createSessionFor(a.ctx, username)
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	}
 
-	writeJSONResponse(r.Context(), w, http.StatusOK, &loginResponse{Session: session})
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusOK, &loginResponse{Session: session})
 }
 
 // swagger:model logoutResponse
@@ -221,7 +207,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 	if r.Method != "POST" {
 		http.Error(w, "not found", http.StatusNotFound)
 	}
-	session := r.Header.Get(apiV2AuthHeader)
+	session := r.Header.Get(APIV2AuthHeader)
 	if session == "" {
 		http.Error(w, "invalid or unspecified session", http.StatusBadRequest)
 		return
@@ -229,16 +215,16 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 	var sessionCookie serverpb.SessionCookie
 	decoded, err := base64.StdEncoding.DecodeString(session)
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	}
 	if err := protoutil.Unmarshal(decoded, &sessionCookie); err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	}
 
 	// Revoke the session.
-	if n, err := a.sqlServer.internalExecutor.ExecEx(
+	if n, err := a.sqlServer.InternalExecutor().ExecEx(
 		a.ctx,
 		"revoke-auth-session",
 		nil, /* txn */
@@ -246,7 +232,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionCookie.ID,
 	); err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(r.Context(), err, w)
 		return
 	} else if n == 0 {
 		err := status.Errorf(
@@ -257,7 +243,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSONResponse(r.Context(), w, http.StatusOK, &logoutResponse{LoggedOut: true})
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusOK, &logoutResponse{LoggedOut: true})
 }
 
 func (a *authenticationV2Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -274,19 +260,11 @@ type authenticationV2Mux struct {
 	allowAnonymous bool
 }
 
-func newAuthenticationV2Mux(s *authenticationV2Server, inner http.Handler) *authenticationV2Mux {
-	return &authenticationV2Mux{
-		s:              s,
-		inner:          inner,
-		allowAnonymous: s.sqlServer.cfg.Insecure,
-	}
-}
-
-// apiV2UseCookieBasedAuth is a magic value of the auth header that
+// APIV2UseCookieBasedAuth is a magic value of the auth header that
 // tells us to look for the session in the cookie. This can be used by
 // frontend code to maintain cookie-based auth while interacting with
 // the API.
-const apiV2UseCookieBasedAuth = "cookie"
+const APIV2UseCookieBasedAuth = "cookie"
 
 // getSession decodes the cookie from the request, looks up the corresponding
 // session, and returns the logged-in username. The session can be looked up
@@ -301,7 +279,7 @@ func (a *authenticationV2Mux) getSession(
 ) (string, *serverpb.SessionCookie, int, error) {
 	ctx := req.Context()
 	// Validate the returned session header or cookie.
-	rawSession := req.Header.Get(apiV2AuthHeader)
+	rawSession := req.Header.Get(APIV2AuthHeader)
 	if len(rawSession) == 0 {
 		err := errors.New("invalid session header")
 		return "", nil, http.StatusUnauthorized, err
@@ -309,9 +287,9 @@ func (a *authenticationV2Mux) getSession(
 
 	cookie := &serverpb.SessionCookie{}
 	var err error
-	if rawSession == apiV2UseCookieBasedAuth {
-		st := a.s.sqlServer.cfg.Settings
-		cookie, err = findAndDecodeSessionCookie(req.Context(), st, req.Cookies())
+	if rawSession == APIV2UseCookieBasedAuth {
+		st := a.s.sqlServer.ExecutorConfig().Settings
+		cookie, err = FindAndDecodeSessionCookie(req.Context(), st, req.Cookies())
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(rawSession)
 		if err != nil {
@@ -327,9 +305,9 @@ func (a *authenticationV2Mux) getSession(
 		err := errors.New("invalid session header")
 		return "", nil, http.StatusBadRequest, err
 	}
-	valid, username, err := a.s.authServer.verifySession(req.Context(), cookie)
+	valid, username, err := a.s.authServer.VerifySession(req.Context(), cookie)
 	if err != nil {
-		apiV2InternalError(req.Context(), err, w)
+		srverrors.APIV2InternalError(req.Context(), err, w)
 		return "", nil, http.StatusInternalServerError, err
 	}
 	if !valid {
@@ -356,16 +334,23 @@ func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request
 	if cookie != nil {
 		sessionID = cookie.ID
 	}
-	req = req.WithContext(contextWithHTTPAuthInfo(req.Context(), u, sessionID))
+	req = req.WithContext(ContextWithHTTPAuthInfo(req.Context(), u, sessionID))
 	a.inner.ServeHTTP(w, req)
 }
 
-type apiRole int
+// APIRole is an enum representing the authorization level
+// needed for an APIv2 endpoint.
+type APIRole int
 
 const (
-	regularRole apiRole = iota
-	adminRole
-	superUserRole
+	// RegularRole is the default role for an APIv2 endpoint.
+	RegularRole APIRole = iota
+	// AdminRole is the role for an APIv2 endpoint that requires
+	// admin privileges.
+	AdminRole
+	// SuperUserRole is the role for an APIv2 endpoint that requires
+	// superuser privileges.
+	SuperUserRole
 )
 
 // roleAuthorizationMux enforces a role (eg. type of user, role option)
@@ -374,40 +359,40 @@ const (
 // the `option` roleoption, an HTTP 403 forbidden error is returned. Otherwise,
 // the request is passed onto the inner http.Handler.
 type roleAuthorizationMux struct {
-	ie     *sql.InternalExecutor
-	role   apiRole
+	ie     isql.Executor
+	role   APIRole
 	option roleoption.Option
 	inner  http.Handler
 }
 
 func (r *roleAuthorizationMux) getRoleForUser(
 	ctx context.Context, user username.SQLUsername,
-) (apiRole, error) {
+) (APIRole, error) {
 	if user.IsRootUser() {
 		// Shortcut.
-		return superUserRole, nil
+		return SuperUserRole, nil
 	}
 	row, err := r.ie.QueryRowEx(
 		ctx, "check-is-admin", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
 		"SELECT crdb_internal.is_admin()")
 	if err != nil {
-		return regularRole, err
+		return RegularRole, err
 	}
 	if row == nil {
-		return regularRole, errors.AssertionFailedf("hasAdminRole: expected 1 row, got 0")
+		return RegularRole, errors.AssertionFailedf("hasAdminRole: expected 1 row, got 0")
 	}
 	if len(row) != 1 {
-		return regularRole, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(row))
+		return RegularRole, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(row))
 	}
 	dbDatum, ok := tree.AsDBool(row[0])
 	if !ok {
-		return regularRole, errors.AssertionFailedf("hasAdminRole: expected bool, got %T", row[0])
+		return RegularRole, errors.AssertionFailedf("hasAdminRole: expected bool, got %T", row[0])
 	}
 	if dbDatum {
-		return adminRole, nil
+		return AdminRole, nil
 	}
-	return regularRole, nil
+	return RegularRole, nil
 }
 
 func (r *roleAuthorizationMux) hasRoleOption(
@@ -440,10 +425,10 @@ func (r *roleAuthorizationMux) hasRoleOption(
 func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// The username is set in authenticationV2Mux, and must correspond with a
 	// logged-in user.
-	username := userFromHTTPAuthInfoContext(req.Context())
+	username := UserFromHTTPAuthInfoContext(req.Context())
 	if role, err := r.getRoleForUser(req.Context(), username); err != nil || role < r.role {
 		if err != nil {
-			apiV2InternalError(req.Context(), err, w)
+			srverrors.APIV2InternalError(req.Context(), err, w)
 		} else {
 			http.Error(w, "user not allowed to access this endpoint", http.StatusForbidden)
 		}
@@ -452,7 +437,7 @@ func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	if r.option > 0 {
 		ok, err := r.hasRoleOption(req.Context(), username, r.option)
 		if err != nil {
-			apiV2InternalError(req.Context(), err, w)
+			srverrors.APIV2InternalError(req.Context(), err, w)
 			return
 		} else if !ok {
 			http.Error(w, "user not allowed to access this endpoint", http.StatusForbidden)

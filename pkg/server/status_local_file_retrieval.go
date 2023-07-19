@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"google.golang.org/grpc/codes"
@@ -49,7 +50,7 @@ func profileLocal(
 			}
 			if err := pprof.StartCPUProfile(&buf); err != nil {
 				// Construct a gRPC error to return to the caller.
-				return serverError(ctx, err)
+				return srverrors.ServerError(ctx, err)
 			}
 			defer pprof.StopCPUProfile()
 			select {

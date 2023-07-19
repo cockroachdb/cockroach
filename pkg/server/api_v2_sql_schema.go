@@ -13,7 +13,10 @@ package server
 import (
 	"net/http"
 
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/gorilla/mux"
@@ -62,7 +65,7 @@ type usersResponse struct {
 func (a *apiV2Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	ctx := r.Context()
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 
 	query := `SELECT username FROM system.users WHERE "isRole" = false ORDER BY username`
@@ -81,7 +84,7 @@ func (a *apiV2Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		query, qargs...,
 	)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 
@@ -92,13 +95,13 @@ func (a *apiV2Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(tree.MustBeDString(row[0]))})
 	}
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	if limit > 0 && len(resp.Users) >= limit {
 		resp.Next = offset + len(resp.Users)
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 // Response for listEvents.
@@ -149,7 +152,7 @@ type eventsResponse struct {
 func (a *apiV2Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	ctx := r.Context()
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	queryValues := r.URL.Query()
 
@@ -162,14 +165,14 @@ func (a *apiV2Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	eventsResp, err := a.admin.eventsHelper(
 		ctx, req, username, limit, offset, true /* redactEvents */)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	resp.EventsResponse = *eventsResp
 	if limit > 0 && len(resp.Events) >= limit {
 		resp.Next = offset + len(resp.Events)
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 // Response for listDatabases.
@@ -213,20 +216,20 @@ type databasesResponse struct {
 func (a *apiV2Server) listDatabases(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	ctx := r.Context()
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 
 	var resp databasesResponse
 	req := &serverpb.DatabasesRequest{}
 	dbsResp, err := a.admin.databasesHelper(ctx, req, username, limit, offset)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	var databases interface{}
 	databases, resp.Next = simplePaginate(dbsResp.Databases, limit, offset)
 	resp.Databases = databases.([]string)
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 // Response for databaseDetails.
@@ -263,7 +266,7 @@ type databaseDetailsResponse struct {
 //	  description: Database not found
 func (a *apiV2Server) databaseDetails(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.DatabaseDetailsRequest{
@@ -277,14 +280,14 @@ func (a *apiV2Server) databaseDetails(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			srverrors.APIV2InternalError(ctx, err, w)
 		}
 		return
 	}
 	resp := databaseDetailsResponse{
 		DescriptorID: dbDetailsResp.DescriptorID,
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 // Response for databaseGrants.
@@ -337,7 +340,7 @@ type databaseGrantsResponse struct {
 func (a *apiV2Server) databaseGrants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.DatabaseDetailsRequest{
@@ -348,7 +351,7 @@ func (a *apiV2Server) databaseGrants(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			srverrors.APIV2InternalError(ctx, err, w)
 		}
 		return
 	}
@@ -356,7 +359,7 @@ func (a *apiV2Server) databaseGrants(w http.ResponseWriter, r *http.Request) {
 	if limit > 0 && len(grants) >= limit {
 		resp.Next = offset + len(grants)
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 // Response for databaseTables.
@@ -412,7 +415,7 @@ type databaseTablesResponse struct {
 func (a *apiV2Server) databaseTables(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.DatabaseDetailsRequest{
@@ -423,7 +426,7 @@ func (a *apiV2Server) databaseTables(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			srverrors.APIV2InternalError(ctx, err, w)
 		}
 		return
 	}
@@ -431,7 +434,7 @@ func (a *apiV2Server) databaseTables(w http.ResponseWriter, r *http.Request) {
 	if limit > 0 && len(tables) >= limit {
 		resp.Next = offset + len(tables)
 	}
-	writeJSONResponse(ctx, w, 200, resp)
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
 }
 
 // Response for tableDetails.
@@ -473,7 +476,7 @@ type tableDetailsResponse serverpb.TableDetailsResponse
 //	  description: Database or table not found
 func (a *apiV2Server) tableDetails(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	username := userFromHTTPAuthInfoContext(ctx)
+	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.TableDetailsRequest{
@@ -486,9 +489,9 @@ func (a *apiV2Server) tableDetails(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database or table not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			srverrors.APIV2InternalError(ctx, err, w)
 		}
 		return
 	}
-	writeJSONResponse(ctx, w, 200, tableDetailsResponse(*resp))
+	apiutil.WriteJSONResponse(ctx, w, 200, tableDetailsResponse(*resp))
 }

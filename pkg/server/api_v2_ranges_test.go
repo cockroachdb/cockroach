@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/rangetestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,14 +31,14 @@ import (
 func TestHotRangesV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := startServer(t)
+	ts := rangetestutils.StartServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
 	var hotRangesResp hotRangesResponse
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiV2Path+"ranges/hot/").String(), nil)
+	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiconstants.APIV2Path+"ranges/hot/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -64,11 +66,11 @@ func TestNodeRangesV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ts := startServer(t)
+	ts := rangetestutils.StartServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.DB().Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,7 +78,7 @@ func TestNodeRangesV2(t *testing.T) {
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiV2Path+"nodes/local/ranges/").String(), nil)
+	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiconstants.APIV2Path+"nodes/local/ranges/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -99,7 +101,7 @@ func TestNodeRangesV2(t *testing.T) {
 
 	// Take the first range ID, and call the ranges/ endpoint with it.
 	rangeID := nodeRangesResp.Ranges[0].Desc.RangeID
-	req, err = http.NewRequest("GET", fmt.Sprintf("%s%sranges/%d/", ts.AdminURL(), apiV2Path, rangeID), nil)
+	req, err = http.NewRequest("GET", fmt.Sprintf("%s%sranges/%d/", ts.AdminURL(), apiconstants.APIV2Path, rangeID), nil)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -141,7 +143,7 @@ func TestNodesV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiV2Path+"nodes/").String(), nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"nodes/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)

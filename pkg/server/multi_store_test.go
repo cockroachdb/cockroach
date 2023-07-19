@@ -65,7 +65,9 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 			ServerArgsPerNode: map[int]base.TestServerArgs{},
 		}
 		for srvIdx := 0; srvIdx < numNodes; srvIdx++ {
-			var serverArgs base.TestServerArgs
+			serverArgs := base.TestServerArgs{
+				DefaultTestTenant: base.TODOTestTenantDisabled,
+			}
 			serverArgs.Knobs.Server = &server.TestingKnobs{StickyEngineRegistry: ser}
 			for storeIdx := 0; storeIdx < numStoresPerNode; storeIdx++ {
 				id := fmt.Sprintf("s%d.%d", srvIdx+1, storeIdx+1)

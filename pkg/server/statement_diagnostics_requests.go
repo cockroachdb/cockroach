@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -71,10 +72,10 @@ func (diagnostics *stmtDiagnostics) toProto() serverpb.StatementDiagnostics {
 func (s *statusServer) CreateStatementDiagnosticsReport(
 	ctx context.Context, req *serverpb.CreateStatementDiagnosticsReportRequest,
 ) (*serverpb.CreateStatementDiagnosticsReportResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -103,10 +104,10 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 func (s *statusServer) CancelStatementDiagnosticsReport(
 	ctx context.Context, req *serverpb.CancelStatementDiagnosticsReportRequest,
 ) (*serverpb.CancelStatementDiagnosticsReportResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -127,10 +128,10 @@ func (s *statusServer) CancelStatementDiagnosticsReport(
 func (s *statusServer) StatementDiagnosticsRequests(
 	ctx context.Context, _ *serverpb.StatementDiagnosticsReportsRequest,
 ) (*serverpb.StatementDiagnosticsReportsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -221,10 +222,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 func (s *statusServer) StatementDiagnostics(
 	ctx context.Context, req *serverpb.StatementDiagnosticsRequest,
 ) (*serverpb.StatementDiagnosticsResponse, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 

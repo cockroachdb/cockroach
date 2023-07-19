@@ -46,7 +46,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
@@ -100,11 +103,11 @@ type SQLServerWrapper struct {
 	runtime    *status.RuntimeStatSampler
 
 	http            *httpServer
-	adminAuthzCheck *adminPrivilegeChecker
+	adminAuthzCheck privchecker.CheckerForRPCHandlers
 	tenantAdmin     *adminServer
 	tenantStatus    *statusServer
 	drainServer     *drainServer
-	authentication  *authenticationServer
+	authentication  authserver.Server
 	// eventsExporter exports data to the Observability Service.
 	eventsExporter obs.EventsExporterInterface
 	stopper        *stop.Stopper
@@ -264,11 +267,7 @@ func newTenantServer(
 	// Instantiate the API privilege checker.
 	//
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminAuthzCheck := &adminPrivilegeChecker{
-		ie:          args.circularInternalExecutor,
-		st:          args.Settings,
-		makePlanner: nil,
-	}
+	adminAuthzCheck := privchecker.NewChecker(args.circularInternalExecutor, args.Settings)
 
 	// Instantiate the HTTP server.
 	// These callbacks help us avoid a dependency on gossip in httpServer.
@@ -360,11 +359,11 @@ func newTenantServer(
 	sqlServer.migrationServer = tms // only for testing via TestTenant
 
 	// Tell the authz server how to connect to SQL.
-	adminAuthzCheck.makePlanner = func(opName string) (interface{}, func()) {
+	adminAuthzCheck.SetAuthzAccessorFactory(func(opName string) (sql.AuthorizationAccessor, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
 		txn := args.db.NewTxn(ctx, "check-system-privilege")
-		return sql.NewInternalPlanner(
+		p, cleanup := sql.NewInternalPlanner(
 			opName,
 			txn,
 			username.RootUserName(),
@@ -372,10 +371,11 @@ func newTenantServer(
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
 		)
-	}
+		return p.(sql.AuthorizationAccessor), cleanup
+	})
 
 	// Create the authentication RPC server (login/logout).
-	sAuth := newAuthenticationServer(baseCfg.Config, sqlServer)
+	sAuth := authserver.NewServer(baseCfg.Config, sqlServer)
 
 	// Create a drain server.
 	drainServer := newDrainServer(baseCfg, args.stopper, args.stopTrigger, args.grpc, sqlServer)
@@ -725,7 +725,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+			apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 		}),
 		newAPIV2Server(workersCtx, &apiV2ServerOpts{
 			admin:            s.tenantAdmin,

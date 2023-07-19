@@ -26,7 +26,7 @@ func (s *systemStatusServer) ProblemRanges(
 ) (*serverpb.ProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 

@@ -66,6 +66,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/systemconfigwatcher/systemconfigwatchertest",
         "//pkg/settings/cluster",
