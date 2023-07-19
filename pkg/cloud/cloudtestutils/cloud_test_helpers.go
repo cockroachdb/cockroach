@@ -591,3 +591,8 @@ func IsImplicitAuthConfigured() bool {
 	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	return credentials != ""
 }
+
+func NewTestID() uint64 {
+	rng, _ := randutil.NewTestRand()
+	return rng.Uint64()
+}
