@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -111,14 +112,20 @@ type Optimizer struct {
 	scratchSort *memo.SortExpr
 }
 
-// maxGroupPasses is the maximum allowed number of optimization passes for any
-// single memo group. The groupState.passes field is incremented every time
-// optimizeGroup is called on the group. If a groupState's passes exceeds this
-// limit, there is likely a cycle in the memo where a path exists from a group
-// member's children back to the group member's group. To avoid stack overflows
-// that these memo cycles cause, the optimizer throws an internal error when
-// this limit is reached.
-const maxGroupPasses = 100_000
+const (
+	// maxGroupPasses is the maximum allowed number of optimization passes for
+	// any single memo group. The groupState.passes field is incremented every
+	// time optimizeGroup is called on the group. If a groupState's passes
+	// exceeds this limit, there is likely a cycle in the memo where a path
+	// exists from a group member's children back to the group member's group.
+	// To avoid stack overflows that these memo cycles cause, the optimizer
+	// throws an internal error when this limit is reached.
+	maxGroupPasses = 100_000
+
+	// maxGroupPassesTest is similar to maxGroupPasses but only applies in test
+	// builds.
+	maxGroupPassesTest = 10_000
+)
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
@@ -493,20 +500,19 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	}
 
 	state.passes++
-	if state.passes > maxGroupPasses {
+	var maxPasses int
+	if buildutil.CrdbTestBuild {
+		maxPasses = maxGroupPassesTest
+	} else {
+		maxPasses = maxGroupPasses
+	}
+	if state.passes > maxPasses {
 		// If optimizeGroup has been called on a group more than maxGroupPasses
 		// times, there is likely a cycle in the memo. To avoid a stack
 		// overflow, throw an internal error. The formatted memo is included as
 		// an error detail to aid in debugging the cycle.
 		mf := makeMemoFormatter(o, FmtCycle, false /* redactableValues */)
-		panic(errors.WithDetail(
-			errors.AssertionFailedf(
-				"memo group optimization passes surpassed limit of %v; "+
-					"there may be a cycle in the memo",
-				maxGroupPasses,
-			),
-			mf.format(),
-		))
+		panic(errors.WithDetail(errors.AssertionFailedf("memo cycle detected"), mf.format()))
 	}
 
 	// Iterate until the group has been fully optimized.

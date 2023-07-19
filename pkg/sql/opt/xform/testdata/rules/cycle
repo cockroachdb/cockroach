@@ -31,7 +31,7 @@ expropt disable=MemoCycleTestRelRuleFilter skip-race
     [ (Eq (Var "b") (Const 1 "int")) ]
 )
 ----
-error: memo group optimization passes surpassed limit of 100000; there may be a cycle in the memo
+error: memo cycle detected
 details:
 memo (not optimized, ~3KB, required=[], cycle=[G1->G1])
  ├── G1: (memo-cycle-test-rel G2 G3) (memo-cycle-test-rel G1 G3)
@@ -60,7 +60,7 @@ expropt disable=MemoCycleTestRelRuleFilter skip-race
     [ ]
 )
 ----
-error: memo group optimization passes surpassed limit of 100000; there may be a cycle in the memo
+error: memo cycle detected
 details:
 memo (not optimized, ~16KB, required=[], cycle=[G1->G3->G5->G5])
  ├── G1: (left-join G2 G3 G4)
@@ -88,7 +88,7 @@ expropt disable=MemoCycleTestRelRule skip-race
     [ (Eq (Var "v") (Const 1 "int")) ]
 )
 ----
-error: memo group optimization passes surpassed limit of 100000; there may be a cycle in the memo
+error: memo cycle detected
 details:
 memo (not optimized, ~6KB, required=[], cycle=[G1->G4->G6->G9->G10->G12->G13->G1])
  ├── G1: (memo-cycle-test-rel G2 G3) (select G2 G4)
