@@ -1,0 +1,3 @@
+FROM cypress/browsers:node16.14.2-slim-chrome100-ff99-edge
+RUN curl -fsSL https://get.pnpm.io/install.sh | env SHELL=bash PNPM_HOME=/usr/local/bin PNPM_VERSION=8.5.1 sh -
+RUN pnpm --version

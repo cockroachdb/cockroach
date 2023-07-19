@@ -18,9 +18,12 @@ services:
       COCKROACH_DATABASE: movr
 
   cypress:
-    image: cypress/browsers:node16.14.2-slim-chrome100-ff99-edge
-    working_dir: /e2e
-    entrypoint: ./build/compose-entrypoint.sh
+    build:
+      context: .
+      dockerfile: Dockerfile.cypress
+    image: crdb_ci-cypress_20230719
+    working_dir: /ui
+    entrypoint: ./workspaces/e2e-tests/build/compose-entrypoint.sh
     environment:
       IS_DOCKER: "1"
     depends_on:
@@ -29,7 +32,7 @@ services:
     networks:
       - db
     volumes:
-      - ./:/e2e
+      - ../../:/ui
       - ./artifacts:/artifacts
 
 networks:
