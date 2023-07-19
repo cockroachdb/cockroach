@@ -82,7 +82,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 		return
 	}
 
-	resumerTraceFilename := fmt.Sprintf("resumer-trace-n%s.%s.txt",
+	resumerTraceFilename := fmt.Sprintf("resumer-trace-n%s.%s.binpb",
 		r.ID().String(), timeutil.Now().Format("20060102_150405.00"))
 	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
 	b, err := protoutil.Marshal(&td)
