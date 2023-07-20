@@ -87,6 +87,10 @@ const (
 	// removal, non-voter addition and rebalancing.
 	// See allocatorimpl.AllocatorAction.Priority.
 	replicateQueueLeasePreferencePriority = 1001
+
+	// replicateQueueAddOrMaybeAddSemSize is the number of replicas which can be
+	// considered for enqueueing concurrently into the replicate queue.
+	replicateQueueAddOrMaybeAddSemSize = 1000
 )
 
 // MinLeaseTransferInterval controls how frequently leases can be transferred
@@ -572,13 +576,14 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
-			successes:          store.metrics.ReplicateQueueSuccesses,
-			failures:           store.metrics.ReplicateQueueFailures,
-			pending:            store.metrics.ReplicateQueuePending,
-			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
-			purgatory:          store.metrics.ReplicateQueuePurgatory,
-			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			successes:            store.metrics.ReplicateQueueSuccesses,
+			failures:             store.metrics.ReplicateQueueFailures,
+			pending:              store.metrics.ReplicateQueuePending,
+			processingNanos:      store.metrics.ReplicateQueueProcessingNanos,
+			purgatory:            store.metrics.ReplicateQueuePurgatory,
+			disabledConfig:       kvserverbase.ReplicateQueueEnabled,
+			addOrMaybeAddSemSize: replicateQueueAddOrMaybeAddSemSize,
 		},
 	)
 	updateFn := func() {
@@ -813,13 +818,15 @@ func ShouldRequeue(ctx context.Context, change plan.ReplicateChange) bool {
 		// time around.
 		requeue = false
 
-	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance {
-		// Don't requeue after a successful rebalance operation.
-		requeue = false
-
 	} else if change.Op.LHBeingRemoved() {
 		// Don't requeue if the leaseholder was removed as a voter or the range
 		// lease was transferred away.
+		requeue = false
+
+	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
+		!change.Replica.LeaseViolatesPreferences(ctx) {
+		// Don't requeue after a successful rebalance operation, unless the lease
+		// violates the lease preferences.
 		requeue = false
 
 	} else {
