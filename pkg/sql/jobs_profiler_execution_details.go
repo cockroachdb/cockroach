@@ -182,6 +182,15 @@ func (p *planner) RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.
 	}
 
 	e := makeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID)
+
+	// Check if the job exists otherwise we can bail early.
+	if exists, err := jobs.JobExists(ctx, jobID, e.db); err != nil {
+		return err
+	} else if !exists {
+		log.Warningf(ctx, "execution details requested for non-existent job %d", jobID)
+		return nil
+	}
+
 	// TODO(adityamaru): When we start collecting more information we can consider
 	// parallelize the collection of the various pieces.
 	e.addDistSQLDiagram(ctx)
@@ -238,7 +247,7 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
 		return
 	}
-	if row[0] != tree.DNull {
+	if row != nil && row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
 		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
 		if err := jobs.WriteExecutionDetailFile(ctx, filename,

@@ -140,3 +140,20 @@ ORDER BY created`
 	}
 	return false /* exists */, err
 }
+
+// JobExists returns true if there is a row corresponding to jobID in the
+// system.jobs table.
+func JobExists(ctx context.Context, jobID jobspb.JobID, db isql.DB) (bool, error) {
+	var exists bool
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		row, err := txn.QueryRow(ctx, "check-for-job", txn.KV(), `SELECT id FROM system.jobs WHERE id = $1`, jobID)
+		if err != nil {
+			return err
+		}
+		exists = row != nil
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
