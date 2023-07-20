@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 )
 
 // MVCCIterator wraps an storage.MVCCIterator and ensures that it can
@@ -445,6 +446,17 @@ type spanSetReader struct {
 
 var _ storage.Reader = spanSetReader{}
 
+func (s spanSetReader) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+}
+
 func (s spanSetReader) Close() {
 	s.r.Close()
 }
@@ -762,6 +774,18 @@ type spanSetBatch struct {
 
 var _ storage.Batch = spanSetBatch{}
 
+func (s spanSetBatch) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	// Only used on Engine.
+	panic("unimplemented")
+}
+
 func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
 }
@@ -792,6 +816,18 @@ func (s spanSetBatch) Repr() []byte {
 
 func (s spanSetBatch) CommitStats() storage.BatchCommitStats {
 	return s.b.CommitStats()
+}
+
+func (s spanSetBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	return s.b.PutInternalRangeKey(start, end, key)
+}
+
+func (s spanSetBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	return s.b.PutInternalPointKey(key, value)
+}
+
+func (s spanSetBatch) ClearRawEncodedRange(start, end []byte) error {
+	return s.b.ClearRawEncodedRange(start, end)
 }
 
 // NewBatch returns a storage.Batch that asserts access of the underlying
