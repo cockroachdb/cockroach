@@ -184,7 +184,20 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			ct.t.Fatal(err)
 		}
 
-		ct.cluster.Run(ct.ctx, webhookNode, `sudo apt --yes install golang-go;`)
+		// As seen in #107061, this can hit a 503 Service Unavailable when
+		// trying to download the package, so we retry every 30 seconds
+		// for up to 5 mins below.
+		err = retry.WithMaxAttempts(ct.ctx, retry.Options{
+			InitialBackoff: 30 * time.Second,
+			Multiplier:     1,
+		}, 10, func() error {
+			err = ct.cluster.RunE(ct.ctx, webhookNode, `sudo apt --yes install golang-go;`)
+			err = errors.Wrap(err, "infrastructure failure; could not install golang")
+			return err
+		})
+		if err != nil {
+			ct.t.Fatal(err)
+		}
 
 		// Start the server in its own monitor to not block ct.mon.Wait()
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
