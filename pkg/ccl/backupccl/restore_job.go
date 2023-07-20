@@ -3177,6 +3177,14 @@ func sendAddRemoteSSTs(
 		return genSpan(ctx, restoreSpanEntriesCh)
 	})
 	remainingBytesInTargetRange := int64(512 << 20)
+
+	openedStorages := make(map[cloudpb.ExternalStorage]ExternalStorage)
+	defer func() {
+		for _, es := range openedStorages {
+			es.Close()
+		}
+	}()
+
 	for entry := range restoreSpanEntriesCh {
 		for i, file := range entry.Files {
 
@@ -3200,6 +3208,22 @@ func sendAddRemoteSSTs(
 				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
 					log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 				}
+			}
+
+			if file.BackingFileSize == 0 {
+				if _, ok := openedStorages[file.Dir]; !ok {
+					es, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, file.Dir)
+					if err != nil {
+						return err
+					}
+					openedStorages[file.Dir] = es
+				}
+
+				sz, err := openedStorages[file.Dir].Size(ctx, file.Path)
+				if err != nil {
+					return err
+				}
+				file.BackingFileSize = uint64(sz)
 			}
 
 			loc := kvpb.AddSSTableRequest_RemoteFile{
