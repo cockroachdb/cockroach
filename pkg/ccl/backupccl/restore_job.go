@@ -3202,6 +3202,19 @@ func sendAddRemoteSSTs(
 				}
 			}
 
+			if file.BackingFileSize == 0 {
+				es, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uris[i], username.SQLUsername{})
+				if err != nil {
+					return err
+				}
+				sz, err := es.Size(ctx, file.Path)
+				err = errors.CombineErrors(err, es.Close())
+				if err != nil {
+					return err
+				}
+				file.BackingFileSize = uint64(sz)
+			}
+
 			loc := kvpb.AddSSTableRequest_RemoteFile{
 				Locator:         uris[i],
 				Path:            file.Path,
