@@ -238,7 +238,7 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
 		return
 	}
-	if row[0] != tree.DNull {
+	if len(row) > 0 && row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
 		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
 		if err := jobs.WriteExecutionDetailFile(ctx, filename,
