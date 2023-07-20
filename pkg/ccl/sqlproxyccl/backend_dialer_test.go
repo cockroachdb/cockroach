@@ -14,6 +14,7 @@ import (
 	"crypto/x509"
 	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -151,4 +154,52 @@ func TestBackendDialTLS(t *testing.T) {
 			}
 		})
 	}
+}
+
+type closeCounter struct {
+	net.Conn
+	closeCount int32
+}
+
+func (n *closeCounter) Close() error {
+	_ = atomic.AddInt32(&n.closeCount, 1)
+	return nil
+}
+
+func (n *closeCounter) CloseCount() int {
+	return int(atomic.LoadInt32(&n.closeCount))
+}
+
+func TestCloseOnCancelCleanupBeforeCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	conn := &closeCounter{}
+	for i := 0; i < 1000; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		cleanup := closeWhenCancelled(ctx, conn)
+		cleanup()
+		cancel()
+	}
+	require.Equal(t, 0, conn.CloseCount())
+}
+
+func TestCloseOnCancelCancelBeforeCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	conn := &closeCounter{}
+	for i := 0; i < 1000; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		cleanup := closeWhenCancelled(ctx, conn)
+		cancel()
+		cleanup()
+	}
+	testutils.SucceedsSoon(t, func() error {
+		count := conn.CloseCount()
+		if count != 1000 {
+			return errors.Newf("expected 1000 closes found %d", count)
+		}
+		return nil
+	})
 }

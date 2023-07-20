@@ -92,14 +92,27 @@ var BackendDial = func(
 // closeWhenCancelled will close the connection if the context is cancelled
 // before the cleanup function is called.
 func closeWhenCancelled(ctx context.Context, conn net.Conn) (cleanup func()) {
+	// TODO(jeffswenson): when we upgrade to go 1.21 replace the implementation
+	// of closeWhenCancelled with context.AfterFunc.
 	done := make(chan struct{})
 	go func() {
 		select {
-		case <-ctx.Done():
-			conn.Close()
 		case <-done:
 			// Do nothing because the cleanup function was called.
+		case <-ctx.Done():
+			conn.Close()
 		}
 	}()
-	return func() { close(done) }
+	return func() {
+		select {
+		case done <- struct{}{}:
+			// Send a done signal to the closing goroutine. Unbuffered channels
+			// guarantee synchronous delivery. We can't use close(done) because the
+			// close signal is asynchronous and a cancel that arrives after the
+			// cleanup function returns may be processed by the closing goroutine.
+		case <-ctx.Done():
+			// Do nothing if the context is cancelled, since the go routine will
+			// process the close.
+		}
+	}
 }
