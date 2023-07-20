@@ -15,6 +15,7 @@ import { noop } from "lodash";
 import {
   error,
   nodeRegions,
+  requestTime,
   routeProps,
   timeScale,
   transaction,
@@ -53,6 +54,8 @@ storiesOf("Transactions Details", module)
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
       isDataValid={true}
+      requestTime={requestTime}
+      onRequestTimeChange={noop}
     />
   ))
   .add("with loading indicator", () => (
@@ -76,6 +79,8 @@ storiesOf("Transactions Details", module)
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
       isDataValid={true}
+      requestTime={requestTime}
+      onRequestTimeChange={noop}
     />
   ))
   .add("with error alert", () => (
@@ -100,6 +105,8 @@ storiesOf("Transactions Details", module)
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
       isDataValid={true}
+      requestTime={moment()}
+      onRequestTimeChange={noop}
     />
   ))
   .add("No data for this time frame; no cached transaction text", () => {
@@ -124,6 +131,8 @@ storiesOf("Transactions Details", module)
         limit={100}
         reqSortSetting={StatsSortOptions.SERVICE_LAT}
         isDataValid={true}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
       />
     );
   });

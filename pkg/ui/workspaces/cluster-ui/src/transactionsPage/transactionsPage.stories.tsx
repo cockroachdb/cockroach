@@ -18,6 +18,7 @@ import {
   filters,
   lastUpdated,
   nodeRegions,
+  requestTime,
   routeProps,
   sortSetting,
   timeScale,
@@ -61,6 +62,8 @@ storiesOf("Transactions Page", module)
       onChangeLimit={noop}
       onChangeReqSort={noop}
       onApplySearchCriteria={noop}
+      requestTime={requestTime}
+      onRequestTimeChange={noop}
     />
   ))
   .add("without data", () => {
@@ -89,6 +92,8 @@ storiesOf("Transactions Page", module)
         onChangeLimit={noop}
         onChangeReqSort={noop}
         onApplySearchCriteria={noop}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
       />
     );
   })
@@ -125,6 +130,8 @@ storiesOf("Transactions Page", module)
         onChangeLimit={noop}
         onChangeReqSort={noop}
         onApplySearchCriteria={noop}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
       />
     );
   })
@@ -154,6 +161,8 @@ storiesOf("Transactions Page", module)
         onChangeLimit={noop}
         onChangeReqSort={noop}
         onApplySearchCriteria={noop}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
       />
     );
   })
@@ -190,6 +199,8 @@ storiesOf("Transactions Page", module)
         onChangeLimit={noop}
         onChangeReqSort={noop}
         onApplySearchCriteria={noop}
+        requestTime={requestTime}
+        onRequestTimeChange={noop}
       />
     );
   });
