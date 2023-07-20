@@ -111,7 +111,7 @@ const fingerprintStmtsQuery = (stmtFingerprintIDs: string[]): string => `
 SELECT
   DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
   (metadata ->> 'query') AS query
-FROM crdb_internal.statement_statistics
+FROM crdb_internal.statement_statistics_persisted
 WHERE encode(fingerprint_id, 'hex') =
       ANY ARRAY[ ${stmtFingerprintIDs.map(id => `'${id}'`).join(",")} ]`;
 
