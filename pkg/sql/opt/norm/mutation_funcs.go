@@ -11,8 +11,11 @@
 package norm
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // SimplifiablePartialIndexProjectCols returns the set of projected partial
@@ -172,8 +175,11 @@ func multiUsePartialIndexCols(mp *memo.MutationPrivate) opt.ColSet {
 // projected column's expression simplified to false if the column exists in
 // simplifiableCols.
 func (c *CustomFuncs) SimplifyPartialIndexProjections(
-	projections memo.ProjectionsExpr, simplifiableCols opt.ColSet,
-) memo.ProjectionsExpr {
+	projections memo.ProjectionsExpr,
+	passthrough opt.ColSet,
+	simplifiableCols opt.ColSet,
+	private *memo.MutationPrivate,
+) (memo.ProjectionsExpr, *memo.MutationPrivate) {
 	simplified := make(memo.ProjectionsExpr, len(projections))
 	for i := range projections {
 		if col := projections[i].Col; simplifiableCols.Contains(col) {
@@ -182,5 +188,40 @@ func (c *CustomFuncs) SimplifyPartialIndexProjections(
 			simplified[i] = projections[i]
 		}
 	}
-	return simplified
+
+	// Any simplifiable partial index expressions that are currently passthrough
+	// columns must be changed to projected false expressions.
+	simplifiableCols.IntersectionWith(passthrough)
+	if simplifiableCols.Empty() {
+		return simplified, private
+	}
+
+	// Copy the MutationPrivate in order to change the partial index columns.
+	simplifiedPrivate := *private
+	simplifiedPrivate.PartialIndexPutCols = append(opt.OptionalColList{}, private.PartialIndexPutCols...)
+	simplifiedPrivate.PartialIndexDelCols = append(opt.OptionalColList{}, private.PartialIndexDelCols...)
+
+	ord := len(simplifiedPrivate.PartialIndexPutCols)
+	for i, col := range simplifiedPrivate.PartialIndexPutCols {
+		if simplifiableCols.Contains(col) {
+			name := fmt.Sprintf("partial_index_put%d", ord+1)
+			newPutCol := c.f.Metadata().AddColumn(name, types.Bool)
+			simplified = append(simplified, c.f.ConstructProjectionsItem(memo.FalseSingleton, newPutCol))
+			simplifiedPrivate.PartialIndexPutCols[i] = newPutCol
+			ord++
+		}
+	}
+
+	ord = len(simplifiedPrivate.PartialIndexDelCols)
+	for i, col := range simplifiedPrivate.PartialIndexDelCols {
+		if simplifiableCols.Contains(col) {
+			name := fmt.Sprintf("partial_index_del%d", ord+1)
+			newDelCol := c.f.Metadata().AddColumn(name, types.Bool)
+			simplified = append(simplified, c.f.ConstructProjectionsItem(memo.FalseSingleton, newDelCol))
+			simplifiedPrivate.PartialIndexDelCols[i] = newDelCol
+			ord++
+		}
+	}
+
+	return simplified, &simplifiedPrivate
 }
