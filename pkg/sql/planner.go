@@ -179,10 +179,6 @@ type planner struct {
 	// never be accessed directly. Nothing explicitly resets this field.
 	internalSQLTxn internalTxn
 
-	// isInternalPlanner is set to true when this planner is not bound to
-	// a SQL session.
-	isInternalPlanner bool
-
 	atomic struct {
 		// innerPlansMustUseLeafTxn is set to 1 if the "outer" plan is using
 		// the LeafTxn forcing the "inner" plans to use the LeafTxns too. An
@@ -399,7 +395,6 @@ func newInternalPlanner(
 	p.txn = txn
 	p.stmt = Statement{}
 	p.cancelChecker.Reset(ctx)
-	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.SearchPath = &sd.SearchPath
@@ -455,7 +450,6 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.extendedEvalCtx.Descs = params.collection
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
