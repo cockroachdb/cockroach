@@ -196,7 +196,7 @@ FROM
           statistics -> 'statistics' ->> 'lastExecAt' DESC
       ) AS rank 
     FROM 
-      crdb_internal.statement_statistics 
+      crdb_internal.statement_statistics_persisted 
     WHERE 
       aggregated_ts >= now() - INTERVAL '1 week'
   ) 
