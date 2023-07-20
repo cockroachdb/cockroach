@@ -868,7 +868,7 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 
 // TracerI is part of the serverutils.TestTenantInterface.
 func (t *TestTenant) TracerI() interface{} {
-	return t.Tracer
+	return t.Tracer()
 }
 
 // SettingsWatcher is part of the serverutils.TestTenantInterface.
