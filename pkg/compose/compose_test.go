@@ -32,6 +32,8 @@ import (
 )
 
 var (
+	// flagEach controls how long we are going to run each compose test. Ensure bazel BUILD file
+	// of compose tests has a longer timeout.
 	flagEach      = flag.Duration("each", 10*time.Minute, "individual test timeout")
 	flagTests     = flag.String("tests", ".", "tests within docker compose to run")
 	flagArtifacts = flag.String("artifacts", "", "artifact directory")

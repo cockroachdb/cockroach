@@ -303,4 +303,4 @@ trace.opentelemetry.collector	string		address of an OpenTelemetry trace collecto
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	tenant-rw
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	tenant-rw
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	tenant-rw
-version	version	1000023.1-14	set the active cluster version in the format '<major>.<minor>'	tenant-rw
+version	version	1000023.1-16	set the active cluster version in the format '<major>.<minor>'	tenant-rw
