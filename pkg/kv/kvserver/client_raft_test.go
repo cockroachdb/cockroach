@@ -6547,7 +6547,7 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 				// Set a large election timeout. We don't want replicas to call
 				// elections due to timeouts, we want them to campaign and obtain
 				// votes despite PreVote+CheckQuorum.
-				RaftElectionTimeoutTicks: 200,
+				RaftElectionTimeoutTicks: 300,
 			},
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -6601,6 +6601,9 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	tc.RemoveVotersOrFatal(t, key, tc.Target(0))
 	t.Logf("n1 removed from range")
 
+	// Make sure we didn't time out on the above.
+	require.NoError(t, ctx.Err())
+
 	require.Eventually(t, func() bool {
 		logStatus(repl2.RaftStatus())
 		logStatus(repl3.RaftStatus())
@@ -6610,6 +6613,8 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 		}
 		return false
 	}, 10*time.Second, 500*time.Millisecond)
+
+	require.NoError(t, ctx.Err())
 }
 
 // TestRaftUnquiesceLeaderNoProposal tests that unquiescing a Raft leader does

@@ -255,12 +255,14 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 // initRaftGroupRaftMuLockedReplicaMuLocked initializes a Raft group for the
 // replica, replacing the existing Raft group if any.
 func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
+	ctx := r.AnnotateCtx(context.Background())
 	rg, err := raft.NewRawNode(newRaftConfig(
+		ctx,
 		raft.Storage((*replicaRaftStorage)(r)),
 		uint64(r.replicaID),
 		r.mu.state.RaftAppliedIndex,
 		r.store.cfg,
-		&raftLogger{ctx: r.AnnotateCtx(context.Background())},
+		&raftLogger{ctx: ctx},
 	))
 	if err != nil {
 		return err
