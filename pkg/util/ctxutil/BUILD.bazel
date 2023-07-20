@@ -9,7 +9,10 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+    ],
 )
 
 go_test(
