@@ -43,14 +43,29 @@ message SpanStats {
   // range end, will have a range_count value of 1.
   int32 range_count = 2;
 
-  // The explicit jsontag prevents 'omitempty` from being added by default.
+  // ApproximateDiskBytes is the approximate size "on-disk" in all files of the
+  // data in the span. NB; this *includes* files stored remotely, not just on
+  // _local_ disk; see the RemoteFileBytes field below.
+  // NB: The explicit jsontag prevents 'omitempty` from being added by default.
   uint64 approximate_disk_bytes = 3 [(gogoproto.jsontag) = "approximate_disk_bytes"];
+
+  // RemoteFileBytes is the subset of ApproximateDiskBytes which are stored in
+  // "remote" files (i.e. shared files and external files).
+  uint64 remote_file_bytes = 5;
+
+  // ExternalFileBytes is the subset of RemoteFileBytes that are in "external"
+  // files (not written/owned by this cluster, such as in restored backups).
+  uint64 external_file_bytes = 6;
+
+  // NEXT ID: 7.
 }
 
 message SpanStatsResponse {
-  cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
-  // See the range_count comment for the SpanStats proto.
-  int32 range_count = 2;
-  uint64 approximate_disk_bytes = 3;
+  reserved 1;
+  reserved 2;
+  reserved 3;
+
   map<string, SpanStats> span_to_stats = 4;
+
+  // NEXT ID: 5.
 }

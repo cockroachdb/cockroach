@@ -1374,7 +1374,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	require.NoError(t, p.Flush())
 
 	approxBytes := func(span roachpb.Span) uint64 {
-		v, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
+		v, _, _, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
 		require.NoError(t, err)
 		t.Logf("%s (%x-%x): %d bytes", span, span.Key, span.EndKey, v)
 		return v

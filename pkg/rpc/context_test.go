@@ -2556,7 +2556,9 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
 
-	// Start server listener.
+	// Start server listener. We set the ping handler to fail initially, to make
+	// sure no other actor creates an RPC connection.
+	failPing.Store(true)
 	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
@@ -2582,10 +2584,12 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 	failPing.Store(true)
 	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
-	failPing.Store(false)
 
-	// Stalled pings result in InitialHeartbeatFailedError.
+	// Stalled pings result in InitialHeartbeatFailedError. We're careful to
+	// enable the hang before disabling the error, to make sure no other
+	// actor establishes a connection in the meanwhile.
 	hangPing.Store(true)
+	failPing.Store(false)
 	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
 	hangPing.Store(false)
