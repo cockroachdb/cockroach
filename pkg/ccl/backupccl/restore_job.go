@@ -343,6 +343,7 @@ func restore(
 			spanCh,
 		)
 	}
+
 	// Count number of import spans.
 	var numImportSpans int
 	var countTasks []func(ctx context.Context) error
@@ -3178,7 +3179,37 @@ func sendAddRemoteSSTs(
 	})
 	remainingBytesInTargetRange := int64(512 << 20)
 
-	openedStorages := make(map[cloudpb.ExternalStorage]ExternalStorage)
+	// We lost the string URIs for the backup storage locations very early in the
+	// process of planning the restore, when the backups were resolved, and the
+	// parsed proto versions -- which we usually prefer -- were attached to the
+	// backup manifests and the individual files during span generation. However
+	// for telling pebble the locations of the files we need those raw string URIs
+	// again. We could plumb them side-by-side with the proto versions, but for
+	// now we'll just reverse engineer them: we'll make a map that has the proto
+	// version of every URI we might have parsed -- all the default backup URIs
+	// and any locality bucket URIs -- to the raw URI that produces that proto.
+	// We can then look in this map using the proto attached to each file to find
+	// the URI for that file.
+	// TODO(dt/butler): should we plumb the original string instead?
+	urisForDirs := make(map[cloudpb.ExternalStorage]string)
+	for _, u := range uris {
+		dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
+		if err != nil {
+			return err
+		}
+		urisForDirs[dir] = u
+	}
+	for _, loc := range backupLocalityInfo {
+		for _, u := range loc.URIsByOriginalLocalityKV {
+			dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
+			if err != nil {
+				return err
+			}
+			urisForDirs[dir] = u
+		}
+	}
+
+	openedStorages := make(map[cloudpb.ExternalStorage]cloud.ExternalStorage)
 	defer func() {
 		for _, es := range openedStorages {
 			es.Close()
@@ -3186,7 +3217,7 @@ func sendAddRemoteSSTs(
 	}()
 
 	for entry := range restoreSpanEntriesCh {
-		for i, file := range entry.Files {
+		for _, file := range entry.Files {
 
 			log.Infof(ctx, "Experimental restore: sending span %s of file %s",
 				file.BackupFileEntrySpan, file.Path)
@@ -3225,9 +3256,13 @@ func sendAddRemoteSSTs(
 				}
 				file.BackingFileSize = uint64(sz)
 			}
+			uri, ok := urisForDirs[file.Dir]
+			if !ok {
+				return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
+			}
 
 			loc := kvpb.AddSSTableRequest_RemoteFile{
-				Locator:         uris[i],
+				Locator:         uri,
 				Path:            file.Path,
 				BackingFileSize: file.BackingFileSize,
 			}
