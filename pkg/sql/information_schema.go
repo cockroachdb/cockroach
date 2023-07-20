@@ -1748,6 +1748,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			dbNameStr := tree.NewDString(db.GetName())
 			exPriv := tree.NewDString(privilege.EXECUTE.String())
 			roleNameForBuiltins := []*tree.DString{
+				tree.NewDString(username.AdminRole),
 				tree.NewDString(username.RootUser),
 				tree.NewDString(username.PublicRole),
 			}
@@ -1810,42 +1811,38 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 					if !canSeeDescriptor {
 						return nil
 					}
-					privs := fn.GetPrivileges()
+					privs, err := fn.GetPrivileges().Show(privilege.Function, true /* showImplicitOwnerPrivs */)
+					if err != nil {
+						return err
+					}
 					scNameStr := tree.NewDString(sc.GetName())
 					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fn.GetName(), catid.FuncIDToOID(fn.GetID())))
 					fnName := tree.NewDString(fn.GetName())
-					// EXECUTE is the only privilege kind relevant to functions.
-					if err := addRow(
-						tree.DNull, // grantor
-						tree.NewDString(privs.Owner().Normalized()), // grantee
-						dbNameStr,      // specific_catalog
-						scNameStr,      // specific_schema
-						fnSpecificName, // specific_name
-						dbNameStr,      // routine_catalog
-						scNameStr,      // routine_schema
-						fnName,         // routine_name
-						exPriv,         // privilege_type
-						yesString,      // is_grantable
-					); err != nil {
-						return err
-					}
-					for _, user := range privs.Users {
-						if !privilege.EXECUTE.IsSetIn(user.Privileges) {
-							continue
-						}
-						if err := addRow(
-							tree.DNull, // grantor
-							tree.NewDString(user.User().Normalized()), // grantee
-							dbNameStr,      // specific_catalog
-							scNameStr,      // specific_schema
-							fnSpecificName, // specific_name
-							dbNameStr,      // routine_catalog
-							scNameStr,      // routine_schema
-							fnName,         // routine_name
-							exPriv,         // privilege_type
-							yesOrNoDatum(privilege.EXECUTE.IsSetIn(user.WithGrantOption)), // is_grantable
-						); err != nil {
-							return err
+					for _, u := range privs {
+						userNameStr := tree.NewDString(u.User.Normalized())
+						for _, priv := range u.Privileges {
+							// We use this function to check for the grant option so that the
+							// object owner also gets is_grantable=true.
+							isGrantable, err := p.CheckGrantOptionsForUser(
+								ctx, fn.GetPrivileges(), sc, []privilege.Kind{priv.Kind}, u.User,
+							)
+							if err != nil {
+								return err
+							}
+							if err := addRow(
+								tree.DNull,                          // grantor
+								userNameStr,                         // grantee
+								dbNameStr,                           // specific_catalog
+								scNameStr,                           // specific_schema
+								fnSpecificName,                      // specific_name
+								dbNameStr,                           // routine_catalog
+								scNameStr,                           // routine_schema
+								fnName,                              // routine_name
+								tree.NewDString(priv.Kind.String()), // privilege_type
+								yesOrNoDatum(isGrantable),           // is_grantable
+							); err != nil {
+								return err
+							}
 						}
 					}
 					return nil

@@ -1297,13 +1297,23 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					// the RoleHasAllPrivilegesOnX flag and skip. We still have to take
 					// into consideration the PublicHasUsageOnTypes flag.
 					if objectType == privilege.Types {
-						// if the objectType is tree.Types, we only omit the entry
+						// if the objectType is Types, we only omit the entry
 						// if both the role has ALL privileges AND public has USAGE.
 						// This is the "default" state for default privileges on types
 						// in Postgres.
 						if (!defaultPrivilegesForRole.IsExplicitRole() ||
 							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types)) &&
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
+							continue
+						}
+					} else if objectType == privilege.Functions {
+						// if the objectType is Functions, we only omit the entry
+						// if both the role has ALL privileges AND public has EXECUTE.
+						// This is the "default" state for default privileges on functions
+						// in Postgres.
+						if (!defaultPrivilegesForRole.IsExplicitRole() ||
+							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions)) &&
+							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
 							continue
 						}
 					} else if !defaultPrivilegesForRole.IsExplicitRole() ||
@@ -1360,11 +1370,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					}
 				}
 
-				// Special cases to handle for types.
+				// Special cases to handle for types and functions.
 				// If one of RoleHasAllPrivilegesOnTypes or PublicHasUsageOnTypes is false
 				// and the other is true, we do not omit the entry since the default
 				// state has changed. We have to produce an entry by expanding the
-				// privileges.
+				// privileges. Similarly, we need to check EXECUTE for functions.
 				if defaultPrivilegesForRole.IsExplicitRole() {
 					if objectType == privilege.Types {
 						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types) &&
@@ -1381,6 +1391,33 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						}
 						if !catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) &&
 							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes {
+							defaclItem, err := createDefACLItem(
+								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
+								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
+							)
+							if err != nil {
+								return err
+							}
+							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
+								return err
+							}
+						}
+					}
+					if objectType == privilege.Functions {
+						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions) &&
+							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
+							defaclItem, err := createDefACLItem(
+								"" /* public role */, privilege.List{privilege.EXECUTE}, privilege.List{}, privilegeObjectType,
+							)
+							if err != nil {
+								return err
+							}
+							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
+								return err
+							}
+						}
+						if !catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) &&
+							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions {
 							defaclItem, err := createDefACLItem(
 								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
 								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,

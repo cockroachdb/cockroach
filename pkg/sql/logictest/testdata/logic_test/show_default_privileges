@@ -3,12 +3,13 @@
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root    ALL    true
-root  false  schemas    root    ALL    true
-root  false  sequences  root    ALL    true
-root  false  tables     root    ALL    true
-root  false  types      public  USAGE  false
-root  false  types      root    ALL    true
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    root    ALL      true
+root  false  sequences  root    ALL      true
+root  false  tables     root    ALL      true
+root  false  types      public  USAGE    false
+root  false  types      root    ALL      true
 
 # Ensure revoking "default" default privileges reflects in show default
 # privileges.
@@ -19,10 +20,11 @@ ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM public;
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root  ALL  true
-root  false  schemas    root  ALL  true
-root  false  sequences  root  ALL  true
-root  false  types      root  ALL  true
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    root    ALL      true
+root  false  sequences  root    ALL      true
+root  false  types      root    ALL      true
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC;
@@ -33,14 +35,15 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON SEQUENCES TO PUBLIC;
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root    ALL     true
-root  false  schemas    public  USAGE   false
-root  false  schemas    root    ALL     true
-root  false  sequences  public  SELECT  false
-root  false  sequences  root    ALL     true
-root  false  tables     public  SELECT  false
-root  false  types      public  USAGE   false
-root  false  types      root    ALL     true
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    public  USAGE    false
+root  false  schemas    root    ALL      true
+root  false  sequences  public  SELECT   false
+root  false  sequences  root    ALL      true
+root  false  tables     public  SELECT   false
+root  false  types      public  USAGE    false
+root  false  types      root    ALL      true
 
 statement ok
 CREATE USER foo
@@ -51,14 +54,15 @@ CREATE USER bar
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root    ALL     true
-root  false  schemas    public  USAGE   false
-root  false  schemas    root    ALL     true
-root  false  sequences  public  SELECT  false
-root  false  sequences  root    ALL     true
-root  false  tables     public  SELECT  false
-root  false  types      public  USAGE   false
-root  false  types      root    ALL     true
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    public  USAGE    false
+root  false  schemas    root    ALL      true
+root  false  sequences  public  SELECT   false
+root  false  sequences  root    ALL      true
+root  false  tables     public  SELECT   false
+root  false  types      public  USAGE    false
+root  false  types      root    ALL      true
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO foo, bar;
@@ -69,34 +73,37 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO foo, bar;
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE foo, bar, root
 ----
-bar   false  functions  bar     ALL     true
-bar   false  schemas    bar     ALL     true
-bar   false  sequences  bar     ALL     true
-bar   false  tables     bar     ALL     true
-bar   false  types      bar     ALL     true
-bar   false  types      public  USAGE   false
-foo   false  functions  foo     ALL     true
-foo   false  schemas    foo     ALL     true
-foo   false  sequences  foo     ALL     true
-foo   false  tables     foo     ALL     true
-foo   false  types      foo     ALL     true
-foo   false  types      public  USAGE   false
-root  false  functions  root    ALL     true
-root  false  schemas    bar     ALL     false
-root  false  schemas    foo     ALL     false
-root  false  schemas    public  USAGE   false
-root  false  schemas    root    ALL     true
-root  false  sequences  bar     ALL     false
-root  false  sequences  foo     ALL     false
-root  false  sequences  public  SELECT  false
-root  false  sequences  root    ALL     true
-root  false  tables     bar     ALL     false
-root  false  tables     foo     ALL     false
-root  false  tables     public  SELECT  false
-root  false  types      bar     ALL     false
-root  false  types      foo     ALL     false
-root  false  types      public  USAGE   false
-root  false  types      root    ALL     true
+bar   false  functions  bar     ALL      true
+bar   false  functions  public  EXECUTE  false
+bar   false  schemas    bar     ALL      true
+bar   false  sequences  bar     ALL      true
+bar   false  tables     bar     ALL      true
+bar   false  types      bar     ALL      true
+bar   false  types      public  USAGE    false
+foo   false  functions  foo     ALL      true
+foo   false  functions  public  EXECUTE  false
+foo   false  schemas    foo     ALL      true
+foo   false  sequences  foo     ALL      true
+foo   false  tables     foo     ALL      true
+foo   false  types      foo     ALL      true
+foo   false  types      public  USAGE    false
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    bar     ALL      false
+root  false  schemas    foo     ALL      false
+root  false  schemas    public  USAGE    false
+root  false  schemas    root    ALL      true
+root  false  sequences  bar     ALL      false
+root  false  sequences  foo     ALL      false
+root  false  sequences  public  SELECT   false
+root  false  sequences  root    ALL      true
+root  false  tables     bar     ALL      false
+root  false  tables     foo     ALL      false
+root  false  tables     public  SELECT   false
+root  false  types      bar     ALL      false
+root  false  types      foo     ALL      false
+root  false  types      public  USAGE    false
+root  false  types      root    ALL      true
 
 statement ok
 GRANT foo, bar TO root;
@@ -110,22 +117,23 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar GRANT ALL ON SEQUENCES TO foo, bar;
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root    ALL     true
-root  false  schemas    bar     ALL     false
-root  false  schemas    foo     ALL     false
-root  false  schemas    public  USAGE   false
-root  false  schemas    root    ALL     true
-root  false  sequences  bar     ALL     false
-root  false  sequences  foo     ALL     false
-root  false  sequences  public  SELECT  false
-root  false  sequences  root    ALL     true
-root  false  tables     bar     ALL     false
-root  false  tables     foo     ALL     false
-root  false  tables     public  SELECT  false
-root  false  types      bar     ALL     false
-root  false  types      foo     ALL     false
-root  false  types      public  USAGE   false
-root  false  types      root    ALL     true
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    bar     ALL      false
+root  false  schemas    foo     ALL      false
+root  false  schemas    public  USAGE    false
+root  false  schemas    root    ALL      true
+root  false  sequences  bar     ALL      false
+root  false  sequences  foo     ALL      false
+root  false  sequences  public  SELECT   false
+root  false  sequences  root    ALL      true
+root  false  tables     bar     ALL      false
+root  false  tables     foo     ALL      false
+root  false  tables     public  SELECT   false
+root  false  types      bar     ALL      false
+root  false  types      foo     ALL      false
+root  false  types      public  USAGE    false
+root  false  types      root    ALL      true
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON TABLES FROM foo, bar;
@@ -136,22 +144,23 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo, bar REVOKE ALL ON SEQUENCES FROM foo, bar
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root    ALL     true
-root  false  schemas    bar     ALL     false
-root  false  schemas    foo     ALL     false
-root  false  schemas    public  USAGE   false
-root  false  schemas    root    ALL     true
-root  false  sequences  bar     ALL     false
-root  false  sequences  foo     ALL     false
-root  false  sequences  public  SELECT  false
-root  false  sequences  root    ALL     true
-root  false  tables     bar     ALL     false
-root  false  tables     foo     ALL     false
-root  false  tables     public  SELECT  false
-root  false  types      bar     ALL     false
-root  false  types      foo     ALL     false
-root  false  types      public  USAGE   false
-root  false  types      root    ALL     true
+root  false  functions  public  EXECUTE  false
+root  false  functions  root    ALL      true
+root  false  schemas    bar     ALL      false
+root  false  schemas    foo     ALL      false
+root  false  schemas    public  USAGE    false
+root  false  schemas    root    ALL      true
+root  false  sequences  bar     ALL      false
+root  false  sequences  foo     ALL      false
+root  false  sequences  public  SELECT   false
+root  false  sequences  root    ALL      true
+root  false  tables     bar     ALL      false
+root  false  tables     foo     ALL      false
+root  false  tables     public  SELECT   false
+root  false  types      bar     ALL      false
+root  false  types      foo     ALL      false
+root  false  types      public  USAGE    false
+root  false  types      root    ALL      true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM foo, bar, public;
@@ -162,26 +171,27 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM foo, bar, public;
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root  ALL         true
-root  false  schemas    root  ALL         true
-root  false  sequences  root  ALL         true
-root  false  tables     bar   BACKUP      false
-root  false  tables     bar   CHANGEFEED  false
-root  false  tables     bar   CREATE      false
-root  false  tables     bar   DELETE      false
-root  false  tables     bar   DROP        false
-root  false  tables     bar   INSERT      false
-root  false  tables     bar   UPDATE      false
-root  false  tables     bar   ZONECONFIG  false
-root  false  tables     foo   BACKUP      false
-root  false  tables     foo   CHANGEFEED  false
-root  false  tables     foo   CREATE      false
-root  false  tables     foo   DELETE      false
-root  false  tables     foo   DROP        false
-root  false  tables     foo   INSERT      false
-root  false  tables     foo   UPDATE      false
-root  false  tables     foo   ZONECONFIG  false
-root  false  types      root  ALL         true
+root  false  functions  public  EXECUTE     false
+root  false  functions  root    ALL         true
+root  false  schemas    root    ALL         true
+root  false  sequences  root    ALL         true
+root  false  tables     bar     BACKUP      false
+root  false  tables     bar     CHANGEFEED  false
+root  false  tables     bar     CREATE      false
+root  false  tables     bar     DELETE      false
+root  false  tables     bar     DROP        false
+root  false  tables     bar     INSERT      false
+root  false  tables     bar     UPDATE      false
+root  false  tables     bar     ZONECONFIG  false
+root  false  tables     foo     BACKUP      false
+root  false  tables     foo     CHANGEFEED  false
+root  false  tables     foo     CREATE      false
+root  false  tables     foo     DELETE      false
+root  false  tables     foo     DROP        false
+root  false  tables     foo     INSERT      false
+root  false  tables     foo     UPDATE      false
+root  false  tables     foo     ZONECONFIG  false
+root  false  types      root    ALL         true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
@@ -190,12 +200,13 @@ ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTI
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-root  false  functions  root  ALL         true
-root  false  schemas    root  ALL         true
-root  false  sequences  root  ALL         true
-root  false  tables     foo   DROP        true
-root  false  tables     foo   ZONECONFIG  true
-root  false  types      root  ALL         true
+root  false  functions  public  EXECUTE     false
+root  false  functions  root    ALL         true
+root  false  schemas    root    ALL         true
+root  false  sequences  root    ALL         true
+root  false  tables     foo     DROP        true
+root  false  tables     foo     ZONECONFIG  true
+root  false  types      root    ALL         true
 
 # Create a second database.
 statement ok
@@ -210,6 +221,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT DROP, ZONECONFIG ON TABLES TO f
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
+testuser  false  functions  public    EXECUTE     false
 testuser  false  functions  testuser  ALL         true
 testuser  false  schemas    testuser  ALL         true
 testuser  false  sequences  testuser  ALL         true
@@ -224,18 +236,20 @@ user testuser
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES
 ----
-testuser  false  functions  testuser  ALL    true
-testuser  false  schemas    testuser  ALL    true
-testuser  false  sequences  testuser  ALL    true
-testuser  false  tables     testuser  ALL    true
-testuser  false  types      public    USAGE  false
-testuser  false  types      testuser  ALL    true
+testuser  false  functions  public    EXECUTE  false
+testuser  false  functions  testuser  ALL      true
+testuser  false  schemas    testuser  ALL      true
+testuser  false  sequences  testuser  ALL      true
+testuser  false  tables     testuser  ALL      true
+testuser  false  types      public    USAGE    false
+testuser  false  types      testuser  ALL      true
 
 user root
 
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser
 ----
+testuser  false  functions  public    EXECUTE     false
 testuser  false  functions  testuser  ALL         true
 testuser  false  schemas    testuser  ALL         true
 testuser  false  sequences  testuser  ALL         true
@@ -251,6 +265,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT DROP, ZONECONFIG ON TABLES TO foo W
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE root, testuser
 ----
+root      false  functions  public    EXECUTE     false
 root      false  functions  root      ALL         true
 root      false  schemas    root      ALL         true
 root      false  sequences  root      ALL         true
@@ -259,6 +274,7 @@ root      false  tables     foo       ZONECONFIG  true
 root      false  tables     root      ALL         true
 root      false  types      public    USAGE       false
 root      false  types      root      ALL         true
+testuser  false  functions  public    EXECUTE     false
 testuser  false  functions  testuser  ALL         true
 testuser  false  schemas    testuser  ALL         true
 testuser  false  sequences  testuser  ALL         true
@@ -275,9 +291,10 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT DROP, ZONECONFIG ON TABLES TO foo W
 query TBTTTB rowsort
 SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
-NULL  true  tables  foo     DROP        true
-NULL  true  tables  foo     ZONECONFIG  true
-NULL  true  types   public  USAGE       false
+NULL  true  functions  public  EXECUTE     false
+NULL  true  tables     foo     DROP        true
+NULL  true  tables     foo     ZONECONFIG  true
+NULL  true  types      public  USAGE       false
 
 statement ok
 CREATE DATABASE "MixedCaseDB"
@@ -295,6 +312,7 @@ query TBTTTB colnames,rowsort
 SHOW DEFAULT PRIVILEGES
 ----
 role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+root  false          functions    public   EXECUTE         false
 root  false          functions    root     ALL             true
 root  false          schemas      root     ALL             true
 root  false          sequences    root     ALL             true

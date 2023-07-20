@@ -25,6 +25,8 @@ DROP FUNCTION f;
   {descriptorId: 109, owner: root}
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 109, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 109, privileges: "1048576", userName: public}
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Function:{DescID: 109}, ABSENT], PUBLIC]

@@ -20,7 +20,7 @@ write *eventpb.CreateFunction to event log:
       SQL\n\tAS $$SELECT ‹1›;$$"
     tag: CREATE FUNCTION
     user: root
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #105
   -
   +function:
@@ -39,6 +39,8 @@ upsert descriptor #105
   +    - privileges: "2"
   +      userProto: admin
   +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
@@ -154,7 +156,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 21 MutationType ops
+## PreCommitPhase stage 2 of 2 with 22 MutationType ops
 upsert descriptor #105
   -
   +function:
@@ -191,6 +193,8 @@ upsert descriptor #105
   +    - privileges: "2"
   +      userProto: admin
   +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
