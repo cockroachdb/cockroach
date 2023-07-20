@@ -202,7 +202,7 @@ pg_index                         false
 pg_indexes                       false
 pg_inherits                      true
 pg_init_privs                    true
-pg_language                      true
+pg_language                      false
 pg_largeobject                   true
 pg_largeobject_metadata          true
 pg_locks                         true

@@ -5678,6 +5678,11 @@ func (d *DOid) Min(ctx CompareContext) (Datum, bool) {
 	return &DOid{0, d.semanticType, ""}, true
 }
 
+// Name returns the name associated with this DOid.
+func (d *DOid) Name() string {
+	return d.name
+}
+
 // DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
 // custom Oid values to be attached to the Datum and its types.T.
 // The reason the Datum type was introduced was to permit the introduction of Datum

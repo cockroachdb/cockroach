@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -856,14 +857,44 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-parameters.html
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/parameters-table.html
-var informationSchemaParametersTable = virtualSchemaTable{
-	comment: `built-in function parameters (empty - introspection not yet supported)
+var informationSchemaParametersTable = virtualSchemaView{
+	comment: `function parameters
 https://www.postgresql.org/docs/9.5/infoschema-parameters.html`,
 	schema: vtable.InformationSchemaParameters,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	resultColumns: colinfo.ResultColumns{
+		{Name: "specific_catalog", Typ: types.String},
+		{Name: "specific_schema", Typ: types.String},
+		{Name: "specific_name", Typ: types.String},
+		{Name: "ordinal_position", Typ: types.Int},
+		{Name: "parameter_mode", Typ: types.String},
+		{Name: "is_result", Typ: types.String},
+		{Name: "as_locator", Typ: types.String},
+		{Name: "parameter_name", Typ: types.String},
+		{Name: "data_type", Typ: types.String},
+		{Name: "character_maximum_length", Typ: types.Int},
+		{Name: "character_octet_length", Typ: types.Int},
+		{Name: "character_set_catalog", Typ: types.String},
+		{Name: "character_set_schema", Typ: types.String},
+		{Name: "character_set_name", Typ: types.String},
+		{Name: "collation_catalog", Typ: types.String},
+		{Name: "collation_schema", Typ: types.String},
+		{Name: "collation_name", Typ: types.String},
+		{Name: "numeric_precision", Typ: types.Int},
+		{Name: "numeric_precision_radix", Typ: types.Int},
+		{Name: "numeric_scale", Typ: types.Int},
+		{Name: "datetime_precision", Typ: types.Int},
+		{Name: "interval_type", Typ: types.String},
+		{Name: "interval_precision", Typ: types.Int},
+		{Name: "udt_catalog", Typ: types.String},
+		{Name: "udt_schema", Typ: types.String},
+		{Name: "udt_name", Typ: types.String},
+		{Name: "scope_catalog", Typ: types.String},
+		{Name: "scope_schema", Typ: types.String},
+		{Name: "scope_name", Typ: types.String},
+		{Name: "maximum_cardinality", Typ: types.Int},
+		{Name: "dtd_identifier", Typ: types.String},
+		{Name: "parameter_default", Typ: types.String},
 	},
-	unimplemented: true,
 }
 
 var (
@@ -964,14 +995,94 @@ https://www.postgresql.org/docs/9.5/infoschema-role-table-grants.html`,
 }
 
 // MySQL:    https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/routines-table.html
-var informationSchemaRoutineTable = virtualSchemaTable{
-	comment: `built-in functions (empty - introspection not yet supported)
-https://www.postgresql.org/docs/9.5/infoschema-routines.html`,
+var informationSchemaRoutineTable = virtualSchemaView{
+	comment: `built-in functions and user-defined functions
+https://www.postgresql.org/docs/15/infoschema-routines.html`,
 	schema: vtable.InformationSchemaRoutines,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	resultColumns: colinfo.ResultColumns{
+		{Name: "specific_catalog", Typ: types.String},
+		{Name: "specific_schema", Typ: types.String},
+		{Name: "specific_name", Typ: types.String},
+		{Name: "routine_catalog", Typ: types.String},
+		{Name: "routine_schema", Typ: types.String},
+		{Name: "routine_name", Typ: types.String},
+		{Name: "routine_type", Typ: types.String},
+		{Name: "module_catalog", Typ: types.String},
+		{Name: "module_schema", Typ: types.String},
+		{Name: "module_name", Typ: types.String},
+		{Name: "udt_catalog", Typ: types.String},
+		{Name: "udt_schema", Typ: types.String},
+		{Name: "udt_name", Typ: types.String},
+		{Name: "data_type", Typ: types.String},
+		{Name: "character_maximum_length", Typ: types.Int},
+		{Name: "character_octet_length", Typ: types.Int},
+		{Name: "character_set_catalog", Typ: types.String},
+		{Name: "character_set_schema", Typ: types.String},
+		{Name: "character_set_name", Typ: types.String},
+		{Name: "collation_catalog", Typ: types.String},
+		{Name: "collation_schema", Typ: types.String},
+		{Name: "collation_name", Typ: types.String},
+		{Name: "numeric_precision", Typ: types.Int},
+		{Name: "numeric_precision_radix", Typ: types.Int},
+		{Name: "numeric_scale", Typ: types.Int},
+		{Name: "datetime_precision", Typ: types.Int},
+		{Name: "interval_type", Typ: types.String},
+		{Name: "interval_precision", Typ: types.Int},
+		{Name: "type_udt_catalog", Typ: types.String},
+		{Name: "type_udt_schema", Typ: types.String},
+		{Name: "type_udt_name", Typ: types.String},
+		{Name: "scope_catalog", Typ: types.String},
+		{Name: "scope_schema", Typ: types.String},
+		{Name: "scope_name", Typ: types.String},
+		{Name: "maximum_cardinality", Typ: types.Int},
+		{Name: "dtd_identifier", Typ: types.String},
+		{Name: "routine_body", Typ: types.String},
+		{Name: "routine_definition", Typ: types.String},
+		{Name: "external_name", Typ: types.String},
+		{Name: "external_language", Typ: types.String},
+		{Name: "parameter_style", Typ: types.String},
+		{Name: "is_deterministic", Typ: types.String},
+		{Name: "sql_data_access", Typ: types.String},
+		{Name: "is_null_call", Typ: types.String},
+		{Name: "sql_path", Typ: types.String},
+		{Name: "schema_level_routine", Typ: types.String},
+		{Name: "max_dynamic_result_sets", Typ: types.Int},
+		{Name: "is_user_defined_cast", Typ: types.String},
+		{Name: "is_implicitly_invocable", Typ: types.String},
+		{Name: "security_type", Typ: types.String},
+		{Name: "to_sql_specific_catalog", Typ: types.String},
+		{Name: "to_sql_specific_schema", Typ: types.String},
+		{Name: "to_sql_specific_name", Typ: types.String},
+		{Name: "as_locator", Typ: types.String},
+		{Name: "created", Typ: types.TimestampTZ},
+		{Name: "last_altered", Typ: types.TimestampTZ},
+		{Name: "new_savepoint_level", Typ: types.String},
+		{Name: "is_udt_dependent", Typ: types.String},
+		{Name: "result_cast_from_data_type", Typ: types.String},
+		{Name: "result_cast_as_locator", Typ: types.String},
+		{Name: "result_cast_char_max_length", Typ: types.Int},
+		{Name: "result_cast_char_octet_length", Typ: types.Int},
+		{Name: "result_cast_char_set_catalog", Typ: types.String},
+		{Name: "result_cast_char_set_schema", Typ: types.String},
+		{Name: "result_cast_char_set_name", Typ: types.String},
+		{Name: "result_cast_collation_catalog", Typ: types.String},
+		{Name: "result_cast_collation_schema", Typ: types.String},
+		{Name: "result_cast_collation_name", Typ: types.String},
+		{Name: "result_cast_numeric_precision", Typ: types.Int},
+		{Name: "result_cast_numeric_precision_radix", Typ: types.Int},
+		{Name: "result_cast_numeric_scale", Typ: types.Int},
+		{Name: "result_cast_datetime_precision", Typ: types.Int},
+		{Name: "result_cast_interval_type", Typ: types.String},
+		{Name: "result_cast_interval_precision", Typ: types.Int},
+		{Name: "result_cast_type_udt_catalog", Typ: types.String},
+		{Name: "result_cast_type_udt_schema", Typ: types.String},
+		{Name: "result_cast_type_udt_name", Typ: types.String},
+		{Name: "result_cast_scope_catalog", Typ: types.String},
+		{Name: "result_cast_scope_schema", Typ: types.String},
+		{Name: "result_cast_scope_name", Typ: types.String},
+		{Name: "result_cast_maximum_cardinality", Typ: types.Int},
+		{Name: "result_cast_dtd_identifier", Typ: types.String},
 	},
-	unimplemented: true,
 }
 
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html

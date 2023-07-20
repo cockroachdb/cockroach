@@ -2429,6 +2429,8 @@ var builtinOidsArray = []string{
 	2456: `crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) -> jsonb`,
 	2457: `crdb_internal.request_job_execution_details(jobID: int) -> bool`,
 	2458: `pg_sequence_last_value(sequence_oid: oid) -> int`,
+	2459: `nameconcatoid(name: string, oid: oid) -> name`,
+	2460: `pg_get_function_arg_default(func_oid: oid, arg_num: int4) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
