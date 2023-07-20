@@ -15,7 +15,6 @@ import (
 	"io"
 	"net"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -376,10 +375,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		return err
 	}
 
-	stuckWatcher := newStuckRangeFeedCanceler(cancel, defaultStuckRangeThreshold(m.ds.st))
-	defer stuckWatcher.stop()
-
-	if recvErr := m.receiveEventsFromNode(ctx, mux, stuckWatcher, &ms); recvErr != nil {
+	if recvErr := m.receiveEventsFromNode(ctx, mux, &ms); recvErr != nil {
 		// Clear out this client, and restart all streams on this node.
 		// Note: there is a race here where we may delete this muxClient, while
 		// another goroutine loaded it.  That's fine, since we would not
@@ -409,26 +405,11 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 // receiveEventsFromNode receives mux rangefeed events from a node.
 func (m *rangefeedMuxer) receiveEventsFromNode(
-	ctx context.Context,
-	receiver muxRangeFeedEventReceiver,
-	stuckWatcher *stuckRangeFeedCanceler,
-	ms *muxStream,
+	ctx context.Context, receiver muxRangeFeedEventReceiver, ms *muxStream,
 ) error {
-	stuckThreshold := defaultStuckRangeThreshold(m.ds.st)
-	stuckCheckFreq := func() time.Duration {
-		if threshold := stuckThreshold(); threshold > 0 {
-			return threshold
-		}
-		return time.Minute
-	}
-	nextStuckCheck := timeutil.Now().Add(stuckCheckFreq())
-
-	var event *kvpb.MuxRangeFeedEvent
 	for {
-		if err := stuckWatcher.do(func() (err error) {
-			event, err = receiver.Recv()
-			return err
-		}); err != nil {
+		event, err := receiver.Recv()
+		if err != nil {
 			return err
 		}
 
@@ -488,26 +469,6 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		case <-ctx.Done():
 			return ctx.Err()
 		case m.eventCh <- msg:
-		}
-
-		// Piggyback on this loop to check if any of the active ranges
-		// on this node appear to be stuck.
-		// NB: this does not notify the server in any way.  We may have to add
-		// a more complex protocol -- or better yet, figure out why ranges
-		// get stuck in the first place.
-		if timeutil.Now().After(nextStuckCheck) {
-			if threshold := stuckThreshold(); threshold > 0 {
-				// Restart rangefeed on another goroutine. Restart might be a bit
-				// expensive, particularly if we have to resolve span.  We do not want
-				// to block receiveEventsFromNode for too long.
-				toRestart := ms.purgeStuckStreams(threshold)
-				if len(toRestart) > 0 {
-					m.g.GoCtx(func(ctx context.Context) error {
-						return m.restartActiveRangeFeeds(ctx, errRestartStuckRange, toRestart)
-					})
-				}
-			}
-			nextStuckCheck = timeutil.Now().Add(stuckCheckFreq())
 		}
 	}
 }
@@ -605,18 +566,6 @@ func (c *muxStream) lookupStream(streamID int64) (a *activeMuxRangeFeed) {
 	a = c.mu.streams[streamID]
 	c.mu.Unlock()
 	return a
-}
-
-func (c *muxStream) purgeStuckStreams(threshold time.Duration) (stuck []*activeMuxRangeFeed) {
-	c.mu.Lock()
-	for streamID, a := range c.mu.streams {
-		if !a.startAfter.IsEmpty() && timeutil.Since(a.startAfter.GoTime()) > threshold {
-			stuck = append(stuck, a)
-			delete(c.mu.streams, streamID)
-		}
-	}
-	c.mu.Unlock()
-	return stuck
 }
 
 func (c *muxStream) deleteStream(streamID int64) {
