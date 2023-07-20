@@ -7401,6 +7401,7 @@ CREATE TABLE crdb_internal.cluster_locks (
     granted             BOOL,
     contended           BOOL NOT NULL,
     duration            INTERVAL,
+    isolation_level 		STRING NOT NULL,
     INDEX(table_id),
     INDEX(database_name),
     INDEX(table_name),
@@ -7675,6 +7676,7 @@ func genClusterLocksGenerator(
 				tree.MakeDBool(tree.DBool(granted)),          /* granted */
 				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
 				durationDatum,                                /* duration */
+				tree.NewDString(kvTxnIsolationLevelToTree(curLock.LockHolder.IsoLevel).String()), /* isolation_level */
 			}, nil
 
 		}, nil, nil
