@@ -235,7 +235,7 @@ func makeProxyMetrics() metrics {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaConnMigrationAttemptedCount,
 			Duration: base.DefaultHistogramWindowInterval(),
-			Buckets:  metric.NetworkLatencyBuckets,
+			Buckets:  metric.IOLatencyBuckets,
 		}),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
@@ -244,7 +244,7 @@ func makeProxyMetrics() metrics {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaDialTenantLatency,
 			Duration: base.DefaultHistogramWindowInterval(),
-			Buckets:  metric.NetworkLatencyBuckets},
+			Buckets:  metric.IOLatencyBuckets},
 		),
 		DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		// Connection migration metrics.
@@ -256,7 +256,7 @@ func makeProxyMetrics() metrics {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaConnMigrationAttemptedLatency,
 			Duration: base.DefaultHistogramWindowInterval(),
-			Buckets:  metric.NetworkLatencyBuckets,
+			Buckets:  metric.IOLatencyBuckets,
 		}),
 		ConnMigrationTransferResponseMessageSize: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaConnMigrationTransferResponseMessageSize,
