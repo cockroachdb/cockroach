@@ -118,7 +118,7 @@ func (p *planner) GetSchemasForDB(
 	ctx context.Context, dbName string,
 ) (map[descpb.ID]string, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
-		tree.DatabaseLookupFlags{AvoidLeased: true})
+		tree.DatabaseLookupFlags{AvoidLeased: true, Required: true})
 	if err != nil {
 		return nil, err
 	}

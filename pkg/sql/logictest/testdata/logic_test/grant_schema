@@ -195,3 +195,12 @@ test           sc102962     root     ALL             true
 
 statement error pgcode 2BP01 pq: cannot drop role/user r102962: grants still exist on test.sc102962
 DROP ROLE r102962
+
+subtest end
+
+subtest regression_97547
+
+statement error database \"db_97547\" does not exist
+SHOW GRANTS ON SCHEMA db_97547.* FOR testuser
+
+subtest end
