@@ -300,8 +300,8 @@ func TestGCJobRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
-	tdb.Exec(t, "DROP TABLE foo CASCADE;")
+	tdb.Exec(t, "INSERT INTO foo SELECT generate_series(1, 1000)")
+	tdb.Exec(t, "DROP TABLE foo")
 	var jobID string
 	tdb.QueryRow(t, `
 SELECT job_id
