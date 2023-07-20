@@ -182,6 +182,7 @@ CREATE TABLE crdb_internal.cluster_locks (
   granted BOOL,           -- represents if this transaction is holding the lock or waiting on the lock
   contended BOOL,         -- represents if this lock has active waiters
   duration INTERVAL,      -- represents how long the lock has been held (or waiter has been waiting)
+  isolation_level STRING, -- the isolation level [SERIALIZABLE, SNAPSHOT, READ COMMITTED]
 );
 ```
 
