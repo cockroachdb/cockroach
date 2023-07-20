@@ -29,26 +29,12 @@ import (
 var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // NewSubStopper creates a new stopper that will be stopped when either the
-// parent is stopped or its own Stop is called. The code is slightly more
-// complicated that simply calling NewStopper followed by AddCloser since there
-// is a possibility that between the two calls, the parent stopper completes a
-// stop and then the leak detection may find a leaked stopper.
+// parent is stopped or its own Stop is called.
 func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
-	var mu syncutil.Mutex
-	var subStopper *stop.Stopper
+	subStopper := stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
 	parentStopper.AddCloser(stop.CloserFn(func() {
-		mu.Lock()
-		defer mu.Unlock()
-		if subStopper == nil {
-			subStopper = stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
-		}
 		subStopper.Stop(context.Background())
 	}))
-	mu.Lock()
-	defer mu.Unlock()
-	if subStopper == nil {
-		subStopper = stop.NewStopper(stop.WithTracer(parentStopper.Tracer()))
-	}
 	return subStopper
 }
 
