@@ -53,7 +53,7 @@ type singleRangeInfo struct {
 }
 
 var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.TenantReadOnly,
 	"kv.rangefeed.use_dedicated_connection_class.enabled",
 	"uses dedicated connection when running rangefeeds",
 	util.ConstantWithMetamorphicTestBool(
