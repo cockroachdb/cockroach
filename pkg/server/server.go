@@ -1900,6 +1900,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// initialized.
 	s.grpc.setMode(modeOperational)
 
+	// Begin the node liveness heartbeat. Add a callback which records the local
+	// store "last up" timestamp for every store whenever the liveness record is
+	// updated.
+	s.nodeLiveness.Start(workersCtx)
+
 	// We'll block here until all stores are fully initialized. We do this here
 	// for two reasons:
 	// - some of the components below depend on all stores being fully
@@ -1907,6 +1912,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// - we'll need to do it after having opened up the RPC floodgates (due to
 	//   the hazard described in Node.start, around initializing additional
 	//   stores)
+	// - we'll need to do it after starting node liveness, see:
+	//   https://github.com/cockroachdb/cockroach/issues/106706#issuecomment-1640254715
 	s.node.waitForAdditionalStoreInit()
 
 	additionalStoreIDs, err := state.additionalStoreIDs()
@@ -1953,11 +1960,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", log.SafeManaged(s.cfg.AdvertiseAddr))
 
 	log.Event(ctx, "accepting connections")
-
-	// Begin the node liveness heartbeat. Add a callback which records the local
-	// store "last up" timestamp for every store whenever the liveness record is
-	// updated.
-	s.nodeLiveness.Start(workersCtx)
 
 	// Begin recording status summaries.
 	if err := s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval); err != nil {
