@@ -126,7 +126,7 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			if !bytes.HasPrefix(line, []byte{'-'}) {
 				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
 			}
-		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
+		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")) || bytes.Contains(line, []byte("skip.")):
 			if curPkgName != "" && len(curTestName) > 0 {
 				curPkg := pkgs[curPkgName]
 				curPkg.tests = append(curPkg.tests, curTestName)
