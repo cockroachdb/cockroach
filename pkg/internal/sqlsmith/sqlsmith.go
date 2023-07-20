@@ -105,6 +105,7 @@ type Smither struct {
 	disableInsertSelect        bool
 	disableDivision            bool
 	disableDecimals            bool
+	disableOIDs                bool
 	disableUDFs                bool
 
 	bulkSrv     *httptest.Server
@@ -508,6 +509,11 @@ var DisableDecimals = simpleOption("disable decimals", func(s *Smither) {
 	s.disableDecimals = true
 })
 
+// DisableOIDs disables use of OID types in the query.
+var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
+	s.disableOIDs = true
+})
+
 // DisableUDFs causes the Smither to disable user-defined functions.
 var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
 	s.disableUDFs = true
@@ -536,6 +542,12 @@ var PostgresMode = multiOption(
 	simpleOption("postgres", func(s *Smither) {
 		s.postgres = true
 	})(),
+	// Postgres does not support index hinting.
+	DisableIndexHints(),
+	// CockroachDB supports OID type but the same OID value might be assigned to
+	// different objects from Postgres, and we thus disable using OID types in
+	// randomly generated queries.
+	DisableOIDs(),
 
 	// Some func impls differ from postgres, so skip them here.
 	// #41709
@@ -559,6 +571,9 @@ var PostgresMode = multiOption(
 	IgnoreFNs("^postgis_.*build_date"),
 	IgnoreFNs("^postgis_.*version"),
 	IgnoreFNs("^postgis_.*scripts"),
+	IgnoreFNs("hlc_to_timestamp"),
+	IgnoreFNs("st_s2covering"),
+	IgnoreFNs("sum_int"),
 )
 
 // MutatingMode causes the Smither to generate mutation statements in the same
