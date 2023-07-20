@@ -1683,7 +1683,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, id)
+				sc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -1691,6 +1691,13 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 					if err != nil {
 						return err
+					}
+					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, fn, db, false /* allowAdding */)
+					if err != nil {
+						return err
+					}
+					if !canSeeDescriptor {
+						return nil
 					}
 					privs := fn.GetPrivileges()
 					scNameStr := tree.NewDString(sc.GetName())
