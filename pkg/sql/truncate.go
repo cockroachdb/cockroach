@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -410,7 +409,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 
 	// Re-split the new set of indexes along the same split points as the old
 	// indexes.
-	var b kv.Batch
+	b := p.Txn().NewBatch()
 	tablePrefix := p.execCfg.Codec.TablePrefix(uint32(tableID))
 
 	// Fetch all of the range descriptors for this index.
@@ -507,12 +506,12 @@ func (p *planner) copySplitPointsToNewIndexes(
 		})
 	}
 
-	if err = p.txn.DB().Run(ctx, &b); err != nil {
+	if err = p.txn.DB().Run(ctx, b); err != nil {
 		return err
 	}
 
 	// Now scatter the ranges, after we've finished splitting them.
-	b = kv.Batch{}
+	b = p.Txn().NewBatch()
 	b.AddRawRequest(&roachpb.AdminScatterRequest{
 		// Scatter all of the data between the start key of the first new index, and
 		// the PrefixEnd of the last new index.
@@ -523,7 +522,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 		RandomizeLeases: true,
 	})
 
-	return p.txn.DB().Run(ctx, &b)
+	return p.txn.DB().Run(ctx, b)
 }
 
 func (p *planner) reassignIndexComments(

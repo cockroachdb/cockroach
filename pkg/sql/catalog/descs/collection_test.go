@@ -264,7 +264,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			// Don't write the descriptor, just write the namespace entry.
 			// This will mean that resolution still is based on the old name.
-			b := &kv.Batch{}
+			b := txn.NewBatch()
 			b.CPut(catalogkeys.MakeDatabaseNameKey(lm.Codec(), mut.Name), mut.GetID(), nil)
 			err = txn.Run(ctx, b)
 			require.NoError(t, err)
