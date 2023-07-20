@@ -235,40 +235,65 @@ CREATE TABLE information_schema.key_column_usage (
 
 // InformationSchemaParameters describes the schema of the
 // information_schema.parameters table.
-const InformationSchemaParameters = `CREATE TABLE information_schema.parameters (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ORDINAL_POSITION INT,
-	PARAMETER_MODE STRING,
-	IS_RESULT STRING,
-	AS_LOCATOR STRING,
-	PARAMETER_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION INT,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_SCHEMA STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	PARAMETER_DEFAULT STRING
-)`
+const InformationSchemaParameters = `
+CREATE VIEW information_schema.parameters AS
+    SELECT CAST(current_database() AS TEXT) AS specific_catalog,
+           CAST(n_nspname AS TEXT) AS specific_schema,
+           CAST(nameconcatoid(proname, p_oid) AS TEXT) AS specific_name,
+           CAST((ss.x).n AS INT) AS ordinal_position,
+           CAST(
+             CASE WHEN proargmodes IS NULL THEN 'IN'
+                WHEN proargmodes[(ss.x).n] = 'i' THEN 'IN'
+                WHEN proargmodes[(ss.x).n] = 'o' THEN 'OUT'
+                WHEN proargmodes[(ss.x).n] = 'b' THEN 'INOUT'
+                WHEN proargmodes[(ss.x).n] = 'v' THEN 'IN'
+                WHEN proargmodes[(ss.x).n] = 't' THEN 'OUT'
+             END AS TEXT) AS parameter_mode,
+           CAST('NO' AS TEXT) AS is_result,
+           CAST('NO' AS TEXT) AS as_locator,
+           CAST(NULLIF(proargnames[(ss.x).n], '') AS TEXT) AS parameter_name,
+           CAST(
+             CASE WHEN t.typelem <> 0 AND t.typlen = -1 THEN 'ARRAY'
+                  WHEN nt.nspname = 'pg_catalog' THEN format_type(t.oid, null)
+                  ELSE 'USER-DEFINED' END AS TEXT)
+             AS data_type,
+           CAST(null AS INT) AS character_maximum_length,
+           CAST(null AS INT) AS character_octet_length,
+           CAST(null AS TEXT) AS character_set_catalog,
+           CAST(null AS TEXT) AS character_set_schema,
+           CAST(null AS TEXT) AS character_set_name,
+           CAST(null AS TEXT) AS collation_catalog,
+           CAST(null AS TEXT) AS collation_schema,
+           CAST(null AS TEXT) AS collation_name,
+           CAST(null AS INT) AS numeric_precision,
+           CAST(null AS INT) AS numeric_precision_radix,
+           CAST(null AS INT) AS numeric_scale,
+           CAST(null AS INT) AS datetime_precision,
+           CAST(null AS TEXT) AS interval_type,
+           CAST(null AS INT) AS interval_precision,
+           CAST(current_database() AS TEXT) AS udt_catalog,
+           CAST(nt.nspname AS TEXT) AS udt_schema,
+           CAST(t.typname AS TEXT) AS udt_name,
+           CAST(null AS TEXT) AS scope_catalog,
+           CAST(null AS TEXT) AS scope_schema,
+           CAST(null AS TEXT) AS scope_name,
+           CAST(null AS INT) AS maximum_cardinality,
+           CAST((ss.x).n AS TEXT) AS dtd_identifier,
+           CAST(
+             CASE WHEN pg_has_role(proowner, 'USAGE')
+                  THEN pg_get_function_arg_default(p_oid, (ss.x).n)
+                  ELSE NULL END
+             AS TEXT) AS parameter_default
+
+    FROM pg_type t, pg_namespace nt,
+         (SELECT n.nspname AS n_nspname, p.proname, p.oid AS p_oid, p.proowner,
+                 p.proargnames, p.proargmodes,
+                 information_schema._pg_expandarray(coalesce(p.proallargtypes, p.proargtypes::oid[])) AS x
+          FROM pg_namespace n, pg_proc p
+          WHERE n.oid = p.pronamespace
+                AND (pg_has_role(p.proowner, 'USAGE') OR
+                     has_function_privilege(p.oid, 'EXECUTE'))) AS ss
+    WHERE t.oid = (ss.x).x AND t.typnamespace = nt.oid;`
 
 // InformationSchemaReferentialConstraints describes the schema of the
 // information_schema.referential_constraints table.
@@ -302,91 +327,117 @@ CREATE TABLE information_schema.role_table_grants (
 )`
 
 // InformationSchemaRoutines describes the schema of the
-// information_schema.routines table.
+// information_schema.routines view.
 const InformationSchemaRoutines = `
-CREATE TABLE information_schema.routines (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ROUTINE_CATALOG STRING,
-	ROUTINE_SCHEMA STRING,
-	ROUTINE_NAME STRING,
-	ROUTINE_TYPE STRING,
-	MODULE_CATALOG STRING,
-	MODULE_SCHEMA STRING,
-	MODULE_NAME STRING,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION INT,
-	TYPE_UDT_CATALOG STRING,
-	TYPE_UDT_SCHEMA STRING,
-	TYPE_UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	ROUTINE_BODY STRING,
-	ROUTINE_DEFINITION STRING,
-	EXTERNAL_NAME STRING,
-	EXTERNAL_LANGUAGE STRING,
-	PARAMETER_STYLE STRING,
-	IS_DETERMINISTIC STRING,
-	SQL_DATA_ACCESS STRING,
-	IS_NULL_CALL STRING,
-	SQL_PATH STRING,
-	SCHEMA_LEVEL_ROUTINE STRING,
-	MAX_DYNAMIC_RESULT_SETS INT,
-	IS_USER_DEFINED_CAST STRING,
-	IS_IMPLICITLY_INVOCABLE STRING,
-	SECURITY_TYPE STRING,
-	TO_SQL_SPECIFIC_CATALOG STRING,
-	TO_SQL_SPECIFIC_SCHEMA STRING,
-	TO_SQL_SPECIFIC_NAME STRING,
-	AS_LOCATOR STRING,
-	CREATED  TIMESTAMPTZ,
-	LAST_ALTERED TIMESTAMPTZ,
-	NEW_SAVEPOINT_LEVEL  STRING,
-	IS_UDT_DEPENDENT STRING,
-	RESULT_CAST_FROM_DATA_TYPE STRING,
-	RESULT_CAST_AS_LOCATOR STRING,
-	RESULT_CAST_CHAR_MAX_LENGTH  INT,
-	RESULT_CAST_CHAR_OCTET_LENGTH INT,
-	RESULT_CAST_CHAR_SET_CATALOG STRING,
-	RESULT_CAST_CHAR_SET_SCHEMA  STRING,
-	RESULT_CAST_CHAR_SET_NAME STRING,
-	RESULT_CAST_COLLATION_CATALOG STRING,
-	RESULT_CAST_COLLATION_SCHEMA STRING,
-	RESULT_CAST_COLLATION_NAME STRING,
-	RESULT_CAST_NUMERIC_PRECISION INT,
-	RESULT_CAST_NUMERIC_PRECISION_RADIX INT,
-	RESULT_CAST_NUMERIC_SCALE INT,
-	RESULT_CAST_DATETIME_PRECISION INT,
-	RESULT_CAST_INTERVAL_TYPE STRING,
-	RESULT_CAST_INTERVAL_PRECISION INT,
-	RESULT_CAST_TYPE_UDT_CATALOG STRING,
-	RESULT_CAST_TYPE_UDT_SCHEMA  STRING,
-	RESULT_CAST_TYPE_UDT_NAME STRING,
-	RESULT_CAST_SCOPE_CATALOG STRING,
-	RESULT_CAST_SCOPE_SCHEMA STRING,
-	RESULT_CAST_SCOPE_NAME STRING,
-	RESULT_CAST_MAXIMUM_CARDINALITY INT,
-	RESULT_CAST_DTD_IDENTIFIER STRING
-)`
+CREATE VIEW information_schema.routines AS
+    SELECT CAST(current_database() AS TEXT) AS specific_catalog,
+           CAST(n.nspname AS TEXT) AS specific_schema,
+           CAST(nameconcatoid(p.proname, p.oid) AS TEXT) AS specific_name,
+           CAST(current_database() AS TEXT) AS routine_catalog,
+           CAST(n.nspname AS TEXT) AS routine_schema,
+           CAST(p.proname AS TEXT) AS routine_name,
+           CAST(CASE p.prokind WHEN 'f' THEN 'FUNCTION' WHEN 'p' THEN 'PROCEDURE' END
+             AS TEXT) AS routine_type,
+           CAST(null AS TEXT) AS module_catalog,
+           CAST(null AS TEXT) AS module_schema,
+           CAST(null AS TEXT) AS module_name,
+           CAST(null AS TEXT) AS udt_catalog,
+           CAST(null AS TEXT) AS udt_schema,
+           CAST(null AS TEXT) AS udt_name,
+
+           CAST(
+             CASE WHEN p.prokind = 'p' THEN NULL
+                  WHEN t.typelem <> 0 AND t.typlen = -1 THEN 'ARRAY'
+                  WHEN nt.nspname = 'pg_catalog' THEN format_type(t.oid, null)
+                  ELSE 'USER-DEFINED' END AS TEXT)
+             AS data_type,
+           CAST(null AS INT) AS character_maximum_length,
+           CAST(null AS INT) AS character_octet_length,
+           CAST(null AS TEXT) AS character_set_catalog,
+           CAST(null AS TEXT) AS character_set_schema,
+           CAST(null AS TEXT) AS character_set_name,
+           CAST(null AS TEXT) AS collation_catalog,
+           CAST(null AS TEXT) AS collation_schema,
+           CAST(null AS TEXT) AS collation_name,
+           CAST(null AS INT) AS numeric_precision,
+           CAST(null AS INT) AS numeric_precision_radix,
+           CAST(null AS INT) AS numeric_scale,
+           CAST(null AS INT) AS datetime_precision,
+           CAST(null AS TEXT) AS interval_type,
+           CAST(null AS INT) AS interval_precision,
+           CAST(CASE WHEN nt.nspname IS NOT NULL THEN current_database() END AS TEXT) AS type_udt_catalog,
+           CAST(nt.nspname AS TEXT) AS type_udt_schema,
+           CAST(t.typname AS TEXT) AS type_udt_name,
+           CAST(null AS TEXT) AS scope_catalog,
+           CAST(null AS TEXT) AS scope_schema,
+           CAST(null AS TEXT) AS scope_name,
+           CAST(null AS INT) AS maximum_cardinality,
+           CAST(CASE WHEN p.prokind <> 'p' THEN 0 END AS TEXT) AS dtd_identifier,
+
+           CAST(CASE WHEN l.lanname = 'sql' THEN 'SQL' ELSE 'EXTERNAL' END AS TEXT)
+             AS routine_body,
+           CAST(
+             CASE WHEN pg_has_role(p.proowner, 'USAGE') THEN p.prosrc ELSE null END
+             AS TEXT) AS routine_definition,
+           CAST(
+             CASE WHEN l.lanname = 'c' THEN p.prosrc ELSE null END
+             AS TEXT) AS external_name,
+           CAST(upper(l.lanname) AS TEXT) AS external_language,
+
+           CAST('GENERAL' AS TEXT) AS parameter_style,
+           CAST(CASE WHEN p.provolatile = 'i' THEN 'YES' ELSE 'NO' END AS TEXT) AS is_deterministic,
+           CAST('MODIFIES' AS TEXT) AS sql_data_access,
+           CAST(CASE WHEN p.prokind <> 'p' THEN
+             CASE WHEN p.proisstrict THEN 'YES' ELSE 'NO' END END AS TEXT) AS is_null_call,
+           CAST(null AS TEXT) AS sql_path,
+           CAST('YES' AS TEXT) AS schema_level_routine,
+           CAST(0 AS INT) AS max_dynamic_result_sets,
+           CAST(null AS TEXT) AS is_user_defined_cast,
+           CAST(null AS TEXT) AS is_implicitly_invocable,
+           CAST(CASE WHEN p.prosecdef THEN 'DEFINER' ELSE 'INVOKER' END AS TEXT) AS security_type,
+           CAST(null AS TEXT) AS to_sql_specific_catalog,
+           CAST(null AS TEXT) AS to_sql_specific_schema,
+           CAST(null AS TEXT) AS to_sql_specific_name,
+           CAST('NO' AS TEXT) AS as_locator,
+           CAST(null AS TIMESTAMPTZ) AS created,
+           CAST(null AS TIMESTAMPTZ) AS last_altered,
+           CAST(null AS TEXT) AS new_savepoint_level,
+           CAST('NO' AS TEXT) AS is_udt_dependent,
+
+           CAST(null AS TEXT) AS result_cast_from_data_type,
+           CAST(null AS TEXT) AS result_cast_as_locator,
+           CAST(null AS INT) AS result_cast_char_max_length,
+           CAST(null AS INT) AS result_cast_char_octet_length,
+           CAST(null AS TEXT) AS result_cast_char_set_catalog,
+           CAST(null AS TEXT) AS result_cast_char_set_schema,
+           CAST(null AS TEXT) AS result_cast_char_set_name,
+           CAST(null AS TEXT) AS result_cast_collation_catalog,
+           CAST(null AS TEXT) AS result_cast_collation_schema,
+           CAST(null AS TEXT) AS result_cast_collation_name,
+           CAST(null AS INT) AS result_cast_numeric_precision,
+           CAST(null AS INT) AS result_cast_numeric_precision_radix,
+           CAST(null AS INT) AS result_cast_numeric_scale,
+           CAST(null AS INT) AS result_cast_datetime_precision,
+           CAST(null AS TEXT) AS result_cast_interval_type,
+           CAST(null AS INT) AS result_cast_interval_precision,
+           CAST(null AS TEXT) AS result_cast_type_udt_catalog,
+           CAST(null AS TEXT) AS result_cast_type_udt_schema,
+           CAST(null AS TEXT) AS result_cast_type_udt_name,
+           CAST(null AS TEXT) AS result_cast_scope_catalog,
+           CAST(null AS TEXT) AS result_cast_scope_schema,
+           CAST(null AS TEXT) AS result_cast_scope_name,
+           CAST(null AS INT) AS result_cast_maximum_cardinality,
+           CAST(null AS TEXT) AS result_cast_dtd_identifier
+
+    FROM (pg_catalog.pg_namespace n
+          JOIN pg_catalog.pg_proc p ON n.oid = p.pronamespace
+          JOIN pg_catalog.pg_language l ON p.prolang = l.oid)
+         LEFT JOIN
+         (pg_catalog.pg_type t JOIN pg_catalog.pg_namespace nt ON t.typnamespace = nt.oid)
+         ON p.prorettype = t.oid AND p.prokind <> 'p'
+
+    WHERE (pg_has_role(p.proowner, 'USAGE')
+           OR has_function_privilege(p.oid, 'EXECUTE'));`
 
 // InformationSchemaTypePrivileges describes the schema of the
 // information_schema.type_privileges table.

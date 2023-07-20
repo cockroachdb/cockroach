@@ -1956,15 +1956,43 @@ https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html`,
 	unimplemented: true,
 }
 
+// Match the OIDs that Postgres uses for languages.
+var languageInternalOid = tree.NewDOidWithName(oid.Oid(12), types.Oid, "internal")
+var languageSqlOid = tree.NewDOidWithName(oid.Oid(14), types.Oid, "sql")
+var languagePlpgsqlOid = tree.NewDOidWithName(oid.Oid(14024), types.Oid, "plpgsql")
+
 var pgCatalogLanguageTable = virtualSchemaTable{
-	comment: `available languages (empty - feature does not exist)
+	comment: `available languages
 https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 	schema: vtable.PGCatalogLanguage,
 	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Languages to write functions and stored procedures are not supported.
+		h := makeOidHasher()
+		for _, lang := range []*tree.DOid{languageInternalOid, languageSqlOid, languagePlpgsqlOid} {
+			isPl := tree.DBoolFalse
+			if lang == languagePlpgsqlOid {
+				isPl = tree.DBoolTrue
+			}
+
+			isTrusted := tree.DBoolFalse
+			if lang == languagePlpgsqlOid || lang == languageSqlOid {
+				isTrusted = tree.DBoolTrue
+			}
+			if err := addRow(
+				lang,                                // oid
+				tree.NewDString(lang.Name()),        // lanname
+				h.UserOid(username.AdminRoleName()), // lanowner
+				isPl,                                // lanispl
+				isTrusted,                           // lanpltrusted
+				tree.WrapAsZeroOid(types.Oid),       // lanplcallfoid
+				tree.WrapAsZeroOid(types.Oid),       // laninline
+				tree.WrapAsZeroOid(types.Oid),       // lanvalidator
+				tree.DNull,                          // lanacl
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogLocksTable = virtualSchemaTable{
@@ -1978,7 +2006,7 @@ https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
 }
 
 var pgCatalogMatViewsTable = virtualSchemaTable{
-	comment: `available materialized views (empty - feature does not exist)
+	comment: `available materialized views
 https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 	schema: vtable.PGCatalogMatViews,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2385,7 +2413,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			dName,                                    // proname
 			nspOid,                                   // pronamespace
 			tree.DNull,                               // proowner
-			oidZero,                                  // prolang
+			languageInternalOid,                      // prolang
 			tree.DNull,                               // procost
 			tree.DNull,                               // prorows
 			variadicType,                             // provariadic
@@ -2454,21 +2482,25 @@ func addPgProcUDFRow(
 		argNames = argNamesArray
 	}
 
+	lang := languageInternalOid
+	if fnDesc.GetLanguage() == catpb.Function_PLPGSQL {
+		lang = languagePlpgsqlOid
+	} else if fnDesc.GetLanguage() == catpb.Function_SQL {
+		lang = languageSqlOid
+	}
 	return addRow(
 		tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
 		tree.NewDName(fnDesc.GetName()),                 // proname
 		schemaOid(scDesc.GetID()),                       // pronamespace
 		h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
-		// In postgres oid of sql language is 14, need to add a mapping if
-		// we are going to support more languages.
-		tree.NewDOid(14), // prolang
-		tree.DNull,       // procost
-		tree.DNull,       // prorows
-		oidZero,          // provariadic
-		tree.DNull,       // protransform
-		tree.DBoolFalse,  // proisagg
-		tree.DBoolFalse,  // proiswindow
-		tree.DBoolFalse,  // prosecdef
+		lang,            // prolang
+		tree.DNull,      // procost
+		tree.DNull,      // prorows
+		oidZero,         // provariadic
+		tree.DNull,      // protransform
+		tree.DBoolFalse, // proisagg
+		tree.DBoolFalse, // proiswindow
+		tree.DBoolFalse, // prosecdef
 		tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),            // proleakproof
 		tree.MakeDBool(tree.DBool(isStrict)),                         // proisstrict
 		tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset

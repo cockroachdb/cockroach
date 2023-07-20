@@ -3587,6 +3587,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="nameconcatoid"></a><code>nameconcatoid(name: <a href="string.html">string</a>, oid: oid) &rarr; name</code></td><td><span class="funcdesc"><p>Used in the information_schema to produce specific_name columns, which are supposed to be unique per schema. The result is the same as ($1::text || ‘_’ || $2::text)::name except that, if it would not fit in 63 characters, we make it do so by truncating the name input (not the oid).</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
@@ -3600,6 +3602,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it. Currently, this always returns NULL, since CockroachDB does not support default values.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (with defaults) necessary to identify a function, in the form it would need to appear in within CREATE FUNCTION.</p>
 </span></td><td>Stable</td></tr>
