@@ -2232,8 +2232,7 @@ func (r *restoreResumer) publishDescriptors(
 				jobsKnobs,
 				jobs.ScheduledJobTxn(txn),
 				user,
-				mutTable.GetID(),
-				mutTable.GetRowLevelTTL(),
+				mutTable,
 			)
 			if err != nil {
 				return err

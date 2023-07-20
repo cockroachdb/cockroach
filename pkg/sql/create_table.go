@@ -2414,8 +2414,7 @@ func newTableDesc(
 			params.ExecCfg().JobsKnobs(),
 			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
-			ret.GetID(),
-			ttl,
+			ret,
 		)
 		if err != nil {
 			return nil, err
@@ -2426,15 +2425,13 @@ func newTableDesc(
 }
 
 // newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
-// for a given table.
+// for a given table. newRowLevelTTLScheduledJob assumes that
+// tblDesc.RowLevelTTL is not nil.
 func newRowLevelTTLScheduledJob(
-	env scheduledjobs.JobSchedulerEnv,
-	owner username.SQLUsername,
-	tblID descpb.ID,
-	ttl *catpb.RowLevelTTL,
+	env scheduledjobs.JobSchedulerEnv, owner username.SQLUsername, tblDesc *tabledesc.Mutable,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
-	sj.SetScheduleLabel(fmt.Sprintf("row-level-ttl-%d", tblID))
+	sj.SetScheduleLabel(fmt.Sprintf("row-level-ttl-%s", tblDesc.GetName()))
 	sj.SetOwner(owner)
 	sj.SetScheduleDetails(jobspb.ScheduleDetails{
 		Wait: jobspb.ScheduleDetails_WAIT,
@@ -2442,11 +2439,12 @@ func newRowLevelTTLScheduledJob(
 		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
 	})
 
-	if err := sj.SetSchedule(ttl.DeletionCronOrDefault()); err != nil {
+	// TODO: Is it better to check that RowLevelTTL is not nil and return an error?
+	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
-		TableID: tblID,
+		TableID: tblDesc.GetID(),
 	}
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
@@ -2465,12 +2463,11 @@ func CreateRowLevelTTLScheduledJob(
 	knobs *jobs.TestingKnobs,
 	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
-	tblID descpb.ID,
-	ttl *catpb.RowLevelTTL,
+	tblDesc *tabledesc.Mutable,
 ) (*jobs.ScheduledJob, error) {
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
 	env := JobSchedulerEnv(knobs)
-	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
+	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc)
 	if err != nil {
 		return nil, err
 	}

@@ -136,6 +136,8 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 		return err
 	}
 
+	// TODO: Should this name be changed to match the label? We'll have to query
+	// the table name.
 	p, cleanup := cfg.PlanHookMaker(
 		ctx,
 		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),

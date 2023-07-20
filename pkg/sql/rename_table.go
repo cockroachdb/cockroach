@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -230,6 +231,29 @@ func (n *renameTableNode) startExec(params runParams) error {
 	// Run the namespace update batch.
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
+	}
+
+	// If this table has row level ttl enabled, update the schedule_name of all
+	// row-level-ttl jobs with the name table name.
+	if tableDesc.HasRowLevelTTL() {
+		const (
+			opname = `update ttl job names`
+			query  = `update system.scheduled_jobs set schedule_name = 'row-level-ttl-' || $1 WHERE schedule_id = $2`
+		)
+		// TODO Should the number of modified rows be inspected here? Could log a
+		// warning to indicate that something has gone wrong but wouldn't want to
+		// fail the schema change because of a missing TTL row.
+		if _, err := p.InternalSQLTxn().ExecEx(
+			ctx,
+			opname,
+			p.txn,
+			sessiondata.NoSessionDataOverride,
+			query,
+			tableDesc.GetName(),
+			tableDesc.RowLevelTTL.ScheduleID,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Log Rename Table event. This is an auditable log event and is recorded
