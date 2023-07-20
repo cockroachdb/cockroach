@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/ctxutil",
         "//pkg/util/grpcutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
