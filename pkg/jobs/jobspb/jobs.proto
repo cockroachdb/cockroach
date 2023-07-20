@@ -479,8 +479,12 @@ message RestoreDetails {
   roachpb.Locality execution_locality = 30 [(gogoproto.nullable) = false];
   
   bool experimental_online = 31;
+  
+  // DownloadSpans indicates this job is the download-step of a multi-step
+  // online restore.
+  repeated roachpb.Span download_spans = 32 [(gogoproto.nullable) = false]; 
 
-  // NEXT ID: 31.
+  // NEXT ID: 33.
 }
 
 
@@ -496,6 +500,11 @@ message RestoreProgress {
   }
 
   repeated FrontierEntry checkpoint = 2 [(gogoproto.nullable) = false];
+
+  // TotalDownloadRequired is set in the download job for an online restore, and
+  // reflects the total amount that was initially found to be needing to be 
+  // downloaded. 
+  uint64 total_download_required = 3;
 }
 
 message ImportDetails {
