@@ -7401,6 +7401,7 @@ CREATE TABLE crdb_internal.cluster_locks (
     granted             BOOL,
     contended           BOOL NOT NULL,
     duration            INTERVAL,
+    isolation_level 		STRING NOT NULL,
     INDEX(table_id),
     INDEX(database_name),
     INDEX(table_name),
@@ -7660,21 +7661,22 @@ func genClusterLocksGenerator(
 			}
 
 			return tree.Datums{
-				tree.NewDInt(tree.DInt(curLock.RangeID)),     /* range_id */
-				tree.NewDInt(tree.DInt(tableID)),             /* table_id */
-				tree.NewDString(dbName),                      /* database_name */
-				tree.NewDString(schemaName),                  /* schema_name */
-				tree.NewDString(tableName),                   /* table_name */
-				tree.NewDString(indexName),                   /* index_name */
-				tree.NewDBytes(tree.DBytes(keyOrRedacted)),   /* lock_key */
-				tree.NewDString(prettyKeyOrRedacted),         /* lock_key_pretty */
-				txnIDDatum,                                   /* txn_id */
-				tsDatum,                                      /* ts */
-				strengthDatum,                                /* lock_strength */
-				tree.NewDString(curLock.Durability.String()), /* durability */
-				tree.MakeDBool(tree.DBool(granted)),          /* granted */
-				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
-				durationDatum,                                /* duration */
+				tree.NewDInt(tree.DInt(curLock.RangeID)),              /* range_id */
+				tree.NewDInt(tree.DInt(tableID)),                      /* table_id */
+				tree.NewDString(dbName),                               /* database_name */
+				tree.NewDString(schemaName),                           /* schema_name */
+				tree.NewDString(tableName),                            /* table_name */
+				tree.NewDString(indexName),                            /* index_name */
+				tree.NewDBytes(tree.DBytes(keyOrRedacted)),            /* lock_key */
+				tree.NewDString(prettyKeyOrRedacted),                  /* lock_key_pretty */
+				txnIDDatum,                                            /* txn_id */
+				tsDatum,                                               /* ts */
+				strengthDatum,                                         /* lock_strength */
+				tree.NewDString(curLock.Durability.String()),          /* durability */
+				tree.MakeDBool(tree.DBool(granted)),                   /* granted */
+				tree.MakeDBool(len(curLock.Waiters) > 0),              /* contended */
+				durationDatum,                                         /* duration */
+				tree.NewDString(curLock.LockHolder.IsoLevel.String()), /* isolation_level */
 			}, nil
 
 		}, nil, nil
