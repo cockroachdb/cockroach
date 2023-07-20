@@ -2785,6 +2785,7 @@ optimizer_use_forecasts                                    on                  N
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats                   on                  NULL      NULL        NULL        string
+optimizer_use_improved_join_elimination                    on                  NULL      NULL        NULL        string
 optimizer_use_improved_split_disjunction_for_joins         on                  NULL      NULL        NULL        string
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
@@ -2944,6 +2945,7 @@ optimizer_use_forecasts                                    on                  N
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats                   on                  NULL  user     NULL      on                  on
+optimizer_use_improved_join_elimination                    on                  NULL  user     NULL      on                  on
 optimizer_use_improved_split_disjunction_for_joins         on                  NULL  user     NULL      on                  on
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
@@ -3102,6 +3104,7 @@ optimizer_use_forecasts                                    NULL    NULL     NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats                   NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_join_elimination                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_split_disjunction_for_joins         NULL    NULL     NULL     NULL        NULL
 optimizer_use_limit_ordering_for_streaming_group_by        NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                               NULL    NULL     NULL     NULL        NULL

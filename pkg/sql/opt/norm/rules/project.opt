@@ -27,13 +27,14 @@
     $projections:*
     $passthrough:* &
         (CanRemapCols
-            (UnionCols
+            $fromCols:(UnionCols
                 $passthrough
                 (ProjectionOuterCols $projections)
             )
             $leftCols:(OutputCols $left)
             $fds:(FuncDeps $join)
-        )
+        ) &
+        (CanUseImprovedJoinElimination $fromCols $leftCols)
 )
 =>
 (Project
@@ -56,13 +57,14 @@
     $projections:*
     $passthrough:* &
         (CanRemapCols
-            (UnionCols
+            $fromCols:(UnionCols
                 $passthrough
                 (ProjectionOuterCols $projections)
             )
             $rightCols:(OutputCols $right)
             $fds:(FuncDeps $join)
-        )
+        ) &
+        (CanUseImprovedJoinElimination $fromCols $rightCols)
 )
 =>
 (Project

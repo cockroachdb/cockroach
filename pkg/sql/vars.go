@@ -2800,6 +2800,23 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(maxConn, 10), nil
 		},
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_improved_join_elimination`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_improved_join_elimination`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_improved_join_elimination", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseImprovedJoinElimination(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseImprovedJoinElimination), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

@@ -908,3 +908,10 @@ func (c *CustomFuncs) RemapProjectionCols(
 	}
 	return *(replace(&projections).(*memo.ProjectionsExpr))
 }
+
+// CanUseImprovedJoinElimination returns true if either no column remapping is
+// required in order to eliminate the join, or column remapping is enabled by
+// OptimizerUseImprovedJoinElimination.
+func (c *CustomFuncs) CanUseImprovedJoinElimination(from, to opt.ColSet) bool {
+	return c.f.evalCtx.SessionData().OptimizerUseImprovedJoinElimination || from.SubsetOf(to)
+}
