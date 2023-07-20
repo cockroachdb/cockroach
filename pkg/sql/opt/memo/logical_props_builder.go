@@ -2258,6 +2258,7 @@ func addOuterColsToFuncDep(outerCols opt.ColSet, fdset *props.FuncDepSet) {
 // joins that are used internally when deriving logical properties and
 // statistics.
 type joinPropsHelper struct {
+	evalCtx  *eval.Context
 	join     RelExpr
 	joinType opt.Operator
 
@@ -2276,7 +2277,7 @@ type joinPropsHelper struct {
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*h = joinPropsHelper{join: joinExpr}
+	*h = joinPropsHelper{evalCtx: b.evalCtx, join: joinExpr}
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:
@@ -2514,7 +2515,9 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 		// created new possibilities for simplifying removed columns.
 		rel.FuncDeps.ProjectCols(rel.OutputCols)
 	}
-	h.addSelfJoinImpliedFDs(rel)
+	if h.evalCtx.SessionData().OptimizerUseImprovedJoinElimination {
+		h.addSelfJoinImpliedFDs(rel)
+	}
 }
 
 // addSelfJoinImpliedFDs adds any extra equality FDs that are implied by a self

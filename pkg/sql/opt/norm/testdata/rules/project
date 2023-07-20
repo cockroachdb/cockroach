@@ -266,6 +266,40 @@ project
  └── projections
       └── child.parent_id:2 [as=parent_id:9, outer=(2)]
 
+# The join can be eliminated as long as it doesn't require remapping with
+# OptimizerUseImprovedJoinElimination disabled.
+norm set=optimizer_use_improved_join_elimination=false expect=EliminateJoinUnderProjectLeft
+SELECT b.x, b.z FROM b LEFT JOIN a ON b.x = a.x
+----
+scan b
+ ├── columns: x:1!null z:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# The join cannot be eliminated with OptimizerUseImprovedJoinElimination
+# disabled.
+norm set=optimizer_use_improved_join_elimination=false expect-not=EliminateJoinUnderProjectLeft
+SELECT b.j, b1.x FROM b INNER JOIN b AS b1 ON b.x = b1.x
+----
+project
+ ├── columns: j:3 x:6!null
+ ├── key: (6)
+ ├── fd: (6)-->(3)
+ └── inner-join (hash)
+      ├── columns: b.x:1!null b.j:3 b1.x:6!null
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      ├── key: (6)
+      ├── fd: (1)-->(3), (1)==(6), (6)==(1)
+      ├── scan b
+      │    ├── columns: b.x:1!null b.j:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3)
+      ├── scan b [as=b1]
+      │    ├── columns: b1.x:6!null
+      │    └── key: (6)
+      └── filters
+           └── b.x:1 = b1.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
 # --------------------------------------------------
 # EliminateJoinUnderProjectRight
 # --------------------------------------------------

@@ -373,6 +373,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = false
 	notStale()
 
+	// Stale optimizer_use_improved_join_elimination.
+	evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedJoinElimination = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

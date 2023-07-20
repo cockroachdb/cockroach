@@ -79,6 +79,7 @@
             $leftCols
             $fds:(FuncDeps $input)
         ) &
+        (CanUseImprovedJoinElimination $toRemap $leftCols) &
         (CanEliminateJoinUnderGroupByLeft $input $aggs)
 )
 =>
@@ -114,6 +115,7 @@
             $rightCols
             $fds:(FuncDeps $input)
         ) &
+        (CanUseImprovedJoinElimination $toRemap $rightCols) &
         (CanEliminateJoinUnderGroupByRight $input $aggs)
 )
 =>

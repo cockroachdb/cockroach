@@ -405,6 +405,10 @@ message LocalOnlySessionData {
   // ReplicationMode represents the replication parameter passed in during
   // connection time.
   ReplicationMode replication_mode = 106;
+  // OptimizerUseImprovedJoinElimination, when true, allows the optimizer to
+  // eliminate joins in more cases by remapping columns from the eliminated
+  // input of the join to equivalent columns from the preserved input.
+  bool optimizer_use_improved_join_elimination = 107;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
