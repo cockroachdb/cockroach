@@ -805,10 +805,6 @@ type PlanningCtx struct {
 	isLocal bool
 	planner *planner
 
-	// usePlannerDescriptorsForLocalFlow may be set to true to force
-	// planner.Descriptors() use for local flows.
-	usePlannerDescriptorsForLocalFlow bool
-
 	stmtType tree.StatementReturnType
 	// planDepth is set to the current depth of the planNode tree. It's used to
 	// keep track of whether it's valid to run a root node in a special fast path
