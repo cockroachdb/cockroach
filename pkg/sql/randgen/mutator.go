@@ -742,10 +742,20 @@ func postgresCreateTableMutator(
 			for _, def := range stmt.Defs {
 				switch def := def.(type) {
 				case *tree.ColumnTableDef:
-					colTypes[string(def.Name)] = tree.MustBeStaticallyKnownType(def.Type)
+					colType := tree.MustBeStaticallyKnownType(def.Type)
+					// Disable locales because CRDB random generator generates
+					// locales without double-quotes, and they are unknown to
+					// Postgres (e.g. `i TEXT COLLATE de_DE` won't work with
+					// Postgres).
+					if colType.Family() == types.CollatedStringFamily {
+						colType = types.String
+					}
+					colTypes[string(def.Name)] = colType
 				}
 			}
 
+			// Exclude `INDEX` and `UNIQUE` table defs and hoist them into separate
+			// `CREATE INDEX` and `CREATE UNIQUE INDEX` statements.
 			var newdefs tree.TableDefs
 			for _, def := range stmt.Defs {
 				switch def := def.(type) {
@@ -774,6 +784,8 @@ func postgresCreateTableMutator(
 						break
 					}
 					def.Columns = newCols
+					// Hoist this IndexTableDef into a separate CreateIndex.
+					changed = true
 					// TODO(rafi): Postgres supports inverted indexes with a different
 					// syntax than Cockroach. Maybe we could add it later.
 					// The syntax is `CREATE INDEX name ON table USING gin(column)`.
@@ -786,7 +798,6 @@ func postgresCreateTableMutator(
 							Storing:  def.Storing,
 							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 						})
-						changed = true
 					}
 				case *tree.UniqueConstraintTableDef:
 					var newCols tree.IndexElemList
