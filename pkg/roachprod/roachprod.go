@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -833,7 +834,18 @@ func Install(ctx context.Context, l *logger.Logger, clusterName string, software
 	if err != nil {
 		return err
 	}
-	return install.Install(ctx, l, c, software)
+
+	// As seen in #107061, this can hit a 503 Service Unavailable when
+	// trying to download the package, so we retry every 30 seconds
+	// for up to 5 mins below. The caller may choose to fail or skip the test.
+	return retry.WithMaxAttempts(ctx, retry.Options{
+		InitialBackoff: 30 * time.Second,
+		Multiplier:     1,
+	}, 10, func() error {
+		err = install.Install(ctx, l, c, software)
+		err = errors.Wrapf(err, "infrastructure failure; could not install %s", software)
+		return err
+	})
 }
 
 // Download downloads 3rd party tools, using a GCS cache if possible.
