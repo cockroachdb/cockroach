@@ -90,7 +90,7 @@ func TestGetSSTableMetricsMultiNode(t *testing.T) {
 	var storeID int
 	var level int
 	var fileNum int
-	var approximateSpanBytes []byte
+	var approximateSpanBytes uint64
 	var metrics []byte
 
 	for idx, id := range tc.NodeIDs() {
@@ -127,6 +127,7 @@ func TestGetSSTableMetricsMultiNode(t *testing.T) {
 			require.Equal(t, nodeID, nodeIDArg)
 			require.Equal(t, storeID, storeIDArg)
 			require.NotEqual(t, fileNum, 0)
+			require.NotEqual(t, approximateSpanBytes, 0)
 			count++
 		}
 
@@ -184,7 +185,7 @@ func TestGetSSTableMetricsSingleNode(t *testing.T) {
 	var storeID int
 	var level int
 	var fileNum int
-	var approximateSpanBytes []byte
+	var approximateSpanBytes uint64
 	var metrics []byte
 
 	for rows.Next() {
@@ -193,6 +194,7 @@ func TestGetSSTableMetricsSingleNode(t *testing.T) {
 		require.Equal(t, nodeID, nodeIDArg)
 		require.Equal(t, storeID, storeIDArg)
 		require.NotEqual(t, fileNum, 0)
+		require.NotEqual(t, approximateSpanBytes, 0)
 		count++
 	}
 	require.Equal(t, 1, count)

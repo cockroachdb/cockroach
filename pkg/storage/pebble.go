@@ -2032,8 +2032,11 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 			}
 
 			tableID := sstableInfo.TableInfo.FileNum
-			approximateSpanBytes := sstableInfo.Properties.UserProperties["approximate-span-bytes"]
-			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{TableID: uint64(tableID), Level: int32(level), ApproximateSpanBytes: []byte(approximateSpanBytes), TableInfoJSON: marshalTableInfo})
+			approximateSpanBytes, err := strconv.ParseUint(sstableInfo.Properties.UserProperties["approximate-span-bytes"], 10, 64)
+			if err != nil {
+				return []enginepb.SSTableMetricsInfo{}, err
+			}
+			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{TableID: uint64(tableID), Level: int32(level), ApproximateSpanBytes: approximateSpanBytes, TableInfoJSON: marshalTableInfo})
 		}
 	}
 	return metricsInfo, nil

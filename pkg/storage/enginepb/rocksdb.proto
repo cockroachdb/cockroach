@@ -23,7 +23,7 @@ message SSTableMetricsInfo {
   // table_info_json contains sstable properties, encoded as JSON
   bytes table_info_json = 3 [(gogoproto.customname) = "TableInfoJSON"];
   // approximate_span_bytes represents the total number of bytes that overlap the given keyspan
-  bytes approximate_span_bytes = 4 [(gogoproto.customname) = "ApproximateSpanBytes"];
+  uint64 approximate_span_bytes = 4 [(gogoproto.customname) = "ApproximateSpanBytes"];
 }
 
 // SSTUserProperties contains the user-added properties of a single sstable.
