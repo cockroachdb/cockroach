@@ -154,6 +154,9 @@ func fetchTableDescriptors(
 		})
 	}
 	if err := sql.DescsTxn(ctx, execCfg, fetchSpans); err != nil {
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
+			return nil, changefeedbase.WithTerminalError(err)
+		}
 		return nil, err
 	}
 	return targetDescs, nil
