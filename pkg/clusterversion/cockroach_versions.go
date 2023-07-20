@@ -553,6 +553,10 @@ const (
 	// DeleteSized operations.
 	V23_2_UseSizedPebblePointTombstones
 
+	// V23_2_PebbleFormatVirtualSSTables upgrades Pebble's format major version to
+	// FormatVirtualSSTables, allowing use of virtual sstables in Pebble.
+	V23_2_PebbleFormatVirtualSSTables
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -961,6 +965,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_UseSizedPebblePointTombstones,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 14},
+	},
+	{
+		Key:     V23_2_PebbleFormatVirtualSSTables,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 16},
 	},
 
 	// *************************************************
