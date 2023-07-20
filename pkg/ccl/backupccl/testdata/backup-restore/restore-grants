@@ -624,3 +624,48 @@ SELECT owner FROM [SHOW TABLES] WHERE table_name = 'testtable_greeting_owner';
 testuser
 
 subtest end
+
+subtest show-grants-during-restore
+
+# Ensure that SHOW GRANTS works during a restore.
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow';
+----
+
+restore expect-pausepoint tag=restore_bar
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name=bar;
+----
+job paused at pausepoint
+
+# Ensure that SHOW GRANTS works during a restore.
+# https://github.com/cockroachdb/cockroach/issues/106370 was a bug where
+# this would fail with `schema "public" is offline: restoring`.
+query-sql
+SELECT * FROM [SHOW GRANTS] WHERE relation_name = 'testtable_simple';
+----
+testdb public testtable_simple admin ALL true
+testdb public testtable_simple root ALL true
+testdb public testtable_simple testuser ALL true
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+----
+
+job resume=restore_bar
+----
+
+job tag=restore_bar wait-for-state=succeeded
+----
+
+exec-sql
+USE bar;
+----
+
+query-sql
+SELECT * FROM [SHOW GRANTS] WHERE relation_name = 'testtable_simple';
+----
+bar public testtable_simple admin ALL true
+bar public testtable_simple root ALL true
+
+subtest end
