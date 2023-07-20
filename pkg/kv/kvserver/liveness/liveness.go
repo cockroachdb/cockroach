@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	diskStorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -732,6 +733,16 @@ var errNodeAlreadyLive = errors.New("node already live")
 // by the Start loop.
 // TODO(bdarnell): Should we just remove this synchronous heartbeat completely?
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness livenesspb.Liveness) error {
+	if buildutil.CrdbTestBuild && !nl.started.Get() {
+		// This check was added as part of resolving #106706. We were previously
+		// accidentally relying on synchronous heartbeats to paper over problems,
+		// which only worked most of the time but could lead to hangs.
+		// In our test builds, we only allow heartbeats of any kind once the
+		// liveness loop has started.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/106706#issuecomment-1640254715
+		return errors.New("liveness heartbeat not started yet")
+	}
 	return nl.heartbeatInternal(ctx, liveness, false /* increment epoch */)
 }
 
