@@ -3203,13 +3203,13 @@ func sendAddRemoteSSTs(
 	// We can then look in this map using the proto attached to each file to find
 	// the URI for that file.
 	// TODO(dt/butler): should we plumb the original string instead?
-	urisForDirs := make(map[cloudpb.ExternalStorage]string)
+	urisForDirs := make(map[string]string)
 	for _, u := range uris {
 		dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
 		if err != nil {
 			return err
 		}
-		urisForDirs[dir] = u
+		urisForDirs[dir.String()] = u
 	}
 	for _, loc := range backupLocalityInfo {
 		for _, u := range loc.URIsByOriginalLocalityKV {
@@ -3217,7 +3217,7 @@ func sendAddRemoteSSTs(
 			if err != nil {
 				return err
 			}
-			urisForDirs[dir] = u
+			urisForDirs[dir.String()] = u
 		}
 	}
 
@@ -3268,7 +3268,7 @@ func sendAddRemoteSSTs(
 				}
 				file.BackingFileSize = uint64(sz)
 			}
-			uri, ok := urisForDirs[file.Dir]
+			uri, ok := urisForDirs[file.Dir.String()]
 			if !ok {
 				return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
 			}
