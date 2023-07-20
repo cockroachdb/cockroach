@@ -183,13 +183,6 @@ type TestServerInterface interface {
 	// with DistSQL at the same time.
 	SetDistSQLSpanResolver(spanResolver interface{})
 
-	// MustGetSQLCounter returns the value of a counter metric from the server's
-	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
-	MustGetSQLCounter(name string) int64
-	// MustGetSQLNetworkCounter returns the value of a counter metric from the
-	// server's SQL server. Runs in O(# of metrics) time, which is fine for test
-	// code.
-	MustGetSQLNetworkCounter(name string) int64
 	// WriteSummaries records summaries of time-series data, which is required for
 	// any tests that query server stats.
 	WriteSummaries() error

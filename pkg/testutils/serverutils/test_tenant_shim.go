@@ -226,9 +226,13 @@ type TestTenantInterface interface {
 	// SystemConfigProvider provides access to the system config.
 	SystemConfigProvider() config.SystemConfigProvider
 
-	// MustGetSQLCounter returns the value of a counter metric from the server's
+	// MustGetSQLCounter returns the value of a counter metric from the tenant's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
 	MustGetSQLCounter(name string) int64
+	// MustGetSQLNetworkCounter returns the value of a counter metric from the
+	// tenant's SQL server. Runs in O(# of metrics) time, which is fine for test
+	// code.
+	MustGetSQLNetworkCounter(name string) int64
 
 	// Codec returns this tenant's codec (or keys.SystemSQLCodec if this is the
 	// system tenant).

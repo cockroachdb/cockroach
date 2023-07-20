@@ -846,9 +846,18 @@ func (t *TestTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
-// MustGetSQLCounter implements serverutils.TestTenantInterface.
+// MustGetSQLCounter implements the serverutils.TestTenantInterface.
 func (t *TestTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.sql.metricsRegistry, name)
+}
+
+// MustGetSQLNetworkCounter implements the serverutils.TestTenantInterface.
+func (t *TestTenant) MustGetSQLNetworkCounter(name string) int64 {
+	reg := metric.NewRegistry()
+	for _, m := range t.sql.pgServer.Metrics() {
+		reg.AddMetricStruct(m)
+	}
+	return mustGetSQLCounterForRegistry(reg, name)
 }
 
 // RangeDescIteratorFactory implements the serverutils.TestTenantInterface.
@@ -1400,29 +1409,11 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 
 // MustGetSQLNetworkCounter implements the serverutils.TestServerInterface.
 func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
-	var c int64
-	var found bool
-
 	reg := metric.NewRegistry()
 	for _, m := range ts.sqlServer.pgServer.Metrics() {
 		reg.AddMetricStruct(m)
 	}
-	reg.Each(func(n string, v interface{}) {
-		if name == n {
-			switch t := v.(type) {
-			case *metric.Counter:
-				c = t.Count()
-				found = true
-			case *metric.Gauge:
-				c = t.Value()
-				found = true
-			}
-		}
-	})
-	if !found {
-		panic(fmt.Sprintf("couldn't find metric %s", name))
-	}
-	return c
+	return mustGetSQLCounterForRegistry(reg, name)
 }
 
 // Locality returns the Locality used by the TestServer.
