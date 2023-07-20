@@ -120,10 +120,8 @@ func (p *planner) shouldNotRoleBasedAudit(execType executorType) bool {
 	// Do not do audit work if role-based auditing is not enabled.
 	// Do not emit audit events for reserved users/roles. This does not omit the
 	// root user.
-	// Do not emit audit events for internal planners.
 	// Do not emit audit events for internal executors.
 	return !auditlogging.UserAuditEnabled(p.execCfg.Settings, p.EvalContext().ClusterID) ||
 		p.User().IsReserved() ||
-		p.isInternalPlanner ||
 		execType == executorTypeInternal
 }

@@ -688,14 +688,8 @@ func (dsp *DistSQLPlanner) Run(
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
-	// If we have access to a planner and are currently being used to plan
-	// statements in a user transaction, then take the descs.Collection to resolve
-	// types with during flow execution. This is necessary to do in the case of
-	// a transaction that has already created or updated some types. If we do not
-	// use the local descs.Collection, we would attempt to acquire a lease on
-	// modified types when accessing them, which would error out.
-	if planCtx.planner != nil &&
-		(!planCtx.planner.isInternalPlanner || planCtx.usePlannerDescriptorsForLocalFlow) {
+	if planCtx.planner != nil {
+		// Note that the planner's collection will only be used for local plans.
 		localState.Collection = planCtx.planner.Descriptors()
 	}
 
