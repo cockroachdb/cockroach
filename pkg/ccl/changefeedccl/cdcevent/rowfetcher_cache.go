@@ -109,6 +109,11 @@ func refreshUDT(
 		tableDesc, err = collection.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
+			// Dropped descriptors are a bad news.
+			return nil, changefeedbase.WithTerminalError(err)
+		}
+
 		// Manager can return all kinds of errors during chaos, but based on
 		// its usage, none of them should ever be terminal.
 		return nil, changefeedbase.MarkRetryableError(err)
