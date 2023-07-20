@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -73,7 +75,21 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		p.ExecCfg().InternalDB,
 		p.ExecCfg().InternalDB.server.ServerMetrics.StatsMetrics.SQLStatsRemovedRows,
 		p.ExecCfg().SQLStatsTestingKnobs)
-	if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
+
+	retryOpts := retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		Multiplier:     1.3,
+	}
+
+	err = retry.WithMaxAttempts(ctx, retryOpts, 10 /* maxAttempts */, func() error {
+		if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
+			log.Warningf(ctx, "sql stats compaction failed with error: %v, retrying...", err)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 
