@@ -496,13 +496,28 @@ func TestDeleteTenant(t *testing.T) {
 		process.Stopper.Stop(ctx)
 	}
 
-	// Report failure connecting to the pod to force refresh of addrs.
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
+	// There is a rare race condition where the watch event can overwrite
+	// ListPods inside ReportFailure. If that happens, retrying the ReportFailure
+	// should work as expected.
+	// See https://github.com/cockroachdb/cockroach/issues/86077
+	testutils.SucceedsSoon(t, func() error {
+		// Report failure connecting to the pod to force refresh of addrs.
+		if err := dir.ReportFailure(ctx, tenantID, addr); err != nil {
+			return err
+		}
 
-	// Ensure that tenant has no valid IP addresses.
-	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
-	require.NoError(t, err)
-	require.Empty(t, pods)
+		// Ensure that tenant has no valid IP addresses.
+		pods, err = dir.TryLookupTenantPods(ctx, tenantID)
+		if err != nil {
+			return err
+		}
+
+		if len(pods) != 0 {
+			return errors.Newf("expected 0 pods found %v", pods)
+		}
+
+		return nil
+	})
 
 	// Report failure again to ensure that works when there is no ip address.
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
