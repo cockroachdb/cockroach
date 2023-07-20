@@ -3314,7 +3314,7 @@ func makeSpanStatsGenerator(
 	spans := make([]roachpb.Span, 0, argSpans.Len())
 	for _, span := range argSpans.Array {
 		s := tree.MustBeDTuple(span)
-		if s.D[0] == tree.DNull || s.D[1] == tree.DNull {
+		if len(s.D) != 2 || s.D[0] == tree.DNull || s.D[1] == tree.DNull {
 			continue
 		}
 		startKey := roachpb.Key(tree.MustBeDBytes(s.D[0]))
