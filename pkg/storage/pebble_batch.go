@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 )
 
 // Wrapper struct around a pebble.Batch.
@@ -257,6 +258,23 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	return iter
 }
 
+// ScanInternal implements the Reader interface.
+func (p *pebbleBatch) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	panic("ScanInternal only supported on Engine and Snapshot.")
+}
+
+// ClearRawEncodedRange implements the InternalWriter interface.
+func (p *pebbleBatch) ClearRawEncodedRange(start, end []byte) error {
+	return p.batch.DeleteRange(start, end, pebble.Sync)
+}
+
 // ConsistentIterators implements the Batch interface.
 func (p *pebbleBatch) ConsistentIterators() bool {
 	return true
@@ -482,6 +500,20 @@ func (p *pebbleBatch) PutEngineRangeKey(start, end roachpb.Key, suffix, value []
 		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value, nil)
 }
 
+// PutInternalRangeKey implements the InternalWriter interface.
+func (p *pebbleBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	switch key.Kind() {
+	case pebble.InternalKeyKindRangeKeyUnset:
+		return p.batch.RangeKeyUnset(start, end, key.Suffix, nil /* writeOptions */)
+	case pebble.InternalKeyKindRangeKeySet:
+		return p.batch.RangeKeySet(start, end, key.Suffix, key.Value, nil /* writeOptions */)
+	case pebble.InternalKeyKindRangeKeyDelete:
+		return p.batch.RangeKeyDelete(start, end, nil /* writeOptions */)
+	default:
+		panic("unexpected range key kind")
+	}
+}
+
 // ClearEngineRangeKey implements the Engine interface.
 func (p *pebbleBatch) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
 	return p.batch.RangeKeyUnset(
@@ -540,6 +572,14 @@ func (p *pebbleBatch) PutEngineKey(key EngineKey, value []byte) error {
 
 	p.buf = key.EncodeToBuf(p.buf[:0])
 	return p.batch.Set(p.buf, value, nil)
+}
+
+// PutInternalPointKey implements the WriteBatch interface.
+func (p *pebbleBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	if len(key.UserKey) == 0 {
+		return emptyKeyError()
+	}
+	return p.batch.AddInternalKey(key, value, nil /* writeOptions */)
 }
 
 func (p *pebbleBatch) put(key MVCCKey, value []byte) error {
