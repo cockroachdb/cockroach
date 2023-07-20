@@ -256,8 +256,12 @@ export function createIdxName(statement: string): string {
       idxName += "_" + value;
     }
   }
-
-  idxName += "_rec_idx";
+  const suffix =
+    statement.indexOf("STORING") >= 0 ? "_storing_rec_idx" : "_rec_idx";
+  // The table name is fully qualified at this point, but we don't need the full name,
+  // so just use the last value (also an index name can't have ".")
+  const idxNameArr = idxName.split(".");
+  idxName = idxNameArr[idxNameArr.length - 1].replace(/\s/g, "_") + suffix;
 
   return statement.replace(
     "CREATE INDEX ON ",
