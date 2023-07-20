@@ -138,7 +138,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,0, info: repl
 
 sequence req=req4
 ----
@@ -161,7 +161,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,0, info: repl
    waiting readers:
     req: 3, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3

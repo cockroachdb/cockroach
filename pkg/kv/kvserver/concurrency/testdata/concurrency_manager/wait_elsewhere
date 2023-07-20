@@ -69,7 +69,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
@@ -211,12 +211,12 @@ debug-lock-table
 ----
 num=2
  lock: "k1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    waiting readers:
     req: 5, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "k2"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 # Simulate that the replicated locks were discovered, so they are added to the
 # lock table. Keys "k1" and "k2" were previously discovered, but "k3" is new.
@@ -242,7 +242,7 @@ debug-lock-table
 ----
 num=1
  lock: "k1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    waiting readers:
     req: 6, txn: 00000002-0000-0000-0000-000000000000
     req: 5, txn: 00000002-0000-0000-0000-000000000000

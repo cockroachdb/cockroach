@@ -20,7 +20,7 @@ add-discovered r=req1 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -28,23 +28,23 @@ add-discovered r=req1 k=b txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
 
 add-discovered r=req1 k=c txn=txn2
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -54,13 +54,13 @@ print
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -77,13 +77,13 @@ print
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
@@ -101,14 +101,14 @@ print
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
@@ -122,9 +122,9 @@ num=3
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
@@ -141,9 +141,9 @@ num=3
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    queued writers:
     active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
@@ -158,7 +158,7 @@ num=3
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
  lock: "c"
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
@@ -179,7 +179,7 @@ num=3
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: repl
    waiting readers:
     req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1

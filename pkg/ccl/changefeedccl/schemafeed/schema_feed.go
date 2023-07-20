@@ -658,7 +658,14 @@ func (tf *schemaFeed) validateDescriptor(
 		}
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
-		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
+		if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
+			err = errors.Wrapf(err, "could not acquire type descriptor %d lease", desc.GetID())
+			if errors.Is(err, catalog.ErrDescriptorDropped) { // That's pretty fatal.
+				err = changefeedbase.WithTerminalError(err)
+			}
+			return err
+		}
+		return nil
 	case catalog.TableDescriptor:
 		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances); err != nil {
 			return err

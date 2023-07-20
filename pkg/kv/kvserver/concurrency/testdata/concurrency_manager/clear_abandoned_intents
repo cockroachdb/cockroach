@@ -37,25 +37,25 @@ debug-lock-table
 ----
 num=10
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -72,28 +72,28 @@ debug-lock-table
 ----
 num=10
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    waiting readers:
     req: 1, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 1
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 debug-advance-clock ts=123
 ----
@@ -164,7 +164,7 @@ debug-lock-table
 ----
 num=1
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
 
@@ -204,7 +204,7 @@ num=2
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl [holder finalized: committed] epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl [holder finalized: committed]
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
 
@@ -236,7 +236,7 @@ num=3
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl [holder finalized: committed] epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl [holder finalized: committed]
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
 
@@ -306,9 +306,9 @@ debug-lock-table
 ----
 num=2
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 new-request name=req2 txn=txn2 ts=10,1
   put key=g value=v1
@@ -338,13 +338,13 @@ debug-lock-table
 ----
 num=4
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 sequence req=req1
 ----
@@ -361,16 +361,16 @@ debug-lock-table
 ----
 num=4
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    waiting readers:
     req: 3, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 debug-advance-clock ts=123
 ----
@@ -449,15 +449,15 @@ debug-lock-table
 ----
 num=3
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
 
@@ -476,16 +476,16 @@ debug-lock-table
 ----
 num=3
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
 
@@ -531,20 +531,20 @@ debug-lock-table
 ----
 num=5
  lock: "a"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "b"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
 
@@ -568,23 +568,23 @@ debug-lock-table
 ----
 num=5
  lock: "a"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
  lock: "b"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
 
@@ -613,7 +613,7 @@ debug-lock-table
 ----
 num=4
  lock: "b"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
@@ -621,11 +621,11 @@ num=4
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl [holder finalized: aborted]
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
@@ -657,7 +657,7 @@ num=3
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5

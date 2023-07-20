@@ -815,11 +815,17 @@ func TestLockTableMaxLocks(t *testing.T) {
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
 	}
+	txnMeta := enginepb.TxnMeta{
+		ID:             uuid.MakeV4(),
+		WriteTimestamp: hlc.Timestamp{WallTime: 10},
+	}
 	for i := range guards {
 		for j := 0; j < 10; j++ {
 			k := i*20 + j
 			added, err := lt.AddDiscoveredLock(
-				&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[k]}},
+				&roachpb.Intent{
+					Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[k]}, Txn: txnMeta,
+				},
 				0, false, guards[i])
 			require.True(t, added)
 			require.NoError(t, err)
@@ -839,7 +845,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err := lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+10]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+10]}, Txn: txnMeta,
+		},
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -848,7 +856,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(101), int64(lt.locks.lockIDSeqNum))
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+11]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+11]}, Txn: txnMeta,
+		},
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -862,7 +872,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	lt.locks.lockAddMaxLocksCheckInterval = 2
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+12]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+12]}, Txn: txnMeta,
+		},
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -870,7 +882,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(7), lt.lockCountForTesting())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+13]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+13]}, Txn: txnMeta,
+		},
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -885,7 +899,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	lt.Dequeue(guards[8])
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+14]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+14]}, Txn: txnMeta,
+		},
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -893,7 +909,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Add another discovered lock, to trigger tryClearLocks, and push us over 5
 	// locks.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+15]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+15]}, Txn: txnMeta,
+		},
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -904,7 +922,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Add locks to push us over 5 locks.
 	for i := 16; i < 20; i++ {
 		added, err = lt.AddDiscoveredLock(
-			&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+i]}},
+			&roachpb.Intent{
+				Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+i]}, Txn: txnMeta,
+			},
 			0, false, guards[9])
 		require.True(t, added)
 		require.NoError(t, err)
@@ -943,10 +963,16 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
 	}
+	txnMeta := enginepb.TxnMeta{
+		ID:             uuid.MakeV4(),
+		WriteTimestamp: hlc.Timestamp{WallTime: 10},
+	}
 	// The first 6 requests discover 3 locks total.
 	for i := 0; i < 6; i++ {
 		added, err := lt.AddDiscoveredLock(
-			&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[i/2]}},
+			&roachpb.Intent{
+				Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[i/2]}, Txn: txnMeta,
+			},
 			0, false, guards[i])
 		require.True(t, added)
 		require.NoError(t, err)
@@ -961,7 +987,9 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	}
 	// Add another lock using request 6.
 	added, err := lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[6/2]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[6/2]}, Txn: txnMeta,
+		},
 		0, false, guards[6])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -979,7 +1007,9 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	require.Equal(t, int64(4), lt.lockCountForTesting())
 	// Add another lock using request 8.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[8/2]}},
+		&roachpb.Intent{
+			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[8/2]}, Txn: txnMeta,
+		},
 		0, false, guards[8])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -1828,18 +1858,17 @@ func TestLockStateSafeFormat(t *testing.T) {
 		key:    []byte("KEY"),
 		endKey: []byte("END"),
 	}
-	l.holder.locked = true
+	l.holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
 	// TODO(arul): add something about replicated locks here too.
 	l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{
-		txn:  &enginepb.TxnMeta{ID: uuid.NamespaceDNS},
 		ts:   hlc.Timestamp{WallTime: 123, Logical: 7},
 		seqs: []enginepb.TxnSeq{1},
 	}
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8, ts: 0.000000123,7, info: unrepl epoch: 0, seqs: [1]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8, ts: 0.000000123,7, info: unrepl epoch: 0, seqs: [1]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
 		redact.Sprint(l).Redact())
 }
 
