@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -227,7 +226,7 @@ func (p *planner) createDescriptor(
 			"expected new descriptor, not a modification of version %d",
 			descriptor.OriginalVersion())
 	}
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 	if err := p.Descriptors().WriteDescToBatch(ctx, kvTrace, descriptor, b); err != nil {
 		return err

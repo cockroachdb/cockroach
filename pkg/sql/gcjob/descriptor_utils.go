@@ -32,7 +32,7 @@ func deleteDatabaseZoneConfig(
 		return nil
 	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := &kv.Batch{}
+		b := txn.NewBatch()
 
 		// Delete the zone config entry for the dropped database associated with the
 		// job, if it exists.
