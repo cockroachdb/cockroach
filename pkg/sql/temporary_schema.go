@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -108,7 +107,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	if err != nil {
 		return nil, err
 	}
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	if err := p.Descriptors().InsertTempSchemaToBatch(
 		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), db, tempSchemaName, id, b,
 	); err != nil {
