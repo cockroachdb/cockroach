@@ -48,6 +48,8 @@ COMMIT
 statement ok
 SET TRACING = off
 
+# TODO(XXX)
+
 # Confirm that the trace and its associated spans are no longer tracked.
 query B retry
 SELECT count(*) = 0

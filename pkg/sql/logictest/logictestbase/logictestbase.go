@@ -103,6 +103,7 @@ const (
 	Always
 	// Never will never start a tenant server.
 	Never
+	UseDefaultTestTenant
 )
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -281,7 +282,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// TODO(#76378): We should review this choice. Why can't we use "Random"
 		// here? If there are specific tests that are incompatible, we can
 		// flag them to run only in a separate config.
-		UseSecondaryTenant:          Never,
+		UseSecondaryTenant:          UseDefaultTestTenant,
 		DeclarativeCorpusCollection: true,
 	},
 	{

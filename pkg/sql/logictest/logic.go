@@ -1397,6 +1397,8 @@ func (t *logicTest) newCluster(
 	case logictestbase.Random:
 		// Delegate to the test framework what to do.
 		defaultTestTenant = base.TestTenantProbabilisticOnly
+	case logictestbase.UseDefaultTestTenant:
+		defaultTestTenant = base.TestTenantAlwaysEnabled
 	}
 
 	params := base.TestClusterArgs{

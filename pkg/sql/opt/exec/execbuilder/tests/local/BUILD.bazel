@@ -14,10 +14,12 @@ go_test(
     ],
     shard_count = 48,
     tags = [
+        "ccl_test",
         "cpu:1",
     ],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

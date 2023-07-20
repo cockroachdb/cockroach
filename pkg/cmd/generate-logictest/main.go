@@ -117,10 +117,10 @@ func (t *testdir) addSqliteLogicTests(
 	return nil
 }
 
-func (t *testdir) dump() error {
-	for configIdx := range logictestbase.LogicTestConfigs {
+func (t *testdir) dump(localCCL bool) error {
+	for configIdx, config := range logictestbase.LogicTestConfigs {
 		tplCfg := testFileTemplateConfig{
-			Ccl:                   strings.Contains(t.dir, "pkg/ccl"),
+			Ccl:                   strings.Contains(t.dir, "pkg/ccl") || (config.Name == "local" && localCCL),
 			ForceProductionValues: strings.HasSuffix(t.dir, "pkg/sql/opt/exec/execbuilder/tests"),
 		}
 		var testCount int
@@ -305,7 +305,7 @@ func generate() error {
 		if err != nil {
 			return err
 		}
-		err = t.dump()
+		err = t.dump(true)
 		if err != nil {
 			return err
 		}
@@ -320,7 +320,7 @@ func generate() error {
 		if err != nil {
 			return err
 		}
-		err = t.dump()
+		err = t.dump(false)
 		if err != nil {
 			return err
 		}
@@ -352,7 +352,7 @@ func generate() error {
 		if err != nil {
 			return err
 		}
-		err = t.dump()
+		err = t.dump(false)
 		if err != nil {
 			return err
 		}
@@ -370,7 +370,7 @@ func generate() error {
 		if err != nil {
 			return err
 		}
-		err = t.dump()
+		err = t.dump(false)
 		if err != nil {
 			return err
 		}
@@ -385,7 +385,7 @@ func generate() error {
 		if err != nil {
 			return err
 		}
-		err = t.dump()
+		err = t.dump(true)
 		if err != nil {
 			return err
 		}

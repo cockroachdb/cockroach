@@ -215,7 +215,7 @@ var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"sql.zone_configs.allow_for_secondary_tenant.enabled",
 	"allow secondary tenants to set zone configurations; does not affect the system tenant",
-	false,
+	true,
 )
 
 // SecondaryTenantSplitAtEnabled controls if secondary tenants are allowed to
@@ -225,7 +225,7 @@ var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"sql.split_at.allow_for_secondary_tenant.enabled",
 	"allow secondary tenants to run ALTER TABLE/INDEX ... SPLIT AT commands; does not affect the system tenant",
-	false,
+	true,
 )
 
 // SecondaryTenantScatterEnabled controls if secondary tenants are allowed to
@@ -235,7 +235,7 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"sql.scatter.allow_for_secondary_tenant.enabled",
 	"allow secondary tenants to run ALTER TABLE/INDEX ... SCATTER commands; does not affect the system tenant",
-	false,
+	true,
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
