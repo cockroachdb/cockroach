@@ -663,6 +663,35 @@ func (rq *replicateQueue) process(
 			continue
 		}
 
+		// After we made a replica change, make sure the lease is still on the
+		// correct store.
+		//
+		// TODO(kvoli): This lease transfer occurs outside of the planning
+		// ProcessOneChange planning and application logic. It should be moved
+		// into the planning phase and returned as a follow up change.
+		if rq.canTransferLeaseFrom(ctx, repl) {
+			transferStatus, transferErr := rq.shedLease(
+				ctx,
+				repl,
+				repl.Desc(),
+				repl.SpanConfig(),
+				allocator.TransferLeaseOptions{
+					Goal:                   allocator.FollowTheWorkload,
+					ExcludeLeaseRepl:       false,
+					CheckCandidateFullness: true,
+				},
+			)
+			// If we successfully transferred the lease, we can't requeue, let the new
+			// leaseholder do it.
+			if transferStatus == allocator.TransferOK {
+				requeue = false
+			}
+			if transferErr != nil {
+				log.KvDistribution.Warningf(ctx, "%v", transferErr)
+				return false, err
+			}
+		}
+
 		if err != nil {
 			return false, err
 		}
