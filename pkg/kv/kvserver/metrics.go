@@ -2578,7 +2578,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaLeaseRequestLatency,
 			Duration: histogramWindow,
-			Buckets:  metric.NetworkLatencyBuckets,
+			Buckets:  metric.IOLatencyBuckets,
 		}),
 		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
 		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
