@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"runtime/debug"
 	"sort"
@@ -499,4 +500,79 @@ func (f loggingFile) Close() error {
 func (f loggingFile) Sync() error {
 	fmt.Fprintf(f.w, "sync(%q)\n", f.name)
 	return f.File.Sync()
+}
+
+func TestFileRegistryRollover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const dir = "/mydb"
+	mem := vfs.NewMem()
+	require.NoError(t, mem.MkdirAll(dir, 0755))
+	registry := &PebbleFileRegistry{FS: mem, DBDir: dir}
+	require.NoError(t, registry.Load())
+
+	// All the registry files created so far. Some may have been subsequently
+	// deleted.
+	var registryFiles []string
+	accumRegistryFiles := func() {
+		registry.mu.Lock()
+		defer registry.mu.Unlock()
+		n := len(registryFiles)
+		if registry.mu.registryFilename != "" &&
+			(n == 0 || registry.mu.registryFilename != registryFiles[n-1]) {
+			registryFiles = append(registryFiles, registry.mu.registryFilename)
+			n++
+		}
+	}
+	numAddedEntries := 0
+	// Large settings slice, so that the test rolls over registry files quickly.
+	encryptionSettings := make([]byte, 1<<20)
+	rand.Read(encryptionSettings)
+	// Check that the entries we have added are in the file registry and there
+	// isn't an additional entry.
+	checkAddedEntries := func() {
+		for i := 0; i < numAddedEntries; i++ {
+			filename := fmt.Sprintf("%04d", i)
+			entry := registry.GetFileEntry(filename)
+			require.NotNil(t, entry)
+			require.Equal(t, filename, string(entry.EncryptionSettings[len(entry.EncryptionSettings)-4:]))
+		}
+		// Does not have an additional entry.
+		filename := fmt.Sprintf("%04d", numAddedEntries)
+		entry := registry.GetFileEntry(filename)
+		require.Nil(t, entry)
+	}
+	addEntry := func() {
+		filename := fmt.Sprintf("%04d", numAddedEntries)
+		// Create a file for this added entry so that it doesn't get cleaned up
+		// when we reopen the file registry.
+		f, err := mem.Create(mem.PathJoin(dir, filename))
+		require.NoError(t, err)
+		require.NoError(t, f.Sync())
+		require.NoError(t, f.Close())
+		fileEntry := &enginepb.FileEntry{EnvType: enginepb.EnvType_Data}
+		fileEntry.EncryptionSettings = append(encryptionSettings, []byte(filename)...)
+		require.NoError(t, registry.SetFileEntry(filename, fileEntry))
+		numAddedEntries++
+	}
+	for {
+		created := len(registryFiles)
+		accumRegistryFiles()
+		if created != len(registryFiles) {
+			// Rolled over.
+			checkAddedEntries()
+		}
+		// Rollover a few times.
+		if len(registryFiles) == 4 {
+			break
+		}
+		addEntry()
+	}
+	require.NoError(t, registry.Close())
+	registry = &PebbleFileRegistry{FS: mem, DBDir: dir}
+	require.NoError(t, registry.Load())
+	// Check added entries again.
+	checkAddedEntries()
+	require.NoError(t, registry.Close())
 }

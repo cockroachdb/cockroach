@@ -398,10 +398,23 @@ func (r *PebbleFileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
 }
 
 func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
-	// Create a new file registry file if one doesn't exist yet.
-	if r.mu.registryWriter == nil {
+	// Create a new file registry file if one doesn't exist yet, or we need to
+	// rollover.
+	nilWriter := r.mu.registryWriter == nil
+	if nilWriter || r.mu.registryWriter.Size() > maxRegistrySize {
+		// If !nilWriter, exceeded the size threshold: create a new file registry
+		// file to hopefully shrink the size of the file.
+		//
+		// TODO(storage-team): fix this rollover logic to not rollover with each
+		// change if the total number of entries is large enough to exceed
+		// maxRegistrySize. Do something similar to what we do with the Pebble
+		// MANIFEST rollover.
 		if err := r.createNewRegistryFile(); err != nil {
-			return errors.Wrap(err, "creating new registry file")
+			if nilWriter {
+				return errors.Wrap(err, "creating new registry file")
+			} else {
+				return errors.Wrap(err, "rotating registry file")
+			}
 		}
 	}
 	w, err := r.mu.registryWriter.Next()
@@ -418,17 +431,7 @@ func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateB
 	if err := r.mu.registryWriter.Flush(); err != nil {
 		return err
 	}
-	if err := r.mu.registryFile.Sync(); err != nil {
-		return err
-	}
-	// Create a new file registry file to hopefully shrink the size of the file
-	// if we have exceeded the max registry size.
-	if r.mu.registryWriter.Size() > maxRegistrySize {
-		if err := r.createNewRegistryFile(); err != nil {
-			return errors.Wrap(err, "rotating registry file")
-		}
-	}
-	return nil
+	return r.mu.registryFile.Sync()
 }
 
 func makeRegistryFilename(iter uint64) string {
