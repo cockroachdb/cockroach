@@ -9,8 +9,12 @@ go_library(
 
 go_test(
     name = "compose_test",
+    size = "enormous",
     srcs = ["compose_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     data = [
         "//c-deps:libgeos",
         "//pkg/compose:compare/docker-compose.yml",
