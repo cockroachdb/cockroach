@@ -2634,7 +2634,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		}
 	}
 
-	log.KvDistribution.VEventf(ctx, 1,
+	log.KvDistribution.VEventf(ctx, 5,
 		"shouldTransferLease qpsStats: %+v, replicaLocalities: %+v, replicaWeights: %+v",
 		qpsStats, replicaLocalities, replicaWeights)
 	sourceWeight := math.Max(minReplicaWeight, replicaWeights[source.Node.NodeID])
@@ -2751,7 +2751,7 @@ func loadBasedLeaseRebalanceScore(
 
 	log.KvDistribution.VEventf(
 		ctx,
-		2,
+		5,
 		"node: %d, sourceWeight: %.2f, remoteWeight: %.2f, remoteLatency: %v, "+
 			"rebalanceThreshold: %.2f, meanLeases: %.2f, sourceLeaseCount: %d, overfullThreshold: %d, "+
 			"remoteLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
