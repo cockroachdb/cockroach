@@ -220,6 +220,10 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		require.True(t, strings.Contains(string(goroutines), fmt.Sprintf("labels: {\"foo\":\"bar\", \"job\":\"IMPORT id=%d\", \"n\":\"1\"}", importJobID)))
 		require.True(t, strings.Contains(string(goroutines), "github.com/cockroachdb/cockroach/pkg/sql_test.fakeExecResumer.Resume"))
 	})
+
+	t.Run("execution details for invalid job ID", func(t *testing.T) {
+		runner.ExpectErr(t, `job -123 not found; cannot request execution details`, `SELECT crdb_internal.request_job_execution_details(-123)`)
+	})
 }
 
 func TestListProfilerExecutionDetails(t *testing.T) {

@@ -176,12 +176,22 @@ func constructBackupExecutionDetails(
 // RequestExecutionDetailFiles implements the JobProfiler interface.
 func (p *planner) RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.JobID) error {
 	execCfg := p.ExecCfg()
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
 		return errors.Newf("execution details can only be requested on a cluster with version >= %s",
-			clusterversion.V23_1.String())
+			clusterversion.V23_2.String())
 	}
 
 	e := makeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID)
+
+	// Check if the job exists otherwise we can bail early.
+	exists, err := jobs.JobExists(ctx, jobID, p.Txn(), e.db.Executor())
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.Newf("job %d not found; cannot request execution details", jobID)
+	}
+
 	// TODO(adityamaru): When we start collecting more information we can consider
 	// parallelize the collection of the various pieces.
 	e.addDistSQLDiagram(ctx)
@@ -238,7 +248,7 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())
 		return
 	}
-	if row[0] != tree.DNull {
+	if row != nil && row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
 		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
 		if err := jobs.WriteExecutionDetailFile(ctx, filename,
