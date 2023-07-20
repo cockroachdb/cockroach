@@ -132,6 +132,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
+    privileges: "1048576"
+    userName: public
+    withGrantOption: "0"
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
     privileges: "2"
     userName: admin
     withGrantOption: "2"

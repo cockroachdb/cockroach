@@ -157,8 +157,9 @@ func (d *Mutable) RevokeDefaultPrivileges(
 		(!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Tables) ||
 			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Sequences) ||
 			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Types) ||
-			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Schemas)) ||
-		!GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Schemas) ||
+			!GetPublicHasUsageOnTypes(defaultPrivilegesForRole) ||
+			!GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole)) {
 		return nil
 	}
 
@@ -334,6 +335,19 @@ func foldPrivileges(
 			return err
 		}
 	}
+	if targetObject == privilege.Functions &&
+		privileges.CheckPrivilege(username.PublicRoleName(), privilege.EXECUTE) {
+		setPublicHasExecuteOnFunctions(defaultPrivilegesForRole, true)
+		if err := privileges.Revoke(
+			username.PublicRoleName(),
+			privilege.List{privilege.EXECUTE},
+			privilege.Function,
+			false, /* grantOptionFor */
+		); err != nil {
+			return err
+		}
+	}
+
 	// ForAllRoles cannot be a grantee, nothing left to do.
 	if role.ForAllRoles {
 		return nil
@@ -368,6 +382,10 @@ func expandPrivileges(
 		privileges.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
 		setPublicHasUsageOnTypes(defaultPrivilegesForRole, false)
 	}
+	if targetObject == privilege.Functions && GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole) {
+		privileges.Grant(username.PublicRoleName(), privilege.List{privilege.EXECUTE}, false /* withGrantOption */)
+		setPublicHasExecuteOnFunctions(defaultPrivilegesForRole, false)
+	}
 	// ForAllRoles cannot be a grantee, nothing left to do.
 	if role.ForAllRoles {
 		return
@@ -396,15 +414,29 @@ func GetUserPrivilegesForObject(
 			Privileges: privilege.USAGE.Mask(),
 		})
 	}
+	if GetPublicHasExecuteOnFunctions(&p) && targetObject == privilege.Functions {
+		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
+			UserProto:  username.PublicRoleName().EncodeProto(),
+			Privileges: privilege.EXECUTE.Mask(),
+		})
+	}
 	return userPrivileges
 }
 
-// GetPublicHasUsageOnTypes returns whether Public has Usage privilege on types.
+// GetPublicHasUsageOnTypes returns whether Public has USAGE privilege on types.
 func GetPublicHasUsageOnTypes(defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole) bool {
 	if defaultPrivilegesForRole.IsExplicitRole() {
 		return defaultPrivilegesForRole.GetExplicitRole().PublicHasUsageOnTypes
 	}
 	return defaultPrivilegesForRole.GetForAllRoles().PublicHasUsageOnTypes
+}
+
+// GetPublicHasExecuteOnFunctions returns whether Public has EXECUTE privilege on functions.
+func GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole) bool {
+	if defaultPrivilegesForRole.IsExplicitRole() {
+		return defaultPrivilegesForRole.GetExplicitRole().PublicHasExecuteOnFunctions
+	}
+	return defaultPrivilegesForRole.GetForAllRoles().PublicHasExecuteOnFunctions
 }
 
 // GetRoleHasAllPrivilegesOnTargetObject returns whether the creator role
@@ -440,6 +472,17 @@ func setPublicHasUsageOnTypes(
 		defaultPrivilegesForRole.GetExplicitRole().PublicHasUsageOnTypes = publicHasUsageOnTypes
 	} else {
 		defaultPrivilegesForRole.GetForAllRoles().PublicHasUsageOnTypes = publicHasUsageOnTypes
+	}
+}
+
+// setPublicHasExecuteOnFunctions sets PublicHasExecuteOnFunctions to publicHasExecuteOnFunctions.
+func setPublicHasExecuteOnFunctions(
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole, publicHasExecuteOnFunctions bool,
+) {
+	if defaultPrivilegesForRole.IsExplicitRole() {
+		defaultPrivilegesForRole.GetExplicitRole().PublicHasExecuteOnFunctions = publicHasExecuteOnFunctions
+	} else {
+		defaultPrivilegesForRole.GetForAllRoles().PublicHasExecuteOnFunctions = publicHasExecuteOnFunctions
 	}
 }
 

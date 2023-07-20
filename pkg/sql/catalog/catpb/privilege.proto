@@ -67,6 +67,7 @@ message DefaultPrivilegesForRole {
     optional bool role_has_all_privileges_on_schemas = 7 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_functions = 9 [(gogoproto.nullable) = false];
+    optional bool public_has_execute_on_functions = 10 [(gogoproto.nullable) = false];
   }
   // ForAllRoles represents when default privileges are defined
   // using FOR ALL ROLES.
@@ -76,6 +77,7 @@ message DefaultPrivilegesForRole {
     // role has privileges on tables/sequences/schemas and types as
     // for_all_roles is not a real role and cannot have grants.
     optional bool public_has_usage_on_types = 11 [(gogoproto.nullable) = false];
+    optional bool public_has_execute_on_functions = 12 [(gogoproto.nullable) = false];
   }
   oneof role {
     ExplicitRole explicit_role = 12;
