@@ -558,7 +558,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 
 	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
 	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
-		log.Shoutf(ctx, severity.ERROR, "test tenant requested by configuration, but code organization prevents start!\n%v", err)
+		log.Shoutf(ctx, severity.WARNING, "test tenant requested by configuration, but code organization prevents start!\n%v", err)
 		// If not enterprise enabled, we won't be able to use SQL Servers so eat
 		// the error and return without creating/starting a SQL server.
 		ts.cfg.DisableDefaultTestTenant = true
