@@ -150,8 +150,8 @@ func (r *BatchReader) Value() []byte {
 	}
 }
 
-// EngineEndKey returns the engine end key of the current ranged batch entry.
-func (r *BatchReader) EngineEndKey() (EngineKey, error) {
+// EndKey returns the raw end key of the current ranged batch entry.
+func (r *BatchReader) EndKey() ([]byte, error) {
 	var rawKey []byte
 	switch r.kind {
 	case pebble.InternalKeyKindRangeDelete:
@@ -160,13 +160,22 @@ func (r *BatchReader) EngineEndKey() (EngineKey, error) {
 	case pebble.InternalKeyKindRangeKeySet, pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
 		rangeKeys, err := r.rangeKeys()
 		if err != nil {
-			return EngineKey{}, err
+			return nil, err
 		}
 		rawKey = rangeKeys.End
 
 	default:
-		return EngineKey{}, errors.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"can only ask for EndKey on a ranged entry, got %v", r.kind)
+	}
+	return rawKey, nil
+}
+
+// EngineEndKey returns the engine end key of the current ranged batch entry.
+func (r *BatchReader) EngineEndKey() (EngineKey, error) {
+	rawKey, err := r.EndKey()
+	if err != nil {
+		return EngineKey{}, err
 	}
 
 	key, ok := DecodeEngineKey(rawKey)
@@ -174,6 +183,21 @@ func (r *BatchReader) EngineEndKey() (EngineKey, error) {
 		return key, errors.Errorf("invalid encoded engine key: %x", rawKey)
 	}
 	return key, nil
+}
+
+// RawRangeKeys returns the raw range key values at the current entry.
+func (r *BatchReader) RawRangeKeys() ([]rangekey.Key, error) {
+	switch r.kind {
+	case pebble.InternalKeyKindRangeKeySet, pebble.InternalKeyKindRangeKeyUnset:
+	default:
+		return nil, errors.AssertionFailedf(
+			"can only ask for range keys on a range key entry, got %v", r.kind)
+	}
+	rangeKeys, err := r.rangeKeys()
+	if err != nil {
+		return nil, err
+	}
+	return rangeKeys.Keys, nil
 }
 
 // EngineRangeKeys returns the engine range key values at the current entry.
