@@ -74,7 +74,7 @@ SELECT
   DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS transaction_fingerprint_id,
   app_name,
   ARRAY( SELECT jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs' )) AS query_ids
-FROM crdb_internal.transaction_statistics
+FROM crdb_internal.transaction_statistics_persisted
 WHERE app_name != '${INTERNAL_SQL_API_APP}'
   AND encode(fingerprint_id, 'hex') = 
       ANY ARRAY[ ${txnFingerprintIDs.map(id => `'${id}'`).join(",")} ]`;
@@ -111,7 +111,7 @@ const fingerprintStmtsQuery = (stmtFingerprintIDs: string[]): string => `
 SELECT
   DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
   (metadata ->> 'query') AS query
-FROM crdb_internal.statement_statistics
+FROM crdb_internal.statement_statistics_persisted
 WHERE encode(fingerprint_id, 'hex') =
       ANY ARRAY[ ${stmtFingerprintIDs.map(id => `'${id}'`).join(",")} ]`;
 
