@@ -126,8 +126,8 @@ export function sqlResultsAreEmpty(
   result: SqlExecutionResponse<unknown>,
 ): boolean {
   return (
-    !result.execution?.txn_results?.length ||
-    result.execution.txn_results.every(txn => txnResultIsEmpty(txn))
+    !result?.execution?.txn_results?.length ||
+    result?.execution.txn_results.every(txn => txnResultIsEmpty(txn))
   );
 }
 
