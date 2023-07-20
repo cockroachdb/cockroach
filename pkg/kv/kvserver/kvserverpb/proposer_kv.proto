@@ -193,9 +193,11 @@ message ReplicatedEvalResult {
     // taken place since 22.1, to make sure all Raft log entries from 21.2 or
     // older have been applied on all replicas.
     bool at_write_timestamp = 4;
-    
+
+    // TODO(msbutler,dt): bikeshed the name of these fields.
     string remote_file_loc = 5;
     string remote_file_path = 6;
+    uint64 backing_file_size = 7;
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 

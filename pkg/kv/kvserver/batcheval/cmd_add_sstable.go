@@ -174,9 +174,10 @@ func EvalAddSSTable(
 		return result.Result{
 			Replicated: kvserverpb.ReplicatedEvalResult{
 				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
-					RemoteFileLoc:  args.RemoteFile.Locator,
-					RemoteFilePath: args.RemoteFile.Path,
-					Span:           roachpb.Span{Key: start.Key, EndKey: end.Key},
+					RemoteFileLoc:   args.RemoteFile.Locator,
+					RemoteFilePath:  args.RemoteFile.Path,
+					BackingFileSize: args.RemoteFile.BackingFileSize,
+					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
 				},
 				MVCCHistoryMutation: mvccHistoryMutation,
 			},

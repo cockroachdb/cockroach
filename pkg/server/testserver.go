@@ -1146,7 +1146,21 @@ func (ts *TestServer) StartTenant(
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
-	if ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
+	// Waiting for capabilities can take 3+ seconds since the
+	// rangefeedcache needs to wait for the closed timestamp
+	// before flushing updates. To avoid paying this cost in all
+	// cases, we only set the nodelocal storage capability if the
+	// caller has configured an ExternalIODir since nodelocal
+	// storage only works with that configured.
+	//
+	// TODO(ssd): We should do more here. We could have the caller
+	// pass in explicitly that they want these capabilities. Or,
+	// we could modify the system in some way to avoid waiting on
+	// capabilities for so long. Also, note that this doesn't
+	// apply to StartSharedProcessTenant.
+	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
+	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities)
+	if canGrantNodelocalCap && shouldGrantNodelocalCap {
 		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
 			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", params.TenantID.ToUint64())
 		if err != nil {
