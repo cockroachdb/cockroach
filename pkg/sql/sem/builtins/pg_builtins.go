@@ -2191,7 +2191,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Name),
 			Body: `
 SELECT
-  CASE WHEN length($1::text || '_' || $2::text) > 64
+  CASE WHEN length($1::text || '_' || $2::text) > 63
 	THEN (substring($1 from 1 for 63 - length($2::text) - 1) || '_' || $2::text)::name
 	ELSE ($1::text || '_' || $2::text)::name
 	END
