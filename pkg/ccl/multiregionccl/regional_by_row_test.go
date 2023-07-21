@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -346,7 +345,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// set backfill chunk to -chunksPerBackfill, to allow the ALTER TABLE ... ADD COLUMN
 							// to backfill successfully.
 							currentBackfillChunk := -(chunksPerBackfill + 1)
-							params, _ := tests.CreateTestServerParams()
+							var params base.TestServerArgs
 							params.Locality.Tiers = []roachpb.Tier{
 								{Key: "region", Value: "ajstorm-1"},
 							}
