@@ -21,20 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-// InitManualReplication calls tc.ToggleReplicateQueues(false).
-//
-// Note that the test harnesses that use this typically call
-// tc.WaitForFullReplication before calling this method,
-// so up-replication has usually already taken place.
-func InitManualReplication(tc *testcluster.TestCluster) {
-	tc.ToggleReplicateQueues(false)
-}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests

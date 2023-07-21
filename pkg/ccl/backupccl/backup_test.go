@@ -9771,7 +9771,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
+	_, sqlDB, tempDir, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()

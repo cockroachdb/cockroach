@@ -42,10 +42,15 @@ func TestMetadataSST(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	const numAccounts = 1
 	userfile := "userfile:///0"
-	tc, sqlDB, _, cleanupFn := backuptestutils.BackupRestoreTestSetup(t, backuptestutils.SingleNode, numAccounts,
-		backuptestutils.InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t,
+		backuptestutils.SingleNode,
+		backuptestutils.WithBank(1),
+		backuptestutils.WithParams(base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
+		}))
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
