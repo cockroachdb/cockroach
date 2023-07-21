@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package server_test
 
 import (
 	"context"
@@ -18,14 +18,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -39,9 +39,10 @@ import (
 func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLStatsKnobs: &sqlstats.TestingKnobs{
 			AOSTClause: "AS OF SYSTEM TIME '-1us'",
@@ -52,14 +53,15 @@ func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer r.Close()
 
 	url := r.URL()
-	params.Knobs.Server = &TestingKnobs{
+	params.Knobs.Server = &server.TestingKnobs{
 		DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 			OverrideReportingURL: &url,
 		},
 	}
 
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -68,7 +70,7 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
+	sqlServer := s.SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
 	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
@@ -106,12 +108,12 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	params.Settings = cluster.MakeClusterSettings()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
 
 	sqlConn := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -138,8 +140,8 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 		sqlConn.Exec(t, tc.stmt)
 	}
 
-	statusServer := s.(*TestServer).status
-	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
+	statusServer := s.StatusServer().(serverpb.StatusServer)
+	sqlServer := s.SQLServer().(*sql.Server)
 	sqlServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 	testutils.SucceedsSoon(t, func() error {
 		// Get the diagnostic info.
@@ -178,13 +180,14 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 func TestSQLStatCollection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()()
+
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
+	sqlServer := srv.TenantOrServer().SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
 	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
@@ -298,29 +301,32 @@ func populateStats(t *testing.T, sqlDB *gosql.DB) {
 func TestClusterResetSQLStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
-
-	params, _ := tests.CreateTestServerParams()
-	params.Insecure = true
 
 	for _, flushed := range []bool{false, true} {
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-				ServerArgs: params,
+				ServerArgs: base.TestServerArgs{
+					Insecure: true,
+					Knobs: base.TestingKnobs{
+						SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
+					},
+				},
 			})
 			defer testCluster.Stopper().Stop(ctx)
 
-			gatewayServer := testCluster.Server(1 /* idx */).(*TestServer)
-			status := gatewayServer.status
+			gateway := testCluster.Server(1 /* idx */).TenantOrServer()
+			status := gateway.StatusServer().(serverpb.SQLStatusServer)
 
 			sqlDB := serverutils.OpenDBConn(
-				t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
-				gatewayServer.Stopper())
+				t, gateway.SQLAddr(), "" /* useDatabase */, true, /* insecure */
+				gateway.Stopper())
 
 			populateStats(t, sqlDB)
 			if flushed {
-				gatewayServer.SQLServer().(*sql.Server).
+				gateway.SQLServer().(*sql.Server).
 					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 			}
 
