@@ -1808,6 +1808,13 @@ var charts = []sectionDescription{
 					"leases.transfers.success",
 				},
 			},
+			{
+				Title: "Lease Preference Conformance",
+				Metrics: []string{
+					"leases.preferences.violating",
+					"leases.preferences.less-preferred",
+				},
+			},
 		},
 	},
 	{
