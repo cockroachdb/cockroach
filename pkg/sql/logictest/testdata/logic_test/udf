@@ -18,10 +18,10 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 
 subtest usage
 
-statement error pq: no language specified
+statement error pgcode 42P13 pq: no language specified
 CREATE FUNCTION f() RETURNS INT IMMUTABLE AS $$ SELECT 1 $$;
 
-statement error pq: no function body specified
+statement error pgcode 42P13 pq: no function body specified
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL;
 
 
@@ -34,7 +34,7 @@ CREATE FUNCTION b(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT a FROM ab WHERE a =
 statement ok
 CREATE FUNCTION c(i INT, j INT) RETURNS INT LANGUAGE SQL AS 'SELECT i - j'
 
-statement error column \"j\" does not exist
+statement error pgcode 42703 column \"j\" does not exist
 CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT j'
 
 statement error pgcode 42703 column \"j\" does not exist
@@ -46,13 +46,13 @@ CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM dne'
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
 
-statement error return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
+statement error pgcode 42P13 return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
 CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 
-statement error return type mismatch in function declared to return int\nDETAIL: Actual return type is bool
+statement error pgcode 42P13 return type mismatch in function declared to return int\nDETAIL: Actual return type is bool
 CREATE FUNCTION err(b BOOL) RETURNS INT LANGUAGE SQL AS 'SELECT b'
 
-statement error return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
+statement error pgcode 42P13 return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
 CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 
 # TODO(#100962): Add support for default parameters.
@@ -64,7 +64,7 @@ CREATE FUNCTION err(i INT, j INT DEFAULT 2) RETURNS INT LANGUAGE SQL AS 'SELECT 
 statement ok
 CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
 
-statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
+statement error pgcode 42P13 pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
 
 # Create function with no references.
@@ -120,7 +120,7 @@ CREATE FUNCTION public.f(IN a test.public.notmyworkday)
   SELECT nextval('public.sq1'::REGCLASS);
 $$
 
-statement error pq: unimplemented: alter function depends on extension not supported.*
+statement error pgcode 0A000 pq: unimplemented: alter function depends on extension not supported.*
 ALTER FUNCTION f() DEPENDS ON EXTENSION postgis
 
 subtest end
@@ -277,7 +277,7 @@ CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
   SELECT 'hello';
 $$
 
-statement error pq: unknown function: proc_f_2()
+statement error pgcode 42883 pq: unknown function: proc_f_2()
 SHOW CREATE FUNCTION proc_f_2;
 
 query T
@@ -330,10 +330,10 @@ SELECT 'sc.proc_f_2'::REGPROC::INT;
 ----
 100121
 
-statement error pq: unknown function: no_such_func()
+statement error pgcode 42883 pq: unknown function: no_such_func()
 SELECT 'no_such_func'::REGPROC;
 
-statement error pq: more than one function named 'proc_f'
+statement error pgcode 42P09 pq: more than one function named 'proc_f'
 SELECT 'proc_f'::REGPROC;
 
 query T
@@ -406,17 +406,18 @@ CREATE FUNCTION sc1.f_test_drop(IN INT8)
   SELECT 1;
 $$
 
-statement error pq: function name \"f_test_drop\" is not unique
+# TODO(107369): Postgres errors with code 42725 here.
+statement error pgcode XXUUU pq: function name \"f_test_drop\" is not unique
 DROP FUNCTION f_test_drop;
 
 statement ok
 DROP FUNCTION IF EXISTS f_not_existing;
 
-statement error pq: unknown function: f_not_existing\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
 DROP FUNCTION f_not_existing;
 
 # drop a function twice should fail.
-statement error pq: function f_test_drop\(\) does not exist: function undefined
+statement error pgcode 42883 pq: function f_test_drop\(\) does not exist: function undefined
 BEGIN;
 DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
@@ -459,7 +460,7 @@ $$
 statement ok
 DROP FUNCTION f_test_drop(INT), f_test_drop(INT);
 
-statement error pq: unknown function: public.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\): function undefined
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
 query T
@@ -478,7 +479,7 @@ $$
 statement ok
 DROP FUNCTION f_test_drop(INT);
 
-statement error pq: unknown function: sc1.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\): function undefined
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 # If there are identical function signatures in different schemas, multiple drop
@@ -519,10 +520,10 @@ DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
 COMMIT;
 
-statement error pq: unknown function: public.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\): function undefined
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
-statement error pq: unknown function: sc1.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\): function undefined
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 statement ok
@@ -547,7 +548,7 @@ SELECT f_test_exec_dropped(123);
 statement ok
 DROP FUNCTION f_test_exec_dropped;
 
-statement error pq: unknown function: f_test_exec_dropped\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_test_exec_dropped\(\): function undefined
 SELECT f_test_exec_dropped(321);
 
 subtest end
@@ -555,22 +556,22 @@ subtest end
 
 subtest create_or_replace_function
 
-statement error pq: parameter name "a" used more than once
+statement error pgcode 42P13 pq: parameter name "a" used more than once
 CREATE FUNCTION f_test_cor(a INT, a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement ok
 CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 1 $$;
 
-statement error pq: function "f_test_cor" already exists with same argument types
+statement error pgcode 42723 pq: function "f_test_cor" already exists with same argument types
 CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement ok
 CREATE OR REPLACE FUNCTION f_test_cor_not_exist(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
-statement error pq: cannot change name of input parameter "b"
+statement error pgcode 42P13 pq: cannot change name of input parameter "b"
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
-statement error pq: cannot change return type of existing function
+statement error pgcode 42P13 pq: cannot change return type of existing function
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
 statement error pgcode 42P13 leak proof function must be immutable, but got volatility: VOLATILE
@@ -632,7 +633,7 @@ statement ok
 CREATE SCHEMA sc_seq_qualified_name;
 CREATE SEQUENCE sc_seq_qualified_name.sq;
 
-statement error pq: relation "sc_seq_qualified_name.sq" does not exist
+statement error pgcode 42P01 pq: relation "sc_seq_qualified_name.sq" does not exist
 CREATE FUNCTION f_seq_qualified_name() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM nextval('"sc_seq_qualified_name.sq"') $$;
 
 statement ok
@@ -835,18 +836,18 @@ subtest end
 
 subtest args
 
-statement error pq: SQL functions cannot have arguments of type record
+statement error pgcode 42P13 pq: SQL functions cannot have arguments of type record
 CREATE FUNCTION f(r RECORD) RETURNS INT LANGUAGE SQL AS 'SELECT i'
 
 # TODO(mgartner): Technically $3 is a parameter, and the error message should be
 # more similar to Postgres's "there is no parameter $3".
-statement error no value provided for placeholder: \$3
+statement error pgcode 42P02 no value provided for placeholder: \$3
 CREATE FUNCTION err(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + y + $1 + $2 + $3'
 
-statement error no value provided for placeholder: \$3
+statement error pgcode 42P02 no value provided for placeholder: \$3
 CREATE FUNCTION err(INT, INT) RETURNS INT LANGUAGE SQL AS 'SELECT $1 + $2 + $3'
 
-statement error placeholder index must be between 1 and 65536
+statement error pgcode 42601 placeholder index must be between 1 and 65536
 CREATE FUNCTION err(INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1 + $0'
 
 statement ok
@@ -1014,7 +1015,7 @@ SELECT single_quote('hello')
 ----
 'hello'
 
-statement error unterminated string
+statement error pgcode 42601 unterminated string
 CREATE FUNCTION err() RETURNS STRING LANGUAGE SQL AS $outer$
   SELECT $inner$hello$outer$
 $inner$

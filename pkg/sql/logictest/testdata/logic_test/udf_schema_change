@@ -20,7 +20,7 @@ CREATE FUNCTION public.f_test_alter_opt(IN INT8)
   SELECT 1;
 $$
 
-statement error pq: IMMUTABLE: conflicting or redundant options
+statement error pgcode 42601 pq: IMMUTABLE: conflicting or redundant options
 ALTER FUNCTION f_test_alter_opt IMMUTABLE IMMUTABLE
 
 statement error pgcode 42P13 leak proof function must be immutable, but got volatility: STABLE
@@ -68,16 +68,16 @@ CREATE FUNCTION public.f_test_alter_name(IN INT8)
   SELECT 1;
 $$
 
-statement error pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
 
-statement error pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
 
 statement ok
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
 
-statement error pq: unknown function: f_test_alter_name\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_test_alter_name\(\): function undefined
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 
 query T
@@ -96,7 +96,7 @@ $$
 statement ok
 ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
 
-statement error pq: unknown function: f_test_alter_name_new\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_test_alter_name_new\(\): function undefined
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 
 query T
@@ -185,10 +185,10 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
 113  105
 115  114
 
-statement error pq: cannot move objects into or out of virtual schemas
+statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
 ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
 
-statement error pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
+statement error pgcode 42723 pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
 ALTER FUNCTION f_test_sc() SET SCHEMA test_alter_sc;
 
 # Make sure moving to same schema has not effects.
@@ -389,13 +389,13 @@ SELECT sc2.f_seq()
 ----
 2
 
-statement error pq: cannot rename database because relation "rename_db1.sc1.f_tbl" depends on relation "rename_db1.sc1.tbl"
+statement error pgcode 2BP01 pq: cannot rename database because relation "rename_db1.sc1.f_tbl" depends on relation "rename_db1.sc1.tbl"
 ALTER DATABASE rename_db1 RENAME TO rename_db2;
 
 statement ok
 DROP FUNCTION sc1.f_tbl()
 
-statement error pq: cannot rename database because relation "rename_db1.sc2.f_tbl" depends on relation "rename_db1.sc1.tbl"
+statement error pgcode 2BP01 pq: cannot rename database because relation "rename_db1.sc2.f_tbl" depends on relation "rename_db1.sc1.tbl"
 ALTER DATABASE rename_db1 RENAME TO rename_db2;
 
 statement ok
@@ -468,13 +468,13 @@ SELECT sc2.f_seq()
 ----
 2
 
-statement error pq: cannot rename schema because relation "rename_sc1.sc1.f_tbl" depends on relation "rename_sc1.sc1.tbl"
+statement error pgcode 2BP01 pq: cannot rename schema because relation "rename_sc1.sc1.f_tbl" depends on relation "rename_sc1.sc1.tbl"
 ALTER SCHEMA sc1 RENAME TO sc1_new
 
 statement ok
 DROP FUNCTION sc1.f_tbl()
 
-statement error pq: cannot rename schema because relation "rename_sc1.sc2.f_tbl" depends on relation "rename_sc1.sc1.tbl"
+statement error pgcode 2BP01 pq: cannot rename schema because relation "rename_sc1.sc2.f_tbl" depends on relation "rename_sc1.sc1.tbl"
 ALTER SCHEMA sc1 RENAME TO sc1_new
 
 statement ok
@@ -484,10 +484,10 @@ statement ok
 ALTER SCHEMA sc1 RENAME TO sc1_new
 
 # Cannot refer to the old schema name.
-statement error pq: schema "sc1" does not exist
+statement error pgcode 3F000 pq: schema "sc1" does not exist
 SELECT sc1.f_type()
 
-statement error pq: schema "sc1" does not exist
+statement error pgcode 3F000 pq: schema "sc1" does not exist
 SELECT sc1.f_seq()
 
 # Make sure that schema renaming does not affect types and sequences in UDF.
@@ -536,7 +536,7 @@ SELECT f()
 statement ok
 ALTER SEQUENCE sc.sq RENAME TO sq_new;
 
-statement error pq: relation "tdb_seq_select.sc.sq" does not exist
+statement error pgcode 42P01 pq: relation "tdb_seq_select.sc.sq" does not exist
 SELECT f()
 
 statement ok
@@ -546,7 +546,7 @@ SELECT f();
 statement ok
 ALTER SCHEMA sc RENAME TO sc_new;
 
-statement error pq: unknown schema "sc"
+statement error pgcode 3F000 pq: unknown schema "sc"
 SELECT f()
 
 statement ok
@@ -557,7 +557,7 @@ statement ok
 ALTER DATABASE tdb_seq_select RENAME TO tdb_seq_select_new;
 SET DATABASE = tdb_seq_select_new;
 
-statement error pq: database "tdb_seq_select" does not exist
+statement error pgcode 3D000 pq: database "tdb_seq_select" does not exist
 SELECT f()
 
 statement ok
@@ -593,7 +593,7 @@ SELECT f_rtbl();
 statement ok
 ALTER TABLE t_alter DROP COLUMN c;
 
-statement error pq: return type mismatch in function declared to return t_alter
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
 statement ok
@@ -610,7 +610,7 @@ SET enable_experimental_alter_column_type_general=true
 statement ok
 ALTER TABLE t_alter ALTER c TYPE FLOAT;
 
-statement error pq: return type mismatch in function declared to return t_alter
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
 statement ok
@@ -624,7 +624,7 @@ SELECT f_rtbl();
 statement ok
 ALTER TABLE t_alter ALTER b TYPE CHAR(3)
 
-statement error pq: return type mismatch in function declared to return t_alter
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
 statement ok
@@ -633,7 +633,7 @@ ALTER TABLE t_alter ALTER b TYPE TEXT
 statement ok
 ALTER TABLE t_alter ADD COLUMN d INT;
 
-statement error pq: return type mismatch in function declared to return record
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
 CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
   SELECT 1, 'foobar', 2
 $$
