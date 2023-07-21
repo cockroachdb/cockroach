@@ -52,11 +52,11 @@ const log10int64times1000 = 19 * 1000
 func MakeBulkMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
-			Metadata: metaMemMaxBytes,
-			Duration: histogramWindow,
-			MaxVal:   log10int64times1000,
-			SigFigs:  3,
-			Buckets:  metric.MemoryUsage64MBBuckets,
+			Metadata:     metaMemMaxBytes,
+			Duration:     histogramWindow,
+			MaxVal:       log10int64times1000,
+			SigFigs:      3,
+			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 	}
