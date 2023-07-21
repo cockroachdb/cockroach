@@ -733,14 +733,24 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 						return nil
 					}
 					bti.resumeCh <- struct{}{}
-					return <-bti.errCh
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case err := <-bti.errCh:
+						return err
+					}
 				},
 				FailOrCancel: func(ctx context.Context) error {
 					if bti.done.Load().(bool) {
 						return nil
 					}
 					bti.failOrCancelCh <- struct{}{}
-					return <-bti.errCh
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case err := <-bti.errCh:
+						return err
+					}
 				},
 			}
 		}, UsesTenantCostControl)
@@ -793,7 +803,14 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			expectedResumed++
 			retryCnt++
 			// Validate that the job is resumed only once.
-			require.Equal(t, expectedResumed, bti.resumed.Count(), "unexpected number of jobs resumed in retry %d", i)
+			//
+			// For tests that immediately resume, we can't make this
+			// assertion because the waitFn above might have already
+			// put the job into the state where it will be retried
+			// and by definition it is not going to wait to retry.
+			if !bti.expectImmediateRetry {
+				require.Equal(t, expectedResumed, bti.resumed.Count(), "unexpected number of jobs resumed in retry (post waitFn) %d", i)
+			}
 			lastRun = bti.clock.Now()
 		}
 		bti.done.Store(true)
@@ -839,7 +856,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("pause running", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{expectImmediateRetry: true}
-		skip.WithIssue(t, 74399)
 		bti.afterJobStateMachineKnob = func() {
 			if bti.done.Load().(bool) {
 				return
@@ -856,7 +872,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			<-bti.resumeCh
 			insqlDB := bti.s.InternalDB().(isql.DB)
 			pauseOrCancelJob(t, ctx, insqlDB, bti.registry, jobID, pause)
-			bti.errCh <- nil
 			<-bti.transitionCh
 			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
 			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
@@ -920,7 +935,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("pause reverting", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{expectImmediateRetry: true}
-		skip.WithIssue(t, 74399)
 
 		bti.afterJobStateMachineKnob = func() {
 			if bti.done.Load().(bool) {
@@ -945,11 +959,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
 			<-bti.failOrCancelCh
 			pauseOrCancelJob(t, ctx, bti.idb, bti.registry, jobID, pause)
-			// We have to return error here because, otherwise, the job will be marked as
-			// failed regardless of the fact that it is currently pause-requested in the
-			// jobs table. This is because we currently do not check the current status
-			// of a job before marking it as failed.
-			bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state to retry"))
 			<-bti.transitionCh
 			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
 			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
