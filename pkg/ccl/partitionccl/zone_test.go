@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -376,7 +375,7 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 	yamlOverride := "gc: {ttlseconds: 42}"
 
 	errCh := make(chan error)
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 
 	startIndexMerge := make(chan interface{})
 	atIndexMerge := make(chan interface{})
