@@ -109,6 +109,18 @@ var EagerLeaseAcquisitionConcurrency = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// LeaseCheckPreferencesOnAcquisitionEnabled controls whether lease preferences
+// are checked upon acquiring a new lease. If the new lease violates the
+// configured preferences, it is enqueued in the replicate queue for
+// processing.
+var LeaseCheckPreferencesOnAcquisitionEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.check_preferences_on_acquisition.enabled",
+	"controls whether lease preferences are checked on lease acquisition, "+
+		"if the new lease violates preferences, it is queued for processing",
+	true,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
