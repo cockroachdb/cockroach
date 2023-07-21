@@ -20,6 +20,7 @@ package kvprober
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -210,6 +211,27 @@ func (p *ProberOps) Write(key roachpb.Key) func(context.Context, *kv.Txn) error 
 	}
 }
 
+// errorIsExpectedDuringNormalOperation filters out errors that may be returned
+// during normal operation of CRDB.
+//
+// One such example is the `was permanently removed from the cluster at` error
+// that is returned to the kvclient of decommissioned nodes. This error does not
+// affect user traffic, since such traffic is drained off the node by the time it
+// becomes decommissioned.
+//
+// Since such errors do not indicate a problem with CRDB, kvprober does not report
+// them as an error in its metrics.
+func errorIsExpectedDuringNormalOperation(err error) bool {
+	// Note that errors *other* than decommissioned status errors, such as
+	// `use of closed network connection`, happen *occasionally* on the kvclient
+	// of a decommissioned node. The full set of other errors is not known exactly,
+	// and the errors mostly lack structure. Since they happen rarely, and since
+	// the intended use of kvprober is to page on a sustained error rate, not a
+	// single error, we choose to only filter out `was permanently removed from
+	// the cluster at` errors.
+	return strings.Contains(err.Error(), "was permanently removed from the cluster at")
+}
+
 // validateKey returns an error if the key is not valid for use by the kvprober.
 // This is a sanity check to ensure that the kvprober does not corrupt user data
 // in the global keyspace or other system data in the local keyspace.
@@ -352,8 +374,12 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 		return
 	}
 	if err != nil {
-		log.Health.Errorf(ctx, "can't make a plan: %v", err)
-		p.metrics.ProbePlanFailures.Inc(1)
+		if errorIsExpectedDuringNormalOperation(err) {
+			log.Health.Warningf(ctx, "making a plan failed with expected error: %v", err)
+		} else {
+			log.Health.Errorf(ctx, "can't make a plan: %v", err)
+			p.metrics.ProbePlanFailures.Inc(1)
+		}
 		return
 	}
 
@@ -383,9 +409,13 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 		return txns.TxnRootKV(ctx, f)
 	})
 	if err != nil {
-		// TODO(josh): Write structured events with log.Structured.
-		log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
-		p.metrics.ReadProbeFailures.Inc(1)
+		if errorIsExpectedDuringNormalOperation(err) {
+			log.Health.Warningf(ctx, "kv.Get(%s), r=%v failed with expected error: %v", step.Key, step.RangeID, err)
+		} else {
+			// TODO(josh): Write structured events with log.Structured.
+			log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
+			p.metrics.ReadProbeFailures.Inc(1)
+		}
 		return
 	}
 
@@ -415,8 +445,12 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 		return
 	}
 	if err != nil {
-		log.Health.Errorf(ctx, "can't make a plan: %v", err)
-		p.metrics.ProbePlanFailures.Inc(1)
+		if errorIsExpectedDuringNormalOperation(err) {
+			log.Health.Warningf(ctx, "making a plan failed with expected error: %v", err)
+		} else {
+			log.Health.Errorf(ctx, "can't make a plan: %v", err)
+			p.metrics.ProbePlanFailures.Inc(1)
+		}
 		return
 	}
 
@@ -435,11 +469,17 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 		return txns.TxnRootKV(ctx, f)
 	})
 	if err != nil {
-		added := p.quarantineWritePool.maybeAdd(ctx, step)
-		log.Health.Errorf(
-			ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v [quarantined=%t]", step.Key, step.RangeID, err, added,
-		)
-		p.metrics.WriteProbeFailures.Inc(1)
+		if errorIsExpectedDuringNormalOperation(err) {
+			log.Health.Warningf(
+				ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with expected error: %v", step.Key, step.RangeID, err,
+			)
+		} else {
+			added := p.quarantineWritePool.maybeAdd(ctx, step)
+			log.Health.Errorf(
+				ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v [quarantined=%t]", step.Key, step.RangeID, err, added,
+			)
+			p.metrics.WriteProbeFailures.Inc(1)
+		}
 		return
 	}
 	// This will no-op if not in the quarantine pool.
