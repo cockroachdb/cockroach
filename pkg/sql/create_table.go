@@ -1192,19 +1192,6 @@ func newTableDescIfAs(
 		return nil, err
 	}
 
-	colResIndex := 0
-	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
-	// for each column, and a ConstraintTableDef for any constraints on those
-	// columns.
-	for _, defs := range p.Defs {
-		var d *tree.ColumnTableDef
-		var ok bool
-		if d, ok = defs.(*tree.ColumnTableDef); ok {
-			d.Type = resultColumns[colResIndex].Typ
-			colResIndex++
-		}
-	}
-
 	// If there are no TableDefs defined by the parser, then we construct a
 	// ColumnTableDef for each column using resultColumns.
 	if len(p.Defs) == 0 {
@@ -1212,15 +1199,30 @@ func newTableDescIfAs(
 			var d *tree.ColumnTableDef
 			var ok bool
 			var tableDef tree.TableDef = &tree.ColumnTableDef{
-				Name:   tree.Name(colRes.Name),
-				Type:   colRes.Typ,
-				Hidden: colRes.Hidden,
+				Name:       tree.Name(colRes.Name),
+				Type:       colRes.Typ,
+				IsCreateAs: true,
+				Hidden:     colRes.Hidden,
 			}
 			if d, ok = tableDef.(*tree.ColumnTableDef); !ok {
 				return nil, errors.Errorf("failed to cast type to ColumnTableDef\n")
 			}
 			d.Nullable.Nullability = tree.SilentNull
 			p.Defs = append(p.Defs, tableDef)
+		}
+	} else {
+		colResIndex := 0
+		// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
+		// for each column, and a ConstraintTableDef for any constraints on those
+		// columns.
+		for _, defs := range p.Defs {
+			var d *tree.ColumnTableDef
+			var ok bool
+			if d, ok = defs.(*tree.ColumnTableDef); ok {
+				d.Type = resultColumns[colResIndex].Typ
+				d.IsCreateAs = true
+				colResIndex++
+			}
 		}
 	}
 
