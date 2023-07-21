@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,6 +103,27 @@ func TestShouldPost(t *testing.T) {
 		require.Equal(t, c.expectedPost, doPost)
 		require.Equal(t, c.expectedReason, skipReason)
 	}
+}
+
+func TestGenerateHelpCommand(t *testing.T) {
+	vo := vm.DefaultCreateOpts()
+	vmOpts := &vo
+
+	reg := makeTestRegistry(spec.GCE, "", "", false, false)
+	clusterSpec := reg.MakeClusterSpec(1, spec.Arch("arm64"))
+	testClusterImpl := &clusterImpl{name: "foo-cluster", spec: clusterSpec, arch: vm.ArchAMD64}
+
+	github := &githubIssues{
+		vmCreateOpts: vmOpts,
+		cluster:      testClusterImpl,
+		teamLoader:   validTeamsFn,
+	}
+
+	r := &issues.Renderer{}
+	generateHelpCommand(github)(r)
+
+	// TODO (BEFORE MERGE): time.Now() in tests == no bueno. could do regex, but want something like utils.TimeNow() that cc has
+	echotest.Require(t, strings.Replace(r.String(), "\n", "", -1), filepath.Join("testdata", "help_command.txt"))
 }
 
 func TestCreatePostRequest(t *testing.T) {

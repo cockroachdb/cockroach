@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -44,6 +45,25 @@ func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) 
 
 func roachtestPrefix(p string) string {
 	return "ROACHTEST_" + p
+}
+
+// TODO(BEFORE MERGING): the 'from' timestamp is zeroed out for now, until I find the correct
+// way to get the 'start' time of a roachtest
+func generateHelpCommand(g *githubIssues) func(renderer *issues.Renderer) {
+	return func(renderer *issues.Renderer) {
+		issues.HelpCommandAsLink(
+			"roachtest README",
+			"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
+		)(renderer)
+		issues.HelpCommandAsLink(
+			"How To Investigate (internal)",
+			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
+		)(renderer)
+		issues.HelpCommandAsLink(
+			"Grafana",
+			fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", g.cluster.name, 0, time.Now().Unix()),
+		)(renderer)
+	}
 }
 
 // postIssueCondition encapsulates a condition that causes issue
@@ -192,16 +212,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
-		HelpCommand: func(renderer *issues.Renderer) {
-			issues.HelpCommandAsLink(
-				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
-			)(renderer)
-			issues.HelpCommandAsLink(
-				"How To Investigate (internal)",
-				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
-			)(renderer)
-		},
+		HelpCommand:     generateHelpCommand(g),
 	}
 }
 
