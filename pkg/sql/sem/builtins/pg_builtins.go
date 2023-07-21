@@ -824,7 +824,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				res.ExplicitCatalog = false
-				return tree.NewDString(fmt.Sprintf(`%s.%s`, res.Schema(), res.Object())), nil
+				return tree.NewDString(fmt.Sprintf(`%s.%s`, res.SchemaName.String(), res.ObjectName.String())), nil
 			},
 			Info:       "Returns the name of the sequence used by the given column_name in the table table_name.",
 			Volatility: volatility.Stable,
