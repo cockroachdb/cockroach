@@ -64,12 +64,15 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	default:
 		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
 	}
+
 	if dst == nil {
 		// We're adding both a new element and a target for it.
 		if target == scpb.ToAbsent {
 			// Ignore targets to remove something that doesn't exist yet.
 			return
 		}
+		// Set a target for the element but check for concurrent schema changes.
+		_ = b.checkForConcurrentSchemaChanges(e)
 		b.addNewElementState(elementState{
 			element:  e,
 			initial:  scpb.Status_ABSENT,
@@ -85,18 +88,10 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		return
 	}
 
-	// Check that the descriptors relevant to this element are not undergoing any
-	// concurrent schema changes.
-	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
-		b.ensureDescriptor(id)
-		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
-		}
-	})
-	// Re-assign dst because the above function may have mutated the builder
-	// state. Specifically, the output slice, to which dst points to, might
-	// have grown and might have been reallocated.
-	dst = b.getExistingElementState(e)
+	// Check that there are no concurrent schema changes on the descriptors
+	// referenced by this element. Re-assign dst because of potential
+	// re-allocations.
+	dst = b.checkForConcurrentSchemaChanges(e)
 
 	// Henceforth all possibilities lead to the target and metadata being
 	// overwritten. See below for explanations as to why this is legal.
@@ -158,6 +153,32 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		return
 	}
 	panic(errors.AssertionFailedf("unsupported incumbent target %s", oldTarget.Status()))
+}
+
+func (b *builderState) checkForConcurrentSchemaChanges(e scpb.Element) *elementState {
+	b.ensureDescriptors(e)
+	// Check that there are no descriptors which are undergoing a concurrent
+	// schema change which might interfere with this one.
+	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
+		}
+	})
+	// We may have mutated the builder state for this element.
+	// Specifically, the output slice might have grown and have been realloc'ed.
+	return b.getExistingElementState(e)
+}
+
+// ensureDescriptors ensures the presence of all elements for all
+// descriptors referenced inside the element.
+//
+// This provides us with all of the ID -> name mappings required to
+// comprehensively decorate any EXPLAIN (DDL) output.
+func (b *builderState) ensureDescriptors(e scpb.Element) {
+	_ = screl.WalkDescIDs(e, func(id *catid.DescID) error {
+		b.ensureDescriptor(*id)
+		return nil
+	})
 }
 
 func (b *builderState) upsertElementState(es elementState) {
