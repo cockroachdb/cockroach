@@ -2431,6 +2431,7 @@ var builtinOidsArray = []string{
 	2458: `pg_sequence_last_value(sequence_oid: oid) -> int`,
 	2459: `nameconcatoid(name: string, oid: oid) -> name`,
 	2460: `pg_get_function_arg_default(func_oid: oid, arg_num: int4) -> string`,
+	2461: `crdb_internal.plpgsql_raise(severity: string, message: string, detail: string, hint: string, code: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
