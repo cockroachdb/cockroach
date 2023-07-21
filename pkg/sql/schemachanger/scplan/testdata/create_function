@@ -20,7 +20,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -28,6 +28,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -74,6 +75,11 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         Privileges: 2
         UserName: admin
         WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 109
+        Privileges: 1048576
+        UserName: public
     *scop.UpdateUserPrivileges
       Privileges:
         DescriptorID: 109
@@ -153,12 +159,13 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[FunctionVolatility:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 11 MutationType ops
+PreCommitPhase stage 2 of 2 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -166,6 +173,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -212,6 +220,11 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         Privileges: 2
         UserName: admin
         WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 109
+        Privileges: 1048576
+        UserName: public
     *scop.UpdateUserPrivileges
       Privileges:
         DescriptorID: 109
@@ -318,6 +331,10 @@ $$;
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 110, Name: public}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
   to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
@@ -346,6 +363,10 @@ $$;
   kind: Precedence
   rule: dependents exist before descriptor becomes public
 - from: [UserPrivileges:{DescID: 110, Name: admin}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 110, Name: public}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public

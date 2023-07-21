@@ -882,4 +882,9 @@ select nameconcatoid(repeat('a', 58) || 'bbbbbbbbbb', 2);
 ----
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbb_2
 
+query TI
+select nameconcatoid(repeat('a', 62), 2), length(nameconcatoid(repeat('a', 62), 2))
+----
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2  63
+
 subtest end

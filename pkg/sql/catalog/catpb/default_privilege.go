@@ -107,7 +107,8 @@ func InitDefaultPrivilegesForRole(
 	if role.ForAllRoles {
 		defaultPrivilegesRole = &DefaultPrivilegesForRole_ForAllRoles{
 			ForAllRoles: &DefaultPrivilegesForRole_ForAllRolesPseudoRole{
-				PublicHasUsageOnTypes: true,
+				PublicHasUsageOnTypes:       true,
+				PublicHasExecuteOnFunctions: true,
 			},
 		}
 		return DefaultPrivilegesForRole{
@@ -121,6 +122,7 @@ func InitDefaultPrivilegesForRole(
 			ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
 				UserProto:                       role.Role.EncodeProto(),
 				PublicHasUsageOnTypes:           true,
+				PublicHasExecuteOnFunctions:     true,
 				RoleHasAllPrivilegesOnTables:    true,
 				RoleHasAllPrivilegesOnSequences: true,
 				RoleHasAllPrivilegesOnSchemas:   true,

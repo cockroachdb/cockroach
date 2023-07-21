@@ -42,7 +42,7 @@ write *eventpb.CreateFunction to event log:
       SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$"
     tag: CREATE FUNCTION
     user: root
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #110
   -
   +function:
@@ -80,6 +80,8 @@ upsert descriptor #110
   +    - privileges: "2"
   +      userProto: admin
   +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
@@ -184,7 +186,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 11 MutationType ops
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
 upsert descriptor #110
   -
   +function:
@@ -222,6 +224,8 @@ upsert descriptor #110
   +    - privileges: "2"
   +      userProto: admin
   +      withGrantOption: "2"
+  +    - privileges: "1048576"
+  +      userProto: public
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"

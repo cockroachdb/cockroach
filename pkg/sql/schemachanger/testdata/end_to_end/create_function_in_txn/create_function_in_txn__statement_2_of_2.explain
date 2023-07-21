@@ -31,9 +31,10 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 12 elements transitioning toward PUBLIC
+ │    │    ├── 13 elements transitioning toward PUBLIC
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (t+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+ │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "public"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "root"}
  │    │    │    ├── PUBLIC        → ABSENT Function:{DescID: 105 (t+)}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
@@ -51,9 +52,10 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 12 elements transitioning toward PUBLIC
+ │         ├── 13 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105 (t+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (t+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (t+), Name: "root"}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID: 105 (t+)}
  │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
@@ -68,7 +70,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 3}
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 3}
- │         └── 21 Mutation operations
+ │         └── 22 Mutation operations
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
  │              ├── SetFunctionName {"FunctionID":105,"Name":"t"}
  │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
@@ -85,6 +87,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":1048576,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}

@@ -6361,6 +6361,20 @@ CREATE TABLE crdb_internal.default_privileges (
 									return err
 								}
 							}
+							if catprivilege.GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole) {
+								if err := addRow(
+									database,    // database_name
+									schema,      // schema_name
+									role,        // role
+									forAllRoles, // for_all_roles
+									tree.NewDString(privilege.Functions.String()),           // object_type
+									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
+									tree.NewDString(privilege.EXECUTE.String()),             // privilege_type
+									tree.DBoolFalse, // is_grantable
+								); err != nil {
+									return err
+								}
+							}
 						}
 					}
 					return nil
