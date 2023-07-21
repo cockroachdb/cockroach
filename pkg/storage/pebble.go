@@ -52,7 +52,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
-	"github.com/cockroachdb/pebble/objstorage/shared"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
@@ -855,7 +855,7 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 		return nil
 	}
 	p.storeIDPebbleLog.Set(ctx, storeID)
-	// Note that SetCreatorID only does something if shared storage is configured
+	// Note that SetCreatorID only does something if remote storage is configured
 	// in the pebble options. The version gate protects against accidentally
 	// setting the creator ID on an older store.
 	if storeID != base.TempStoreID && p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
@@ -1131,7 +1131,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	if cfg.SharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
-		opts.Experimental.SharedStorage = shared.MakeSimpleFactory(map[shared.Locator]shared.Storage{
+		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
 			"": esWrapper,
 		})
 		opts.Experimental.CreateOnShared = true
