@@ -844,6 +844,45 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 	if GetPublicHasUsageOnTypes(defaultPrivilegesForCreator) {
 		t.Errorf("expected public to not have USAGE privilege on types")
 	}
+
+	if err := defaultPrivileges.RevokeDefaultPrivileges(
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
+		privilege.List{privilege.EXECUTE},
+		[]username.SQLUsername{username.PublicRoleName()},
+		privilege.Functions,
+		false, /* grantOptionFor */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if GetPublicHasExecuteOnFunctions(defaultPrivilegesForCreator) {
+		t.Errorf("expected public to not have EXECUTE privilege on functions")
+	}
+	if err := defaultPrivileges.GrantDefaultPrivileges(
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
+		privilege.List{privilege.EXECUTE},
+		[]username.SQLUsername{username.PublicRoleName()},
+		privilege.Functions,
+		false, /* withGrantOption */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if !GetPublicHasExecuteOnFunctions(defaultPrivilegesForCreator) {
+		t.Errorf("expected public to have EXECUTE privilege on functions")
+	}
+
+	// Test a complete revoke afterwards.
+	if err := defaultPrivileges.RevokeDefaultPrivileges(
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
+		privilege.List{privilege.EXECUTE},
+		[]username.SQLUsername{username.PublicRoleName()},
+		privilege.Functions,
+		false, /* grantOptionFor */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if GetPublicHasExecuteOnFunctions(defaultPrivilegesForCreator) {
+		t.Errorf("expected public to not have EXECUTE privilege on functions")
+	}
 }
 
 // TestApplyDefaultPrivileges tests whether granting potentially different privileges and grant options

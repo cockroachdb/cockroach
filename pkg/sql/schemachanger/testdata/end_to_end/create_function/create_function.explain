@@ -27,21 +27,23 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN �
 	AS $$SELECT ‹a› FROM ‹defaultdb›.‹public›.‹t›; SELECT ‹b› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_b›; SELECT ‹c› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_c›; SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 8 elements transitioning toward PUBLIC
+ │         ├── 9 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Function:{DescID: 110 (f+)}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC FunctionName:{DescID: 110 (f+)}
  │         │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 110 (f+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 110 (f+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "root"}
  │         │    └── ABSENT → PUBLIC FunctionBody:{DescID: 110 (f+)}
- │         └── 11 Mutation operations
+ │         └── 12 Mutation operations
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":110}}
  │              ├── SetFunctionName {"FunctionID":110,"Name":"f"}
  │              ├── SetFunctionVolatility {"FunctionID":110,"Volatility":1}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":110,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":1048576,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── SetFunctionBody {"Body":{"Body":"SELECT a FROM t;...","FunctionID":110}}
  │              ├── UpdateFunctionTypeReferences {"FunctionID":110}
@@ -50,33 +52,36 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN �
  │              └── MarkDescriptorAsPublic {"DescriptorID":110}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 8 elements transitioning toward PUBLIC
+      │    ├── 9 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Function:{DescID: 110 (f+)}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 110 (f+)}
       │    │    ├── PUBLIC → ABSENT FunctionVolatility:{DescID: 110 (f+)}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 110 (f+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 110 (f+), Name: "admin"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 110 (f+), Name: "public"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 110 (f+), Name: "root"}
       │    │    └── PUBLIC → ABSENT FunctionBody:{DescID: 110 (f+)}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
-           ├── 8 elements transitioning toward PUBLIC
+           ├── 9 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Function:{DescID: 110 (f+)}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC FunctionName:{DescID: 110 (f+)}
            │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 110 (f+)}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 110 (f+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "public"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "root"}
            │    └── ABSENT → PUBLIC FunctionBody:{DescID: 110 (f+)}
-           └── 11 Mutation operations
+           └── 12 Mutation operations
                 ├── CreateFunctionDescriptor {"Function":{"FunctionID":110}}
                 ├── SetFunctionName {"FunctionID":110,"Name":"f"}
                 ├── SetFunctionVolatility {"FunctionID":110,"Volatility":1}
                 ├── UpdateOwner {"Owner":{"DescriptorID":110,"Owner":"root"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":1048576,"UserName":"public"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"root","WithGrantOption":2}}
                 ├── SetFunctionBody {"Body":{"Body":"SELECT a FROM t;...","FunctionID":110}}
                 ├── UpdateFunctionTypeReferences {"FunctionID":110}
