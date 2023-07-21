@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -144,15 +143,12 @@ func TestStatusAPIListSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-	defer testCluster.Stopper().Stop(ctx)
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 
-	serverProto := testCluster.Server(0)
-	serverSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	s := srv.TenantOrServer()
+	serverSQL := sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, s.SQLAddr(), "defaultdb", false, s.Stopper()))
 
 	appName := "test_sessions_api"
 	serverSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))
@@ -171,13 +167,13 @@ func TestStatusAPIListSessions(t *testing.T) {
 	userNoAdmin := apiconstants.TestingUserNameNoAdmin()
 	var resp serverpb.ListSessionsResponse
 	// Non-admin without VIEWWACTIVITY or VIEWACTIVITYREDACTED should work and fetch user's own sessions.
-	err := srvtestutils.GetStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, "sessions", &resp, false)
 	require.NoError(t, err)
 
 	// Grant VIEWACTIVITYREDACTED.
 	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
 	serverSQL.Exec(t, "SELECT 1")
-	err = srvtestutils.GetStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	err = srvtestutils.GetStatusJSONProtoWithAdminOption(s, "sessions", &resp, false)
 	require.NoError(t, err)
 	session := getSessionWithTestAppName(&resp)
 	require.Equal(t, session.LastActiveQuery, session.LastActiveQueryNoConstants)
@@ -186,7 +182,7 @@ func TestStatusAPIListSessions(t *testing.T) {
 	// Grant VIEWACTIVITY, VIEWACTIVITYREDACTED should take precedence.
 	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", userNoAdmin.Normalized()))
 	serverSQL.Exec(t, "SELECT 1, 1")
-	err = srvtestutils.GetStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	err = srvtestutils.GetStatusJSONProtoWithAdminOption(s, "sessions", &resp, false)
 	require.NoError(t, err)
 	session = getSessionWithTestAppName(&resp)
 	require.Equal(t, appName, session.ApplicationName)
@@ -196,7 +192,7 @@ func TestStatusAPIListSessions(t *testing.T) {
 	// Remove VIEWACTIVITYREDCATED. User should now see full query.
 	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
 	serverSQL.Exec(t, "SELECT 2")
-	err = srvtestutils.GetStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	err = srvtestutils.GetStatusJSONProtoWithAdminOption(s, "sessions", &resp, false)
 	require.NoError(t, err)
 	session = getSessionWithTestAppName(&resp)
 	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
@@ -211,13 +207,10 @@ func TestListClosedSessions(t *testing.T) {
 	skip.UnderStressRace(t, "active sessions")
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: serverParams,
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
-	server := testCluster.Server(0)
+	server := testCluster.Server(0).TenantOrServer()
 
 	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
 		var resp serverpb.ListSessionsResponse

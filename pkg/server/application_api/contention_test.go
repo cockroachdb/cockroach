@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,23 +41,23 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
-	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
-	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
+	server1 := testCluster.Server(0).TenantOrServer()
+	server2 := testCluster.Server(1).TenantOrServer()
+	server3 := testCluster.Server(2).TenantOrServer()
+	conn1 := serverutils.OpenDBConn(t, server1.SQLAddr(), "defaultdb", false, server1.Stopper())
+	server1Conn := sqlutils.MakeSQLRunner(conn1)
+	server2Conn := sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, server2.SQLAddr(), "defaultdb", false, server1.Stopper()))
 
-	contentionCountBefore := testCluster.Server(1).SQLServer().(*sql.Server).
+	contentionCountBefore := server2.SQLServer().(*sql.Server).
 		Metrics.EngineMetrics.SQLContendedTxns.Count()
 
 	sqlutils.CreateTable(
 		t,
-		testCluster.ServerConn(0),
+		conn1,
 		"test",
 		"x INT PRIMARY KEY",
 		1, /* numRows */
@@ -97,7 +96,7 @@ SET TRACING=off;
 	var resp serverpb.ListContentionEventsResponse
 	require.NoError(t,
 		srvtestutils.GetStatusJSONProtoWithAdminOption(
-			testCluster.Server(2),
+			server3,
 			"contention_events",
 			&resp,
 			true /* isAdmin */),
@@ -133,7 +132,7 @@ SET TRACING=off;
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
 
-	contentionCountNow := testCluster.Server(1).SQLServer().(*sql.Server).
+	contentionCountNow := server2.SQLServer().(*sql.Server).
 		Metrics.EngineMetrics.SQLContendedTxns.Count()
 
 	require.Greaterf(t, contentionCountNow, contentionCountBefore,
@@ -147,8 +146,9 @@ func TestTransactionContentionEvents(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
 
 	sqlutils.CreateTable(
 		t,
@@ -160,7 +160,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 	)
 
 	conn2 :=
-		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+		serverutils.OpenDBConn(t, s.SQLAddr(), "", false /* insecure */, s.Stopper())
 	defer func() {
 		require.NoError(t, conn2.Close())
 	}()

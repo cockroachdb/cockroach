@@ -44,12 +44,13 @@ func TestListSessionsV2(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	ts1 := testCluster.Server(0)
+	ts1 := testCluster.Server(0).TenantOrServer()
 
 	var sqlConns []*gosql.Conn
 	for i := 0; i < 15; i++ {
-		serverConn := testCluster.ServerConn(i % 3)
-		conn, err := serverConn.Conn(ctx)
+		srv := testCluster.Server(i % 3).TenantOrServer()
+		db := serverutils.OpenDBConn(t, srv.SQLAddr(), "defaultdb", false, srv.Stopper())
+		conn, err := db.Conn(ctx)
 		require.NoError(t, err)
 		sqlConns = append(sqlConns, conn)
 	}

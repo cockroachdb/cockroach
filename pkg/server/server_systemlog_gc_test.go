@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,10 +36,10 @@ func TestLogGC(t *testing.T) {
 	skip.UnderRace(t, "takes >1 min under race")
 
 	a := assert.New(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ts := s.(*TestServer)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.TenantOrServer()
 	const testRangeID = 10001
 	const table = "rangelog"
 
@@ -93,7 +94,7 @@ func TestLogGC(t *testing.T) {
 
 	gc := func(ctx context.Context, table string, tsLow, tsHigh time.Time) (time.Time, int64, error) {
 		return gcSystemLog(ctx,
-			ts.sqlServer,
+			ts.InternalExecutor().(isql.Executor),
 			"test", table, "timestamp", tsLow, tsHigh, 1000)
 	}
 
@@ -193,6 +194,7 @@ func TestLogGCTrigger(t *testing.T) {
 				SystemLogsGCPeriod: time.Nanosecond,
 			},
 		},
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107409),
 	}
 
 	s, db, _ := serverutils.StartServer(t, params)

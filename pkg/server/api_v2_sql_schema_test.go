@@ -34,9 +34,9 @@ func TestUsersV2(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	ts1 := testCluster.Server(0)
+	ts1 := testCluster.Server(0).TenantOrServer()
 
-	conn := testCluster.ServerConn(0)
+	conn := serverutils.OpenDBConn(t, ts1.SQLAddr(), "defaultdb", false, ts1.Stopper())
 	_, err := conn.Exec("CREATE USER test;")
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
@@ -68,9 +68,9 @@ func TestDatabasesTablesV2(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	ts1 := testCluster.Server(0)
+	ts1 := testCluster.Server(0).TenantOrServer()
 
-	conn := testCluster.ServerConn(0)
+	conn := serverutils.OpenDBConn(t, ts1.SQLAddr(), "defaultdb", false, ts1.Stopper())
 	_, err := conn.Exec("CREATE DATABASE testdb;")
 	require.NoError(t, err)
 	_, err = conn.Exec("CREATE TABLE testdb.testtable (id INTEGER PRIMARY KEY, value STRING);")
@@ -170,9 +170,9 @@ func TestEventsV2(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	ts1 := testCluster.Server(0)
+	ts1 := testCluster.Server(0).TenantOrServer()
 
-	conn := testCluster.ServerConn(0)
+	conn := serverutils.OpenDBConn(t, ts1.SQLAddr(), "defaultdb", false, ts1.Stopper())
 	_, err := conn.Exec("CREATE DATABASE testdb;")
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
