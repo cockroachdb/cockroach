@@ -1774,7 +1774,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 
 				_, overloads := builtinsregistry.GetBuiltinProperties(name)
 				for _, o := range overloads {
-					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fnNameStr, o.Oid))
+					fnSpecificName := tree.NewDString(nameConcatOid(fnNameStr, o.Oid))
 					for _, grantee := range roleNameForBuiltins {
 						if err := addRow(
 							tree.DNull, // grantor
@@ -1816,7 +1816,8 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 						return err
 					}
 					scNameStr := tree.NewDString(sc.GetName())
-					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fn.GetName(), catid.FuncIDToOID(fn.GetID())))
+
+					fnSpecificName := tree.NewDString(nameConcatOid(fn.GetName(), catid.FuncIDToOID(fn.GetID())))
 					fnName := tree.NewDString(fn.GetName())
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
@@ -2954,4 +2955,17 @@ func userCanSeeDescriptor(
 
 func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
 	return desc.Public() || (allowAdding && desc.Adding())
+}
+
+// nameConcatOid is a Go version of the nameconcatoid builtin function. The
+// result is the same as fmt.Sprintf("%s_%d", s, o) except that, if it would not
+// fit in 63 characters, we make it do so by truncating the name input (not the
+// oid).
+func nameConcatOid(s string, o oid.Oid) string {
+	const maxLen = 63
+	oidStr := strconv.Itoa(int(o))
+	if len(s)+1+len(oidStr) <= maxLen {
+		return s + "_" + oidStr
+	}
+	return s[:maxLen-1-len(oidStr)] + "_" + oidStr
 }
