@@ -75,7 +75,7 @@ $$
   SELECT 1;
 $$ LANGUAGE SQL;
 
-statement error pq: column reference "a" is ambiguous
+statement error pgcode 42702 pq: column reference "a" is ambiguous
 CREATE FUNCTION f_ambiguous() RETURNS INT AS
 $$
   SELECT a FROM (SELECT * FROM (SELECT a FROM t_onecol) AS foo JOIN (SELECT a FROM t_twocol) AS bar ON true) AS baz;
@@ -181,7 +181,7 @@ SELECT f_allcolsel_alias()
 statement ok
 ALTER TABLE t_twocol ADD COLUMN c INT DEFAULT 5;
 
-statement error pq: return type mismatch in function declared to return t_twocol
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_twocol
 SELECT f_unqualified_twocol()
 
 # Dropping the new column renders the function usable again.
@@ -192,19 +192,19 @@ statement ok
 SELECT f_unqualified_twocol()
 
 # Altering a column type is not allowed in postgres or CRDB.
-statement error pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
+statement error pgcode 2BP01 pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol ALTER b TYPE FLOAT;
 
 # TODO(#101934): Postgres allows column renaming when only referenced by UDFs.
-statement error pq: cannot rename column "a" because function "f_unqualified_twocol" depends on it
+statement error pgcode 2BP01 pq: cannot rename column "a" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME COLUMN a TO d;
 
 # TODO(#101934): Postgres allows table renaming when only referenced by UDFs.
-statement error pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
+statement error pgcode 2BP01 pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME TO t_twocol_prime;
 
 # Dropping a column a UDF depends on is not allowed.
-statement error pq: cannot drop column "b" because function "f_unqualified_twocol" depends on it
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol DROP COLUMN b;
 
 # Drop all but one of the functions with an implicit record return value.

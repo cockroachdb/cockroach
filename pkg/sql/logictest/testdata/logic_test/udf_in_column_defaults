@@ -355,7 +355,7 @@ CREATE TABLE t2(
   FAMILY fam_0 (a, b)
 );
 
-statement error cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
 DROP FUNCTION f1;
 
 statement ok
@@ -508,5 +508,5 @@ statement ok
 CREATE TABLE t_circle(a INT PRIMARY KEY, b INT);
 CREATE FUNCTION f_circle() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_circle $$;
 
-statement error pq: cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
+statement error pgcode XXUUU pq: cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
 ALTER TABLE t_circle ALTER COLUMN b SET DEFAULT f_circle();
