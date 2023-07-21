@@ -165,9 +165,6 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW CREATE FUNCTION show_create_fn",
 			setup: "CREATE FUNCTION show_create_fn(i int) RETURNS INT AS 'SELECT i' LANGUAGE SQL",
-			// TODO(sql-foundations): Fix `unknown function: show_create_fn(): function undefined` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106268.
-			skip: true,
 		},
 		{
 			sql: "SHOW CREATE ALL TYPES",
