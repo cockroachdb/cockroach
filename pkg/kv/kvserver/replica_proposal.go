@@ -464,8 +464,9 @@ func (r *Replica) leasePostApplyLocked(
 	// it in the replicate queue.
 	if leaseChangingHands && iAmTheLeaseHolder {
 		if LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
-			preferenceStatus := makeLeasePreferenceStatus(st, r.store.StoreID(), r.store.Attrs(),
-				r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
+			preferenceStatus := makeLeasePreferenceStatus(r.leaseStatusAtRLocked(ctx, now),
+				r.store.StoreID(), r.store.Attrs(), r.store.nodeDesc.Attrs,
+				r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
 			switch preferenceStatus {
 			case leasePreferencesOK, leasePreferencesLessPreferred, leasePreferencesUnknown:
 				// We could also enqueue the lease when we are a less preferred
