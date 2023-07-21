@@ -930,6 +930,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if err := r.applySnapshot(ctx, inSnap, snap, hs, subsumedRepls); err != nil {
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
+			for _, msg := range msgStorageAppend.Responses {
+				// The caller would like to see the MsgAppResp that usually results from
+				// applying the snapshot synchronously, so fish it out.
+				if msg.To == uint64(inSnap.FromReplica.ReplicaID) &&
+					msg.Type == raftpb.MsgAppResp &&
+					!msg.Reject &&
+					msg.Index == snap.Metadata.Index {
+
+					inSnap.msgAppRespCh <- msg
+					break
+				}
+			}
 			stats.tSnapEnd = timeutil.Now()
 			stats.snap.applied = true
 
@@ -1827,9 +1839,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	// index it requested is now actually durable on the follower. Note also that
 	// the follower will generate an MsgAppResp reflecting the applied snapshot
 	// which typically moves the follower to StateReplicate when (if) received
-	// by the leader.
-	//
-	// See: https://github.com/cockroachdb/cockroach/issues/87581
+	// by the leader, which as of #106793 we do synchronously.
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
