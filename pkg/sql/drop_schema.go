@@ -258,6 +258,7 @@ func (p *planner) createDropSchemaJob(
 			// The version distinction for database jobs doesn't matter for jobs that
 			// drop schemas.
 			FormatVersion: jobspb.DatabaseJobFormatVersion,
+			SessionData:   &p.SessionData().SessionData,
 		},
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
