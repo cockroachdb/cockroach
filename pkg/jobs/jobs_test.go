@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1218,10 +1217,11 @@ func TestJobLifecycle(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{DisableRegistryLifecycleManagent: true}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
 
 	registry := s.JobRegistry().(*jobs.Registry)
 
@@ -1799,7 +1799,7 @@ func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
@@ -1951,7 +1951,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap: true,
 	}
@@ -1961,7 +1961,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{DontUseJobs: true}
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
-	r := s.JobRegistry().(*jobs.Registry)
+	r := s.TenantOrServer().JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.Background())
 
@@ -2081,7 +2081,7 @@ func TestShowJobsWithError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 		DontUseJobs:                       true,
 		SkipJobMetricsPollingJobBootstrap: true,
@@ -2109,7 +2109,7 @@ SELECT id, payload, progress FROM "".crdb_internal.system_jobs ORDER BY id DESC 
 	}
 
 	// Create 3 rows from the valid row, one of which is corrupted.
-	createJob(context.Background(), t, s.JobRegistry().(*jobs.Registry), jobID+1, payload, progress)
+	createJob(context.Background(), t, s.TenantOrServer().JobRegistry().(*jobs.Registry), jobID+1, payload, progress)
 
 	// Create the second row with a corrupted progress field.
 	if _, err := sqlDB.Exec(`
