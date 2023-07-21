@@ -39,9 +39,9 @@ func (p *planner) maybeAuditSensitiveTableAccessEvent(
 	)
 }
 
-func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context) {
+func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context, execType executorType) {
 	// Avoid doing audit work if not necessary.
-	if p.shouldNotRoleBasedAudit() {
+	if p.shouldNotRoleBasedAudit(execType) {
 		return
 	}
 
@@ -114,10 +114,16 @@ func (p *planner) initializeReducedAuditConfig(ctx context.Context) {
 	p.reducedAuditConfig.AuditSetting = p.AuditConfig().GetMatchingAuditSetting(userRoles, user)
 }
 
-// shouldNotRoleBasedAudit checks if we should do any auditing work for RoleBasedAuditEvents.
-func (p *planner) shouldNotRoleBasedAudit() bool {
+// shouldNotRoleBasedAudit checks if we should do any auditing work for
+// RoleBasedAuditEvents.
+func (p *planner) shouldNotRoleBasedAudit(execType executorType) bool {
 	// Do not do audit work if role-based auditing is not enabled.
-	// Do not emit audit events for reserved users/roles. This does not omit the root user.
+	// Do not emit audit events for reserved users/roles. This does not omit the
+	// root user.
 	// Do not emit audit events for internal planners.
-	return !auditlogging.UserAuditEnabled(p.execCfg.Settings, p.EvalContext().ClusterID) || p.User().IsReserved() || p.isInternalPlanner
+	// Do not emit audit events for internal executors.
+	return !auditlogging.UserAuditEnabled(p.execCfg.Settings, p.EvalContext().ClusterID) ||
+		p.User().IsReserved() ||
+		p.isInternalPlanner ||
+		execType == executorTypeInternal
 }
