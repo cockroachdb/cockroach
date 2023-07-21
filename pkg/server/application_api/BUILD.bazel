@@ -9,6 +9,7 @@ go_library(
 
 go_test(
     name = "application_api_test",
+    size = "large",
     srcs = [
         "activity_test.go",
         "config_test.go",
@@ -30,7 +31,7 @@ go_test(
         "util_test.go",
         "zcfg_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
