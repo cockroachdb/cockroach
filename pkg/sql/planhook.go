@@ -127,6 +127,7 @@ type PlanHookState interface {
 	SpanConfigReconciler() spanconfig.Reconciler
 	SpanStatsConsumer() keyvisualizer.SpanStatsConsumer
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
 	Txn() *kv.Txn
 	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*mtinfopb.TenantInfo, error)
 	GetAvailableTenantID(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)

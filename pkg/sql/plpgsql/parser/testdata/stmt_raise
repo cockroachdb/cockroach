@@ -6,15 +6,17 @@ END
 ----
 expected parse error: at or near ";": syntax error: unimplemented: this syntax
 
-
 parse
 DECLARE
 BEGIN
   RAISE EXCEPTION USING MESSAGE = "why is this so involved?";
 END
 ----
-expected parse error: at or near "why is this so involved?": syntax error: unimplemented: this syntax
-
+DECLARE
+BEGIN
+RAISE exception
+USING MESSAGE = "why is this so involved?";
+END
 
 parse
 DECLARE
@@ -22,7 +24,11 @@ BEGIN
   RAISE LOG USING HINT = "Insert HINT";
 END
 ----
-expected parse error: at or near "Insert HINT": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+RAISE log
+USING HINT = "Insert HINT";
+END
 
 parse
 DECLARE
@@ -30,7 +36,10 @@ BEGIN
   RAISE LOG 'Nonexistent ID --> %', user_id;
 END
 ----
-expected parse error: at or near ",": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+RAISE log 'Nonexistent ID --> %', user_id;
+END
 
 parse
 DECLARE
@@ -39,8 +48,61 @@ BEGIN
   USING HINT = "check...userid?" ;
 END
 ----
-expected parse error: at or near ",": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+RAISE log 'Nonexistent ID --> %', user_id
+USING HINT = "check...userid?";
+END
 
+parse
+DECLARE
+BEGIN
+  RAISE 'foo %', 'bar';
+END
+----
+DECLARE
+BEGIN
+RAISE 'foo %', 'bar';
+END
+
+parse
+DECLARE
+  i INT := 0;
+BEGIN
+  RAISE 'foo %', i;
+END
+----
+DECLARE
+i INT8 := 0;
+BEGIN
+RAISE 'foo %', i;
+END
+
+parse
+DECLARE
+  i INT := 0;
+BEGIN
+  RAISE 'foo %, %, %.', i, i*2, i*100;
+END
+----
+DECLARE
+i INT8 := 0;
+BEGIN
+RAISE 'foo %, %, %.', i, i * 2, i * 100;
+END
+
+parse
+DECLARE
+  i INT := 0;
+BEGIN
+  RAISE 'foo %', (SELECT count(*) FROM xy WHERE x = i);
+END
+----
+DECLARE
+i INT8 := 0;
+BEGIN
+RAISE 'foo %', (SELECT count(*) FROM xy WHERE x = i);
+END
 
 parse
 DECLARE
@@ -48,8 +110,11 @@ BEGIN
   RAISE SQLSTATE '222222' USING HINT = "hm";
 END
 ----
-expected parse error: at or near "sqlstate": syntax error: unimplemented: this syntax
-
+DECLARE
+BEGIN
+RAISE SQLSTATE '222222'
+USING HINT = hm;
+END
 
 parse
 DECLARE
@@ -57,4 +122,22 @@ BEGIN
   RAISE internal_screaming;
 END
 ----
-expected parse error: at or near "internal_screaming": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+RAISE internal_screaming;
+END
+
+parse
+DECLARE
+BEGIN
+  RAISE internal_screaming
+  USING MESSAGE = 'blah blah blah',
+        COLUMN = 'foo';
+END
+----
+DECLARE
+BEGIN
+RAISE internal_screaming
+USING MESSAGE = 'blah blah blah',
+COLUMN = 'foo';
+END

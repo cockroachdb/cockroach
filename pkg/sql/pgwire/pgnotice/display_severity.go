@@ -34,8 +34,13 @@ const (
 	// DisplaySeverityNotice is a DisplaySeverity value allowing all notices
 	// of value <= DisplaySeverityNotice to display.
 	DisplaySeverityNotice
+	// DisplaySeverityInfo is a DisplaySeverity value allowing all notices
+	// of value <= DisplaySeverityInfo to display. DisplaySeverityInfo is a
+	// special case in that it will always send a message to the client, no matter
+	// the value of client_min_messages.
+	DisplaySeverityInfo
 	// DisplaySeverityLog is a DisplaySeverity value allowing all notices
-	// of value <= DisplaySeverityLog.g to display.
+	// of value <= DisplaySeverityLog to display.
 	DisplaySeverityLog
 	// DisplaySeverityDebug1 is a DisplaySeverity value allowing all notices
 	// of value <= DisplaySeverityDebug1 to display.
@@ -76,6 +81,7 @@ var noticeDisplaySeverityNames = [...]string{
 	DisplaySeverityDebug2:  "debug2",
 	DisplaySeverityDebug1:  "debug1",
 	DisplaySeverityLog:     "log",
+	DisplaySeverityInfo:    "info",
 	DisplaySeverityNotice:  "notice",
 	DisplaySeverityWarning: "warning",
 	DisplaySeverityError:   "error",

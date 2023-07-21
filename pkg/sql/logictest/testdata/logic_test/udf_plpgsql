@@ -1,4 +1,8 @@
 statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     RETURN a;
@@ -559,3 +563,271 @@ CREATE FUNCTION f_err(p1 RECORD) RETURNS RECORD AS $$
    RETURN p1;
  END
 $$ LANGUAGE PLpgSQL;
+
+# Testing RAISE statements.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE DEBUG 'foo';
+    RAISE LOG 'foo';
+    RAISE INFO 'foo';
+    RAISE NOTICE 'foo';
+    RAISE WARNING 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+INFO: foo
+NOTICE: foo
+WARNING: foo
+
+statement ok
+SET client_min_messages = 'debug1';
+
+query T noticetrace
+SELECT f();
+----
+DEBUG1: foo
+LOG: foo
+INFO: foo
+NOTICE: foo
+WARNING: foo
+
+statement ok
+RESET client_min_messages;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE '%', 1;
+    RAISE NOTICE 'foo: %, %, %', 1, 2, 3;
+    RAISE NOTICE '%%';
+    RAISE NOTICE '%%%', 1;
+    RAISE NOTICE '%%%foo%% bar%%%% %% %%%% ba%z%', 1, 2, 3;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: 1
+NOTICE: foo: 1, 2, 3
+NOTICE: %
+NOTICE: %1
+NOTICE: %1foo% bar%% % %% ba2z3
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE division_by_zero;
+    RAISE NOTICE null_value_not_allowed;
+    RAISE NOTICE reading_sql_data_not_permitted;
+    RAISE NOTICE SQLSTATE '22012';
+    RAISE NOTICE SQLSTATE '22004';
+    RAISE NOTICE SQLSTATE '39004';
+    RAISE NOTICE SQLSTATE '2F004';
+    RAISE NOTICE SQLSTATE '38004';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: division_by_zero
+SQLSTATE: 22012
+NOTICE: null_value_not_allowed
+SQLSTATE: 22004
+NOTICE: reading_sql_data_not_permitted
+SQLSTATE: 2F004
+NOTICE: 22012
+SQLSTATE: 22012
+NOTICE: 22004
+SQLSTATE: 22004
+NOTICE: 39004
+SQLSTATE: 39004
+NOTICE: 2F004
+SQLSTATE: 2F004
+NOTICE: 38004
+SQLSTATE: 38004
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE USING MESSAGE = 'foo';
+    RAISE NOTICE USING MESSAGE = format('%s %s!','Hello','World');
+    RAISE NOTICE USING MESSAGE = 'foo', DETAIL = 'bar', HINT = 'baz';
+    RAISE NOTICE 'foo' USING ERRCODE = 'division_by_zero';
+    RAISE NOTICE 'foo' USING ERRCODE = '22012';
+    -- If no message is specified, the error code is used.
+    RAISE NOTICE USING ERRCODE = 'division_by_zero';
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: foo
+NOTICE: Hello World!
+NOTICE: foo
+DETAIL: bar
+HINT: baz
+NOTICE: foo
+SQLSTATE: 22012
+NOTICE: foo
+SQLSTATE: 22012
+NOTICE: division_by_zero
+SQLSTATE: 22012
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE '1: i = %', i;
+    i := 100;
+    RAISE NOTICE '2: i = %', i;
+    i := (SELECT count(*) FROM xy);
+    RAISE NOTICE '3: i = %', i;
+    RAISE NOTICE 'max_x: %', (SELECT max(x) FROM xy);
+    return i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: 1: i = 0
+NOTICE: 2: i = 100
+NOTICE: 3: i = 2
+NOTICE: max_x: 3
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      IF i >= 5 THEN EXIT; END IF;
+      RAISE NOTICE 'i = %', i;
+      i := i + 1;
+    END LOOP;
+    RAISE NOTICE 'finished with i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i = 0
+NOTICE: i = 1
+NOTICE: i = 2
+NOTICE: i = 3
+NOTICE: i = 4
+NOTICE: finished with i = 5
+
+# Testing RAISE statement with EXCEPTION log level.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: foo
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION division_by_zero;
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: division_by_zero
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION SQLSTATE '22012';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: 22012
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      IF i >= 5 THEN EXIT; END IF;
+      IF i = 3 THEN
+        RAISE EXCEPTION 'i = %', i;
+      END IF;
+      RAISE NOTICE 'i = %', i;
+      i := i + 1;
+    END LOOP;
+    RAISE NOTICE 'finished with i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: i = 3
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = 'division_by_zero';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: division_by_zero
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = '22012';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode 22012 pq: 22012
+SELECT f();
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING DETAIL = 'use default errcode for the code and message';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: P0001\nDETAIL: use default errcode for the code and message
+SELECT f();
+
+# The default level is ERROR.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query error pgcode P0001 pq: foo
+SELECT f();

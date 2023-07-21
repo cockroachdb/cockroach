@@ -818,6 +818,9 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	BufferNotice(notice pgnotice.Notice)
 
+	// SendNotice immediately flushes a notice to the client.
+	SendNotice(ctx context.Context, notice pgnotice.Notice) error
+
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
 	//
@@ -1077,6 +1080,12 @@ func (r *streamingCommandResult) BufferParamStatusUpdate(key string, val string)
 // BufferNotice is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
 	// Unimplemented: the internal executor does not support notices.
+}
+
+// SendNotice is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) error {
+	// Unimplemented: the internal executor does not support notices.
+	return nil
 }
 
 // ResetStmtType is part of the RestrictedCommandResult interface.
