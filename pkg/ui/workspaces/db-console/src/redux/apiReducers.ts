@@ -126,6 +126,15 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   api.getHotRanges,
   "hotRanges",
   hotRangesRequestToID,
+  // Set page size to be multiple of 128 ranges as it is predefined number of collected hot ranges per store
+  // `numTopReplicasToTrack` in pkg/kv/kvserver/replica_rankings.go
+  // With one store per node (as default case) would cause to get all hot ranges from node in one pass if we set
+  // page_limit to 128.
+  // Current value is 128 * 3 to visit 3 nodes with one request. It should be relatively fast and covers case for
+  // cluster with minimal recommended number of nodes.
+  128 * 3,
+  undefined,
+  moment.duration(5, "m"),
 );
 
 export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
