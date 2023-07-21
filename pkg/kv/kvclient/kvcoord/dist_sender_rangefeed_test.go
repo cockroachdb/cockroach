@@ -36,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -591,7 +593,9 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	ts := tc.Server(0)
@@ -624,12 +628,177 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	var numErrors atomic.Int32
 	enoughErrors := make(chan struct{})
 	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, noValuesExpected, true,
-		kvcoord.TestingWithOnMuxEvent(func(event *kvpb.MuxRangeFeedEvent) {
-			event.RangeFeedEvent = transientErrEvent
-			if numErrors.Add(1) == numErrsToReturn {
-				close(enoughErrors)
-			}
-		}))
+		kvcoord.TestingWithOnRangefeedEvent(
+			func(_ context.Context, _ roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+				*event = transientErrEvent
+				if numErrors.Add(1) == numErrsToReturn {
+					close(enoughErrors)
+				}
+				return false, nil
+			}))
 	channelWaitWithTimeout(t, enoughErrors)
 	closeFeed()
+}
+
+// Test to make sure the various metrics used by rangefeed are correctly
+// updated during the lifetime of the rangefeed and when the rangefeed completes.
+func TestRangeFeedMetricsManagement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	startTime := ts.Clock().Now()
+
+	// Insert 1000 rows, and split them into 10 ranges.
+	const numRanges = 10
+	sqlDB.ExecMultiple(t,
+		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100))`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	testutils.RunTrueAndFalse(t, "mux", func(t *testing.T, useMux bool) {
+		metrics := kvcoord.TestingMakeRangeFeedMetrics()
+
+		// Number of ranges for which we'll issue transient error.
+		const numRangesToRetry int64 = 3
+		// Number of ranges which we will block from completion.
+		const numCatchupToBlock int64 = 2
+
+		// Upon shutdown, make sure the metrics have correct values.
+		defer func() {
+			require.EqualValues(t, 0, metrics.RangefeedRanges.Value())
+			require.EqualValues(t, 0, metrics.RangefeedRestartStuck.Count())
+
+			// We injected numRangesToRetry transient errors during catchup scan.
+			// It is possible however, that we will observe key-mismatch error when restarting
+			// due to how we split the ranges above (i.e. there is a version of the range
+			// that goes from e.g. 800-Max, and then there is correct version 800-900).
+			// When iterating through the entire table span, we pick up correct version.
+			// However, if we attempt to re-resolve single range, we may get incorrect/old
+			// version that was cached.  Thus, we occasionally see additional transient restarts.
+			require.GreaterOrEqual(t, metrics.RangefeedErrorCatchup.Count(), numRangesToRetry)
+			require.GreaterOrEqual(t, metrics.RangefeedRestartRanges.Count(), numRangesToRetry)
+
+			// Even though numCatchupToBlock ranges were blocked in the catchup scan phase,
+			// the counter should be 0 once rangefeed is done.
+			require.EqualValues(t, 0, metrics.RangefeedCatchupRanges.Value())
+		}()
+
+		frontier, err := span.MakeFrontier(fooSpan)
+		require.NoError(t, err)
+
+		// This error causes rangefeed to restart.
+		transientErrEvent := kvpb.RangeFeedEvent{
+			Error: &kvpb.RangeFeedError{Error: *kvpb.NewError(&kvpb.StoreNotFoundError{})},
+		}
+
+		var numRetried atomic.Int64
+		var numCatchupBlocked atomic.Int64
+		skipSet := struct {
+			syncutil.Mutex
+			stuck roachpb.SpanGroup // Spans that are stuck in catchup scan.
+			retry roachpb.SpanGroup // Spans we issued retry for.
+		}{}
+		const kindRetry = true
+		const kindStuck = false
+		shouldSkip := func(k roachpb.Key, kind bool) bool {
+			skipSet.Lock()
+			defer skipSet.Unlock()
+			if kind == kindRetry {
+				return skipSet.retry.Contains(k)
+			}
+			return skipSet.stuck.Contains(k)
+		}
+
+		ignoreValues := func(event kvcoord.RangeFeedMessage) {}
+		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, ignoreValues, useMux,
+			kvcoord.TestingWithRangeFeedMetrics(&metrics),
+			kvcoord.TestingWithOnRangefeedEvent(
+				func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+					switch t := event.GetValue().(type) {
+					case *kvpb.RangeFeedValue:
+						// If we previously arranged for the range to be skipped (stuck catchup scan),
+						// then skip any value that belongs to the skipped range.
+						// This is only needed for mux rangefeed, since regular rangefeed just blocks.
+						return useMux && shouldSkip(t.Key, kindStuck), nil
+					case *kvpb.RangeFeedCheckpoint:
+						if checkpoint := t; checkpoint.Span.Contains(s) {
+							if checkpoint.ResolvedTS.IsEmpty() {
+								return false, nil
+							}
+
+							// Skip any subsequent checkpoint if we previously arranged for
+							// range to be skipped.
+							if useMux && shouldSkip(checkpoint.Span.Key, kindStuck) {
+								return true, nil
+							}
+
+							if !shouldSkip(checkpoint.Span.Key, kindRetry) && numRetried.Add(1) <= numRangesToRetry {
+								// Return transient error for this range, but do this only once per range.
+								skipSet.Lock()
+								skipSet.retry.Add(checkpoint.Span)
+								skipSet.Unlock()
+								log.Infof(ctx, "skipping span %s", checkpoint.Span)
+								*event = transientErrEvent
+								return false, nil
+							}
+
+							_, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
+							if err != nil {
+								return false, err
+							}
+
+							if numCatchupBlocked.Add(1) <= numCatchupToBlock {
+								if useMux {
+									// Mux rangefeed can't block single range, so just skip this event
+									// and arrange for other events belonging to this range to be skipped as well.
+									skipSet.Lock()
+									skipSet.stuck.Add(checkpoint.Span)
+									skipSet.Unlock()
+									log.Infof(ctx, "skipping stuck span %s", checkpoint.Span)
+									return true /* skip */, nil
+								}
+
+								// Regular rangefeed can block to prevent catchup completion until rangefeed is canceled.
+								return false, timeutil.RunWithTimeout(ctx, "wait-rf-timeout", time.Minute,
+									func(ctx context.Context) error {
+										<-ctx.Done()
+										return ctx.Err()
+									})
+							}
+						}
+					}
+
+					return false, nil
+				}))
+		defer closeFeed()
+
+		// Wait for the test frontier to advance.  Once it advances,
+		// we know the rangefeed is started, all ranges are running (even if some of them are blocked).
+		testutils.SucceedsWithin(t, func() error {
+			if frontier.Frontier().IsEmpty() {
+				return errors.Newf("waiting for frontier advance: %s", frontier.String())
+			}
+			return nil
+		}, 10*time.Second)
+
+		// At this point, we know the rangefeed for all ranges are running.
+		require.EqualValues(t, numRanges, metrics.RangefeedRanges.Value(), frontier.String())
+
+		// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
+		require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
+	})
 }
