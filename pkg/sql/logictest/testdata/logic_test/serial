@@ -245,7 +245,18 @@ create table serial_2 ("capITALS" SERIAL)
 query T
 SELECT pg_get_serial_sequence('serial_2', 'capITALS')
 ----
-public.serial_2_capITALS_seq
+public."serial_2_capITALS_seq"
+
+statement ok
+create schema "schema-hyphen"
+
+statement ok
+create table "schema-hyphen"."Serial_3" ("capITALS" SERIAL)
+
+query T
+SELECT pg_get_serial_sequence('"schema-hyphen"."Serial_3"', 'capITALS')
+----
+"schema-hyphen"."Serial_3_capITALS_seq"
 
 statement ok
 INSERT INTO serial (a, b) VALUES (0, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
