@@ -70,5 +70,8 @@ func TestDecomposeToElements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.DecomposeToElements(t, datapathutils.TestDataPath(t, "decomp"), newMultiRegionCluster)
+	sctest.DecomposeToElements(t, datapathutils.TestDataPath(t, "decomp"), func(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
+		_, db, cleanup := newMultiRegionCluster(t, knobs)
+		return db, cleanup
+	})
 }

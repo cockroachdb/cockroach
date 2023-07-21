@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -59,7 +60,7 @@ func prepareFileUploadURI(
 	switch copyInternalTable {
 	case sql.NodelocalFileUploadTable:
 		testSendFile = strings.TrimPrefix(testSendFile, "/")
-		uri = fmt.Sprintf("nodelocal://self/%s", testSendFile)
+		uri = fmt.Sprintf("nodelocal://1/%s", testSendFile)
 	case sql.UserFileUploadTable:
 		if !strings.HasPrefix(testSendFile, "/") {
 			return "", errors.New("userfile destination must start with a /")
@@ -139,7 +140,7 @@ func checkNodelocalContent(
 func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
-	s serverutils.TestServerInterface,
+	s serverutils.TestTenantInterface,
 	user username.SQLUsername,
 	filename string,
 	expectedContent []byte,
@@ -161,13 +162,14 @@ func TestFileUpload(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	params.ExternalIODir = localExternalDir
 
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: localExternalDir,
+	})
 	defer s.Stopper().Stop(context.Background())
+	tt := s.TenantOrServer()
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -182,7 +184,7 @@ func TestFileUpload(t *testing.T) {
 
 	// Verify contents of the uploaded file.
 	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
-	checkUserFileContent(ctx, t, s, username.RootUserName(), testSendFile, fileContent)
+	checkUserFileContent(ctx, t, tt, username.RootUserName(), testSendFile, fileContent)
 }
 
 func TestUploadEmptyFile(t *testing.T) {
@@ -190,12 +192,13 @@ func TestUploadEmptyFile(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	params.ExternalIODir = localExternalDir
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: localExternalDir,
+	})
 	defer s.Stopper().Stop(context.Background())
+	tt := s.TenantOrServer()
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -210,18 +213,18 @@ func TestUploadEmptyFile(t *testing.T) {
 
 	// Verify contents of the uploaded file.
 	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
-	checkUserFileContent(ctx, t, s, username.RootUserName(), testSendFile, fileContent)
+	checkUserFileContent(ctx, t, tt, username.RootUserName(), testSendFile, fileContent)
 }
 
 func TestFileNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	params.ExternalIODir = localExternalDir
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: localExternalDir,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	expectedErr := "no such file"
@@ -235,11 +238,11 @@ func TestFileExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	params.ExternalIODir = localExternalDir
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: localExternalDir,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
@@ -266,12 +269,12 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	params.ExternalIODir = localExternalDir
-	params.Insecure = true
-	s, rootDB, _ := serverutils.StartServer(t, params)
+	s, rootDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: localExternalDir,
+		Insecure:      true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const smithUser = "jsmith"
@@ -306,13 +309,14 @@ func TestUserfileNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	params.ExternalIODir = localExternalDir
-	params.Insecure = true
-	s, rootDB, _ := serverutils.StartServer(t, params)
+	s, rootDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: localExternalDir,
+		Insecure:      true,
+	})
 	defer s.Stopper().Stop(context.Background())
+	tt := s.TenantOrServer()
 
 	const smithUser = "jsmith"
 	smithUserName := username.MakeSQLUsernameFromPreNormalizedString(smithUser)
@@ -339,5 +343,5 @@ func TestUserfileNotAdmin(t *testing.T) {
 
 	err = runCopyFile(t, userDB, smithUserName, testSendFile, sql.UserFileUploadTable)
 	require.NoError(t, err)
-	checkUserFileContent(context.Background(), t, s, smithUserName, testSendFile, fileContent)
+	checkUserFileContent(context.Background(), t, tt, smithUserName, testSendFile, fileContent)
 }
