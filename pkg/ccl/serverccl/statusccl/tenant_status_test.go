@@ -378,13 +378,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
-		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
-	}
-	serverParams.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: serverParams,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
+				}},
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
 	})
 	defer testCluster.Stopper().Stop(ctx)
 
