@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package userfile
+package userfile_test
 
 import (
 	"bytes"
@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,14 +40,13 @@ func TestPutUserFileTable(t *testing.T) {
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 	filename := "path/to/file"
 
-	testSettings := cluster.MakeTestingClusterSettings()
-
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
+	testSettings := s.ClusterSettings()
 
-	dest := MakeUserFileStorageURI(qualifiedTableName, filename)
+	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	db := s.InternalDB().(isql.DB)
 	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), db, testSettings)
@@ -56,7 +55,7 @@ func TestPutUserFileTable(t *testing.T) {
 		username.RootUserName(), db, testSettings)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
-		dest := MakeUserFileStorageURI("", filename)
+		dest := userfile.MakeUserFileStorageURI("", filename)
 
 		cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), db, testSettings)
 
@@ -103,11 +102,11 @@ func TestUserScoping(t *testing.T) {
 	filename := "path/to/file"
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
 
-	dest := MakeUserFileStorageURI(qualifiedTableName, "")
+	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
 	db := s.InternalDB().(isql.DB)
 
 	// Create two users and grant them all privileges on defaultdb.
