@@ -244,33 +244,34 @@ type DistSenderMetrics struct {
 	InLeaseTransferBackoffs *metric.Counter
 	RangeLookups            *metric.Counter
 	SlowRPCs                *metric.Gauge
-	RangefeedRanges         *metric.Gauge
-	RangefeedCatchupRanges  *metric.Gauge
-	RangefeedErrorCatchup   *metric.Counter
-	RangefeedRestartRanges  *metric.Counter
-	RangefeedRestartStuck   *metric.Counter
 	MethodCounts            [kvpb.NumMethods]*metric.Counter
 	ErrCounts               [kvpb.NumErrors]*metric.Counter
+	DistSenderRangeFeedMetrics
+}
+
+// DistSenderRangeFeedMetrics is a set of rangefeed specific metrics.
+type DistSenderRangeFeedMetrics struct {
+	RangefeedRanges        *metric.Gauge
+	RangefeedCatchupRanges *metric.Gauge
+	RangefeedErrorCatchup  *metric.Counter
+	RangefeedRestartRanges *metric.Counter
+	RangefeedRestartStuck  *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
 	m := DistSenderMetrics{
-		BatchCount:              metric.NewCounter(metaDistSenderBatchCount),
-		PartialBatchCount:       metric.NewCounter(metaDistSenderPartialBatchCount),
-		AsyncSentCount:          metric.NewCounter(metaDistSenderAsyncSentCount),
-		AsyncThrottledCount:     metric.NewCounter(metaDistSenderAsyncThrottledCount),
-		SentCount:               metric.NewCounter(metaTransportSentCount),
-		LocalSentCount:          metric.NewCounter(metaTransportLocalSentCount),
-		NextReplicaErrCount:     metric.NewCounter(metaTransportSenderNextReplicaErrCount),
-		NotLeaseHolderErrCount:  metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
-		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
-		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
-		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
-		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:   metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
-		RangefeedRestartRanges:  metric.NewCounter(metaDistSenderRangefeedRestartRanges),
-		RangefeedRestartStuck:   metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+		BatchCount:                 metric.NewCounter(metaDistSenderBatchCount),
+		PartialBatchCount:          metric.NewCounter(metaDistSenderPartialBatchCount),
+		AsyncSentCount:             metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncThrottledCount:        metric.NewCounter(metaDistSenderAsyncThrottledCount),
+		SentCount:                  metric.NewCounter(metaTransportSentCount),
+		LocalSentCount:             metric.NewCounter(metaTransportLocalSentCount),
+		NextReplicaErrCount:        metric.NewCounter(metaTransportSenderNextReplicaErrCount),
+		NotLeaseHolderErrCount:     metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		InLeaseTransferBackoffs:    metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
+		RangeLookups:               metric.NewCounter(metaDistSenderRangeLookups),
+		SlowRPCs:                   metric.NewGauge(metaDistSenderSlowRPCs),
+		DistSenderRangeFeedMetrics: makeDistSenderRangeFeedMetrics(),
 	}
 	for i := range m.MethodCounts {
 		method := kvpb.Method(i).String()
@@ -288,6 +289,19 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	}
 	return m
 }
+
+func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
+	return DistSenderRangeFeedMetrics{
+		RangefeedRanges:        metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges: metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedRestartStuck:  metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+	}
+}
+
+// MetricStruct implements metrics.Struct
+func (m DistSenderRangeFeedMetrics) MetricStruct() {}
 
 // FirstRangeProvider is capable of providing DistSender with the descriptor of
 // the first range in the cluster and notifying the DistSender when the first

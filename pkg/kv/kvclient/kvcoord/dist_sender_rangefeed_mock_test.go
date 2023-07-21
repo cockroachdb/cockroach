@@ -136,17 +136,17 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 							stream.EXPECT().Send(gomock.Any()).Return(nil)
 							stream.EXPECT().Recv().Do(func() {
 								cancel()
-							}).Return(nil, context.Canceled)
-							client.EXPECT().MuxRangeFeed(gomock.Any()).Return(stream, nil)
+							}).Return(nil, context.Canceled).AnyTimes()
+							client.EXPECT().MuxRangeFeed(gomock.Any()).Return(stream, nil).AnyTimes()
 						} else {
 							stream := kvpbmock.NewMockInternal_RangeFeedClient(ctrl)
 							stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
 							client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 						}
 
-						transport.EXPECT().IsExhausted().Return(false)
-						transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])
-						transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil)
+						transport.EXPECT().IsExhausted().Return(false).AnyTimes()
+						transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0]).AnyTimes()
+						transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil).AnyTimes()
 						transport.EXPECT().Release().AnyTimes()
 					}
 
