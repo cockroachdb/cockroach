@@ -145,8 +145,6 @@ type clusterCfg struct {
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
-	var tc serverutils.TestClusterInterface
-	var cleanup func()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 
@@ -199,20 +197,22 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 			t.Fatalf("TestingKnobCfg %s not found", cfg.testingKnobCfg)
 		}
 	}
+
+	opts := []backuptestutils.BackupTestArg{
+		backuptestutils.WithParams(params),
+		backuptestutils.WithTempDir(cfg.iodir),
+	}
 	if cfg.iodir == "" {
-		tc, _, cfg.iodir, cleanup = backupRestoreTestSetupWithParams(t, clusterSize, cfg.splits,
-			InitManualReplication, params)
-	} else {
-		tc, _, cleanup = backupRestoreTestSetupEmptyWithParams(t, clusterSize, cfg.iodir,
-			InitManualReplication, params)
+		opts = append(opts, backuptestutils.WithBank(cfg.splits))
 	}
-	cleanupFn := func() {
-		cleanup()
-	}
+
+	var tc serverutils.TestClusterInterface
+	var cleanup func()
+	tc, _, cfg.iodir, cleanup = backuptestutils.StartBackupRestoreTestCluster(t, clusterSize, opts...)
 	d.clusters[cfg.name] = tc
 	d.firstNode[cfg.name] = tc.Server(0)
 	d.dataDirs[cfg.name] = cfg.iodir
-	d.cleanupFns = append(d.cleanupFns, cleanupFn)
+	d.cleanupFns = append(d.cleanupFns, cleanup)
 
 	return nil
 }
