@@ -279,6 +279,7 @@ func (p *planner) writeDropFuncSchemaChange(ctx context.Context, funcDesc *funcd
 		DescriptorIDs: descpb.IDs{funcDesc.ID},
 		Details: jobspb.SchemaChangeDetails{
 			DroppedFunctions: descpb.IDs{funcDesc.ID},
+			SessionData:      &p.SessionData().SessionData,
 		},
 		Progress: jobspb.TypeSchemaChangeProgress{},
 	}
