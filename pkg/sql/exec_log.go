@@ -131,7 +131,7 @@ func (p *planner) maybeLogStatement(
 	queryStats *topLevelQueryStats,
 	statsCollector sqlstats.StatsCollector,
 ) {
-	p.maybeAuditRoleBasedAuditEvent(ctx)
+	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
 		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
