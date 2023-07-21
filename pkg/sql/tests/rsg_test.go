@@ -354,7 +354,8 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					continue
 				case "crdb_internal.reset_sql_stats",
 					"crdb_internal.check_consistency",
-					"crdb_internal.request_statement_bundle":
+					"crdb_internal.request_statement_bundle",
+					"crdb_internal.reset_activity_tables":
 					// Skipped due to long execution time.
 					continue
 				}
@@ -416,7 +417,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			limit = " LIMIT 100"
 		}
 		s := fmt.Sprintf("SELECT %s(%s) %s", nb.name, strings.Join(args, ", "), limit)
-		return db.exec(t, ctx, s)
+		// Use a re-settable timeout since in concurrent scenario some operations may
+		// involve schema changes like truncates. In general this should make
+		// this test more resilient as the timeouts are reset as long progress
+		// is made on *some* connection.
+		return db.execWithResettableTimeout(t, ctx, s, *flagRSGExecTimeout, *flagRSGGoRoutines)
 	})
 }
 
