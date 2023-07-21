@@ -213,7 +213,7 @@ func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
 		ctx.FormatNode(t)
 
 	default:
-		panic(errors.AssertionFailedf("type reference must implement NodeFormatter"))
+		panic(errors.AssertionFailedf("type reference %T must implement NodeFormatter", ref))
 	}
 }
 
