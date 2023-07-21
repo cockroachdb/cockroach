@@ -2819,3 +2819,23 @@ query I
 SELECT f_103869('sq_103869')
 ----
 2
+
+subtest lowercase_hint_error_implicit_schema
+
+statement ok
+CREATE FUNCTION lowercase_hint_error_implicit_schema_fn() RETURNS INT AS 'SELECT 1' LANGUAGE SQL
+
+statement error unknown function: LOWERCASE_HINT_ERROR_IMPLICIT_SCHEMA_FN\(\), but lowercase_hint_error_implicit_schema_fn\(\) exists: function undefined
+SELECT "LOWERCASE_HINT_ERROR_IMPLICIT_SCHEMA_FN"();
+
+subtest end
+
+subtest lowercase_hint_error_explicit_schema
+
+statement ok
+CREATE FUNCTION public.lowercase_hint_error_explicit_schema_fn() RETURNS INT AS 'SELECT 1' LANGUAGE SQL
+
+statement error unknown function: public\.LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN\(\), but lowercase_hint_error_explicit_schema_fn\(\) exists: function undefined
+SELECT public."LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN"();
+
+subtest end
