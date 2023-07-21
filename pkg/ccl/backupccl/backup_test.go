@@ -219,6 +219,7 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRaceWithIssue(t, 107336)
 
 	const numAccounts = 1000
 	ctx := context.Background()
