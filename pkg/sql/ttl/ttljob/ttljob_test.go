@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -76,7 +77,11 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
+	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
@@ -151,7 +156,7 @@ func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 	require.NoError(t, h.executeSchedules())
 
 	query := fmt.Sprintf(
-		`SELECT status, error FROM [SHOW JOBS] 
+		`SELECT status, error FROM [SHOW JOBS]
 		WHERE job_id IN (
 			SELECT id FROM %s
 			WHERE created_by_id IN (SELECT schedule_id FROM %s WHERE executor_type = 'scheduled-row-level-ttl-executor')
