@@ -531,6 +531,9 @@ type PrivilegedAccessor interface {
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
 	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (tree.DBytes, bool, error)
+
+	// IsSystemTable returns if a given descriptor ID is a system table.s
+	IsSystemTable(ctx context.Context, id int64) (bool, error)
 }
 
 // RegionOperator gives access to the current region, validation for all
