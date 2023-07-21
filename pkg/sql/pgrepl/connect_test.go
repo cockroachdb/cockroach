@@ -47,8 +47,9 @@ func TestReplicationConnect(t *testing.T) {
 		replicationMode    string
 		expectedSessionVar string
 		useRoot            bool
+		hasAdmin           bool
 		hasPrivilege       bool
-		hasGrant           bool
+		hasSystemGrant     bool
 		expectErrorCode    pgcode.Code
 	}{
 		{replicationMode: "", hasPrivilege: true, expectedSessionVar: "off"},
@@ -59,8 +60,11 @@ func TestReplicationConnect(t *testing.T) {
 		{replicationMode: "database", hasPrivilege: true, expectedSessionVar: "database"},
 		{replicationMode: "asdf", hasPrivilege: true, expectErrorCode: pgcode.InvalidParameterValue},
 
-		{replicationMode: "true", hasGrant: true, expectedSessionVar: "on"},
-		{replicationMode: "database", hasGrant: true, expectedSessionVar: "database"},
+		{replicationMode: "true", hasSystemGrant: true, expectedSessionVar: "on"},
+		{replicationMode: "database", hasSystemGrant: true, expectedSessionVar: "database"},
+
+		{replicationMode: "true", hasAdmin: true, expectedSessionVar: "on"},
+		{replicationMode: "database", hasAdmin: true, expectedSessionVar: "database"},
 
 		{replicationMode: "true", useRoot: true, expectedSessionVar: "on"},
 		{replicationMode: "database", useRoot: true, expectedSessionVar: "database"},
@@ -71,7 +75,7 @@ func TestReplicationConnect(t *testing.T) {
 		{replicationMode: "database", expectErrorCode: pgcode.InsufficientPrivilege},
 		{replicationMode: "asdf", expectErrorCode: pgcode.InvalidParameterValue},
 	} {
-		t.Run(fmt.Sprintf("hasPrivilege=%t/useRoot=%t/hasGrant=%t/replicationMode=%s", tc.hasPrivilege, tc.useRoot, tc.hasGrant, tc.replicationMode), func(t *testing.T) {
+		t.Run(fmt.Sprintf("hasPrivilege=%t/useRoot=%t/hasSystemGrant=%t/hasAdmin=%t/replicationMode=%s", tc.hasPrivilege, tc.useRoot, tc.hasSystemGrant, tc.hasAdmin, tc.replicationMode), func(t *testing.T) {
 			sqlDB.Exec(t, `DROP USER IF EXISTS testuser`)
 			sqlDB.Exec(t, `CREATE USER testuser LOGIN`)
 
@@ -81,8 +85,11 @@ func TestReplicationConnect(t *testing.T) {
 				sqlDB.Exec(t, `ALTER USER testuser NOREPLICATION`)
 			}
 
-			if tc.hasGrant {
+			if tc.hasSystemGrant {
 				sqlDB.Exec(t, `GRANT replicationsystempriv TO testuser`)
+			}
+			if tc.hasAdmin {
+				sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
 			}
 
 			u := url.User(username.TestUser)
