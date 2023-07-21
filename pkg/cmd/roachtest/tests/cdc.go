@@ -91,6 +91,16 @@ type cdcTester struct {
 	doneCh     chan struct{}
 }
 
+// The node on which the webhook sink will be installed and run on.
+func (ct *cdcTester) webhookSinkNode() option.NodeListOption {
+	return ct.cluster.Node(ct.cluster.Spec().NodeCount)
+}
+
+// The node on which the kafka sink will be installed and run on.
+func (ct *cdcTester) kafkaSinkNode() option.NodeListOption {
+	return ct.cluster.Node(ct.cluster.Spec().NodeCount)
+}
+
 // startStatsCollection sets the start point of the stats collection window
 // and returns a function which should be called at the end of the test to dump a
 // stats.json file to the artifacts directory.
@@ -158,7 +168,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	case webhookSink:
 		ct.t.Status("webhook install")
-		webhookNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		webhookNode := ct.webhookSinkNode()
 		rootFolder := `/home/ubuntu`
 		nodeIPs, _ := ct.cluster.ExternalIP(ct.ctx, ct.logger, webhookNode)
 
@@ -184,8 +194,6 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			ct.t.Fatal(err)
 		}
 
-		ct.cluster.Run(ct.ctx, webhookNode, `sudo apt --yes install golang-go;`)
-
 		// Start the server in its own monitor to not block ct.mon.Wait()
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
 		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
@@ -206,7 +214,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	case kafkaSink:
-		kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		kafkaNode := ct.kafkaSinkNode()
 		kafka := kafkaManager{
 			t:     ct.t,
 			c:     ct.cluster,
@@ -1290,6 +1298,13 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
+			// Consider an installation failure to be a flake which is out of
+			// our control. This should be rare.
+			err := c.Install(ctx, t.L(), ct.webhookSinkNode(), "go")
+			if err != nil {
+				t.Skip(err)
+			}
+
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			// The deprecated webhook sink is unable to handle the throughput required for 100 warehouses
@@ -1338,7 +1353,7 @@ func registerCDC(r registry.Registry) {
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1})
 
-			kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+			kafkaNode := ct.kafkaSinkNode()
 			kafka := kafkaManager{
 				t:     ct.t,
 				c:     ct.cluster,

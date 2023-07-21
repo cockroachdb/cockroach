@@ -138,8 +138,8 @@ outer:
 		}
 
 		for _, origColDef := range origDesc.Columns {
-			// We don't take over hidden/inaccessible columns.
-			if origColDef.Hidden || origColDef.Inaccessible {
+			// We don't take over hidden/inaccessible/virtual columns.
+			if origColDef.Hidden || origColDef.Inaccessible || origColDef.Virtual {
 				continue
 			}
 			colID := t.desc.NextColumnID
