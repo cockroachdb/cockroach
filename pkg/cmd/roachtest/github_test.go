@@ -202,10 +202,12 @@ func TestCreatePostRequest(t *testing.T) {
 			}
 
 			if c.loadTeamsFailed {
-				// Assert that if TEAMS.yaml cannot be loaded then function panics.
-				assert.Panics(t, func() { github.createPostRequest(ti, c.failure, "message") })
+				// Assert that if TEAMS.yaml cannot be loaded then function errors.
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req := github.createPostRequest(ti, c.failure, "message")
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				if c.expectedParams != nil {
 					require.Equal(t, c.expectedParams, req.ExtraParams)
