@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -49,7 +48,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
@@ -57,11 +56,11 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	thirdServer := testCluster.Server(2)
+	thirdServer := testCluster.Server(2).TenantOrServer()
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, thirdServer.SQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).TenantOrServer()
 
 	type testCase struct {
 		query         string
@@ -323,14 +322,13 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: params,
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
-	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+	firstServerProto := testCluster.Server(0).TenantOrServer()
+	thirdServer := testCluster.Server(2).TenantOrServer()
+	thirdServerConn := serverutils.OpenDBConn(t, thirdServer.SQLAddr(), "defaultdb", false, thirdServer.Stopper())
+	thirdServerSQL := sqlutils.MakeSQLRunner(thirdServerConn)
 	testingApp := "testing"
 
 	thirdServerSQL.Exec(t, `CREATE DATABASE db; CREATE TABLE db.t();`)

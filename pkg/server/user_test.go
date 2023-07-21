@@ -80,8 +80,9 @@ func TestSQLRolesAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.TenantOrServer()
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	var res serverpb.UserSQLRolesResponse
 

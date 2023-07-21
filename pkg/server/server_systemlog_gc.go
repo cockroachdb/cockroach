@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -76,7 +77,7 @@ var (
 // of rows affected and error (if any).
 func gcSystemLog(
 	ctx context.Context,
-	sqlServer *SQLServer,
+	ie isql.Executor,
 	opName, table, tsCol string,
 	timestampLowerBound, timestampUpperBound time.Time,
 	limit int64,
@@ -98,7 +99,7 @@ SELECT count(1), max(%[2]s) FROM d`,
 	for {
 		var rowsAffected int64
 		err := func() error {
-			row, err := sqlServer.internalExecutor.QueryRowEx(
+			row, err := ie.QueryRowEx(
 				ctx,
 				opName,
 				nil, /* txn */
@@ -182,7 +183,7 @@ func runSystemLogGCForOneTable(
 	limit := systemLogGCLimit.Get(&st.SV)
 	timestampUpperBound := timeutil.Unix(0, sqlServer.execCfg.Clock.PhysicalNow()-int64(ttl))
 	newTimestampLowerBound, rowsAffected, err := gcSystemLog(
-		ctx, sqlServer, opName,
+		ctx, sqlServer.internalExecutor, opName,
 		gcConfig.table, gcConfig.timestampCol,
 		gcConfig.timestampLowerBound,
 		timestampUpperBound,

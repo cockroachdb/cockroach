@@ -85,7 +85,7 @@ func TestListActivitySecurity(t *testing.T) {
 			_, err := db.Exec(fmt.Sprintf("ALTER USER %s VIEWACTIVITY", myUser))
 			require.NoError(t, err)
 		}
-		err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, tc.endpoint, tc.response, tc.requestWithAdmin)
+		err := srvtestutils.GetStatusJSONProtoWithAdminOption(s.TenantOrServer(), tc.endpoint, tc.response, tc.requestWithAdmin)
 		responseErrors := getErrors(tc.response)
 		if tc.expectedErr == "" {
 			if err != nil || len(responseErrors) > 0 {

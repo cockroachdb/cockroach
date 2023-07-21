@@ -65,7 +65,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
-	firstServer := testCluster.Server(0 /* idx */)
+	firstServer := testCluster.Server(0 /* idx */).TenantOrServer()
 	firstLocalStatsReader := firstServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	expectedStatsIndexA := roachpb.IndexUsageStatistics{
@@ -84,7 +84,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	}
 
 	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, firstServer.SQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer firstServerConnCleanup()
 
 	firstServerSQLConn, err := gosql.Open("postgres", firstPgURL.String())
@@ -139,11 +139,11 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	firstServerConnCleanup()
 
 	// Run some queries on the second node.
-	secondServer := testCluster.Server(1 /* idx */)
+	secondServer := testCluster.Server(1 /* idx */).TenantOrServer()
 	secondLocalStatsReader := secondServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	secondPgURL, secondServerConnCleanup := sqlutils.PGUrl(
-		t, secondServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, secondServer.SQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer secondServerConnCleanup()
 
 	secondServerSQLConn, err := gosql.Open("postgres", secondPgURL.String())
@@ -171,11 +171,11 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run some queries on the fourth node.
-	fourthServer := testCluster.Server(3 /* idx */)
+	fourthServer := testCluster.Server(3 /* idx */).TenantOrServer()
 	fourthLocalStatsReader := fourthServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	fourthPgURL, fourthServerConnCleanup := sqlutils.PGUrl(
-		t, fourthServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, fourthServer.SQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer fourthServerConnCleanup()
 
 	fourthServerSQLConn, err := gosql.Open("postgres", fourthPgURL.String())
@@ -221,7 +221,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 
 	// Check local node stats.
 	// Fetch stats reader from each individual
-	thirdServer := testCluster.Server(2 /* idx */)
+	thirdServer := testCluster.Server(2 /* idx */).TenantOrServer()
 	thirdLocalStatsReader := thirdServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	// First node should have nothing.
@@ -319,8 +319,9 @@ func TestGetTableID(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.TenantOrServer()
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Create tables under public and user defined schemas.
