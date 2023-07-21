@@ -169,6 +169,12 @@ SELECT crdb_internal.generate_test_objects('{"seed":1234,"counts":[10],"table_te
 ----
 {"databases": 0, "schemas": 0, "tables": 10}
 
+# Regression test for not ignoring virtual columns.
+query T
+SELECT crdb_internal.generate_test_objects('{"seed":1234,"counts":[1],"table_templates":["system.statement_statistics"]}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 1}
+
 query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
@@ -182,6 +188,7 @@ priVileges
 replication_critical_localities
 role_id_seq
 statement_bundle_chunks
+sta😣tement_statistics
 ten  ant_set                     tings
 
 # Again, the column names are randomized.
