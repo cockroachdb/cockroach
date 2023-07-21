@@ -1540,42 +1540,65 @@ func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
 	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
 }
 
+// leasePreferencesStatus represents the state of satisfying lease preferences.
+type leasePreferencesStatus int
+
+const (
+	// leasePreferencesViolating indicates the leaseholder does not
+	// satisfy any lease preference applied.
+	leasePreferencesViolating leasePreferencesStatus = iota
+	// leasePreferencesLessPreferred indicates the leaseholder satisfies _some_
+	// preference, however not the most preferred.
+	leasePreferencesLessPreferred
+	// leasePreferencesOK indicates the lease satisfies the first
+	// preference, or no lease preferences are applied.
+	leasePreferencesOK
+)
+
 // LeaseViolatesPreferences checks if this replica owns the lease and if it
 // violates the lease preferences defined in the span config. If no preferences
 // are defined then it will return false and consider it to be in conformance.
 func (r *Replica) LeaseViolatesPreferences(ctx context.Context) bool {
 	storeID := r.store.StoreID()
-	storeAttrs := r.store.Attrs()
-	nodeAttrs := r.store.nodeDesc.Attrs
-	nodeLocality := r.store.nodeDesc.Locality
 	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	preferences := r.mu.conf.LeasePreferences
 	r.mu.RUnlock()
-	return leaseViolatesPreferences(
+
+	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
+		return false
+	}
+
+	storeAttrs := r.store.Attrs()
+	nodeAttrs := r.store.nodeDesc.Attrs
+	nodeLocality := r.store.nodeDesc.Locality
+	preferenceStatus := makeLeasePreferenceStatus(
 		leaseStatus, storeID, storeAttrs, nodeAttrs, nodeLocality, preferences)
+
+	return preferenceStatus == leasePreferencesViolating
 }
 
-// leaseViolatesPreferences returns true if the given lease is valid, owned by
-// the given store, and does not satisfy the lease preferences.
-func leaseViolatesPreferences(
+func makeLeasePreferenceStatus(
 	leaseStatus kvserverpb.LeaseStatus,
 	storeID roachpb.StoreID,
 	storeAttrs, nodeAttrs roachpb.Attributes,
 	nodeLocality roachpb.Locality,
 	preferences []roachpb.LeasePreference,
-) bool {
+) leasePreferencesStatus {
 	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
-		return false
+		return leasePreferencesOK
 	}
 	if len(preferences) == 0 {
-		return false
+		return leasePreferencesOK
 	}
-	for _, preference := range preferences {
+	for i, preference := range preferences {
 		if constraint.CheckConjunction(storeAttrs, nodeAttrs, nodeLocality, preference.Constraints) {
-			return false
+			if i > 0 {
+				return leasePreferencesLessPreferred
+			}
+			return leasePreferencesOK
 		}
 	}
-	return true
+	return leasePreferencesViolating
 }

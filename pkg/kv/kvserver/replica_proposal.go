@@ -553,9 +553,14 @@ func (r *Replica) leasePostApplyLocked(
 	// If we acquired a new lease, and it violates the lease preferences, enqueue
 	// it in the replicate queue.
 	if leaseChangingHands && iAmTheLeaseHolder {
-		violatesPreferences := leaseViolatesPreferences(st, r.store.StoreID(), r.store.Attrs(),
+		preferenceStatus := makeLeasePreferenceStatus(st, r.store.StoreID(), r.store.Attrs(),
 			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
-		if violatesPreferences {
+		switch preferenceStatus {
+		case leasePreferencesOK, leasePreferencesLessPreferred:
+			// We could also enqueue the lease when we are a less preferred
+			// leaseholder, however the replicate queue will eventually get to it and
+			// we already satisfy _some_ preference.
+		case leasePreferencesViolating:
 			log.VEventf(ctx, 2,
 				"acquired lease violates lease preferences, enqueueing for transfer [lease=%v preferences=%v]",
 				newLease, r.mu.conf.LeasePreferences)
