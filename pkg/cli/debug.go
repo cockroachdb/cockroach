@@ -66,7 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/pebble/objstorage/shared"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
@@ -1556,7 +1556,7 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 					return err
 				}
 				wrapper := storage.MakeExternalStorageWrapper(context.Background(), es)
-				factory := shared.MakeSimpleFactory(map[shared.Locator]shared.Storage{
+				factory := remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
 					"": wrapper,
 				})
 				pebbleTool.ConfigureSharedStorage(factory, true /* createOnShared */, "" /* createOnSharedLocator */)
