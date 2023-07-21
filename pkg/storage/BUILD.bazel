@@ -87,7 +87,7 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//bloom",
         "@com_github_cockroachdb_pebble//objstorage",
-        "@com_github_cockroachdb_pebble//objstorage/shared",
+        "@com_github_cockroachdb_pebble//objstorage/remote",
         "@com_github_cockroachdb_pebble//rangekey",
         "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//replay",
