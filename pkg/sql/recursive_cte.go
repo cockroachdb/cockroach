@@ -148,7 +148,9 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
 	ctx, sp := tracing.ChildSpan(params.ctx, opName)
 	defer sp.Finish()
-	if err := runPlanInsidePlan(ctx, params, newPlan.(*planComponents), rowResultWriter(n)); err != nil {
+	if err := runPlanInsidePlan(
+		ctx, params, newPlan.(*planComponents), rowResultWriter(n), nil, /* deferredRoutineSender */
+	); err != nil {
 		return false, err
 	}
 
