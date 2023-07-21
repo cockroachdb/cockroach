@@ -813,13 +813,18 @@ func ShouldRequeue(ctx context.Context, change plan.ReplicateChange) bool {
 		// time around.
 		requeue = false
 
-	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance {
-		// Don't requeue after a successful rebalance operation.
-		requeue = false
-
 	} else if change.Op.LHBeingRemoved() {
 		// Don't requeue if the leaseholder was removed as a voter or the range
 		// lease was transferred away.
+		requeue = false
+
+	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
+		!change.Replica.LeaseViolatesPreferences(ctx) {
+		// Don't requeue after a successful rebalance operation, when the lease
+		// does not violate any preferences. If the lease does violate preferences,
+		// the next process attempt will either find a target to transfer the lease
+		// or place the replica into purgatory if unable. See
+		// CantTransferLeaseViolatingPreferencesError.
 		requeue = false
 
 	} else {

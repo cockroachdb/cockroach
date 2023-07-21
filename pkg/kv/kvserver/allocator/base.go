@@ -95,6 +95,9 @@ type TestingKnobs struct {
 		Desc() *roachpb.RangeDescriptor
 		StoreID() roachpb.StoreID
 	}) *raft.Status
+	// BlockTransferTarget can be used to block returning any transfer targets
+	// from TransferLeaseTarget.
+	BlockTransferTarget func() bool
 }
 
 // QPSRebalanceThreshold is much like rangeRebalanceThreshold, but for
