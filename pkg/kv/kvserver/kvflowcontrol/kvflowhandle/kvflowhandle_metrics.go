@@ -109,10 +109,10 @@ func NewMetrics(registry *metric.Registry) *Metrics {
 		)
 		m.WaitDuration[wc] = metric.NewHistogram(
 			metric.HistogramOptions{
-				Metadata: annotateMetricTemplateWithWorkClass(wc, waitDuration),
-				Duration: base.DefaultHistogramWindowInterval(),
-				Buckets:  metric.IOLatencyBuckets,
-				Mode:     metric.HistogramModePrometheus,
+				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
 			},
 		)
 	}

@@ -72,10 +72,10 @@ func TestAggMetric(t *testing.T) {
 		Metadata: metric.Metadata{
 			Name: "histo_gram",
 		},
-		Duration: base.DefaultHistogramWindowInterval(),
-		MaxVal:   100,
-		SigFigs:  1,
-		Buckets:  metric.Count1KBuckets,
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Count1KBuckets,
 	}, "tenant_id")
 	r.AddMetric(h)
 
@@ -175,11 +175,11 @@ func TestAggMetricBuilder(t *testing.T) {
 	g := b.Gauge(metric.Metadata{Name: "bar_gauge"})
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
 	h := b.Histogram(metric.HistogramOptions{
-		Metadata: metric.Metadata{Name: "histo_gram"},
-		Duration: base.DefaultHistogramWindowInterval(),
-		MaxVal:   100,
-		SigFigs:  1,
-		Buckets:  metric.Count1KBuckets,
+		Metadata:     metric.Metadata{Name: "histo_gram"},
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Count1KBuckets,
 	})
 
 	for i := 5; i < 10; i++ {

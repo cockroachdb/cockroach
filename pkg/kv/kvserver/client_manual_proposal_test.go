@@ -232,10 +232,10 @@ LIMIT
 			Settings:    st,
 			Metrics: logstore.Metrics{
 				RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-					Mode:     metric.HistogramModePrometheus,
-					Metadata: fakeMeta,
-					Duration: time.Millisecond,
-					Buckets:  metric.IOLatencyBuckets,
+					Mode:         metric.HistogramModePrometheus,
+					Metadata:     fakeMeta,
+					Duration:     time.Millisecond,
+					BucketConfig: metric.IOLatencyBuckets,
 				}),
 			},
 		}

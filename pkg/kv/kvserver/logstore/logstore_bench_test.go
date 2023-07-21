@@ -68,10 +68,10 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		Settings:    st,
 		Metrics: Metrics{
 			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePrometheus,
-				Metadata: metric.Metadata{},
-				Duration: 10 * time.Second,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+				Metadata:     metric.Metadata{},
+				Duration:     10 * time.Second,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 		},
 	}

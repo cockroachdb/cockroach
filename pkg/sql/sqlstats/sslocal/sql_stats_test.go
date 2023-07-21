@@ -529,11 +529,11 @@ func BenchmarkRecordStatement(b *testing.B) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		metric.NewGauge(sql.MetaReportedSQLStatsMemCurBytes), /* curMemoryBytesCount */
 		metric.NewHistogram(metric.HistogramOptions{
-			Metadata: sql.MetaReportedSQLStatsMemMaxBytes,
-			Duration: 10 * time.Second,
-			MaxVal:   19 * 1000,
-			SigFigs:  3,
-			Buckets:  metric.MemoryUsage64MBBuckets,
+			Metadata:     sql.MetaReportedSQLStatsMemMaxBytes,
+			Duration:     10 * time.Second,
+			MaxVal:       19 * 1000,
+			SigFigs:      3,
+			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}), /* maxMemoryBytesHist */
 		insightsProvider.Writer,
 		monitor,
