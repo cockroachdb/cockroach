@@ -243,7 +243,7 @@ SET vectorize = experimental_always
 statement ok
 SET vectorize = off
 
-statement error invalid value for parameter "vectorize": "bogus"
+statement error invalid value for parameter "vectorize": "bogus"\nHINT: Available values: off,on,experimental_always
 SET vectorize = bogus
 
 statement ok
