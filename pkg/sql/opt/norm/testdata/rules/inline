@@ -1251,21 +1251,16 @@ norm expect=InlineUDF
 SELECT one_strict() FROM (VALUES (1), (2), (3)) v(i)
 ----
 project
- ├── columns: one_strict:3
+ ├── columns: one_strict:3!null
  ├── cardinality: [3 - 3]
+ ├── fd: ()-->(3)
  ├── values
  │    ├── cardinality: [3 - 3]
  │    ├── ()
  │    ├── ()
  │    └── ()
  └── projections
-      └── subquery [as=one_strict:3, subquery]
-           └── values
-                ├── columns: "?column?":2!null
-                ├── cardinality: [1 - 1]
-                ├── key: ()
-                ├── fd: ()-->(2)
-                └── (1,)
+      └── 1 [as=one_strict:3]
 
 # A UDF is not inlined when the arguments are not constants or either Variable
 # or Const expressions.

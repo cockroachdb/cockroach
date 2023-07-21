@@ -348,7 +348,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				}
 				return nil
 			}, false /* expectErrors */, base, plans,
-			"distsql-1-subquery.html distsql-2-main-query.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt")
+			"distsql.html vec-v.txt vec.txt")
 	})
 
 	t.Run("permission error", func(t *testing.T) {
