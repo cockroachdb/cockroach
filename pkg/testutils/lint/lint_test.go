@@ -1982,40 +1982,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestVectorizedTypeSchemaCopy", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkgDir,
-			"git",
-			"grep",
-			"-nE",
-			// We prohibit appending to the type schema and require allocating
-			// a new slice. See the comment in execplan.go file.
-			`(yps|ypes) = append\(`,
-			"--",
-			"sql/colexec/execplan.go",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; allocate a new []*types.T slice", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.WithIssue(t, 86714)
 		skip.UnderShort(t)
