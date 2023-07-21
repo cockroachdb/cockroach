@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -2495,4 +2496,120 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 		t.Logf("disabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 		return epochLeases > 0 && expLeases > 0 && expLeases <= initialExpLeases
 	}, 30*time.Second, 500*time.Millisecond)
+}
+
+// TestReplicateQueueLeasePreferencePurgatoryError tests that not finding a
+// lease transfer target whilst violating lease preferences, will put the
+// replica in the replicate queue purgatory.
+func TestReplicateQueueLeasePreferencePurgatoryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderDeadlock(t)
+	skip.UnderShort(t)
+
+	const initialPreferredNode = 1
+	const nextPreferredNode = 2
+	const numRanges = 40
+	const numNodes = 3
+
+	var blockTransferTarget atomic.Bool
+
+	blockTransferTargetFn := func() bool {
+		block := blockTransferTarget.Load()
+		return block
+	}
+
+	knobs := base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
+			AllocatorKnobs: &allocator.TestingKnobs{
+				BlockTransferTarget: blockTransferTargetFn,
+			},
+		},
+	}
+
+	serverArgs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: knobs,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "rack", Value: fmt.Sprintf("%d", i+1)}},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Conns[0]
+	setLeasePreferences := func(node int) {
+		_, err := db.Exec(fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
+      num_replicas=3, num_voters=3, voter_constraints='[]', lease_preferences='[[+rack=%d]]'`,
+			node))
+		require.NoError(t, err)
+	}
+
+	leaseCount := func(node int) int {
+		var count int
+		err := db.QueryRow(fmt.Sprintf(
+			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
+		).Scan(&count)
+		require.NoError(t, err)
+		return count
+	}
+
+	checkLeaseCount := func(node, expectedLeaseCount int) error {
+		if count := leaseCount(node); count != expectedLeaseCount {
+			return errors.Errorf("expected %d leases on node %d, found %d",
+				expectedLeaseCount, node, count)
+		}
+		return nil
+	}
+
+	// Create a test table with numRanges-1 splits, to end up with numRanges
+	// ranges. We will use the test table ranges to assert on the purgatory lease
+	// preference behavior.
+	_, err := db.Exec("CREATE TABLE t (i int);")
+	require.NoError(t, err)
+	_, err = db.Exec(
+		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+	require.NoError(t, err)
+	_, err = db.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t;")
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+	// Set a preference on the initial node, then wait until all the leases for
+	// the test table are on that node.
+	setLeasePreferences(initialPreferredNode)
+	testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, store.ForceReplicationScanAndProcess())
+		return checkLeaseCount(initialPreferredNode, numRanges)
+	})
+
+	// Block returning transfer targets from the allocator, then update the
+	// preferred node. We expect that every range for the test table will end up
+	// in purgatory on the initially preferred node.
+	blockTransferTarget.Store(true)
+	setLeasePreferences(nextPreferredNode)
+	testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, store.ForceReplicationScanAndProcess())
+		if purgLen := store.ReplicateQueuePurgatoryLength(); purgLen != numRanges {
+			return errors.Errorf("expected %d in purgatory but got %v", numRanges, purgLen)
+		}
+		return nil
+	})
+
+	// Lastly, unblock returning transfer targets. Expect that the leases from
+	// the test table all move to the new preference. Note we don't force a
+	// replication queue scan, as the purgatory retry should handle the
+	// transfers.
+	blockTransferTarget.Store(false)
+	testutils.SucceedsSoon(t, func() error {
+		return checkLeaseCount(nextPreferredNode, numRanges)
+	})
 }
