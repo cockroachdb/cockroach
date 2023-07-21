@@ -17,13 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/objstorage/shared"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 )
 
-// externalStorageReader implements shared.ObjectReader on top of
+// externalStorageReader implements remote.ObjectReader on top of
 // cloud.ExternalStorage..
 type externalStorageReader struct {
-	// Store a reference to the parent Pebble instance. Metrics around shared
+	// Store a reference to the parent Pebble instance. Metrics around remote
 	// storage reads/writes are stored there.
 	//
 	// TODO(bilal): Refactor the metrics out of Pebble, and store a reference
@@ -33,7 +33,7 @@ type externalStorageReader struct {
 	objName string
 }
 
-var _ shared.ObjectReader = (*externalStorageReader)(nil)
+var _ remote.ObjectReader = (*externalStorageReader)(nil)
 
 func (r *externalStorageReader) ReadAt(ctx context.Context, p []byte, offset int64) error {
 	reader, _, err := r.es.ReadFile(ctx, r.objName, cloud.ReadOptions{
@@ -59,18 +59,18 @@ func (r *externalStorageReader) ReadAt(ctx context.Context, p []byte, offset int
 	return nil
 }
 
-// Close is part of the shared.ObjectReader interface.
+// Close is part of the remote.ObjectReader interface.
 func (e *externalStorageReader) Close() error {
 	*e = externalStorageReader{}
 	return nil
 }
 
 // externalStorageWriter wraps an io.WriteCloser returned by
-// externalStorageWrapper and tracks metrics on bytes written to shared storage.
+// externalStorageWrapper and tracks metrics on bytes written to remote storage.
 type externalStorageWriter struct {
 	io.WriteCloser
 
-	// Store a reference to the parent Pebble instance. Metrics around shared
+	// Store a reference to the parent Pebble instance. Metrics around remote
 	// storage reads/writes are stored there.
 	//
 	// TODO(bilal): Refactor the metrics out of Pebble, and store a reference
@@ -88,31 +88,31 @@ func (e *externalStorageWriter) Write(p []byte) (n int, err error) {
 }
 
 // externalStorageWrapper wraps a cloud.ExternalStorage and implements the
-// shared.Storage interface expected by Pebble. Also ensures reads and writes
-// to shared cloud storage are tracked in store-specific metrics.
+// remote.Storage interface expected by Pebble. Also ensures reads and writes
+// to remote cloud storage are tracked in store-specific metrics.
 type externalStorageWrapper struct {
 	p   *Pebble
 	es  cloud.ExternalStorage
 	ctx context.Context
 }
 
-// MakeExternalStorageWrapper returns a shared.Storage implementation that wraps
+// MakeExternalStorageWrapper returns a remote.Storage implementation that wraps
 // cloud.ExternalStorage.
-func MakeExternalStorageWrapper(ctx context.Context, es cloud.ExternalStorage) shared.Storage {
+func MakeExternalStorageWrapper(ctx context.Context, es cloud.ExternalStorage) remote.Storage {
 	return &externalStorageWrapper{p: &Pebble{}, es: es, ctx: ctx}
 }
 
-var _ shared.Storage = &externalStorageWrapper{}
+var _ remote.Storage = &externalStorageWrapper{}
 
-// Close implements the shared.Storage interface.
+// Close implements the remote.Storage interface.
 func (e *externalStorageWrapper) Close() error {
 	return e.es.Close()
 }
 
-// ReadObject implements the shared.Storage interface.
+// ReadObject implements the remote.Storage interface.
 func (e *externalStorageWrapper) ReadObject(
 	ctx context.Context, objName string,
-) (_ shared.ObjectReader, objSize int64, _ error) {
+) (_ remote.ObjectReader, objSize int64, _ error) {
 	objSize, err := e.es.Size(ctx, objName)
 	if err != nil {
 		return nil, 0, err
@@ -124,13 +124,13 @@ func (e *externalStorageWrapper) ReadObject(
 	}, objSize, nil
 }
 
-// CreateObject implements the shared.Storage interface.
+// CreateObject implements the remote.Storage interface.
 func (e *externalStorageWrapper) CreateObject(objName string) (io.WriteCloser, error) {
 	writer, err := e.es.Writer(e.ctx, objName)
 	return &externalStorageWriter{WriteCloser: writer, p: e.p}, err
 }
 
-// List implements the shared.Storage interface.
+// List implements the remote.Storage interface.
 func (e *externalStorageWrapper) List(prefix, delimiter string) ([]string, error) {
 	var directoryList []string
 	err := e.es.List(e.ctx, prefix, delimiter, func(s string) error {
@@ -143,12 +143,12 @@ func (e *externalStorageWrapper) List(prefix, delimiter string) ([]string, error
 	return directoryList, nil
 }
 
-// Delete implements the shared.Storage interface.
+// Delete implements the remote.Storage interface.
 func (e *externalStorageWrapper) Delete(objName string) error {
 	return e.es.Delete(e.ctx, objName)
 }
 
-// Size implements the shared.Storage interface.
+// Size implements the remote.Storage interface.
 func (e *externalStorageWrapper) Size(objName string) (int64, error) {
 	return e.es.Size(e.ctx, objName)
 }
