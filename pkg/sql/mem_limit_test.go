@@ -157,6 +157,7 @@ func TestStreamerTightBudget(t *testing.T) {
 	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	SecondaryTenantSplitAtEnabled.Override(ctx, &s.TenantOrServer().ClusterSettings().SV, true)
 
 	const blobSize = 1 << 20
 	const numRows = 5

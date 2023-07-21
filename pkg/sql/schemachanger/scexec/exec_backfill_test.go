@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,6 +40,7 @@ import (
 // backfills and merges deals with state appropriately.
 func TestExecBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -328,10 +329,10 @@ func TestExecBackfiller(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			defer log.Scope(t).Close(t)
 
-			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-			defer tc.Stopper().Stop(ctx)
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
 
-			testCase.f(t, sqlutils.MakeSQLRunner(tc.ServerConn(0)))
+			testCase.f(t, sqlutils.MakeSQLRunner(db))
 		})
 	}
 

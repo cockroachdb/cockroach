@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,11 +31,12 @@ import (
 // CREATE TABLE AS and CREATE MATERIALIZED VIEW AS.
 func TestCreateAsVTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(ctx)
-	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(db)
 	var p parser.Parser
 
 	i := 0
@@ -74,6 +76,27 @@ func TestCreateAsVTable(t *testing.T) {
 			}
 
 			fqName := name.FQString()
+			if s.StartedDefaultTestTenant() {
+				// Some of the virtual tables are currently only available in
+				// the system tenant.
+				// TODO(yuzefovich): update this list when #54252 is addressed.
+				onlySystemTenant := map[string]struct{}{
+					`"".crdb_internal.gossip_alerts`:                  {},
+					`"".crdb_internal.gossip_liveness`:                {},
+					`"".crdb_internal.gossip_nodes`:                   {},
+					`"".crdb_internal.kv_flow_controller`:             {},
+					`"".crdb_internal.kv_flow_control_handles`:        {},
+					`"".crdb_internal.kv_flow_token_deductions`:       {},
+					`"".crdb_internal.kv_node_status`:                 {},
+					`"".crdb_internal.kv_node_liveness`:               {},
+					`"".crdb_internal.kv_store_status`:                {},
+					`"".crdb_internal.node_tenant_capabilities_cache`: {},
+					`"".crdb_internal.tenant_usage_details`:           {},
+				}
+				if _, ok := onlySystemTenant[fqName]; ok {
+					continue
+				}
+			}
 			// Filter by trace_id to prevent error when selecting from
 			// crdb_internal.cluster_inflight_traces:
 			// "pq: a trace_id value needs to be specified".
@@ -101,6 +124,7 @@ func TestCreateAsVTable(t *testing.T) {
 
 func TestCreateAsShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		sql   string
@@ -267,9 +291,9 @@ func TestCreateAsShow(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(ctx)
-	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(db)
 
 	for i, testCase := range testCases {
 		t.Run(testCase.sql, func(t *testing.T) {
@@ -277,6 +301,11 @@ func TestCreateAsShow(t *testing.T) {
 				return
 			}
 			if testCase.setup != "" {
+				if s.StartedDefaultTestTenant() && strings.Contains(testCase.setup, "create_tenant") {
+					// Only the system tenant has the ability to create other
+					// tenants.
+					return
+				}
 				sqlRunner.Exec(t, testCase.setup)
 			}
 			createTableStmt := fmt.Sprintf(

@@ -498,7 +498,7 @@ USE t;
 							}
 							// Ensure that the writes from the partial new indexes are cleaned up.
 							testutils.SucceedsSoon(t, func() error {
-								return sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue)
+								return sqltestutils.CheckTableKeyCount(ctx, kvDB, keys.SystemSQLCodec, 1, maxValue)
 							})
 						})
 					}

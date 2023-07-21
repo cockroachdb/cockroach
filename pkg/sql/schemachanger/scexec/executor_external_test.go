@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -40,15 +41,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 type testInfra struct {
-	tc       *testcluster.TestCluster
+	s        serverutils.TestTenantInterface
+	nodeID   roachpb.NodeID
 	settings *cluster.Settings
 	lm       *lease.Manager
 	tsql     *sqlutils.SQLRunner
@@ -83,20 +86,23 @@ func (ti testInfra) newExecDeps(txn descs.Txn) scexec.Dependencies {
 	)
 }
 
-func setupTestInfra(t testing.TB) *testInfra {
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+func setupTestInfra(t testing.TB) (_ *testInfra, cleanup func(context.Context)) {
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	tt := s.TenantOrServer()
 	return &testInfra{
-		tc:       tc,
-		settings: tc.Server(0).ClusterSettings(),
-		db:       tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).InternalDB,
-		lm:       tc.Server(0).LeaseManager().(*lease.Manager),
-		cf:       tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory,
-		tsql:     sqlutils.MakeSQLRunner(tc.ServerConn(0)),
-	}
+		s:        tt,
+		nodeID:   s.NodeID(),
+		settings: tt.ClusterSettings(),
+		db:       tt.ExecutorConfig().(sql.ExecutorConfig).InternalDB,
+		lm:       s.LeaseManager().(*lease.Manager),
+		cf:       tt.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory,
+		tsql:     sqlutils.MakeSQLRunner(db),
+	}, s.Stopper().Stop
 }
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type testCase struct {
 		name      string
@@ -116,8 +122,8 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 
 	run := func(t *testing.T, c testCase) {
 		ctx := context.Background()
-		ti := setupTestInfra(t)
-		defer ti.tc.Stopper().Stop(ctx)
+		ti, cleanup := setupTestInfra(t)
+		defer cleanup(ctx)
 
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `
@@ -231,10 +237,12 @@ CREATE TABLE db.t (
 // is fixed up.
 func TestSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	t.Run("add column", func(t *testing.T) {
-		ti := setupTestInfra(t)
-		defer ti.tc.Stopper().Stop(ctx)
+		ti, cleanup := setupTestInfra(t)
+		defer cleanup(ctx)
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
@@ -347,14 +355,14 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 	t.Run("with builder", func(t *testing.T) {
-		ti := setupTestInfra(t)
-		defer ti.tc.Stopper().Stop(ctx)
+		ti, cleanup := setupTestInfra(t)
+		defer cleanup(ctx)
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var cs scpb.CurrentState
 		require.NoError(t, ti.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
-			sctestutils.WithBuilderDependenciesFromTestServer(ti.tc.Server(0), func(buildDeps scbuild.Dependencies) {
+			sctestutils.WithBuilderDependenciesFromTestServer(ti.s, ti.nodeID, func(buildDeps scbuild.Dependencies) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)

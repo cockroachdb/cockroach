@@ -9,6 +9,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql",
         "//pkg/sql/catalog/descidgen",
