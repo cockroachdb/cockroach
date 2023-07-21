@@ -2432,6 +2432,7 @@ var builtinOidsArray = []string{
 	2459: `nameconcatoid(name: string, oid: oid) -> name`,
 	2460: `pg_get_function_arg_default(func_oid: oid, arg_num: int4) -> string`,
 	2461: `crdb_internal.plpgsql_raise(severity: string, message: string, detail: string, hint: string, code: string) -> int`,
+	2462: `crdb_internal.is_system_table_key(raw_key: bytes) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

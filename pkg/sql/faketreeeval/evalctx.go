@@ -530,6 +530,11 @@ func (ep *DummyPrivilegedAccessor) LookupZoneConfigByNamespaceID(
 	return "", false, errors.WithStack(errEvalPrivileged)
 }
 
+// IsSystemTable is part of the tree.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) IsSystemTable(ctx context.Context, id int64) (bool, error) {
+	return false, errors.WithStack(errEvalPrivileged)
+}
+
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.
 type DummySessionAccessor struct{}
 
