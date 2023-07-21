@@ -499,6 +499,13 @@ func TestLogic_cursor(
 	runLogicTest(t, "cursor")
 }
 
+func TestLogic_custom_col_storage_type(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "custom_col_storage_type")
+}
+
 func TestLogic_custom_escape_character(
 	t *testing.T,
 ) {
