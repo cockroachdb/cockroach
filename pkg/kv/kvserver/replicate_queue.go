@@ -58,6 +58,13 @@ const (
 	// in high latency clusters, and not allowing enough of a cushion can
 	// make rebalance thrashing more likely (#17879).
 	newReplicaGracePeriod = 5 * time.Minute
+
+	// replicateQueueLeasePreferencePriority is the priority replicas are
+	// enqueued into the replicate queue with when violating lease preferences.
+	// This priority is lower than any voter up-replication, yet higher than
+	// removal, non-voter addition and rebalancing.
+	// See allocatorimpl.AllocatorAction.Priority.
+	replicateQueueLeasePreferencePriority = 1001
 )
 
 // MinLeaseTransferInterval controls how frequently leases can be transferred
