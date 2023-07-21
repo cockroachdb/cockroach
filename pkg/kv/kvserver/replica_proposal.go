@@ -520,6 +520,28 @@ func (r *Replica) leasePostApplyLocked(
 		})
 	}
 
+	// If we acquired a new lease, and it violates the lease preferences, enqueue
+	// it in the replicate queue.
+	if leaseChangingHands && iAmTheLeaseHolder {
+		if LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
+			preferenceStatus := makeLeasePreferenceStatus(st, r.store.StoreID(), r.store.Attrs(),
+				r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
+			switch preferenceStatus {
+			case leasePreferencesOK, leasePreferencesLessPreferred, leasePreferencesUnknown:
+				// We could also enqueue the lease when we are a less preferred
+				// leaseholder, however the replicate queue will eventually get to it and
+				// we already satisfy _some_ preference.
+			case leasePreferencesViolating:
+				log.VEventf(ctx, 2,
+					"acquired lease violates lease preferences, enqueueing for transfer [lease=%v preferences=%v]",
+					newLease, r.mu.conf.LeasePreferences)
+				r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
+			default:
+				log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
+			}
+		}
+	}
+
 	// Inform the store of this lease.
 	if iAmTheLeaseHolder {
 		r.store.registerLeaseholder(ctx, r, newLease.Sequence)
