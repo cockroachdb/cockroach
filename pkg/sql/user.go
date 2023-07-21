@@ -163,7 +163,7 @@ func GetUserSessionInitInfo(
 
 			// Only check for replication if the user can login.
 			if canLoginSQL {
-				canUseReplicationMode = authInfo.CanUseReplicationRoleOpt
+				canUseReplicationMode = authInfo.CanUseReplicationRoleOpt || isSuperuser
 				// Only check the global privilege if we do not already have replication
 				// privileges.
 				if !canUseReplicationMode {
