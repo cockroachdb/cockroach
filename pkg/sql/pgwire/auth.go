@@ -220,7 +220,7 @@ func (c *conn) handleAuthentication(
 				ctx,
 				pgerror.Newf(
 					pgcode.InsufficientPrivilege,
-					"must have REPLICATION on the user to start streaming replication",
+					"must be superuser or have REPLICATION role to start streaming replication",
 				),
 			)
 		}
