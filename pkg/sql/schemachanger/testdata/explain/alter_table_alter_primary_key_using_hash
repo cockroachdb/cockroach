@@ -32,8 +32,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
- │         └── 22 Mutation operations
- │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"PgAttributeNum":3,"TableID":104}}
+ │         └── 21 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_j_...","TableID":104}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
  │              ├── AddCheckConstraint {"CheckExpr":"\"crdb_internal_j...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
@@ -109,8 +109,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
- │         └── 28 Mutation operations
- │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"PgAttributeNum":3,"TableID":104}}
+ │         └── 27 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_j_...","TableID":104}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
  │              ├── AddCheckConstraint {"CheckExpr":"\"crdb_internal_j...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
