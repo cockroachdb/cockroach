@@ -901,7 +901,6 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 0,
 			cutover:            1 * time.Minute,
 			maxAcceptedLatency: 1 * time.Hour,
-			skip:               "Reveals a bad bug related to replicating an import. See https://github.com/cockroachdb/cockroach/issues/105676 ",
 		},
 	} {
 		sp := sp
