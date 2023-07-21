@@ -144,11 +144,11 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs = knobs
-	params.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
+		ServerArgs: base.TestServerArgs{
+			Knobs:             knobs,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
 	})
 	server := testCluster.Server(0)
 

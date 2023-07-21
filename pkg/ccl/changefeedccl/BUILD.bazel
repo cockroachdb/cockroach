@@ -278,7 +278,6 @@ go_test(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -376,11 +375,9 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 	yamlOverride := "gc: {ttlseconds: 42}"
 
 	errCh := make(chan error)
-	params, _ := tests.CreateTestServerParams()
-
 	startIndexMerge := make(chan interface{})
 	atIndexMerge := make(chan interface{})
-
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeTempIndexMerge: func() {
@@ -393,6 +390,9 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	codec := s.TenantOrServer().Codec()
+	sv := &s.TenantOrServer().ClusterSettings().SV
+	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), sv, true)
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
@@ -431,7 +431,7 @@ PARTITION p1 VALUES IN (DEFAULT));`)
 	<-atIndexMerge
 
 	// Find the temporary index corresponding to the new index.
-	tbl := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
 	newIndex, err := catalog.MustFindIndexByName(tbl, "idx")
 	if err != nil {
 		t.Fatal(err)
