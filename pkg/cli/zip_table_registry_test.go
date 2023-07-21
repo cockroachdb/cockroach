@@ -16,10 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,15 +159,14 @@ func executeAllCustomQuerys(
 
 func TestCustomQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
 	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
+		ServerArgs: base.TestServerArgs{},
 	})
+	defer cluster.Stopper().Stop(context.Background())
 	testConn := cluster.ServerConn(0 /* idx */)
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
-	defer cluster.Stopper().Stop(ctx)
 
 	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerCluster)
 	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerNode)
