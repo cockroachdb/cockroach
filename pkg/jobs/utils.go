@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -139,4 +140,16 @@ ORDER BY created`
 		}
 	}
 	return false /* exists */, err
+}
+
+// JobExists returns true if there is a row corresponding to jobID in the
+// system.jobs table.
+func JobExists(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ex isql.Executor,
+) (bool, error) {
+	row, err := ex.QueryRow(ctx, "check-for-job", txn, `SELECT id FROM system.jobs WHERE id = $1`, jobID)
+	if err != nil {
+		return false, err
+	}
+	return row != nil, nil
 }
