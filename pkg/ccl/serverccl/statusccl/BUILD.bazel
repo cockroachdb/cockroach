@@ -30,7 +30,6 @@ go_test(
         "//pkg/sql/clusterunique",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sqlstats",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

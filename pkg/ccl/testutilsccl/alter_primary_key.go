@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -62,12 +61,7 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 	for _, tc := range testCases {
 		t.Run(tc.Desc, func(t *testing.T) {
 			var db *gosql.DB
-			params, _ := tests.CreateTestServerParams()
-
-			// Override the default set in CreateTestServerParams() until
-			// #76378 is fully resolved.
-			params.DefaultTestTenant = base.TestTenantProbabilistic
-
+			var params base.TestServerArgs
 			params.Locality.Tiers = []roachpb.Tier{
 				{Key: "region", Value: "ajstorm-1"},
 			}
