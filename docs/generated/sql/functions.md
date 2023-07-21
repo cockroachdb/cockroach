@@ -3116,6 +3116,7 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 a CockroachDB HLC in decimal form.</p>
 <p>Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.</p>
+<p>Returns an error if run in a transaction with an isolation level weaker than SERIALIZABLE.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.active_version"></a><code>crdb_internal.active_version() &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the current active cluster version.</p>
 </span></td><td>Volatile</td></tr>

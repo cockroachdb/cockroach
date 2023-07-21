@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/redact"
@@ -61,6 +62,24 @@ func (i IsolationLevel) String() string {
 		return fmt.Sprintf("IsolationLevel(%d)", i)
 	}
 	return isolationLevelNames[i]
+}
+
+// IsolationLevelFromKVTxnIsolationLevel converts a kv level isolation.Level to
+// its SQL semantic equivalent.
+func IsolationLevelFromKVTxnIsolationLevel(level isolation.Level) IsolationLevel {
+	var ret IsolationLevel
+	switch level {
+	case isolation.Serializable:
+		ret = SerializableIsolation
+	case isolation.ReadCommitted:
+		ret = ReadCommittedIsolation
+	case isolation.Snapshot:
+		ret = SnapshotIsolation
+	default:
+		panic("What to do here? Log is a banned import")
+		// log.Fatalf(context.Background(), "unknown isolation level: %s", level)
+	}
+	return ret
 }
 
 // UserPriority holds the user priority for a transaction.
