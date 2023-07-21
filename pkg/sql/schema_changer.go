@@ -131,6 +131,7 @@ type SchemaChanger struct {
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
 	ieFactory            sqlutil.InternalExecutorFactory
+	sessionData          *sessiondatapb.SessionData
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -291,7 +292,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			username.RootUserName(),
 			&MemoryMetrics{},
 			sc.execCfg,
-			sessiondatapb.SessionData{},
+			*sc.sessionData,
 		)
 
 		defer cleanup()
@@ -2145,6 +2146,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 			TableMutationID: sc.mutationID,
 			ResumeSpanList:  spanList,
 			FormatVersion:   oldDetails.FormatVersion,
+			SessionData:     sc.sessionData,
 		},
 	); err != nil {
 		return err
@@ -2643,6 +2645,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			execCfg:              p.ExecCfg(),
 			ieFactory:            r.job.GetInternalExecutorFactory(),
 			metrics:              p.ExecCfg().SchemaChangerMetrics,
+			sessionData:          details.SessionData,
 		}
 		opts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
@@ -2833,6 +2836,7 @@ func (r schemaChangeResumer) OnFailOrCancel(
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
 		ieFactory:            r.job.GetInternalExecutorFactory(),
+		sessionData:          details.SessionData,
 	}
 
 	if r.job.Payload().FinalResumeError == nil {
@@ -2936,6 +2940,7 @@ func (sc *SchemaChanger) queueCleanupJob(
 				// The version distinction for database jobs doesn't matter for jobs on
 				// tables.
 				FormatVersion: jobspb.DatabaseJobFormatVersion,
+				SessionData:   sc.sessionData,
 			},
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,

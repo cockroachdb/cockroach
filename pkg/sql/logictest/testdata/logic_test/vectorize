@@ -3,6 +3,8 @@
 # Note that there is no much benefit from running this file with other logic
 # test configurations because we override vectorize setting.
 
+subtest todo1
+
 # NOTE: all queries in this file should run with vectorize=experimental_always
 # unless they are known to be unsupported (like generate_series, etc). If you do
 # need to execute an unsupported query, follow the pattern of
@@ -605,6 +607,14 @@ SELECT EXTRACT(YEAR FROM x) FROM extract_test
 ----
 2017
 
+statement ok
+RESET vectorize
+
+subtest end
+
+subtest 38937
+
+
 # Regression test for #38937
 statement ok
 CREATE TABLE t38937 (_int2) AS SELECT 1::INT2;
@@ -613,6 +623,13 @@ query I
 SELECT sum_int(_int2) FROM t38937
 ----
 1
+
+subtest end
+
+subtest todo2
+
+statement ok
+SET vectorize=experimental_always
 
 # Regression tests for #38959
 
@@ -1167,6 +1184,13 @@ SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc@i
 ----
 true
 
+statement ok
+RESET vectorize
+
+subtest end
+
+subtest 51841
+
 # Regression test for builtin funcs that take no arguments, combined with
 # data that can't be safely decoded as input.
 
@@ -1175,6 +1199,10 @@ CREATE TABLE t51841 (a) AS SELECT gen_random_uuid();
 
 statement ok
 SELECT random() from t51841
+
+subtest end
+
+subtest todo3
 
 # Regression test to ensure that we can EXPLAIN (VEC) plans that contain user
 # defined types. We aren't interested in the output here, but are just ensuring
@@ -1247,6 +1275,13 @@ SELECT b FROM t66706@u WHERE NOT (b = 'foo')
 bar
 bar
 
+statement ok
+RESET vectorize
+
+subtest end
+
+subtest 68040
+
 # Regression test for ignoring the escaping in the LIKE pattern (#68040).
 statement ok
 CREATE TABLE t68040 (c) AS SELECT 'string with \ backslash'
@@ -1255,6 +1290,13 @@ query T
 SELECT c FROM t68040 WHERE c LIKE '%\\%'
 ----
 string with \ backslash
+
+subtest end
+
+subtest todo4
+
+statement ok
+SET vectorize=experimental_always
 
 # Regression test for #68979. The IN operator should evaluate correctly when the
 # tuple contents are not sorted by the optimizer.
@@ -1296,3 +1338,8 @@ query I
 SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
 ----
 4
+
+statement ok
+RESET vectorize
+
+subtest end
