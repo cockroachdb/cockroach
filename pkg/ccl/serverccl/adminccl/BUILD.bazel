@@ -9,6 +9,7 @@ go_test(
     args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/serverccl",
         "//pkg/security/securityassets",
@@ -16,7 +17,6 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/spanconfig",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
