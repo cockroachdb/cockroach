@@ -306,13 +306,18 @@ type DistSenderMetrics struct {
 	InLeaseTransferBackoffs            *metric.Counter
 	RangeLookups                       *metric.Counter
 	SlowRPCs                           *metric.Gauge
-	RangefeedRanges                    *metric.Gauge
-	RangefeedCatchupRanges             *metric.Gauge
-	RangefeedErrorCatchup              *metric.Counter
-	RangefeedRestartRanges             *metric.Counter
-	RangefeedRestartStuck              *metric.Counter
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
 	ErrCounts                          [kvpb.NumErrors]*metric.Counter
+	DistSenderRangeFeedMetrics
+}
+
+// DistSenderRangeFeedMetrics is a set of rangefeed specific metrics.
+type DistSenderRangeFeedMetrics struct {
+	RangefeedRanges        *metric.Gauge
+	RangefeedCatchupRanges *metric.Gauge
+	RangefeedErrorCatchup  *metric.Counter
+	RangefeedRestartRanges *metric.Counter
+	RangefeedRestartStuck  *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -334,11 +339,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		InLeaseTransferBackoffs:            metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
-		RangefeedRanges:                    metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges:             metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:              metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
-		RangefeedRestartRanges:             metric.NewCounter(metaDistSenderRangefeedRestartRanges),
-		RangefeedRestartStuck:              metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
 	}
 	for i := range m.MethodCounts {
 		method := kvpb.Method(i).String()
@@ -355,6 +356,16 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		m.ErrCounts[i] = metric.NewCounter(meta)
 	}
 	return m
+}
+
+func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
+	return DistSenderRangeFeedMetrics{
+		RangefeedRanges:        metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges: metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedRestartStuck:  metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+	}
 }
 
 // updateCrossLocalityMetricsOnReplicaAddressedBatchRequest updates

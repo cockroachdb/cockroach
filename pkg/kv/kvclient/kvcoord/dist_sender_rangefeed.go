@@ -89,12 +89,17 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 }
 
 type rangeFeedConfig struct {
+	DistSenderRangeFeedMetrics
+
 	useMuxRangeFeed bool
 	overSystemTable bool
 	withDiff        bool
 
 	knobs struct {
-		onMuxRangefeedEvent func(event *kvpb.MuxRangeFeedEvent)
+		// onRangefeedEvent invoked on each rangefeed event.
+		// Returns boolean indicating if event should be skipped or an error
+		// indicating if rangefeed should terminate.
+		onRangefeedEvent func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error)
 	}
 }
 
@@ -186,7 +191,9 @@ func (ds *DistSender) RangeFeedSpans(
 		return errors.AssertionFailedf("expected at least 1 span, got none")
 	}
 
-	var cfg rangeFeedConfig
+	cfg := rangeFeedConfig{
+		DistSenderRangeFeedMetrics: ds.metrics.DistSenderRangeFeedMetrics,
+	}
 	for _, opt := range opts {
 		opt.set(&cfg)
 	}
@@ -462,7 +469,7 @@ func (ds *DistSender) partialRangeFeed(
 	span := rs.AsRawSpanWithNoLocals()
 
 	// Register partial range feed with registry.
-	active := newActiveRangeFeed(span, startAfter, rr, ds.metrics.RangefeedRanges)
+	active := newActiveRangeFeed(span, startAfter, rr, cfg.RangefeedRanges)
 	defer active.release()
 
 	// Start a retry loop for sending the batch to the range.
@@ -503,7 +510,7 @@ func (ds *DistSender) partialRangeFeed(
 		if err != nil {
 			return err
 		}
-		ds.metrics.RangefeedRestartRanges.Inc(1)
+		cfg.RangefeedRestartRanges.Inc(1)
 		if errInfo.evict {
 			token.Evict(ctx)
 			token = rangecache.EvictionToken{}
@@ -586,18 +593,21 @@ func (a catchupAlloc) Release() {
 }
 
 func acquireCatchupScanQuota(
-	ctx context.Context, ds *DistSender, catchupSem *limit.ConcurrentRequestLimiter,
+	ctx context.Context,
+	sv *settings.Values,
+	catchupSem *limit.ConcurrentRequestLimiter,
+	m *DistSenderRangeFeedMetrics,
 ) (catchupAlloc, error) {
 	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
 	// opportunity to update semaphore limit.
-	catchupSem.SetLimit(maxConcurrentCatchupScans(&ds.st.SV))
+	catchupSem.SetLimit(maxConcurrentCatchupScans(sv))
 	res, err := catchupSem.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ds.metrics.RangefeedCatchupRanges.Inc(1)
+	m.RangefeedCatchupRanges.Inc(1)
 	return func() {
-		ds.metrics.RangefeedCatchupRanges.Dec(1)
+		m.RangefeedCatchupRanges.Dec(1)
 		res.Release()
 	}, nil
 }
@@ -707,7 +717,7 @@ func (ds *DistSender) singleRangeFeed(
 
 	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
 	// opportunity to update semaphore limit.
-	catchupRes, err := acquireCatchupScanQuota(ctx, ds, catchupSem)
+	catchupRes, err := acquireCatchupScanQuota(ctx, &ds.st.SV, catchupSem, &cfg.DistSenderRangeFeedMetrics)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -776,9 +786,15 @@ func (ds *DistSender) singleRangeFeed(
 				log.VErrEventf(ctx, 2, "RPC error: %s", err)
 				if stuckWatcher.stuck() {
 					afterCatchUpScan := catchupRes == nil
-					return args.Timestamp, ds.handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold())
+					return args.Timestamp, handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold(), &cfg.DistSenderRangeFeedMetrics)
 				}
 				return args.Timestamp, err
+			}
+
+			if cfg.knobs.onRangefeedEvent != nil {
+				if _, err := cfg.knobs.onRangefeedEvent(ctx, span, event); err != nil {
+					return args.Timestamp, err
+				}
 			}
 
 			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
@@ -799,14 +815,14 @@ func (ds *DistSender) singleRangeFeed(
 			case *kvpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				if catchupRes != nil {
-					ds.metrics.RangefeedErrorCatchup.Inc(1)
+					cfg.RangefeedErrorCatchup.Inc(1)
 				}
 				if stuckWatcher.stuck() {
 					// When the stuck watcher fired, and the rangefeed call is local,
 					// the remote might notice the cancellation first and return from
 					// Recv with an error that we need to special-case here.
 					afterCatchUpScan := catchupRes == nil
-					return args.Timestamp, ds.handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold())
+					return args.Timestamp, handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold(), &cfg.DistSenderRangeFeedMetrics)
 				}
 				return args.Timestamp, t.Error.GoError()
 			}
@@ -828,10 +844,13 @@ func connectionClass(sv *settings.Values) rpc.ConnectionClass {
 	return rpc.DefaultClass
 }
 
-func (ds *DistSender) handleStuckEvent(
-	args *kvpb.RangeFeedRequest, afterCatchupScan bool, threshold time.Duration,
+func handleStuckEvent(
+	args *kvpb.RangeFeedRequest,
+	afterCatchupScan bool,
+	threshold time.Duration,
+	m *DistSenderRangeFeedMetrics,
 ) error {
-	ds.metrics.RangefeedRestartStuck.Inc(1)
+	m.RangefeedRestartStuck.Inc(1)
 	if afterCatchupScan {
 		telemetry.Count("rangefeed.stuck.after-catchup-scan")
 	} else {
@@ -842,3 +861,26 @@ func (ds *DistSender) handleStuckEvent(
 
 // sentinel error returned when cancelling rangefeed when it is stuck.
 var errRestartStuckRange = errors.New("rangefeed restarting due to inactivity")
+
+// a test only option to modify mux rangefeed event.
+func withOnRangefeedEvent(
+	fn func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error),
+) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.onRangefeedEvent = fn
+	})
+}
+
+// a test only option to specify metrics to use while executing this rangefeed.
+func withRangeFeedMetrics(m DistSenderRangeFeedMetrics) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.DistSenderRangeFeedMetrics = m
+	})
+}
+
+// Expose various testing knobs to kvcoord_test package.
+var (
+	TestingWithOnRangefeedEvent = withOnRangefeedEvent
+	TestingWithRangeFeedMetrics = withRangeFeedMetrics
+	TestingMakeRangeFeedMetrics = makeDistSenderRangeFeedMetrics
+)
