@@ -287,6 +287,14 @@ message SnapshotResponse {
   //
   // MIGRATION: only guaranteed to be set when the message field is no longer there.
   errorspb.EncodedError encoded_error = 5 [(gogoproto.nullable) = false];
+
+  // msg_app_resp stores an optional MsgAppResp the receiving RawNode may have
+  // generated in response to applying the snapshot. This message will also have
+  // been handed to the raft transport, but it is helpful to step it into the
+  // sender manually to avoid the race described in:
+  //
+  // https://github.com/cockroachdb/cockroach/issues/97971
+  raftpb.Message msg_app_resp = 6;
 }
 
 // TODO(baptist): Extend this if necessary to separate out the request for the throttle.
@@ -356,6 +364,14 @@ message DelegateSnapshotResponse {
   // collected_spans stores trace spans recorded during the execution of this
   // request.
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 3 [(gogoproto.nullable) = false];
+
+  // msg_app_resp stores an optional MsgAppResp the receiving RawNode may have
+  // generated in response to applying the snapshot. This message will also have
+  // been handed to the raft transport, but it is helpful to step it into the
+  // sender manually to avoid the race described in:
+  //
+  // https://github.com/cockroachdb/cockroach/issues/97971
+  raftpb.Message msg_app_resp = 4;
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
