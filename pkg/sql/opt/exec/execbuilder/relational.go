@@ -2897,10 +2897,10 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 			)
 		}
 		if locking.Durability == tree.LockDurabilityGuaranteed &&
-			b.evalCtx.TxnIsoLevel != isolation.Serializable {
+			b.evalCtx.Txn.IsoLevel() != isolation.Serializable {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				100144, "cannot execute SELECT FOR UPDATE statements under %s isolation",
-				b.evalCtx.TxnIsoLevel,
+				b.evalCtx.Txn.IsoLevel(),
 			)
 		}
 		b.ContainsNonDefaultKeyLocking = true
