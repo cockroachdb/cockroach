@@ -362,9 +362,11 @@ func generateRandomName() string {
 func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+
+	ts := s.TenantOrServer()
 
 	query := "EXPLAIN ANALYZE (DEBUG) SELECT 'secret'"
 	_, err := db.Exec(query)

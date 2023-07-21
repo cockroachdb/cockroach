@@ -99,6 +99,10 @@ type TestTenantInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
+	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
+	// also implements isql.InternalExecutor if the test cannot depend on sql).
+	InternalExecutor() interface{}
+
 	// RangeFeedFactory returns the range feed factory used by the tenant.
 	// The real return type is *rangefeed.Factory.
 	RangeFeedFactory() interface{}
