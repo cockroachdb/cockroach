@@ -1272,8 +1272,9 @@ func TestDirectoryConnect(t *testing.T) {
 	defer te.Close()
 
 	// Start KV server.
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	// Start a SQL pod for the test tenant, and register it with the directory
@@ -1387,8 +1388,9 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Start KV server, and enable session migration.
-	params, _ := tests.CreateTestServerParams()
-	s, mainDB, _ := serverutils.StartServer(t, params)
+	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
 	require.NoError(t, err)
@@ -1474,8 +1476,9 @@ func TestCancelQuery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Start KV server, and enable session migration.
-	params, _ := tests.CreateTestServerParams()
-	s, mainDB, _ := serverutils.StartServer(t, params)
+	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
 	require.NoError(t, err)
@@ -1820,8 +1823,9 @@ func TestPodWatcher(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Start KV server, and enable session migration.
-	params, _ := tests.CreateTestServerParams()
-	s, mainDB, _ := serverutils.StartServer(t, params)
+	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
 	require.NoError(t, err)
@@ -1917,10 +1921,9 @@ func TestConnectionMigration(t *testing.T) {
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	params.DefaultTestTenant = base.TestControlsTenantsExplicitly
-
-	s, mainDB, _ := serverutils.StartServer(t, params)
+	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()
 
@@ -2311,8 +2314,9 @@ func TestAcceptedConnCountMetric(t *testing.T) {
 	ctx := context.Background()
 
 	// Start KV server.
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	// Start a single SQL pod.
@@ -2401,8 +2405,9 @@ func TestCurConnCountMetric(t *testing.T) {
 	ctx := context.Background()
 
 	// Start KV server.
-	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	// Start a single SQL pod.
