@@ -38,8 +38,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, _, _, cleanupFn := backuptestutils.BackupDestinationTestSetup(t, backuptestutils.MultiNode, 1,
-		backuptestutils.InitManualReplication)
+	tc, _, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, backuptestutils.MultiNode)
 	defer cleanupFn()
 
 	ctx := context.Background()
