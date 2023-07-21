@@ -32,7 +32,7 @@ SELECT * FROM t1@idx WHERE [FUNCTION 1074](b, ',') = ARRAY['hello','new','world'
 statement ok
 ALTER TABLE t1 ADD CONSTRAINT c_len CHECK ([FUNCTION 814](b) > 2)
 
-statement error pq: failed to satisfy CHECK constraint \(length\(b\) > 2:::INT8\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(length\(b\) > 2:::INT8\)
 INSERT INTO t1 VALUES (3, 'a')
 
 statement ok
@@ -59,7 +59,7 @@ hello world
 
 # Make sure that argument types are still checked even we know which function
 # overload to use.
-statement error pq: unknown signature: public.f2\(int\)
+statement error pgcode 42883 pq: unknown signature: public.f2\(int\)
 SELECT [FUNCTION $fn_oid](123)
 
 # Make sure that renaming does not break the reference.
@@ -86,7 +86,7 @@ hello world
 statement ok
 DROP FUNCTION sc1.f2_new(STRING);
 
-statement error function undefined
+statement error pgcode 42883 function undefined
 SELECT [FUNCTION $fn_oid]('maybe')
 
 # Referencing UDF OID within a UDF
@@ -98,7 +98,7 @@ let $fn_oid
 SELECT oid FROM pg_catalog.pg_proc WHERE proname = 'f_in_udf'
 
 # TODO(chengxiong,mgartner): Fix this test when we enable support of calling UDFs from UDFs.
-statement error pq: function \d+ not found: function undefined
+statement error pgcode 42883 pq: function \d+ not found: function undefined
 CREATE FUNCTION f_using_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT [FUNCTION $fn_oid]() $$;
 
 # 814 is the OID of builtin function "length" with signature, and it's ok to

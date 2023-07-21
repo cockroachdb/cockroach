@@ -120,7 +120,7 @@ test           test_priv_sc1  100109       test_priv_f3()      public         EX
 test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
 test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         true
 
-statement error pq: cannot drop role/user udf_test_user: grants still exist on.*
+statement error pgcode 2BP01 pq: cannot drop role/user udf_test_user: grants still exist on.*
 DROP USER udf_test_user;
 
 statement ok
@@ -533,7 +533,7 @@ CREATE FUNCTION f_test_show_grants(INT, string, OID) RETURNS INT LANGUAGE SQL AS
 CREATE USER u_test_show_grants;
 GRANT EXECUTE ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) TO u_test_show_grants;
 
-statement error pq: function name "f_test_show_grants" is not unique
+statement error pgcode XXUUU pq: function name "f_test_show_grants" is not unique
 SHOW GRANTS ON FUNCTION f_test_show_grants;
 
 query TTTTTTB colnames
@@ -551,7 +551,7 @@ test           sc_test_show_grants  100117       f_test_show_grants(int8, text, 
 test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  root                ALL             true
 test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-statement error pq: function f_test_show_grants\(string\) does not exist: function undefined
+statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist: function undefined
 SHOW GRANTS ON FUNCTION f_test_show_grants(string);
 
 query TTTTTTB colnames
@@ -572,7 +572,7 @@ test           sc_test_show_grants  100117       f_test_show_grants(int8, text, 
 test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  root                ALL             true
 test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-statement error pq: unknown function: f_not_existing\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
 SHOW GRANTS ON FUNCTION f_not_existing;
 
 query TTTTTTB colnames
@@ -603,7 +603,7 @@ CREATE SCHEMA sc_test_priv;
 
 user testuser
 
-statement error pq: user testuser does not have CREATE privilege on schema sc_test_priv
+statement error pgcode 42501 pq: user testuser does not have CREATE privilege on schema sc_test_priv
 CREATE FUNCTION sc_test_priv.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
 user root
@@ -633,7 +633,7 @@ WHERE proname = 'f_test_alter_owner';
 ----
 root
 
-statement error  pq: role/user "user_not_exists" does not exist
+statement error pgcode 42704 pq: role/user "user_not_exists" does not exist
 ALTER FUNCTION f_test_alter_owner OWNER TO user_not_exists
 
 statement ok
@@ -666,7 +666,7 @@ WHERE proname = 'f_test_alter_owner';
 ----
 u_test_owner
 
-statement error pq: role u_test_owner cannot be dropped because some objects depend on it
+statement error pgcode 2BP01 pq: role u_test_owner cannot be dropped because some objects depend on it
 DROP USER u_test_owner;
 
 statement ok

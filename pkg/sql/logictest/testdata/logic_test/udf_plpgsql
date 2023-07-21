@@ -487,7 +487,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error control reached end of function without RETURN
+statement error pgcode 2F005 control reached end of function without RETURN
 SELECT f(1, 2);
 
 statement ok
@@ -499,7 +499,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error control reached end of function without RETURN
+statement error pgcode 2F005 control reached end of function without RETURN
 SELECT f(1, 2);
 
 statement ok
@@ -511,7 +511,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error control reached end of function without RETURN
+statement error pgcode 2F005 control reached end of function without RETURN
 SELECT f(1, 2);
 
 statement ok
@@ -527,7 +527,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error control reached end of function without RETURN
+statement error pgcode 2F005 control reached end of function without RETURN
 SELECT f(1, 2);
 
 statement ok
@@ -539,7 +539,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error control reached end of function without RETURN
+statement error pgcode 2F005 control reached end of function without RETURN
 SELECT f(1, 2);
 
 statement ok
@@ -554,10 +554,10 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error control reached end of function without RETURN
+statement error pgcode 2F005 control reached end of function without RETURN
 SELECT f(1, 2);
 
-statement error PL/pgSQL functions with RECORD input arguments are not yet supported
+statement error pgcode 0A000 PL/pgSQL functions with RECORD input arguments are not yet supported
 CREATE FUNCTION f_err(p1 RECORD) RETURNS RECORD AS $$
   BEGIN
    RETURN p1;

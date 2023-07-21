@@ -124,7 +124,7 @@ SELECT array_agg(a) FROM all_a_desc() g(a)
 {4,3,2,1}
 
 # Nested set-returning functions are not yet supported.
-statement error unimplemented: nested set-returning functions
+statement error pgcode 0A000 unimplemented: nested set-returning functions
 SELECT all_a_lt(all_a())
 
 statement ok
