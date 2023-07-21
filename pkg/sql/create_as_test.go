@@ -303,3 +303,56 @@ WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
 AND status != 'succeeded'`
 	sqlRunner.CheckQueryResultsRetry(t, query, [][]string{})
 }
+
+func TestFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		sql            string
+		setup          string
+		expectedFormat string
+	}{
+		{
+			sql:            "CREATE TABLE ctas_implicit_columns_tbl AS SELECT * FROM ctas_implicit_columns_source_tbl",
+			setup:          "CREATE TABLE ctas_implicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE TABLE defaultdb.public.ctas_implicit_columns_tbl (id) AS SELECT * FROM defaultdb.public.ctas_implicit_columns_source_tbl",
+		},
+		{
+			sql:            "CREATE TABLE ctas_explicit_columns_tbl (id) AS SELECT * FROM ctas_explicit_columns_source_tbl",
+			setup:          "CREATE TABLE ctas_explicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE TABLE defaultdb.public.ctas_explicit_columns_tbl (id) AS SELECT * FROM defaultdb.public.ctas_explicit_columns_source_tbl",
+		},
+	}
+
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	var p parser.Parser
+
+	for _, tc := range testCases {
+		t.Run(tc.sql, func(t *testing.T) {
+			sqlRunner.Exec(t, tc.setup)
+			sqlRunner.Exec(t, tc.sql)
+
+			statements, err := p.Parse(tc.sql)
+			require.NoError(t, err)
+			require.Len(t, statements, 1)
+			var name string
+			switch stmt := statements[0].AST.(type) {
+			case *tree.CreateTable:
+				name = stmt.Table.Table()
+			default:
+				require.Failf(t, "missing case", "unexpected type %T", stmt)
+			}
+			query := fmt.Sprintf(
+				`SELECT description
+FROM [SHOW JOBS]
+WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
+AND description LIKE '%%%s%%'`,
+				name,
+			)
+			sqlRunner.CheckQueryResults(t, query, [][]string{{tc.expectedFormat}})
+		})
+	}
+}
