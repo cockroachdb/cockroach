@@ -276,10 +276,10 @@ type nodeMetrics struct {
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
 		Latency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaExecLatency,
-			Duration: histogramWindow,
-			Buckets:  metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaExecLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		Success:                       metric.NewCounter(metaExecSuccess),
 		Err:                           metric.NewCounter(metaExecError),

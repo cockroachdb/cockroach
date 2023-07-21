@@ -10,333 +10,132 @@
 
 package metric
 
-// IOLatencyBuckets are prometheus histogram buckets suitable for a histogram
-// that records a quantity (nanosecond-denominated) in which most measurements
-// resemble those of typical disk latencies, i.e. which are in the micro- and
-// millisecond range during normal operation.
-var IOLatencyBuckets = []float64{
-	// Generated via TestHistogramBuckets/IOLatencyBuckets.
-	10000.000000,      // 10µs
-	12638.482029,      // 12.638µs
-	15973.122801,      // 15.973µs
-	20187.602547,      // 20.187µs
-	25514.065200,      // 25.514µs
-	32245.905453,      // 32.245µs
-	40753.929659,      // 40.753µs
-	51506.780762,      // 51.506µs
-	65096.752305,      // 65.096µs
-	82272.413417,      // 82.272µs
-	103979.841848,     // 103.979µs
-	131414.736261,     // 131.414µs
-	166088.278263,     // 166.088µs
-	209910.372011,     // 209.91µs
-	265294.846443,     // 265.294µs
-	335292.414925,     // 335.292µs
-	423758.716060,     // 423.758µs
-	535566.691771,     // 535.566µs
-	676875.000946,     // 676.875µs
-	855467.253557,     // 855.467µs
-	1081180.751077,    // 1.08118ms
-	1366448.349295,    // 1.366448ms
-	1726983.290659,    // 1.726983ms
-	2182644.728397,    // 2.182644ms
-	2758531.617629,    // 2.758531ms
-	3486365.227678,    // 3.486365ms
-	4406236.427774,    // 4.406236ms
-	5568813.990945,    // 5.568813ms
-	7038135.554932,    // 7.038135ms
-	8895134.973108,    // 8.895134ms
-	11242100.350621,   // 11.2421ms
-	14208308.325339,   // 14.208308ms
-	17957144.943716,   // 17.957144ms
-	22695105.366947,   // 22.695105ms
-	28683168.133420,   // 28.683168ms
-	36251170.499885,   // 36.25117ms
-	45815976.690545,   // 45.815976ms
-	57904439.806025,   // 57.904439ms
-	73182422.190762,   // 73.182422ms
-	92491472.772173,   // 92.491472ms
-	116895181.649858,  // 116.895181ms
-	147737765.259851,  // 147.737765ms
-	186718109.129192,  // 186.718109ms
-	235983346.678219,  // 235.983346ms
-	298247128.621688,  // 298.247128ms
-	376939097.538835,  // 376.939097ms
-	476393801.040133,  // 476.393801ms
-	602089449.333611,  // 602.089449ms
-	760949668.545986,  // 760.949668ms
-	961724871.115294,  // 961.724871ms
-	1215474250.076283, // 1.21547425s
-	1536174946.671824, // 1.536174946s
-	1941491945.743876, // 1.941491945s
-	2453751106.639811, // 2.453751106s
-	3101168926.574770, // 3.101168926s
-	3919406774.847209, // 3.919406774s
-	4953535208.959157, // 4.953535208s
-	6260516572.014802, // 6.260516572s
-	7912342618.981298, // 7.912342618s
-	9999999999.999969, // 9.999999999s
+import "github.com/prometheus/client_golang/prometheus"
+
+// staticBucketConfig describes the buckets we want to generate for a specific
+// category of metrics.
+type staticBucketConfig struct {
+	category     string
+	min          float64
+	max          float64
+	count        int
+	units        unitType
+	distribution distribution
 }
 
-// BatchProcessLatencyBuckets are prometheus histogram buckets suitable for a
-// histogram that records a quantity (nanosecond-denominated) in which most
-// measurements are in the seconds to minutes range during normal operation.
-var BatchProcessLatencyBuckets = []float64{
-	// Generated via TestHistogramBuckets/BatchProcessLatencyBuckets.
-	500000000.000000,    // 500ms
-	557259285.358743,    // 557.259285ms
-	621075822.237074,    // 621.075822ms
-	692200537.706851,    // 692.200537ms
-	771470353.934916,    // 771.470353ms
-	859818036.218456,    // 859.818036ms
-	958283168.803309,    // 958.283168ms
-	1068024387.637287,   // 1.068024387s
-	1190333014.000928,   // 1.190333014s
-	1326648249.442152,   // 1.326648249s
-	1478574110.813123,   // 1.47857411s
-	1647898304.683320,   // 1.647898304s
-	1836613263.223422,   // 1.836613263s
-	2046939589.088547,   // 2.046939589s
-	2281352185.176006,   // 2.281352185s
-	2542609376.725576,   // 2.542609376s
-	2833785368.441068,   // 2.833785368s
-	3158306418.555065,   // 3.158306418s
-	3519991155.495853,   // 3.519991155s
-	3923095511.561431,   // 3.923095511s
-	4372362802.333632,   // 4.372362802s
-	4873079541.115184,   // 4.873079541s
-	5431137645.156319,   // 5.431137645s
-	6053103765.649553,   // 6.053103765s
-	6746296557.296375,   // 6.746296557s
-	7518872796.674253,   // 7.518872796s
-	8379923362.755980,   // 8.379923362s
-	9339580208.980864,   // 9.339580208s
-	10409135585.614676,  // 10.409135585s
-	11601174915.283792,  // 11.601174915s
-	12929724885.225649,  // 12.929724885s
-	14410418498.852003,  // 14.410418498s
-	16060679028.781363,  // 16.060679028s
-	17899925035.909710,  // 17.899925035s
-	19949798866.972237,  // 19.949798866s
-	22234421319.319225,  // 22.234421319s
-	24780675469.538071,  // 24.780675469s
-	27618523005.723442,  // 27.618523005s
-	30781356785.666904,  // 30.781356785s
-	34306393769.506477,  // 34.306393769s
-	38235112950.461639,  // 38.23511295s
-	42613743436.770157,  // 42.613743436s
-	47493808428.070732,  // 47.493808428s
-	52932731487.183495,  // 52.932731487s
-	58994512241.268242,  // 58.994512241s
-	65750479463.313522,  // 1m5.750479463s
-	73280130395.441635,  // 1m13.280130395s
-	81672066190.318619,  // 1m21.67206619s
-	91025034477.977859,  // 1m31.025034477s
-	101449091325.905777, // 1m41.449091325s
-	113066896265.136261, // 1m53.066896265s
-	126015155620.881943, // 2m6.01515562s
-	140446231131.326965, // 2m20.446231131s
-	156529932783.144257, // 2m36.529932783s
-	174455516959.974152, // 2m54.455516959s
-	194433913416.010529, // 3m14.433913416s
-	216700207279.419586, // 3m36.700207279s
-	241516405291.241699, // 4m1.516405291s
-	269174518830.019897, // 4m29.17451883s
-	300000000000.000854, // 5m0s
+// distribution describes the population distribution that best describes the
+// metric for which we record histogram data
+type distribution int
+
+const (
+	Uniform distribution = iota
+	Exponential
+	// TODO(ericharmeling): add more distributions
+)
+
+// unitType describes the unit type of the metric for which we record
+// histogram data
+type unitType int
+
+const (
+	LATENCY unitType = iota
+	SIZE
+	COUNT
+)
+
+var IOLatencyBuckets = staticBucketConfig{
+	category:     "IOLatencyBuckets",
+	min:          10e3, // 10µs
+	max:          10e9, // 10s
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
 }
 
-// LongRunning60mLatencyBuckets are prometheus histogram buckets suitable
-// for a histogram that records a quantity (nanosecond-denominated) for
-// long-running processes (multiple minutes).
-var LongRunning60mLatencyBuckets = []float64{
-	// Generated via TestHistogramBuckets/LongRunning60mLatencyBuckets.
-	500000000.000000,     // 500ms
-	581230667.894489,     // 581.230667ms
-	675658178.602148,     // 675.658178ms
-	785426508.834601,     // 785.426508ms
-	913027948.623944,     // 913.027948ms
-	1061359688.770060,    // 1.061359688s
-	1233789601.560218,    // 1.233789601s
-	1434232708.312242,    // 1.434232708s
-	1667240069.936893,    // 1.667240069s
-	1938102118.779750,    // 1.938102118s
-	2252968777.892157,    // 2.252968777s
-	2618989095.039379,    // 2.618989095s
-	3044473561.836243,    // 3.044473561s
-	3539082803.466387,    // 3.539082803s
-	4114046923.185338,    // 4.114046923s
-	4782420481.824564,    // 4.782420481s
-	5559378901.606352,    // 5.559378901s
-	6462563024.118382,    // 6.462563024s
-	7512479645.637113,    // 7.512479645s
-	8732967123.954826,    // 8.732967123s
-	10151736628.313759,   // 10.151736628s
-	11801001321.527510,   // 11.801001321s
-	13718207759.870365,   // 13.718207759s
-	15946886117.169632,   // 15.946886117s
-	18537638537.439724,   // 18.537638537s
-	21549288056.605419,   // 21.549288056s
-	25050214179.583008,   // 25.050214179s
-	29119905436.998066,   // 29.119905436s
-	33850764172.341507,   // 33.850764172s
-	39350204537.257782,   // 39.350204537s
-	45743091329.950188,   // 45.743091329s
-	53174575050.531136,   // 53.17457505s
-	61813387543.251701,   // 1m1.813387543s
-	71855673053.170151,   // 1m11.855673053s
-	83529441681.404266,   // 1m23.529441681s
-	97099746354.672745,   // 1m37.099746354s
-	112874700852.223846,  // 1m52.874700852s
-	131212475529.457443,  // 2m11.212475529s
-	152529429576.151703,  // 2m32.529429576s
-	177309564452.224213,  // 2m57.309564452s
-	206115513141.294464,  // 3m26.115513141s
-	239601314733.059875,  // 3m59.601314733s
-	278527264381.388123,  // 4m38.527264381s
-	323777175806.438293,  // 5m23.777175806s
-	376378448285.935181,  // 6m16.378448285s
-	437525393756.650940,  // 7m17.525393756s
-	508606353667.955078,  // 8m28.606353667s
-	591235221275.612671,  // 9m51.235221275s
-	687288085089.540771,  // 11m27.288085089s
-	798945825465.036499,  // 13m18.945825465s
-	928743631493.114136,  // 15m28.743631493s
-	1079628562470.991943, // 17m59.62856247s
-	1255026460885.963623, // 20m55.026460885s
-	1458919736172.010742, // 24m18.919736172s
-	1695937785319.419434, // 28m15.937785319s
-	1971462103337.413574, // 32m51.462103337s
-	2291748470102.958496, // 38m11.748470102s
-	2664068987848.231934, // 44m24.068987848s
-	3096877194248.046875, // 51m36.877194248s
-	3600000000000.007812, // 1h0m0s
+var BatchProcessLatencyBuckets = staticBucketConfig{
+	category:     "BatchProcessLatencyBuckets",
+	min:          500e6, // 500ms
+	max:          300e9, // 5m
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
 }
 
-// Count1KBuckets are prometheus histogram buckets suitable for a histogram that
-// records a quantity that is a count (unit-less) in which most measurements are
-// in the 1 to ~1000 range during normal operation.
-var Count1KBuckets = []float64{
-	// Generated via TestHistogramBuckets/Count1KBuckets.
-	1.000000,
-	2.000000,
-	4.000000,
-	8.000000,
-	16.000000,
-	32.000000,
-	64.000000,
-	128.000000,
-	256.000000,
-	512.000000,
-	1024.000000,
+var LongRunning60mLatencyBuckets = staticBucketConfig{
+	category:     "LongRunning60mLatencyBuckets",
+	min:          500e6,  // 500ms
+	max:          3600e9, // 1h
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
 }
 
-// Percent100Buckets are prometheus histogram buckets suitable for a histogram that
-// records a percent quantity [0,100]
-var Percent100Buckets = []float64{
-	// Generated via TestHistogramBuckets/Percent100Buckets.
-	10.000000,
-	20.000000,
-	30.000000,
-	40.000000,
-	50.000000,
-	60.000000,
-	70.000000,
-	80.000000,
-	90.000000,
-	100.000000,
+var DataSize16MBBuckets = staticBucketConfig{
+	category:     "DataSize16MBBuckets",
+	min:          1e3,     // 1kB
+	max:          16384e3, // 16MB
+	count:        15,
+	units:        SIZE,
+	distribution: Exponential,
 }
 
-// DataSize16MBBuckets are prometheus histogram buckets suitable for a histogram that
-// records a quantity that is a size (byte-denominated) in which most measurements are
-// in the kB to MB range during normal operation.
-var DataSize16MBBuckets = []float64{
-	// Generated via TestHistogramBuckets/DataSize16MBBuckets.
-	1000.000000,     // 1.0 kB
-	2000.000000,     // 2.0 kB
-	4000.000000,     // 4.0 kB
-	8000.000000,     // 8.0 kB
-	16000.000000,    // 16 kB
-	32000.000000,    // 32 kB
-	64000.000000,    // 64 kB
-	128000.000000,   // 128 kB
-	256000.000000,   // 256 kB
-	512000.000000,   // 512 kB
-	1024000.000000,  // 1.0 MB
-	2048000.000000,  // 2.0 MB
-	4096000.000000,  // 4.1 MB
-	8192000.000000,  // 8.2 MB
-	16384000.000000, // 16 MB
+var MemoryUsage64MBBuckets = staticBucketConfig{
+	category:     "MemoryUsage64MBBuckets",
+	min:          1,    // 1B
+	max:          64e6, // 64MB
+	count:        15,
+	units:        SIZE,
+	distribution: Exponential,
 }
 
-// MemoryUsage64MBBuckets are prometheus histogram buckets suitable for a histogram that
-// records memory usage (in Bytes)
-var MemoryUsage64MBBuckets = []float64{
-	// Generated via TestHistogramBuckets/MemoryUsage64MBBuckets.
-	1.000000,        // 1 B
-	3.610641,        // 3 B
-	13.036727,       // 13 B
-	47.070938,       // 47 B
-	169.956248,      // 169 B
-	613.650962,      // 613 B
-	2215.673192,     // 2.2 kB
-	8000.000000,     // 8.0 kB
-	28885.126301,    // 29 kB
-	104293.815179,   // 104 kB
-	376567.502984,   // 377 kB
-	1359649.985574,  // 1.4 MB
-	4909207.694830,  // 4.9 MB
-	17725385.537954, // 18 MB
-	64000000.000000, // 64 MB
+var ReplicaCPUTimeBuckets = staticBucketConfig{
+	category:     "ReplicaCPUTimeBuckets",
+	min:          50e4, // 500µs
+	max:          5e9,  // 5s
+	count:        20,
+	units:        LATENCY,
+	distribution: Exponential,
 }
 
-var ReplicaCPUTimeBuckets = []float64{
-	500000.000000,     // 500µs
-	811888.369594,     // 811.888µs
-	1318325.449365,    // 1.318325ms
-	2140666.199360,    // 2.140666ms
-	3475963.980888,    // 3.475963ms
-	5644189.458423,    // 5.644189ms
-	9164903.554162,    // 9.164903ms
-	14881757.208157,   // 14.881757ms
-	24164651.192859,   // 24.164651ms
-	39237998.517573,   // 39.237998ms
-	63713749.285157,   // 63.713749ms
-	103456904.055739,  // 103.456904ms
-	167990914.314189,  // 167.990914ms
-	272779739.058426,  // 272.779739ms
-	442933395.205041,  // 442.933395ms
-	719224944.143830,  // 719.224944ms
-	1167860734.545059, // 1.167860734s
-	1896345095.366121, // 1.896345095s
-	3079241055.330125, // 3.079241055s
-	4999999999.999990, // 4.999999999s
+var ReplicaBatchRequestCountBuckets = staticBucketConfig{
+	category:     "ReplicaBatchRequestCountBuckets",
+	min:          1,
+	max:          16e3,
+	count:        20,
+	units:        COUNT,
+	distribution: Exponential,
 }
 
-// ReplicaBatchRequestCountBuckets are prometheus histogram buckets suitable
-// for a histogram that records request counts to a replica. NOTE: The default
-// load based split threshold is 2500 Requests (>= BatchRequests) when QPS
-// splitting is enabled. We don't expect more than 2500 batch requests for a
-// replica in most clusters. However with CPU splits (default), this no longer
-// holds.
-var ReplicaBatchRequestCountBuckets = []float64{
-	1.000000,
-	1.664445,
-	2.770377,
-	4.611141,
-	7.674991,
-	12.774602,
-	21.262623,
-	35.390468,
-	58.905491,
-	98.044956,
-	163.190445,
-	271.621536,
-	452.099132,
-	752.494181,
-	1252.485246,
-	2084.692921,
-	3469.856899,
-	5775.386284,
-	9612.813352,
-	16000.000000,
+var Count1KBuckets = staticBucketConfig{
+	category:     "Count1KBuckets",
+	min:          1,
+	max:          1024,
+	count:        11,
+	units:        COUNT,
+	distribution: Exponential,
+}
+var Percent100Buckets = staticBucketConfig{
+	category:     "Percent100Buckets",
+	min:          0,
+	max:          100,
+	count:        10,
+	units:        COUNT,
+	distribution: Uniform,
+}
+
+var StaticBucketConfigs = []staticBucketConfig{IOLatencyBuckets,
+	BatchProcessLatencyBuckets, LongRunning60mLatencyBuckets,
+	DataSize16MBBuckets, MemoryUsage64MBBuckets, ReplicaCPUTimeBuckets,
+	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets}
+
+func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
+	var buckets []float64
+	if config.distribution == Uniform {
+		width := (config.max - config.min) / float64(config.count)
+		buckets = prometheus.LinearBuckets(config.min, width, config.count)
+	} else if config.distribution == Exponential {
+		buckets = prometheus.ExponentialBucketsRange(config.min, config.max,
+			config.count)
+	}
+	return buckets
 }

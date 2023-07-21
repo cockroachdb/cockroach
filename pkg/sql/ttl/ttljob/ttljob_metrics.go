@@ -107,10 +107,10 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
-			MaxVal:   time.Hour.Nanoseconds(),
-			SigFigs:  sigFigs,
-			Duration: histogramWindowInterval,
-			Buckets:  metric.LongRunning60mLatencyBuckets,
+			MaxVal:       time.Hour.Nanoseconds(),
+			SigFigs:      sigFigs,
+			Duration:     histogramWindowInterval,
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 		SelectDuration: b.Histogram(metric.HistogramOptions{
 			Metadata: metric.Metadata{
@@ -120,10 +120,10 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
-			MaxVal:   time.Minute.Nanoseconds(),
-			SigFigs:  sigFigs,
-			Duration: histogramWindowInterval,
-			Buckets:  metric.BatchProcessLatencyBuckets,
+			MaxVal:       time.Minute.Nanoseconds(),
+			SigFigs:      sigFigs,
+			Duration:     histogramWindowInterval,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		DeleteDuration: b.Histogram(metric.HistogramOptions{
 			Metadata: metric.Metadata{
@@ -133,10 +133,10 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
-			MaxVal:   time.Minute.Nanoseconds(),
-			SigFigs:  sigFigs,
-			Duration: histogramWindowInterval,
-			Buckets:  metric.BatchProcessLatencyBuckets,
+			MaxVal:       time.Minute.Nanoseconds(),
+			SigFigs:      sigFigs,
+			Duration:     histogramWindowInterval,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		RowSelections: b.Counter(
 			metric.Metadata{
