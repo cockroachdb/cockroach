@@ -202,3 +202,36 @@ func BenchmarkRenderPlanning(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkNestedAndPlanning benchmarks how long it takes to run a query with
+// many expressions logically AND'ed in a single output column.
+func BenchmarkNestedAndPlanning(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{SQLMemoryPoolSize: 10 << 30})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Disable fallback to the row-by-row processing wrapping.
+	sqlDB.Exec(b, "SET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.min_render_count = 9999999")
+	sqlDB.Exec(b, "CREATE TABLE bench (i INT)")
+	for _, numRenders := range []int{1 << 4, 1 << 8, 1 << 12} {
+		var sb strings.Builder
+		sb.WriteString("SELECT ")
+		for i := 0; i < numRenders; i++ {
+			if i > 0 {
+				sb.WriteString(" AND ")
+			}
+			sb.WriteString(fmt.Sprintf("i < %d", i+1))
+		}
+		sb.WriteString(" FROM bench")
+		query := sb.String()
+		b.Run(fmt.Sprintf("renders=%d", numRenders), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				sqlDB.Exec(b, query)
+			}
+		})
+	}
+}
