@@ -1982,18 +1982,19 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestVectorizedTypeSchemaCopy", func(t *testing.T) {
+	t.Run("TestColbuilderSimpleProject", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
 			"grep",
 			"-nE",
-			// We prohibit appending to the type schema and require allocating
-			// a new slice. See the comment in execplan.go file.
-			`(yps|ypes) = append\(`,
+			// We prohibit usage of colexecbase.NewSimpleProjectOp outside of
+			// addProjection helper in colbuilder package.
+			`colexecbase\.NewSimpleProjectOp`,
 			"--",
-			"sql/colexec/execplan.go",
+			"sql/colexec/colbuilder*",
+			":!sql/colexec/colbuilder/execplan_util.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -2004,7 +2005,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; allocate a new []*types.T slice", s)
+			t.Errorf("\n%s <- forbidden; use addProjection to prevent type schema corruption", s)
 		}); err != nil {
 			t.Error(err)
 		}
