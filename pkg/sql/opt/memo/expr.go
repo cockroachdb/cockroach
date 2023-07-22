@@ -720,6 +720,23 @@ type UDFDefinition struct {
 	// should be optimized if it is rebuilt. Each props corresponds to the RelExpr
 	// at the same position in Body.
 	BodyProps []*physical.Required
+
+	// ExceptionBlock contains information needed for exception-handling when the
+	// body of this routine returns an error. It can be unset.
+	ExceptionBlock *ExceptionBlock
+}
+
+// ExceptionBlock contains the information needed to match and handle errors in
+// the EXCEPTION block of a routine defined with PLpgSQL.
+type ExceptionBlock struct {
+	// Codes is a list of pgcode strings (see pgcode/codes.go). When the body of a
+	// routine with an ExceptionBlock returns an error, the code of that error is
+	// compared against the Codes slice for a match.
+	Codes []string
+
+	// Actions contains routine definitions that represent exception handlers for
+	// each code in the Codes slice.
+	Actions []*UDFDefinition
 }
 
 // WindowFrame denotes the definition of a window frame for an individual

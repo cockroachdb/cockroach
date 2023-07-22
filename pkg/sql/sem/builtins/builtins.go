@@ -27,7 +27,6 @@ import (
 	"math/bits"
 	"math/rand"
 	"net"
-	"regexp"
 	"regexp/syntax"
 	"strconv"
 	"strings"
@@ -8138,8 +8137,7 @@ expires until the statement bundle is collected`,
 				}
 				if codeString := argStrings[4]; codeString != "" {
 					var code string
-					if regexp.MustCompile(`[A-Z0-9]{5}`).MatchString(codeString) {
-						// The supplied argument is a valid PG code.
+					if pgcode.IsValidPGCode(codeString) {
 						code = codeString
 					} else {
 						// The supplied string may be a condition name.

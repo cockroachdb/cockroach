@@ -136,6 +136,11 @@ type plpgsqlBuilder struct {
 	// statements that follow the loop.
 	exitContinuations []continuation
 
+	// exceptionBlock is the exception handler built to handle the (optional)
+	// EXCEPTION block of the PLpgSQL routine. See the buildExceptions comments
+	// for more detail.
+	exceptionBlock *memo.ExceptionBlock
+
 	identCounter int
 }
 
@@ -194,22 +199,32 @@ func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *s
 			s = b.addPLpgSQLAssign(s, dec.Var, &tree.CastExpr{Expr: tree.DNull, Type: dec.Typ})
 		}
 	}
-	if s = b.buildPLpgSQLStatements(block.Body, s); s != nil {
-		return s
+	b.buildExceptions(block)
+	if b.exceptionBlock != nil {
+		// Wrap the body in a routine to ensure that any errors thrown from the body
+		// are caught. Note that errors thrown during variable elimination are
+		// intentionally not caught.
+		catchCon := b.makeContinuation("exception_block")
+		b.finishContinuation(block.Body, &catchCon, false /* recursive */)
+		s = b.callContinuation(&catchCon, s)
+	} else {
+		// No exception block, so no need to wrap the body statements.
+		s = b.buildPLpgSQLStatements(block.Body, s)
 	}
-	// At least one path in the control flow does not terminate with a RETURN
-	// statement.
-	//
-	// Postgres throws this error at runtime, so it's possible to define a
-	// function that runs correctly for some inputs, but returns this error for
-	// others. We are compiling rather than interpreting, so it seems better to
-	// eagerly return the error if there is an execution path with no RETURN.
-	// TODO(drewk): consider using RAISE (when it is implemented) to throw the
-	// error at runtime instead.
-	panic(pgerror.New(
-		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement,
-		"control reached end of function without RETURN",
-	))
+	if s == nil {
+		// At least one path in the control flow does not terminate with a RETURN
+		// statement.
+		//
+		// Postgres throws this error at runtime, so it's possible to define a
+		// function that runs correctly for some inputs, but returns this error for
+		// others. We are compiling rather than interpreting, so it seems better to
+		// eagerly return the error if there is an execution path with no RETURN.
+		panic(pgerror.New(
+			pgcode.RoutineExceptionFunctionExecutedNoReturnStatement,
+			"control reached end of function without RETURN",
+		))
+	}
+	return s
 }
 
 // buildPLpgSQLStatements performs the majority of the work building a PL/pgSQL
@@ -232,6 +247,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			returnScalar := b.buildPLpgSQLExpr(t.Expr, b.returnType, s)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return"))
 			returnScope := s.push()
+			b.ensureScopeHasExpr(returnScope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
@@ -239,6 +255,16 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
+			if b.exceptionBlock != nil {
+				// If exception handling is required, we have to start a new
+				// continuation after each variable assignment. This ensures that in the
+				// event of an error, the arguments of the currently executing routine
+				// will be the correct values for the variables, and can be passed to
+				// the exception handler routines.
+				catchCon := b.makeContinuation("assign_exception_block")
+				b.finishContinuation(stmts[i+1:], &catchCon, false /* recursive */)
+				return b.callContinuation(&catchCon, s)
+			}
 		case *plpgsqltree.PLpgSQLStmtIf:
 			if len(t.ElseIfList) != 0 {
 				panic(unimplemented.New(
@@ -286,6 +312,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// Return a single column that projects the result of the CASE statement.
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_if"))
 			returnScope := s.push()
+			b.ensureScopeHasExpr(returnScope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
@@ -375,6 +402,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			)
 			raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
 			raiseScope := con.s.push()
+			b.ensureScopeHasExpr(raiseScope)
 			b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
 			b.ob.constructProjectForScope(con.s, raiseScope)
 			con.def.Body = []memo.RelExpr{raiseScope.expr}
@@ -404,6 +432,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 		panic(errors.AssertionFailedf("failed to find type for variable %s", ident))
 	}
 	assignScope := inScope.push()
+	b.ensureScopeHasExpr(assignScope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
 		if col.name.ReferenceName() == ident {
@@ -457,8 +486,16 @@ func (b *plpgsqlBuilder) getRaiseArgs(
 		message = b.makeRaiseFormatMessage(s, raise.Message, raise.Params)
 	}
 	if raise.Code != "" {
+		if !pgcode.IsValidPGCode(raise.Code) {
+			panic(pgerror.Newf(pgcode.Syntax, "invalid SQLSTATE code '%s'", raise.Code))
+		}
 		code = makeConstStr(raise.Code)
 	} else if raise.CodeName != "" {
+		if _, ok := pgcode.PLpgSQLConditionNameToCode[raise.CodeName]; !ok {
+			panic(pgerror.Newf(
+				pgcode.UndefinedObject, "unrecognized exception condition \"%s\"", raise.CodeName,
+			))
+		}
 		code = makeConstStr(raise.CodeName)
 	}
 	// Retrieve the RAISE options, if any.
@@ -551,6 +588,71 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 	return result
 }
 
+// buildExceptions builds the ExceptionBlock for a PLpgSQL routine as a list of
+// matchable error codes and routine definitions that handle each matched error.
+// There are two sets of statements that need to be wrapped in a continuation
+// with an exception handler:
+//  1. The entire set of body statements, not including variable initialization.
+//  2. Execution of all statements following a variable assignment.
+//
+// The first condition handles the case when an error occurs before any variable
+// assignments happen. PLpgSQL exception blocks do not catch errors that occur
+// during variable declaration.
+//
+// The second condition is necessary because the exception block must see the
+// most recent values for all variables from the point when the error occurred.
+// It works because if an error occurs before the assignment continuation is
+// called, it must have happened logically during or before the assignment
+// statement completed. Therefore, the assignment did not succeed and the
+// previous values for the variables should be used. If the error occurs after
+// the assignment continuation is called, the continuation will have access to
+// the updated value from the assignment, and can supply it to the exception
+// handler.
+//
+// Currently, all continuations set the exception handler if there is one. This
+// is necessary because tail-call optimization depends on parent routines doing
+// no further work after a tail-call returns.
+// TODO(drewk): We could make a special case for exception handling, since the
+// exception handler is the same across all PLpgSQL routines. This would allow
+// us to only set the exception handler for the two cases above.
+func (b *plpgsqlBuilder) buildExceptions(block *plpgsqltree.PLpgSQLStmtBlock) {
+	if len(block.Exceptions) == 0 {
+		return
+	}
+	codes := make([]string, 0, len(block.Exceptions))
+	handlers := make([]*memo.UDFDefinition, 0, len(block.Exceptions))
+	for _, e := range block.Exceptions {
+		handlerCon := b.makeContinuation("exception_handler")
+		b.finishContinuation(e.Action, &handlerCon, false /* recursive */)
+		handlerCon.def.Volatility = volatility.Volatile
+		for _, cond := range e.Conditions {
+			if cond.SqlErrState != "" {
+				if !pgcode.IsValidPGCode(cond.SqlErrState) {
+					panic(pgerror.Newf(pgcode.Syntax, "invalid SQLSTATE code '%s'", cond.SqlErrState))
+				}
+				codes = append(codes, cond.SqlErrState)
+				handlers = append(handlers, handlerCon.def)
+				continue
+			}
+			// The match condition was supplied by name instead of code.
+			branchCodes, ok := pgcode.PLpgSQLConditionNameToCode[cond.SqlErrName]
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.UndefinedObject, "unrecognized exception condition \"%s\"", cond.SqlErrName,
+				))
+			}
+			for i := range branchCodes {
+				codes = append(codes, branchCodes[i])
+				handlers = append(handlers, handlerCon.def)
+			}
+		}
+	}
+	b.exceptionBlock = &memo.ExceptionBlock{
+		Codes:   codes,
+		Actions: handlers,
+	}
+}
+
 // makeContinuation allocates a new continuation function with an uninitialized
 // definition.
 func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
@@ -577,6 +679,7 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 			Name:              b.makeIdentifier(name),
 			Typ:               b.returnType,
 			CalledOnNullInput: true,
+			ExceptionBlock:    b.exceptionBlock,
 		},
 		s: s,
 	}
@@ -648,6 +751,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	returnScope := s.push()
+	b.ensureScopeHasExpr(returnScope)
 	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
 	b.ob.constructProjectForScope(s, returnScope)
 	return returnScope

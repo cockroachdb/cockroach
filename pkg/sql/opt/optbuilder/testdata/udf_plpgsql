@@ -3079,3 +3079,1476 @@ project
                      │                        └── projections
                      │                             └── const: 0 [as=stmt_return_3:2]
                      └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE this_error_does_not_exist;
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build
+SELECT f();
+----
+error (42704): unrecognized exception condition "this_error_does_not_exist"
+
+# SQLSTATE error code must be 5 digits and/or letters.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE SQLSTATE '123';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build
+SELECT f();
+----
+error (42601): invalid SQLSTATE code '123'
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE SQLSTATE '123aB';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build
+SELECT f();
+----
+error (42601): invalid SQLSTATE code '123aB'
+
+# Testing EXCEPTION blocks.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:6
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:6]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:5
+                     ├── project
+                     │    ├── columns: exception_block_7:5
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_return_8:4!null
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── floor-div [as=stmt_return_8:4]
+                     │              │                   ├── const: 1
+                     │              │                   └── const: 0
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 100 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '2201B'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 200 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '2200C'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 300 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN SQLSTATE '22012' THEN
+      RETURN 100;
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:6
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:6]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:5
+                     ├── project
+                     │    ├── columns: exception_block_7:5
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_return_8:4!null
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── floor-div [as=stmt_return_8:4]
+                     │              │                   ├── const: 1
+                     │              │                   └── const: 0
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 100 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '2201B'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 200 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '2200C'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 300 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i > 0 THEN
+      RETURN 1 // 0;
+    ELSE
+      RETURN sqrt(i::FLOAT)::INT;
+    END IF;
+  EXCEPTION
+    WHEN SQLSTATE '22012' OR indicator_overflow THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:10
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:10]
+           ├── args
+           │    └── const: 0
+           ├── params: i:1
+           └── body
+                └── limit
+                     ├── columns: exception_block_3:9
+                     ├── project
+                     │    ├── columns: exception_block_3:9
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_3 [as=exception_block_3:9]
+                     │              ├── args
+                     │              │    └── variable: i:1
+                     │              ├── params: i:4
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_if_7:8
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── case [as=stmt_if_7:8]
+                     │              │                   ├── true
+                     │              │                   ├── when
+                     │              │                   │    ├── gt
+                     │              │                   │    │    ├── variable: i:4
+                     │              │                   │    │    └── const: 0
+                     │              │                   │    └── subquery
+                     │              │                   │         └── project
+                     │              │                   │              ├── columns: stmt_return_5:6!null
+                     │              │                   │              ├── values
+                     │              │                   │              │    └── tuple
+                     │              │                   │              └── projections
+                     │              │                   │                   └── floor-div [as=stmt_return_5:6]
+                     │              │                   │                        ├── const: 1
+                     │              │                   │                        └── const: 0
+                     │              │                   └── subquery
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_6:7
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── cast: INT8 [as=stmt_return_6:7]
+                     │              │                                       └── function: sqrt
+                     │              │                                            └── cast: FLOAT8
+                     │              │                                                 └── variable: i:4
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:3!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 100 [as=stmt_return_2:3]
+                     │                   └── SQLSTATE '22022'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_2:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 100 [as=stmt_return_2:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i > 0 THEN
+      RETURN 1 // 0;
+    ELSE
+      RETURN sqrt(i::FLOAT)::INT;
+    END IF;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN SQLSTATE '22022' THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:12
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:12]
+           ├── args
+           │    └── const: 0
+           ├── params: i:1
+           └── body
+                └── limit
+                     ├── columns: exception_block_5:11
+                     ├── project
+                     │    ├── columns: exception_block_5:11
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_5 [as=exception_block_5:11]
+                     │              ├── args
+                     │              │    └── variable: i:1
+                     │              ├── params: i:6
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_if_9:10
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── case [as=stmt_if_9:10]
+                     │              │                   ├── true
+                     │              │                   ├── when
+                     │              │                   │    ├── gt
+                     │              │                   │    │    ├── variable: i:6
+                     │              │                   │    │    └── const: 0
+                     │              │                   │    └── subquery
+                     │              │                   │         └── project
+                     │              │                   │              ├── columns: stmt_return_7:8!null
+                     │              │                   │              ├── values
+                     │              │                   │              │    └── tuple
+                     │              │                   │              └── projections
+                     │              │                   │                   └── floor-div [as=stmt_return_7:8]
+                     │              │                   │                        ├── const: 1
+                     │              │                   │                        └── const: 0
+                     │              │                   └── subquery
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_8:9
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── cast: INT8 [as=stmt_return_8:9]
+                     │              │                                       └── function: sqrt
+                     │              │                                            └── cast: FLOAT8
+                     │              │                                                 └── variable: i:6
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:3!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 100 [as=stmt_return_2:3]
+                     │                   └── SQLSTATE '22022'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_4:5!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: -1 [as=stmt_return_4:5]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE division_by_zero;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:6
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:6]
+           └── body
+                └── limit
+                     ├── columns: exception_block_3:5
+                     ├── project
+                     │    ├── columns: exception_block_3:5
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_3 [as=exception_block_3:5]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: "_stmt_raise_4":4
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── udf: _stmt_raise_4 [as="_stmt_raise_4":4]
+                     │              │                   └── body
+                     │              │                        ├── project
+                     │              │                        │    ├── columns: stmt_raise_5:2
+                     │              │                        │    ├── values
+                     │              │                        │    │    └── tuple
+                     │              │                        │    └── projections
+                     │              │                        │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:2]
+                     │              │                        │              ├── const: 'ERROR'
+                     │              │                        │              ├── const: 'division_by_zero'
+                     │              │                        │              ├── const: ''
+                     │              │                        │              ├── const: ''
+                     │              │                        │              └── const: 'division_by_zero'
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_6:3!null
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── const: 0 [as=stmt_return_6:3]
+                     │              └── exception-handler
+                     │                   └── SQLSTATE '22012'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_2:1!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 100 [as=stmt_return_2:1]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE division_by_zero;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:8]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:7
+                     ├── project
+                     │    ├── columns: exception_block_7:7
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:7]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: "_stmt_raise_8":6
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── udf: _stmt_raise_8 [as="_stmt_raise_8":6]
+                     │              │                   └── body
+                     │              │                        ├── project
+                     │              │                        │    ├── columns: stmt_raise_9:4
+                     │              │                        │    ├── values
+                     │              │                        │    │    └── tuple
+                     │              │                        │    └── projections
+                     │              │                        │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:4]
+                     │              │                        │              ├── const: 'ERROR'
+                     │              │                        │              ├── const: 'division_by_zero'
+                     │              │                        │              ├── const: ''
+                     │              │                        │              ├── const: ''
+                     │              │                        │              └── const: 'division_by_zero'
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_10:5!null
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── const: 0 [as=stmt_return_10:5]
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 101 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '22P02'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 102 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '22P03'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 103 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE invalid_text_representation;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:8]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:7
+                     ├── project
+                     │    ├── columns: exception_block_7:7
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:7]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: "_stmt_raise_8":6
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── udf: _stmt_raise_8 [as="_stmt_raise_8":6]
+                     │              │                   └── body
+                     │              │                        ├── project
+                     │              │                        │    ├── columns: stmt_raise_9:4
+                     │              │                        │    ├── values
+                     │              │                        │    │    └── tuple
+                     │              │                        │    └── projections
+                     │              │                        │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:4]
+                     │              │                        │              ├── const: 'ERROR'
+                     │              │                        │              ├── const: 'invalid_text_representation'
+                     │              │                        │              ├── const: ''
+                     │              │                        │              ├── const: ''
+                     │              │                        │              └── const: 'invalid_text_representation'
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_10:5!null
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── const: 0 [as=stmt_return_10:5]
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 101 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '22P02'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 102 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '22P03'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 103 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE SQLSTATE '22P03';
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:8]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:7
+                     ├── project
+                     │    ├── columns: exception_block_7:7
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:7]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: "_stmt_raise_8":6
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── udf: _stmt_raise_8 [as="_stmt_raise_8":6]
+                     │              │                   └── body
+                     │              │                        ├── project
+                     │              │                        │    ├── columns: stmt_raise_9:4
+                     │              │                        │    ├── values
+                     │              │                        │    │    └── tuple
+                     │              │                        │    └── projections
+                     │              │                        │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:4]
+                     │              │                        │              ├── const: 'ERROR'
+                     │              │                        │              ├── const: '22P03'
+                     │              │                        │              ├── const: ''
+                     │              │                        │              ├── const: ''
+                     │              │                        │              └── const: '22P03'
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_10:5!null
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── const: 0 [as=stmt_return_10:5]
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 101 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '22P02'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 102 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '22P03'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 103 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE SQLSTATE '12345';
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:8]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:7
+                     ├── project
+                     │    ├── columns: exception_block_7:7
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:7]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: "_stmt_raise_8":6
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── udf: _stmt_raise_8 [as="_stmt_raise_8":6]
+                     │              │                   └── body
+                     │              │                        ├── project
+                     │              │                        │    ├── columns: stmt_raise_9:4
+                     │              │                        │    ├── values
+                     │              │                        │    │    └── tuple
+                     │              │                        │    └── projections
+                     │              │                        │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:4]
+                     │              │                        │              ├── const: 'ERROR'
+                     │              │                        │              ├── const: '12345'
+                     │              │                        │              ├── const: ''
+                     │              │                        │              ├── const: ''
+                     │              │                        │              └── const: '12345'
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_return_10:5!null
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── const: 0 [as=stmt_return_10:5]
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 101 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '22P02'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 102 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '22P03'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 103 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:6
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:6]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:5
+                     ├── project
+                     │    ├── columns: exception_block_7:5
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_return_8:4!null
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── const: 0 [as=stmt_return_8:4]
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 101 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '22P02'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 102 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '22P03'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 103 [as=stmt_return_6:3]
+                     └── const: 1
+
+# The exception block does not catch errors thrown during variable declaration.
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 100 // n;
+  BEGIN
+    RETURN i;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:10
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:10]
+           ├── args
+           │    └── const: 0
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: exception_block_3:9
+                     ├── project
+                     │    ├── columns: exception_block_3:9
+                     │    ├── project
+                     │    │    ├── columns: i:2
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── floor-div [as=i:2]
+                     │    │              ├── const: 100
+                     │    │              └── variable: n:1
+                     │    └── projections
+                     │         └── udf: exception_block_3 [as=exception_block_3:9]
+                     │              ├── args
+                     │              │    ├── variable: i:2
+                     │              │    └── variable: n:1
+                     │              ├── params: i:6 n:7
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_return_4:8
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── variable: i:6 [as=stmt_return_4:8]
+                     │              └── exception-handler
+                     │                   └── SQLSTATE '22012'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_2:5!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 101 [as=stmt_return_2:5]
+                     └── const: 1
+
+# Each variable assignment is wrapped in an exception handler.
+exec-ddl
+CREATE OR REPLACE FUNCTION f(i INT, j INT, k INT) RETURNS INT AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    x := 1 // i;
+    x := 2 // j;
+    x := 3 // k;
+    RETURN x;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0, 0, 0);
+----
+project
+ ├── columns: f:34
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:34]
+           ├── args
+           │    ├── const: 0
+           │    ├── const: 0
+           │    └── const: 0
+           ├── params: i:1 j:2 k:3
+           └── body
+                └── limit
+                     ├── columns: exception_block_3:33
+                     ├── project
+                     │    ├── columns: exception_block_3:33
+                     │    ├── project
+                     │    │    ├── columns: x:4!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=x:4]
+                     │    └── projections
+                     │         └── udf: exception_block_3 [as=exception_block_3:33]
+                     │              ├── args
+                     │              │    ├── variable: x:4
+                     │              │    ├── variable: i:1
+                     │              │    ├── variable: j:2
+                     │              │    └── variable: k:3
+                     │              ├── params: x:10 i:11 j:12 k:13
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: assign_exception_block_4:32
+                     │              │         ├── project
+                     │              │         │    ├── columns: x:14
+                     │              │         │    ├── values
+                     │              │         │    │    └── tuple
+                     │              │         │    └── projections
+                     │              │         │         └── floor-div [as=x:14]
+                     │              │         │              ├── const: 1
+                     │              │         │              └── variable: i:11
+                     │              │         └── projections
+                     │              │              └── udf: assign_exception_block_4 [as=assign_exception_block_4:32]
+                     │              │                   ├── args
+                     │              │                   │    ├── variable: x:14
+                     │              │                   │    ├── variable: i:11
+                     │              │                   │    ├── variable: j:12
+                     │              │                   │    └── variable: k:13
+                     │              │                   ├── params: x:15 i:16 j:17 k:18
+                     │              │                   └── body
+                     │              │                        └── project
+                     │              │                             ├── columns: assign_exception_block_5:31
+                     │              │                             ├── project
+                     │              │                             │    ├── columns: x:19
+                     │              │                             │    ├── values
+                     │              │                             │    │    └── tuple
+                     │              │                             │    └── projections
+                     │              │                             │         └── floor-div [as=x:19]
+                     │              │                             │              ├── const: 2
+                     │              │                             │              └── variable: j:17
+                     │              │                             └── projections
+                     │              │                                  └── udf: assign_exception_block_5 [as=assign_exception_block_5:31]
+                     │              │                                       ├── args
+                     │              │                                       │    ├── variable: x:19
+                     │              │                                       │    ├── variable: i:16
+                     │              │                                       │    ├── variable: j:17
+                     │              │                                       │    └── variable: k:18
+                     │              │                                       ├── params: x:20 i:21 j:22 k:23
+                     │              │                                       └── body
+                     │              │                                            └── project
+                     │              │                                                 ├── columns: assign_exception_block_6:30
+                     │              │                                                 ├── project
+                     │              │                                                 │    ├── columns: x:24
+                     │              │                                                 │    ├── values
+                     │              │                                                 │    │    └── tuple
+                     │              │                                                 │    └── projections
+                     │              │                                                 │         └── floor-div [as=x:24]
+                     │              │                                                 │              ├── const: 3
+                     │              │                                                 │              └── variable: k:23
+                     │              │                                                 └── projections
+                     │              │                                                      └── udf: assign_exception_block_6 [as=assign_exception_block_6:30]
+                     │              │                                                           ├── args
+                     │              │                                                           │    ├── variable: x:24
+                     │              │                                                           │    ├── variable: i:21
+                     │              │                                                           │    ├── variable: j:22
+                     │              │                                                           │    └── variable: k:23
+                     │              │                                                           ├── params: x:25 i:26 j:27 k:28
+                     │              │                                                           └── body
+                     │              │                                                                └── project
+                     │              │                                                                     ├── columns: stmt_return_7:29
+                     │              │                                                                     ├── values
+                     │              │                                                                     │    └── tuple
+                     │              │                                                                     └── projections
+                     │              │                                                                          └── variable: x:25 [as=stmt_return_7:29]
+                     │              └── exception-handler
+                     │                   └── SQLSTATE '22012'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_2:9
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── variable: x:5 [as=stmt_return_2:9]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    IF i = 0 THEN
+      x := 100;
+      RAISE division_by_zero;
+    ELSE
+      x := 200;
+      RAISE division_by_zero;
+    END IF;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:31
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:31]
+           ├── args
+           │    └── const: 0
+           ├── params: i:1
+           └── body
+                └── limit
+                     ├── columns: exception_block_3:30
+                     ├── project
+                     │    ├── columns: exception_block_3:30
+                     │    ├── project
+                     │    │    ├── columns: x:2
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── cast: INT8 [as=x:2]
+                     │    │              └── null
+                     │    └── projections
+                     │         └── udf: exception_block_3 [as=exception_block_3:30]
+                     │              ├── args
+                     │              │    ├── variable: x:2
+                     │              │    └── variable: i:1
+                     │              ├── params: x:6 i:7
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_if_12:29
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── case [as=stmt_if_12:29]
+                     │              │                   ├── true
+                     │              │                   ├── when
+                     │              │                   │    ├── eq
+                     │              │                   │    │    ├── variable: i:7
+                     │              │                   │    │    └── const: 0
+                     │              │                   │    └── subquery
+                     │              │                   │         └── project
+                     │              │                   │              ├── columns: assign_exception_block_6:19
+                     │              │                   │              ├── project
+                     │              │                   │              │    ├── columns: x:11!null
+                     │              │                   │              │    ├── values
+                     │              │                   │              │    │    └── tuple
+                     │              │                   │              │    └── projections
+                     │              │                   │              │         └── const: 100 [as=x:11]
+                     │              │                   │              └── projections
+                     │              │                   │                   └── udf: assign_exception_block_6 [as=assign_exception_block_6:19]
+                     │              │                   │                        ├── args
+                     │              │                   │                        │    ├── variable: x:11
+                     │              │                   │                        │    └── variable: i:7
+                     │              │                   │                        ├── params: x:12 i:13
+                     │              │                   │                        └── body
+                     │              │                   │                             └── project
+                     │              │                   │                                  ├── columns: "_stmt_raise_7":18
+                     │              │                   │                                  ├── values
+                     │              │                   │                                  │    └── tuple
+                     │              │                   │                                  └── projections
+                     │              │                   │                                       └── udf: _stmt_raise_7 [as="_stmt_raise_7":18]
+                     │              │                   │                                            ├── args
+                     │              │                   │                                            │    ├── variable: x:12
+                     │              │                   │                                            │    └── variable: i:13
+                     │              │                   │                                            ├── params: x:14 i:15
+                     │              │                   │                                            └── body
+                     │              │                   │                                                 ├── project
+                     │              │                   │                                                 │    ├── columns: stmt_raise_8:16
+                     │              │                   │                                                 │    ├── values
+                     │              │                   │                                                 │    │    └── tuple
+                     │              │                   │                                                 │    └── projections
+                     │              │                   │                                                 │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:16]
+                     │              │                   │                                                 │              ├── const: 'ERROR'
+                     │              │                   │                                                 │              ├── const: 'division_by_zero'
+                     │              │                   │                                                 │              ├── const: ''
+                     │              │                   │                                                 │              ├── const: ''
+                     │              │                   │                                                 │              └── const: 'division_by_zero'
+                     │              │                   │                                                 └── project
+                     │              │                   │                                                      ├── columns: stmt_if_4:17
+                     │              │                   │                                                      ├── values
+                     │              │                   │                                                      │    └── tuple
+                     │              │                   │                                                      └── projections
+                     │              │                   │                                                           └── udf: stmt_if_4 [as=stmt_if_4:17]
+                     │              │                   │                                                                ├── args
+                     │              │                   │                                                                │    ├── variable: x:14
+                     │              │                   │                                                                │    └── variable: i:15
+                     │              │                   │                                                                ├── params: x:8 i:9
+                     │              │                   │                                                                └── body
+                     │              │                   │                                                                     └── project
+                     │              │                   │                                                                          ├── columns: stmt_return_5:10!null
+                     │              │                   │                                                                          ├── values
+                     │              │                   │                                                                          │    └── tuple
+                     │              │                   │                                                                          └── projections
+                     │              │                   │                                                                               └── const: 0 [as=stmt_return_5:10]
+                     │              │                   └── subquery
+                     │              │                        └── project
+                     │              │                             ├── columns: assign_exception_block_9:28
+                     │              │                             ├── project
+                     │              │                             │    ├── columns: x:20!null
+                     │              │                             │    ├── values
+                     │              │                             │    │    └── tuple
+                     │              │                             │    └── projections
+                     │              │                             │         └── const: 200 [as=x:20]
+                     │              │                             └── projections
+                     │              │                                  └── udf: assign_exception_block_9 [as=assign_exception_block_9:28]
+                     │              │                                       ├── args
+                     │              │                                       │    ├── variable: x:20
+                     │              │                                       │    └── variable: i:7
+                     │              │                                       ├── params: x:21 i:22
+                     │              │                                       └── body
+                     │              │                                            └── project
+                     │              │                                                 ├── columns: "_stmt_raise_10":27
+                     │              │                                                 ├── values
+                     │              │                                                 │    └── tuple
+                     │              │                                                 └── projections
+                     │              │                                                      └── udf: _stmt_raise_10 [as="_stmt_raise_10":27]
+                     │              │                                                           ├── args
+                     │              │                                                           │    ├── variable: x:21
+                     │              │                                                           │    └── variable: i:22
+                     │              │                                                           ├── params: x:23 i:24
+                     │              │                                                           └── body
+                     │              │                                                                ├── project
+                     │              │                                                                │    ├── columns: stmt_raise_11:25
+                     │              │                                                                │    ├── values
+                     │              │                                                                │    │    └── tuple
+                     │              │                                                                │    └── projections
+                     │              │                                                                │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_11:25]
+                     │              │                                                                │              ├── const: 'ERROR'
+                     │              │                                                                │              ├── const: 'division_by_zero'
+                     │              │                                                                │              ├── const: ''
+                     │              │                                                                │              ├── const: ''
+                     │              │                                                                │              └── const: 'division_by_zero'
+                     │              │                                                                └── project
+                     │              │                                                                     ├── columns: stmt_if_4:26
+                     │              │                                                                     ├── values
+                     │              │                                                                     │    └── tuple
+                     │              │                                                                     └── projections
+                     │              │                                                                          └── udf: stmt_if_4 [as=stmt_if_4:26]
+                     │              │                                                                               ├── args
+                     │              │                                                                               │    ├── variable: x:23
+                     │              │                                                                               │    └── variable: i:24
+                     │              │                                                                               ├── params: x:8 i:9
+                     │              │                                                                               └── body
+                     │              │                                                                                    └── project
+                     │              │                                                                                         ├── columns: stmt_return_5:10!null
+                     │              │                                                                                         ├── values
+                     │              │                                                                                         │    └── tuple
+                     │              │                                                                                         └── projections
+                     │              │                                                                                              └── const: 0 [as=stmt_return_5:10]
+                     │              └── exception-handler
+                     │                   └── SQLSTATE '22012'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_2:5
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── variable: x:3 [as=stmt_return_2:5]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT, a INT) RETURNS INT AS $$
+  DECLARE
+    x INT;
+    i INT := 0;
+  BEGIN
+    LOOP IF i >= n THEN EXIT; END IF;
+      x := 1 // (i - a);
+      i := i + 1;
+    END LOOP;
+    RETURN -1;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0, 0);
+----
+project
+ ├── columns: f:45
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:45]
+           ├── args
+           │    ├── const: 0
+           │    └── const: 0
+           ├── params: n:1 a:2
+           └── body
+                └── limit
+                     ├── columns: exception_block_3:44
+                     ├── project
+                     │    ├── columns: exception_block_3:44
+                     │    ├── project
+                     │    │    ├── columns: i:4!null x:3
+                     │    │    ├── project
+                     │    │    │    ├── columns: x:3
+                     │    │    │    ├── values
+                     │    │    │    │    └── tuple
+                     │    │    │    └── projections
+                     │    │    │         └── cast: INT8 [as=x:3]
+                     │    │    │              └── null
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:4]
+                     │    └── projections
+                     │         └── udf: exception_block_3 [as=exception_block_3:44]
+                     │              ├── args
+                     │              │    ├── variable: x:3
+                     │              │    ├── variable: i:4
+                     │              │    ├── variable: n:1
+                     │              │    └── variable: a:2
+                     │              ├── params: x:10 i:11 n:12 a:13
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_loop_6:43
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── udf: stmt_loop_6 [as=stmt_loop_6:43]
+                     │              │                   ├── args
+                     │              │                   │    ├── variable: x:10
+                     │              │                   │    ├── variable: i:11
+                     │              │                   │    ├── variable: n:12
+                     │              │                   │    └── variable: a:13
+                     │              │                   ├── params: x:19 i:20 n:21 a:22
+                     │              │                   └── body
+                     │              │                        └── project
+                     │              │                             ├── columns: stmt_if_10:42
+                     │              │                             ├── values
+                     │              │                             │    └── tuple
+                     │              │                             └── projections
+                     │              │                                  └── case [as=stmt_if_10:42]
+                     │              │                                       ├── true
+                     │              │                                       ├── when
+                     │              │                                       │    ├── ge
+                     │              │                                       │    │    ├── variable: i:20
+                     │              │                                       │    │    └── variable: n:21
+                     │              │                                       │    └── subquery
+                     │              │                                       │         └── project
+                     │              │                                       │              ├── columns: loop_exit_4:40
+                     │              │                                       │              ├── values
+                     │              │                                       │              │    └── tuple
+                     │              │                                       │              └── projections
+                     │              │                                       │                   └── udf: loop_exit_4 [as=loop_exit_4:40]
+                     │              │                                       │                        ├── args
+                     │              │                                       │                        │    ├── variable: x:19
+                     │              │                                       │                        │    ├── variable: i:20
+                     │              │                                       │                        │    ├── variable: n:21
+                     │              │                                       │                        │    └── variable: a:22
+                     │              │                                       │                        ├── params: x:14 i:15 n:16 a:17
+                     │              │                                       │                        └── body
+                     │              │                                       │                             └── project
+                     │              │                                       │                                  ├── columns: stmt_return_5:18!null
+                     │              │                                       │                                  ├── values
+                     │              │                                       │                                  │    └── tuple
+                     │              │                                       │                                  └── projections
+                     │              │                                       │                                       └── const: -1 [as=stmt_return_5:18]
+                     │              │                                       └── subquery
+                     │              │                                            └── project
+                     │              │                                                 ├── columns: stmt_if_7:41
+                     │              │                                                 ├── values
+                     │              │                                                 │    └── tuple
+                     │              │                                                 └── projections
+                     │              │                                                      └── udf: stmt_if_7 [as=stmt_if_7:41]
+                     │              │                                                           ├── args
+                     │              │                                                           │    ├── variable: x:19
+                     │              │                                                           │    ├── variable: i:20
+                     │              │                                                           │    ├── variable: n:21
+                     │              │                                                           │    └── variable: a:22
+                     │              │                                                           ├── params: x:23 i:24 n:25 a:26
+                     │              │                                                           └── body
+                     │              │                                                                └── project
+                     │              │                                                                     ├── columns: assign_exception_block_8:39
+                     │              │                                                                     ├── project
+                     │              │                                                                     │    ├── columns: x:27
+                     │              │                                                                     │    ├── values
+                     │              │                                                                     │    │    └── tuple
+                     │              │                                                                     │    └── projections
+                     │              │                                                                     │         └── floor-div [as=x:27]
+                     │              │                                                                     │              ├── const: 1
+                     │              │                                                                     │              └── minus
+                     │              │                                                                     │                   ├── variable: i:24
+                     │              │                                                                     │                   └── variable: a:26
+                     │              │                                                                     └── projections
+                     │              │                                                                          └── udf: assign_exception_block_8 [as=assign_exception_block_8:39]
+                     │              │                                                                               ├── args
+                     │              │                                                                               │    ├── variable: x:27
+                     │              │                                                                               │    ├── variable: i:24
+                     │              │                                                                               │    ├── variable: n:25
+                     │              │                                                                               │    └── variable: a:26
+                     │              │                                                                               ├── params: x:28 i:29 n:30 a:31
+                     │              │                                                                               └── body
+                     │              │                                                                                    └── project
+                     │              │                                                                                         ├── columns: assign_exception_block_9:38
+                     │              │                                                                                         ├── project
+                     │              │                                                                                         │    ├── columns: i:32
+                     │              │                                                                                         │    ├── values
+                     │              │                                                                                         │    │    └── tuple
+                     │              │                                                                                         │    └── projections
+                     │              │                                                                                         │         └── plus [as=i:32]
+                     │              │                                                                                         │              ├── variable: i:29
+                     │              │                                                                                         │              └── const: 1
+                     │              │                                                                                         └── projections
+                     │              │                                                                                              └── udf: assign_exception_block_9 [as=assign_exception_block_9:38]
+                     │              │                                                                                                   ├── args
+                     │              │                                                                                                   │    ├── variable: x:28
+                     │              │                                                                                                   │    ├── variable: i:32
+                     │              │                                                                                                   │    ├── variable: n:30
+                     │              │                                                                                                   │    └── variable: a:31
+                     │              │                                                                                                   ├── params: x:33 i:34 n:35 a:36
+                     │              │                                                                                                   └── body
+                     │              │                                                                                                        └── project
+                     │              │                                                                                                             ├── columns: stmt_loop_6:37
+                     │              │                                                                                                             ├── values
+                     │              │                                                                                                             │    └── tuple
+                     │              │                                                                                                             └── projections
+                     │              │                                                                                                                  └── udf: stmt_loop_6 [as=stmt_loop_6:37]
+                     │              │                                                                                                                       ├── args
+                     │              │                                                                                                                       │    ├── variable: x:33
+                     │              │                                                                                                                       │    ├── variable: i:34
+                     │              │                                                                                                                       │    ├── variable: n:35
+                     │              │                                                                                                                       │    └── variable: a:36
+                     │              │                                                                                                                       └── recursive-call
+                     │              └── exception-handler
+                     │                   └── SQLSTATE '22012'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_2:9
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── variable: i:6 [as=stmt_return_2:9]
+                     └── const: 1
+
+# Duplicate catch branches are allowed; postgres just takes the first.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN division_by_zero THEN
+      RETURN 200;
+    WHEN SQLSTATE '22012' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:6
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:6]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:5
+                     ├── project
+                     │    ├── columns: exception_block_7:5
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_return_8:4!null
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── floor-div [as=stmt_return_8:4]
+                     │              │                   ├── const: 1
+                     │              │                   └── const: 0
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 100 [as=stmt_return_2:1]
+                     │                   ├── SQLSTATE '22012'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: 200 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '22012'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: 300 [as=stmt_return_6:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN this_error_does_not_exist THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+error (42704): unrecognized exception condition "this_error_does_not_exist"
+
+# SQLSTATE error code must be 5 digits and/or letters.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN SQLSTATE '123' THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+error (42601): invalid SQLSTATE code '123'
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN SQLSTATE '123aB' THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+error (42601): invalid SQLSTATE code '123aB'

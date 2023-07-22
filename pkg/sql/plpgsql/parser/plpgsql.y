@@ -149,6 +149,23 @@ func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOpt
     return u.val.([]plpgsqltree.PLpgSQLStmtRaiseOption)
 }
 
+
+func (u *plpgsqlSymUnion) plpgsqlException() *plpgsqltree.PLpgSQLException {
+    return u.val.(*plpgsqltree.PLpgSQLException)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlExceptions() []plpgsqltree.PLpgSQLException {
+    return u.val.([]plpgsqltree.PLpgSQLException)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlCondition() *plpgsqltree.PLpgSQLCondition {
+    return u.val.(*plpgsqltree.PLpgSQLCondition)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlConditions() []plpgsqltree.PLpgSQLCondition {
+    return u.val.([]plpgsqltree.PLpgSQLCondition)
+}
+
 %}
 /*
  * Basic non-keyword token types.  These are hard-wired into the core lexer.
@@ -329,9 +346,10 @@ func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOpt
 %type <*plpgsqltree.PLpgSQLDecl> decl_stmt decl_statement
 %type <[]plpgsqltree.PLpgSQLDecl> decl_sect opt_decl_stmts decl_stmts
 
-%type <*plpgsqltree.PLpgSQLExceptionBlock> exception_sect
+%type <[]plpgsqltree.PLpgSQLException> exception_sect proc_exceptions
 %type <*plpgsqltree.PLpgSQLException>	proc_exception
-%type <*plpgsqltree.PLpgSQLCondition>	proc_conditions proc_condition
+%type <[]plpgsqltree.PLpgSQLCondition> proc_conditions
+%type <*plpgsqltree.PLpgSQLCondition> proc_condition
 
 %type <*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when
 %type <[]*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when_list
@@ -372,6 +390,7 @@ pl_block: opt_block_label decl_sect BEGIN proc_sect exception_sect END opt_label
       Label: $1,
       Decls: $2.plpgsqlDecls(),
       Body: $4.plpgsqlStatements(),
+      Exceptions: $5.plpgsqlExceptions(),
     }
   }
 ;
@@ -1285,44 +1304,56 @@ cursor_variable: IDENT
   }
 ;
 
-exception_sect:
-  { }
-| EXCEPTION
+exception_sect: /* EMPTY */
   {
-    return unimplemented(plpgsqllex, "exception")
+    $$.val = []plpgsqltree.PLpgSQLException(nil)
   }
-  proc_exceptions
+| EXCEPTION proc_exceptions
   {
-    unimplemented(plpgsqllex, "exception")
+    $$.val = $2.plpgsqlExceptions()
   }
 ;
 
 proc_exceptions: proc_exceptions proc_exception
   {
+    e := $2.plpgsqlException()
+    $$.val = append($1.plpgsqlExceptions(), *e)
   }
 | proc_exception
   {
+    e := $1.plpgsqlException()
+    $$.val = []plpgsqltree.PLpgSQLException{*e}
   }
 ;
 
 proc_exception: WHEN proc_conditions THEN proc_sect
   {
+    $$.val = &plpgsqltree.PLpgSQLException{
+      Conditions: $2.plpgsqlConditions(),
+      Action: $4.plpgsqlStatements(),
+    }
   }
 ;
 
 proc_conditions: proc_conditions OR proc_condition
   {
+    c := $3.plpgsqlCondition()
+    $$.val = append($1.plpgsqlConditions(), *c)
   }
 | proc_condition
   {
+    c := $1.plpgsqlCondition()
+    $$.val = []plpgsqltree.PLpgSQLCondition{*c}
   }
 ;
 
 proc_condition: any_identifier
   {
+    $$.val = &plpgsqltree.PLpgSQLCondition{SqlErrName: $1}
   }
 | SQLSTATE SCONST
   {
+    $$.val = &plpgsqltree.PLpgSQLCondition{SqlErrState: $2}
   }
 ;
 
