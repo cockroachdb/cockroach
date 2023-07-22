@@ -251,10 +251,6 @@ type StoreTestingKnobs struct {
 	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft func(roachpb.StoreID) bool
-	// DisableLivenessMapConnHealth disables the ConnHealth check in
-	// updateIsLiveMap, which is useful in tests where we manipulate the node's
-	// liveness record but still keep the connection alive.
-	DisableLivenessMapConnHealth bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
 	// ReplicateQueueAcceptsUnsplit allows the replication queue to
