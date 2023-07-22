@@ -59,7 +59,7 @@ type PLpgSQLStmtBlock struct {
 	Label      string
 	Decls      []PLpgSQLDecl
 	Body       []PLpgSQLStatement
-	Exceptions *PLpgSQLExceptionBlock
+	Exceptions []PLpgSQLException
 }
 
 // TODO(drewk): format Label and Exceptions fields.
@@ -75,6 +75,12 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("BEGIN\n")
 	for _, childStmt := range s.Body {
 		childStmt.Format(ctx)
+	}
+	if s.Exceptions != nil {
+		ctx.WriteString("EXCEPTION\n")
+		for _, e := range s.Exceptions {
+			e.Format(ctx)
+		}
 	}
 	ctx.WriteString("END\n")
 }
