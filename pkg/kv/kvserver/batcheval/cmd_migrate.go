@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 )
 
 func init() {
@@ -63,8 +63,8 @@ func Migrate(
 	migrationVersion := args.Version
 
 	fn, ok := migrationRegistry[migrationVersion]
-	if !ok {
-		return result.Result{}, errors.AssertionFailedf("migration for %s not found", migrationVersion)
+	if err := must.True(ctx, ok, "migration for %s not found", migrationVersion); err != nil {
+		return result.Result{}, err
 	}
 	pd, err := fn(ctx, readWriter, cArgs)
 	if err != nil {
