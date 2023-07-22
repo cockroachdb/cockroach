@@ -23,10 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/errors"
-	"github.com/kr/pretty"
 )
 
 // ClearRangeBytesThreshold is the threshold over which the ClearRange
@@ -174,63 +173,60 @@ func computeStatsDelta(
 
 	// We can avoid manually computing the stats delta if we're clearing
 	// the entire range.
-	entireRange := desc.StartKey.Equal(from) && desc.EndKey.Equal(to)
-	if entireRange {
+	if desc.StartKey.Equal(from) && desc.EndKey.Equal(to) {
 		// Note this it is safe to use the full range MVCC stats, as
-		// opposed to the usual method of computing only a localizied
+		// opposed to the usual method of computing only a localized
 		// stats delta, because a full-range clear prevents any concurrent
 		// access to the stats. Concurrent changes to range-local keys are
 		// explicitly ignored (i.e. SysCount, SysBytes).
 		delta = cArgs.EvalCtx.GetMVCCStats()
 		delta.SysCount, delta.SysBytes, delta.AbortSpanBytes = 0, 0, 0 // no change to system stats
-	}
 
-	// If we can't use the fast stats path, or race test is enabled, compute stats
-	// across the key span to be cleared.
-	if !entireRange || util.RaceEnabled {
-		computed, err := storage.ComputeStats(readWriter, from, to, delta.LastUpdateNanos)
+		// Assert correct stats.
+		if err := must.Expensive(func() error {
+			if delta.ContainsEstimates != 0 {
+				return nil
+			}
+			computed, err := storage.ComputeStats(readWriter, from, to, delta.LastUpdateNanos)
+			if err != nil {
+				return err
+			}
+			return must.Equal(ctx, delta, computed, "range MVCC stats differ from computed")
+		}); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+
+	} else {
+		// If we can't use the fast path, compute stats across the cleared span.
+		var err error
+		delta, err = storage.ComputeStats(readWriter, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
-		// If we took the fast path but race is enabled, assert stats were correctly
-		// computed.
-		if entireRange {
-			// Retain the value of ContainsEstimates for tests under race.
-			computed.ContainsEstimates = delta.ContainsEstimates
-			// We only want to assert the correctness of stats that do not contain
-			// estimates.
-			if delta.ContainsEstimates == 0 && !delta.Equal(computed) {
-				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
-					pretty.Diff(delta, computed))
-			}
+
+		// We need to adjust for the fragmentation of any MVCC range tombstones that
+		// straddle the span bounds. The clearing of the inner fragments has already
+		// been accounted for above. We take care not to peek outside the Raft range
+		// bounds.
+		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+			from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+		rkIter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypeRangesOnly,
+			LowerBound: leftPeekBound,
+			UpperBound: rightPeekBound,
+		})
+		defer rkIter.Close()
+
+		if cmp, lhs, err := storage.PeekRangeKeysLeft(rkIter, from); err != nil {
+			return enginepb.MVCCStats{}, err
+		} else if cmp > 0 {
+			delta.Subtract(storage.UpdateStatsOnRangeKeySplit(from, lhs.Versions))
 		}
-		delta = computed
 
-		// If we're not clearing the entire range, we need to adjust for the
-		// fragmentation of any MVCC range tombstones that straddle the span bounds.
-		// The clearing of the inner fragments has already been accounted for above.
-		// We take care not to peek outside the Raft range bounds.
-		if !entireRange {
-			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
-				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			rkIter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypeRangesOnly,
-				LowerBound: leftPeekBound,
-				UpperBound: rightPeekBound,
-			})
-			defer rkIter.Close()
-
-			if cmp, lhs, err := storage.PeekRangeKeysLeft(rkIter, from); err != nil {
-				return enginepb.MVCCStats{}, err
-			} else if cmp > 0 {
-				delta.Subtract(storage.UpdateStatsOnRangeKeySplit(from, lhs.Versions))
-			}
-
-			if cmp, rhs, err := storage.PeekRangeKeysRight(rkIter, to); err != nil {
-				return enginepb.MVCCStats{}, err
-			} else if cmp < 0 {
-				delta.Subtract(storage.UpdateStatsOnRangeKeySplit(to, rhs.Versions))
-			}
+		if cmp, rhs, err := storage.PeekRangeKeysRight(rkIter, to); err != nil {
+			return enginepb.MVCCStats{}, err
+		} else if cmp < 0 {
+			delta.Subtract(storage.UpdateStatsOnRangeKeySplit(to, rhs.Versions))
 		}
 	}
 

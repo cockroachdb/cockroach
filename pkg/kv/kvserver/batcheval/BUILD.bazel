@@ -55,7 +55,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",
@@ -85,6 +84,7 @@ go_library(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/must",
         "//pkg/util/protoutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
