@@ -11579,6 +11579,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 		raftStatus  raft.BasicStatus
 		livenessMap livenesspb.IsLiveMap
 		desc        *roachpb.RangeDescriptor
+		now         hlc.Timestamp
 	}
 
 	// Set up a base state that we can vary, representing this node n1 being a
@@ -11606,6 +11607,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 			2: livenesspb.IsLiveMapEntry{IsLive: false},
 			3: livenesspb.IsLiveMapEntry{IsLive: false},
 		},
+		now: hlc.Timestamp{Logical: 10},
 	}
 
 	testcases := map[string]struct {
@@ -11637,6 +11639,28 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 		"leader is live": {false, func(p *params) {
 			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
 				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is live according to expiration": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: false,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is dead according to expiration": {true, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
+				},
 			}
 		}},
 	}
@@ -11650,7 +11674,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldForgetLeaderOnVoteRequest(
-				p.raftStatus, p.livenessMap, p.desc))
+				p.raftStatus, p.livenessMap, p.desc, p.now))
 		})
 	}
 }
