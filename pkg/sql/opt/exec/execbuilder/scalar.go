@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -921,6 +922,11 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	udf := scalar.(*memo.UDFCallExpr)
 	if udf.Def == nil {
 		return nil, errors.AssertionFailedf("expected non-nil UDF definition")
+	}
+	if udf.Def.ExceptionBlock != nil {
+		return nil, unimplemented.New("exception block",
+			"exception blocks for PLpgSQL functions are not yet supported",
+		)
 	}
 
 	// Build the argument expressions.
