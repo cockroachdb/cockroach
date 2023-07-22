@@ -1307,7 +1307,6 @@ func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
-	// Pass true for mayCampaignOnWake because we're about to propose a command.
 	return (*Replica)(rp).withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
 		// if we were quiesced. However, we should make sure we are unquiesced.
