@@ -21,7 +21,7 @@ type ProtectedTSMetrics struct {
 	RecordsProcessed     *metric.Counter
 	RecordsRemoved       *metric.Counter
 	ReconciliationErrors *metric.Counter
-	ProtectedRecords     *metric.Counter
+	ProtectedRecords     *metric.Gauge
 }
 
 func MakeMetrics() metric.Struct {
@@ -30,7 +30,7 @@ func MakeMetrics() metric.Struct {
 		RecordsProcessed:     metric.NewCounter(metaRecordsProcessed),
 		RecordsRemoved:       metric.NewCounter(metaRecordsRemoved),
 		ReconciliationErrors: metric.NewCounter(metaReconciliationErrors),
-		ProtectedRecords:     metric.NewCounter(metaProtectedRecords),
+		ProtectedRecords:     metric.NewGauge(metaProtectedRecords),
 	}
 }
 
@@ -73,7 +73,7 @@ var (
 	metaProtectedRecords = metric.Metadata{
 		Name:        "kv.protectedts.storage.protected.records",
 		Help:        "number of records protected timestamp records",
-		Measurement: "Count",
+		Measurement: "Records",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
