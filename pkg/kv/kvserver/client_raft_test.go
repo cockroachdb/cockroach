@@ -6771,9 +6771,6 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
 				},
-				Store: &kvserver.StoreTestingKnobs{
-					DisableLivenessMapConnHealth: true, // to mark n1 as not live
-				},
 			},
 		},
 	})

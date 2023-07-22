@@ -11344,6 +11344,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		livenessMap             livenesspb.IsLiveMap
 		desc                    *roachpb.RangeDescriptor
 		requiresExpirationLease bool
+		now                     hlc.Timestamp
 	}
 
 	// Set up a base state that we can vary, representing this node n1 being a
@@ -11416,9 +11417,31 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			delete(p.livenessMap, 2)
 		}},
 		"leader is live": {false, func(p *params) {
-			l := p.livenessMap[2]
-			l.IsLive = true
-			p.livenessMap[2] = l
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is live according to expiration": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: false,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is dead according to expiration": {true, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
+				},
+			}
 		}},
 	}
 
@@ -11431,7 +11454,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldCampaignOnWake(p.leaseStatus, p.storeID, p.raftStatus,
-				p.livenessMap, p.desc, p.requiresExpirationLease))
+				p.livenessMap, p.desc, p.requiresExpirationLease, p.now))
 		})
 	}
 }
