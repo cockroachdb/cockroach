@@ -1893,6 +1893,13 @@ func TestTenantLogic_statement_statistics_errors(
 	runLogicTest(t, "statement_statistics_errors")
 }
 
+func TestTenantLogic_statement_statistics_errors_redacted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_statistics_errors_redacted")
+}
+
 func TestTenantLogic_stats(
 	t *testing.T,
 ) {
