@@ -1285,6 +1285,7 @@ func TestLint(t *testing.T) {
 			":!spanconfig/errors.go",
 			":!kv/kvpb/replica_unavailable_error.go",
 			":!kv/kvpb/ambiguous_result_error.go",
+			":!kv/kvpb/errors.go",
 			":!sql/flowinfra/flow_registry.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",

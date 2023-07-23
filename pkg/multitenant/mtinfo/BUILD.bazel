@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mtinfo",
+    srcs = ["info.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/roachpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

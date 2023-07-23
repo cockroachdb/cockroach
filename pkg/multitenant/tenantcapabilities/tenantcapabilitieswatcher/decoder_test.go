@@ -69,13 +69,14 @@ func TestDecodeCapabilities(t *testing.T) {
 
 	// Read the row	.
 	k := keys.SystemSQLCodec.IndexPrefix(dummyTableID, keys.TenantsTablePrimaryKeyIndexID)
-	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+	s := tc.Server(0)
+	rows, err := s.DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
 	// Decode and verify.
 	row := rows[0]
-	got, err := tenantcapabilitieswatcher.TestingDecoderFn()(roachpb.KeyValue{
+	got, err := tenantcapabilitieswatcher.TestingDecoderFn(s.ClusterSettings())(ctx, roachpb.KeyValue{
 		Key:   row.Key,
 		Value: *row.Value,
 	})

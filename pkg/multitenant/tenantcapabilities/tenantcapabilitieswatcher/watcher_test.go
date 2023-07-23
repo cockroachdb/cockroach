@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,6 +107,7 @@ func TestDataDriven(t *testing.T) {
 
 		watcher := tenantcapabilitieswatcher.New(
 			ts.Clock(),
+			ts.ClusterSettings(),
 			ts.RangeFeedFactory().(*rangefeed.Factory),
 			dummyTableID,
 			ts.Stopper(),
@@ -197,15 +200,23 @@ func TestDataDriven(t *testing.T) {
 						continue // de-duplicate
 					}
 					if receivedUpdates[i].Deleted {
-						output.WriteString(fmt.Sprintf("delete: ten=%v\n", receivedUpdates[i].TenantID))
+						fmt.Fprintf(&output, "delete: ten=%v\n", receivedUpdates[i].TenantID)
 					} else {
-						output.WriteString(fmt.Sprintf("update: ten=%v cap=%v\n", receivedUpdates[i].TenantID, tenantcapabilitiestestutils.AlteredCapabilitiesString(receivedUpdates[i].TenantCapabilities)))
+						fmt.Fprintf(&output, "update: ten=%v name=%v state=%v service=%v cap=%v\n",
+							receivedUpdates[i].TenantID,
+							receivedUpdates[i].Name,
+							receivedUpdates[i].DataState,
+							receivedUpdates[i].ServiceMode,
+							tenantcapabilitiestestutils.AlteredCapabilitiesString(receivedUpdates[i].TenantCapabilities))
 					}
 				}
 				return output.String()
 
 			case "upsert":
+				t.Logf("%v: processing upsert", d.Pos)
 				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				require.NoError(t, err)
+				name, dataState, serviceMode, err := tenantcapabilitiestestutils.ParseTenantInfo(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
 					Capabilities: *caps,
@@ -214,12 +225,14 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				tdb.Exec(
 					t,
-					fmt.Sprintf("UPSERT INTO %s (id, active, info) VALUES ($1, $2, $3)", dummyTableName),
+					fmt.Sprintf("UPSERT INTO %s (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)", dummyTableName),
 					tenID.ToUint64(),
 					true, /* active */
 					buf,
+					name, dataState, serviceMode,
 				)
 				lastUpdateTS = ts.Clock().Now()
+
 			case "delete":
 				delete := tenantcapabilitiestestutils.ParseTenantCapabilityDelete(t, d)
 				tdb.Exec(
@@ -229,21 +242,50 @@ func TestDataDriven(t *testing.T) {
 				)
 				lastUpdateTS = ts.Clock().Now()
 
+			case "wait-for-info":
+				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
+				var info tenantcapabilities.Entry
+				for {
+					var found bool
+					var infoCh <-chan struct{}
+					info, infoCh, found = watcher.GetInfo(tID)
+					if found {
+						break
+					}
+					select {
+					case <-infoCh:
+						continue
+					case <-time.After(10 * time.Second):
+						t.Fatalf("timed out waiting for info for tenant %v", tID)
+					}
+				}
+
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "%+v\n", pretty.Formatter(info))
+				return buf.String()
+
 			case "get-capabilities":
 				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
-				cp, found := watcher.GetCapabilities(tID)
+				info, _, found := watcher.GetInfo(tID)
 				if !found {
 					return "not-found"
 				}
-				return fmt.Sprintf("%v", tenantcapabilitiestestutils.AlteredCapabilitiesString(cp))
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "ten=%v name=%v state=%v service=%v cap=%v\n",
+					info.TenantID, info.Name, info.DataState, info.ServiceMode,
+					tenantcapabilitiestestutils.AlteredCapabilitiesString(info.TenantCapabilities))
+				return buf.String()
 
 			case "flush-state":
 				var output strings.Builder
 				entries := watcher.TestingFlushCapabilitiesState()
 				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("ten=%v cap=%v\n", entry.TenantID, tenantcapabilitiestestutils.AlteredCapabilitiesString(entry.TenantCapabilities)))
+					fmt.Fprintf(&output, "ten=%v name=%v state=%v service=%v cap=%v\n",
+						entry.TenantID, entry.Name, entry.DataState, entry.ServiceMode,
+						tenantcapabilitiestestutils.AlteredCapabilitiesString(entry.TenantCapabilities))
 				}
 				return output.String()
+
 			case "inject-error":
 				err := errors.New("big-yikes")
 				errorInjectionCh <- err
@@ -264,7 +306,7 @@ func TestDataDriven(t *testing.T) {
 					mu.Lock()
 					defer mu.Unlock()
 					if !mu.rangeFeedRunning {
-						return errors.New("expected undrelying rangefeed to have restarted")
+						return errors.New("expected underlying rangefeed to have restarted")
 					}
 					return nil
 				})

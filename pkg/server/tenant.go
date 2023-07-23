@@ -975,8 +975,10 @@ func makeTenantSQLServerArgs(
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 
 	var rpcTestingKnobs rpc.ContextTestingKnobs
+	var testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent bool
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		rpcTestingKnobs = p.ContextTestingKnobs
+		testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent = p.ShutdownTenantConnectorEarlyIfNoRecordPresent
 	}
 
 	// This tenant's SQL server only serves SQL connections and SQL-to-SQL
@@ -1041,6 +1043,8 @@ func makeTenantSQLServerArgs(
 		RPCContext:        rpcContext,
 		RPCRetryOptions:   rpcRetryOptions,
 		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
+
+		ShutdownTenantConnectorEarlyIfNoRecordPresent: testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent,
 	}
 	kvAddressConfig := kvtenant.KVAddressConfig{RemoteAddresses: sqlCfg.TenantKVAddrs, LoopbackAddress: sqlCfg.TenantLoopbackAddr}
 	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, kvAddressConfig)
