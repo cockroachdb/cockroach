@@ -4,9 +4,22 @@
 # crdb_internal.node_statement_statistics virtual table is queried to validate that the error code
 # is recorded. When querying the node statistics table, we are ignoring statements made internally
 # by CRDB ("$ internal-migration-manager-find-jobs" for example) since they can be flaky. We are
-# also ordering by "last_error_code" to maintain consistency.
+# also ordering by "last_error_code" to maintain consistency. Here we are also testing that the
+# error message is redacted for the VIEWACTIVITYREDACTED privilege.
 
-user root
+
+# Grant testuser the VIEWACTIVITYREDACTED system privilege.
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser;
+
+query TTB
+SHOW SYSTEM GRANTS
+----
+testuser  VIEWACTIVITYREDACTED  false
+
+
+# Switch to testuser
+user testuser
 
 # Test 1: division by zero. Error code "22012" should be added.
 statement error division by zero
@@ -15,7 +28,7 @@ SELECT 2/0;
 query TT
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
-22012  division by zero
+22012  <redacted>
 
 # Test 2: database does not exist. Error code "3D000" should be added.
 query TTTTTT colnames,rowsort
@@ -24,7 +37,6 @@ SHOW DATABASES
 database_name  owner  primary_region  secondary_region  regions  survival_goal
 defaultdb      root   NULL            NULL              {}       NULL
 postgres       root   NULL            NULL              {}       NULL
-system         node   NULL            NULL              {}       NULL
 test           root   NULL            NULL              {}       NULL
 
 statement error pq: database "posgres" does not exist
@@ -33,8 +45,8 @@ use posgres
 query TT
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
-22012  division by zero
-3D000  database "posgres" does not exist
+22012  <redacted>
+3D000  <redacted>
 
 # Test 3: Nonexistant user. Error code "42704" should be added.
 statement error pq: role/user "who" does not exist
@@ -43,37 +55,42 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
 query TT
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
-22012  division by zero
-3D000  database "posgres" does not exist
-42704  role/user "who" does not exist 
+22012  <redacted>
+3D000  <redacted>
+42704  <redacted>
 
-# Test 4: Insufficient privilege. Error code "42501" should be added.
-statement error schema cannot be modified: "crdb_internal"
-CREATE TABLE crdb_internal.example (abc INT)
+# Test 4: Give testuser the VIEWACTIVITY system privilege and remove the VIEWACTIVITYREDACTED privilege.
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+user testuser
+
+# Now the error message should not be redacted.
 
 query TT
 SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
 22012  division by zero
 3D000  database "posgres" does not exist
-42501  schema cannot be modified: "crdb_internal"
 42704  role/user "who" does not exist
 
-# Test 5: Foreign key violation. Error code "23503" should be added.
-statement ok
-CREATE TABLE src(x VARCHAR PRIMARY KEY);
-CREATE TABLE dst(x VARCHAR REFERENCES src(x));
-INSERT INTO src(x) VALUES ('example');
-INSERT INTO dst(x) VALUES ('example')
+# Test 5: Give tesuser the VIEWACTIVITYREDACTED privilege again. This time, the error message should be redacted,
+# as VIEWACTIVITYREDACTED takes precedence over VIEWACTIVITY.
+user root
 
-statement error foreign key
-UPDATE dst SET x = 'xyz'
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
 
 query TT
-SELECT last_error_code, last_error   FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
+SELECT last_error_code, last_error FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL' AND application_name NOT LIKE '$ %' ORDER BY last_error_code ASC;
 ----
-22012  division by zero
-23503  update on table "dst" violates foreign key constraint "dst_x_fkey"
-3D000  database "posgres" does not exist
-42501  schema cannot be modified: "crdb_internal"
-42704  role/user "who" does not exist
+22012  <redacted>
+3D000  <redacted>
+42704  <redacted>

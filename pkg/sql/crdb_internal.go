@@ -1516,12 +1516,24 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   latency_seconds_p99 FLOAT
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-		if err != nil {
+		shouldRedactError := false
+		// Check if the user is admin.
+		if isAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return err
-		}
-		if !hasViewActivityOrViewActivityRedacted {
-			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		} else if !isAdmin {
+			// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
+			// privileges.
+			if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+				return err
+			} else if hasViewActivityRedacted {
+				shouldRedactError = true
+			} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+				return err
+			} else if !hasViewActivity {
+				// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
+				// return insufficient privileges error.
+				return noViewActivityOrViewActivityRedactedRoleError(p.User())
+			}
 		}
 
 		var alloc tree.DatumAlloc
@@ -1530,8 +1542,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
 			errString := tree.DNull
-			if stats.Stats.SensitiveInfo.LastErr != "" {
-				errString = alloc.NewDString(tree.DString(stats.Stats.SensitiveInfo.LastErr))
+			if shouldRedactError {
+				errString = alloc.NewDString(tree.DString("<redacted>"))
+			} else {
+				if stats.Stats.SensitiveInfo.LastErr != "" {
+					errString = alloc.NewDString(tree.DString(stats.Stats.SensitiveInfo.LastErr))
+				}
 			}
 
 			errCode := tree.DNull
