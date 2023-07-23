@@ -177,6 +177,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/security/username",
+        "//pkg/server/status",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
