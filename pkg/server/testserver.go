@@ -906,6 +906,8 @@ func (ts *TestServer) StartSharedProcessTenant(
 	}
 	tenantExists := tenantRow != nil
 
+	justCreated := false
+	var tenantID roachpb.TenantID
 	if tenantExists {
 		// A tenant with the given name already exists; let's check that
 		// it matches the ID that this call wants (if any).
@@ -914,8 +916,10 @@ func (ts *TestServer) StartSharedProcessTenant(
 			return nil, nil, errors.Newf("a tenant with name %q exists, but its ID is %d instead of %d",
 				args.TenantName, id, args.TenantID)
 		}
+		tenantID = roachpb.MustMakeTenantID(id)
 	} else {
 		// The tenant doesn't exist; let's create it.
+		justCreated = true
 		if args.TenantID.IsSet() {
 			// Create with name and ID.
 			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
@@ -929,9 +933,10 @@ func (ts *TestServer) StartSharedProcessTenant(
 			if err != nil {
 				return nil, nil, err
 			}
+			tenantID = args.TenantID
 		} else {
 			// Create with name alone; allocate an ID automatically.
-			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+			row, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
 				ctx,
 				"create-tenant",
 				nil, /* txn */
@@ -942,7 +947,17 @@ func (ts *TestServer) StartSharedProcessTenant(
 			if err != nil {
 				return nil, nil, err
 			}
+			id := uint64(*row[0].(*tree.DInt))
+			tenantID = roachpb.MustMakeTenantID(id)
 		}
+	}
+
+	// Wait for the rangefeed to catch up.
+	if err := ts.WaitForTenantReadiness(ctx, tenantID); err != nil {
+		return nil, nil, err
+	}
+
+	if justCreated {
 		// Also mark it for shared-process execution.
 		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
 			ctx,
@@ -1001,6 +1016,30 @@ func (t *TestTenant) MigrationServer() interface{} {
 // HTTPAuthServer is part of the TestTenantInterface.
 func (t *TestTenant) HTTPAuthServer() interface{} {
 	return t.t.authentication
+}
+
+// WaitForTenantReadiness is part of TestServerInterface.
+func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
+	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
+	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
+	if err != nil {
+		return err
+	}
+
+	for {
+		_, infoCh, found := infoWatcher.GetInfo(tenantID)
+		if found {
+			log.Infof(ctx, "cached record found for tenant %v", tenantID)
+			return nil
+		}
+		// Not found: wait and try again.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-infoCh:
+			continue
+		}
+	}
 }
 
 // StartTenant is part of the serverutils.TestServerInterface.
@@ -1079,6 +1118,13 @@ func (ts *TestServer) StartTenant(
 		}
 		if row[0] != tree.DNull {
 			params.TenantID = roachpb.MustMakeTenantID(uint64(tree.MustBeDInt(row[0])))
+		}
+	}
+
+	if !params.SkipWaitForTenantCache {
+		// Wait until the rangefeed has caught up with the tenant creation.
+		if err := ts.WaitForTenantReadiness(ctx, params.TenantID); err != nil {
+			return nil, err
 		}
 	}
 

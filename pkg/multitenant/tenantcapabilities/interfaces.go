@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -80,6 +81,9 @@ type Authorizer interface {
 type Entry struct {
 	TenantID           roachpb.TenantID
 	TenantCapabilities *tenantcapabilitiespb.TenantCapabilities
+	Name               roachpb.TenantName
+	DataState          mtinfopb.TenantDataState
+	ServiceMode        mtinfopb.TenantServiceMode
 }
 
 // Update represents an update to the global tenant capability state.

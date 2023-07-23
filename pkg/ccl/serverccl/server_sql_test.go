@@ -10,7 +10,6 @@ package serverccl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -327,8 +329,16 @@ func TestNonExistentTenant(t *testing.T) {
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,
+
+			SkipWaitForTenantCache: true,
+
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ShutdownTenantConnectorEarlyIfNoRecordPresent: true,
+				},
+			},
 		})
-	require.EqualError(t, err, `database "[1]" does not exist`)
+	require.True(t, errors.Is(err, &kvpb.MissingRecordError{}))
 }
 
 // TestTenantRowIDs confirms `unique_rowid()` works as expected in a

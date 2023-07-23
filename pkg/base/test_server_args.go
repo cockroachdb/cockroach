@@ -443,6 +443,10 @@ type TestTenantArgs struct {
 	// Skip check for tenant existence when running the test.
 	SkipTenantCheck bool
 
+	// Do not wait for tenant record cache to be populated before
+	// starting a tenant server.
+	SkipWaitForTenantCache bool
+
 	// Locality is used to initialize the same-named field on the server.Config
 	// struct.
 	Locality roachpb.Locality

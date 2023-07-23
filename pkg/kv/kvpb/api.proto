@@ -28,6 +28,7 @@ import "util/tracing/tracingpb/recorded_span.proto";
 import "util/tracing/tracingpb/tracing.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -3117,9 +3118,10 @@ message TenantSettingsRequest {
   TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 }
 
-// TenantSettingsEvent is used to report changes to setting overrides for a
-// particular tenant.
-// The protocol is as follows:
+// TenantSettingsEvent is used to report changes to setting overrides and
+// other metadata for a particular tenant.
+//
+// When used to report changes to setting overrides, the protocol is as follows:
 // - When a tenant server first connects, a non-incremental TenantSettingsEvent
 //   settings event is sent to the client for each precedence value.
 //   This reports to the client the initial values of all the cluster setting
@@ -3127,9 +3129,70 @@ message TenantSettingsRequest {
 // - Afterwards, more TenantSettingsEvent are sent (with Incremental set or not)
 //   whenever settings are updated.
 //
+// TODO(knz): The name of the message should be updated to reflect
+// its more general purpose.
+//
 // Note: this API is designed to allow flexibility of implementation on the
 // server side (e.g. to make it maintain very little state per tenant).
 message TenantSettingsEvent {
+  enum EventType {
+    // The event is about an update to cluster setting overrides.
+    // This must be zero for backward-compatibility with pre-v23.1
+    // CockroachDB.
+    SETTING_EVENT = 0;
+
+    // Note: for compatibility with pre-23.1 tenant clients, it is
+    // important that all event types that convey data about the
+    // initial state of a tenant service be sent after the first
+    // SETTING_EVENT message that communicates overrides (for one of
+    // the two precedence levels), and before the second one (for the
+    // other precedence level).
+    //
+    // This is necessary because of a combination of factors:
+    //
+    // - For compatibility with older version tenant clients,
+    //   all non-setting event types must fake being a no-op
+    //   setting event (see the docstring on event_type below).
+    //   A no-op fake setting event must have `Incremental` set to
+    //   `true`.
+    // - Meanwhile, older version tenant clients also assert that the
+    //   very first message sent by the server must have `Incremental`
+    //   set to `false`.
+    //
+    //   This means we can only send events of other types after the
+    //   first setting overrides event.
+    //
+    // - Then, separately, newer version tenant clients also
+    //   synchronize their startup on the reception of a tenant
+    //   setting event for each precedence level. This is because
+    //   these tenant clients must, in turn, remain compatible with
+    //   older version *KV servers* that do not send other event types
+    //   and send just 2 setting overrides events initially.
+    //
+    //   This means we cannot send other event types after the second
+    //   setting overrides event.
+
+    // The event is about an update to the tenant's metadata.
+    METADATA_EVENT = 1;
+  }
+
+  // The type of event. For backward-compatibility with early 23.1
+  // servers that do not check the event_type field, server of any
+  // 23.2 version must ensure all events of other types than
+  // SETTING_EVENT must appear as a no-op event when interpreted as a
+  // setting event. This means: 1) set precedence to any value; 2) set
+  // incremental to true 3) provide a nil slice in overrides.
+  // This constraint can be lifted once all servers are at least 23.2.
+  EventType event_type = 5;
+
+  // If non-nil, the other fields will be empty and this will be the final event
+  // sent on the stream before it is terminated.
+  errorspb.EncodedError error = 4 [(gogoproto.nullable) = false];
+
+  //
+  // Fields that pertain to cluster setting updates.
+  //
+
   enum Precedence {
     // Sentinel value to ensure that the 0 value is not a valid precedence.
     INVALID = 0;
@@ -3160,9 +3223,30 @@ message TenantSettingsEvent {
   //    fields).
   repeated TenantSetting overrides = 3 [(gogoproto.nullable) = false];
 
-  // If non-nil, the other fields will be empty and this will be the final event
-  // sent on the stream before it is terminated.
-  errorspb.EncodedError error = 4 [(gogoproto.nullable) = false];
+  //
+  // Fields that pertain to other tenant metadata updates.
+  //
+
+  // Name is the tenant's current name.
+  string name = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // Capabilities is the tenant's current capabilities.
+  // Note that this field is advisory: the server may know of a more
+  // recent (and different) set of capabilities, and server-side
+  // capabilities checks always prevail.
+  cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 7;
+
+  // DataState is the tenant's current data state.
+  // TODO(knz): This should really be casted to go type mtinfopb.TenantDataState but we
+  // can't do that yet due to a dependency cycle. We should break the cycle.
+  uint32 data_state = 8;
+
+  // ServiceMode is the tenant's current service mode.
+  // TODO(knz): This should really be casted to go type mtinfopb.TenantServiceMode but we
+  // can't do that yet due to a dependency cycle. We should break the cycle.
+  uint32 service_mode = 9;
+
+  // NEXT ID: 10
 }
 
 // TenantSetting contains the name and value of a tenant setting.

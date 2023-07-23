@@ -110,6 +110,10 @@ func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOv
 		return res
 	}
 	// If we did not find it, we initialize an empty structure.
+	// This is necessary because the caller of GetTenantOverrides wants
+	// to register as a listener on the change channel, and we need to
+	// return a valid channel that will get closed later when we
+	// actually find data for this tenant.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Check again though, maybe it was initialized just now.
