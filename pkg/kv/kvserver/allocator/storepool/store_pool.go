@@ -1312,8 +1312,6 @@ func (sp *StorePool) isStoreReadyForRoutineReplicaTransferInternal(
 	}
 	switch status {
 	case storeStatusThrottled, storeStatusAvailable:
-		log.VEventf(ctx, 3,
-			"s%d is a live target, candidate for rebalancing", targetStoreID)
 		return true
 	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect, storeStatusDraining:
 		log.VEventf(ctx, 3,
