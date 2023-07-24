@@ -1350,6 +1350,7 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
+	manualClock := hlc.NewHybridManualClock()
 	clusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -1361,12 +1362,8 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 				RaftEnableCheckQuorum: true,
 			},
 			Knobs: base.TestingKnobs{
-				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
-					// This test waits for an epoch-based lease to expire, so we're
-					// setting the liveness duration as low as possible while still
-					// keeping the test stable.
-					LivenessDuration: 3000 * time.Millisecond,
-					RenewalDuration:  1500 * time.Millisecond,
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// We eliminate clock offsets in order to eliminate the stasis period
@@ -1437,7 +1434,16 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	// Wait until the lease expires.
 	log.Infof(ctx, "test: waiting for lease expiration on r%d", store0Repl.RangeID)
 	testutils.SucceedsSoon(t, func() error {
+		dur, _ := store0.GetStoreConfig().NodeLivenessDurations()
+		manualClock.Increment(dur.Nanoseconds())
 		leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
+		// If we failed to pin the lease, it likely won't ever expire due to the particular
+		// partition we've set up. Bail early instead of wasting 45s.
+		require.True(t, leaseStatus.Lease.OwnedBy(store0.StoreID()), "failed to pin lease")
+
+		// Lease is on s1, and it should be invalid now. The only reason there's a
+		// retry loop is that there could be a race where we bump the clock while a
+		// heartbeat is inflight (and which picks up the new expiration).
 		if leaseStatus.IsValid() {
 			return errors.Errorf("lease still valid: %+v", leaseStatus)
 		}
