@@ -353,6 +353,11 @@ func (g *Gossip) AssertNotStarted(ctx context.Context) {
 	}
 }
 
+// GetNodeID gets the NodeID.
+func (g *Gossip) GetNodeID() roachpb.NodeID {
+	return g.NodeID.Get()
+}
+
 // GetNodeMetrics returns the gossip node metrics.
 func (g *Gossip) GetNodeMetrics() *Metrics {
 	return g.server.GetNodeMetrics()
