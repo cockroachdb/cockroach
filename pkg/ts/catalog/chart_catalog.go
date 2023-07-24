@@ -4129,6 +4129,18 @@ var charts = []sectionDescription{
 			},
 		},
 	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Raft reads"}},
+		Charts: []chartDescription{
+			{
+				Title: "raft.Storage.Engine Read bytes",
+				Metrics: []string{
+					"raft.storage.read_bytes",
+					"raft.entrycache.read_bytes",
+				},
+			},
+		},
+	},
 }
 
 func jobTypeCharts(title string, varName string) chartDescription {
