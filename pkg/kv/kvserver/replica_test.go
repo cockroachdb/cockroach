@@ -3728,12 +3728,12 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 				return runWithTxn(nil, &args)
 			},
 			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
-				args := deleteRangeArgs(key, append(key, 0))
+				args := deleteRangeArgs(key, roachpb.Key(key).Clone().Next())
 				args.Sequence = 2
 				return runWithTxn(txn, &args)
 			},
 			run: func(txn *roachpb.Transaction, key []byte) error {
-				args := deleteRangeArgs(key, append(key, 0))
+				args := deleteRangeArgs(key, roachpb.Key(key).Clone().Next())
 				args.Sequence = 2
 				return runWithTxn(txn, &args)
 			},
