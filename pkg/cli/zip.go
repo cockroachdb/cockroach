@@ -245,7 +245,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 			if !cmd.Flags().Changed(cliflags.TableDisplayFormat.Name) {
 				// Use a streaming format to avoid accumulating all rows in RAM.
-				sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayJSON
+				sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 			}
 
 			zr.sqlOutputFilenameExtension = computeSQLOutputFilenameExtension(sqlExecCtx.TableDisplayFormat)
