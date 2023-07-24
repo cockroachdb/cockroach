@@ -438,6 +438,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `role_based_audit_event`
 
@@ -473,6 +474,7 @@ cluster setting.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `sensitive_table_access`
 
@@ -508,6 +510,7 @@ a table marked as audited.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ## SQL Execution Log
 
@@ -550,6 +553,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ## SQL Logical Schema Changes
 
@@ -2350,6 +2354,7 @@ set to a non-zero value, AND
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `txn_rows_read_limit`
 
@@ -2470,6 +2475,7 @@ the "slow query" condition.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `txn_rows_read_limit_internal`
 
@@ -3021,6 +3027,7 @@ contains common SQL event/execution details.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `schema_descriptor`
 

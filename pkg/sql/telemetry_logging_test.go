@@ -17,7 +17,6 @@ import (
 	"math"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -106,7 +105,7 @@ func TestTelemetryLogging(t *testing.T) {
 		execTimestampsSeconds   []float64 // Execute the query with the following timestamps.
 		expectedLogStatement    string
 		stubMaxEventFrequency   int64
-		expectedSkipped         []int // Expected skipped query count per expected log line.
+		expectedSkipped         []uint64 // Expected skipped query count per expected log line.
 		expectedUnredactedTags  []string
 		expectedApplicationName string
 		expectedFullScan        bool
@@ -131,7 +130,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{1, 1.1, 1.2, 2},
 			expectedLogStatement:    `TRUNCATE TABLE defaultdb.public.t`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0, 0, 0, 0},
+			expectedSkipped:         []uint64{0, 0, 0, 0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -176,7 +175,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{3},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -199,7 +198,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{4, 4.1, 4.2, 5},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹2›`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0, 2},
+			expectedSkipped:         []uint64{0, 2},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -224,7 +223,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹3›`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0, 3, 0},
+			expectedSkipped:         []uint64{0, 3, 0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -252,7 +251,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{7},
 			expectedLogStatement:    `SELECT x FROM \"\".\"\".u`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -279,7 +278,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{8},
 			expectedLogStatement:    `UPDATE \"\".\"\".u SET x = ‹5› WHERE x > ‹50› RETURNING x`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -304,7 +303,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{9},
 			expectedLogStatement:    `CREATE USER root`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -325,7 +324,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{10, 10.01, 10.02, 10.03, 10.04, 10.05},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹4›`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0, 0, 0, 0, 0, 0},
+			expectedSkipped:         []uint64{0, 0, 0, 0, 0, 0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        false,
@@ -351,7 +350,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{11, 11.01, 11.02, 11.03, 11.04, 11.05},
 			expectedLogStatement:    `SELECT * FROM \"\".\"\".u WHERE x > ‹10› LIMIT ‹3›`,
 			stubMaxEventFrequency:   10,
-			expectedSkipped:         []int{0},
+			expectedSkipped:         []uint64{0},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -371,7 +370,7 @@ func TestTelemetryLogging(t *testing.T) {
 			execTimestampsSeconds:   []float64{20},
 			expectedLogStatement:    `SELECT x FROM \"\".\"\".u ORDER BY x DESC`,
 			stubMaxEventFrequency:   1,
-			expectedSkipped:         []int{24},
+			expectedSkipped:         []uint64{24},
 			expectedUnredactedTags:  []string{"client"},
 			expectedApplicationName: "telemetry-logging-test",
 			expectedFullScan:        true,
@@ -479,17 +478,10 @@ func TestTelemetryLogging(t *testing.T) {
 					err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
 					require.NoError(t, err)
 
-					expectedSkipped := tc.expectedSkipped[logCount]
+					require.Equal(t, tc.expectedSkipped[logCount], sampledQueryFromLog.SkippedQueries)
+
 					logCount++
-					if expectedSkipped == 0 {
-						if strings.Contains(e.Message, "SkippedQueries") {
-							t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
-						}
-					} else {
-						if expected := fmt.Sprintf(`"SkippedQueries":%d`, expectedSkipped); !strings.Contains(e.Message, expected) {
-							t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
-						}
-					}
+
 					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
 					if !costRe.MatchString(e.Message) {
 						t.Errorf("expected to find CostEstimate but none was found")
@@ -521,19 +513,18 @@ func TestTelemetryLogging(t *testing.T) {
 							}
 						}
 					}
-					if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
-						t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
-					}
-					if !strings.Contains(e.Message, "\"SessionID\":\""+sessionID+"\"") {
-						t.Errorf("expected to find sessionID: %s", sessionID)
-					}
-					if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
-						t.Errorf("expected to find Database: %s", databaseName)
-					}
+
+					require.Equal(t, tc.expectedApplicationName, sampledQueryFromLog.ApplicationName)
+					require.Equal(t, sessionID, sampledQueryFromLog.SessionID)
+					require.Equal(t, databaseName, sampledQueryFromLog.Database)
+
+					// All expected logs in this test are single stmt txns.
+					require.Equal(t, uint32(1), sampledQueryFromLog.StmtPosInTxn)
+
 					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
-					if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
-						t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
-					}
+
+					require.Equal(t, uint64(stmtFingerprintID), sampledQueryFromLog.StatementFingerprintID)
+
 					maxFullScanRowsRe := regexp.MustCompile("\"MaxFullScanRowsEstimate\":[0-9]*")
 					foundFullScan := maxFullScanRowsRe.MatchString(e.Message)
 					if tc.expectedFullScan && !foundFullScan {
@@ -1474,5 +1465,88 @@ $$`
 	}
 	if numLogsFound != 1 {
 		t.Errorf("expected 1 log entries, found %d", numLogsFound)
+	}
+}
+
+// TestTelemetryLoggingStmtPosInTxn verifies that StmtCount is logged correctly to
+// telemetry. The structure of the other test cases makes it difficult to verify
+// this property, so we do it explicitly here.
+func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET application_name = 'telemetry-stmt=count-logging-test'`)
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+
+	st.SetTime(timeutil.FromUnixMicros(int64(1e6)))
+	db.Exec(t, `BEGIN;`)
+	db.Exec(t, `SELECT 1`)
+	st.SetTime(timeutil.FromUnixMicros(int64(2 * 1e6)))
+	db.Exec(t, `SELECT 2`)
+	st.SetTime(timeutil.FromUnixMicros(int64(3 * 1e6)))
+	db.Exec(t, `SELECT 3`)
+	db.Exec(t, `COMMIT;`)
+
+	expectedQueries := []string{
+		`SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`,
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	require.NotEmpty(t, entries)
+
+	// Attempt to find all expected logs.
+	for i, expected := range expectedQueries {
+		found := false
+		for _, e := range entries {
+			if strings.Contains(e.Message, expected) {
+				var sq eventpb.SampledQuery
+				require.NoError(t, json.Unmarshal([]byte(e.Message), &sq))
+				require.Equal(t, uint32(i+1), sq.StmtPosInTxn, "%s", entries)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("did not find expected query log in log entries: %s", expected)
+		}
 	}
 }

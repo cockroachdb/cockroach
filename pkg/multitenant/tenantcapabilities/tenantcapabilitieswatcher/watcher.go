@@ -54,6 +54,10 @@ type Watcher struct {
 	startCh  chan struct{}
 	startErr error
 
+	// rfc provides access to the underlying
+	// rangefeedcache.Watcher for testing.
+	rfc *rangefeedcache.Watcher
+
 	// initialScan is used to synchronize the Start() method with the
 	// reception of the initial batch of values from the rangefeed
 	// (which happens asynchronously).
@@ -212,6 +216,7 @@ func (w *Watcher) startRangeFeed(ctx context.Context) error {
 	if err := rangefeedcache.Start(ctx, w.stopper, rfc, w.onError); err != nil {
 		return err
 	}
+	w.rfc = rfc
 
 	// Wait for the initial scan before returning.
 	select {
@@ -343,6 +348,12 @@ func (w *Watcher) handleIncrementalUpdate(
 				w.mu.byName[update.Entry.Name] = update.TenantID
 			}
 		}
+	}
+}
+
+func (w *Watcher) TestingRestart() {
+	if w.rfc != nil {
+		w.rfc.TestingRestart()
 	}
 }
 

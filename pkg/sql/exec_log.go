@@ -121,7 +121,7 @@ func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
 	isCopy bool,
-	numRetries, txnCounter, rows int,
+	numRetries, txnCounter, rows, stmtCount int,
 	bulkJobId uint64,
 	err error,
 	queryReceived time.Time,
@@ -133,7 +133,7 @@ func (p *planner) maybeLogStatement(
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
-		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
+		rows, stmtCount, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
 	)
 }
@@ -142,7 +142,7 @@ func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
 	execType executorType,
 	isCopy bool,
-	numRetries, txnCounter, rows int,
+	numRetries, txnCounter, rows, stmtCount int,
 	bulkJobId uint64,
 	err error,
 	startTime time.Time,
@@ -215,6 +215,7 @@ func (p *planner) maybeLogStatementInternal(
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
 		TxnCounter:    uint32(txnCounter),
+		StmtPosInTxn:  uint32(stmtCount),
 	}
 
 	// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
