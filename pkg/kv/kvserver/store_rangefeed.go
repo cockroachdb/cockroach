@@ -12,10 +12,14 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // rangeFeedUpdaterConf provides configuration for the rangefeed updater job,
@@ -100,4 +104,35 @@ func rangeFeedUpdaterPace(
 		return 1, by // always do some work
 	}
 	return todo, by
+}
+
+type rangeFeedScheduler struct {
+	r *rangefeed.CallbackScheduler
+	s *rangefeed.Scheduler[int, int64]
+}
+
+func newRangeFeedScheduler(workerCount int) *rangeFeedScheduler {
+	sc := rangefeed.NewScheduler()
+	s := &rangeFeedScheduler{
+		r: rangefeed.NewCallbackScheduler(fmt.Sprintf("s%d", 1), sc, workerCount),
+		s: sc,
+	}
+	return s
+}
+
+func (r *rangeFeedScheduler) Start(stopper *stop.Stopper) {
+	r.r.Start(stopper)
+}
+
+func (r *rangeFeedScheduler) RegisterReplica(id roachpb.RangeID, f rangefeed.Callback) {
+	_ = r.r.Register(int64(id), f)
+}
+
+func (r *rangeFeedScheduler) UnregisterReplica(id roachpb.RangeID) {
+	r.r.Unregister(int64(id))
+}
+
+// Close ungracefully keeping on garbage in the queues.
+func (r *rangeFeedScheduler) Close()  {
+	r.r.Close()
 }

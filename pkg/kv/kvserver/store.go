@@ -998,6 +998,7 @@ type Store struct {
 		syncutil.Mutex
 		m map[roachpb.RangeID]struct{}
 	}
+	rangefeedScheduler *rangeFeedScheduler
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1430,6 +1431,7 @@ func NewStore(
 	s.rangefeedReplicas.Lock()
 	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
 	s.rangefeedReplicas.Unlock()
+	s.rangefeedScheduler = newRangeFeedScheduler(16)
 
 	s.tsCache = tscache.New(cfg.Clock)
 	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
@@ -1938,6 +1940,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
+	s.rangefeedScheduler.Start(stopper)
+
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
 	// Note that this is just a hacky way of getting around that without
@@ -2346,6 +2350,7 @@ func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
 
 func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Lock()
+	s.rangefeedScheduler.UnregisterReplica(rangeID)
 	delete(s.rangefeedReplicas.m, rangeID)
 	s.rangefeedReplicas.Unlock()
 }
