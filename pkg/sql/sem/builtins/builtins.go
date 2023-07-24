@@ -5762,9 +5762,10 @@ SELECT
 				tree.ParamType{Name: "raw_value", Typ: types.Bytes},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (d tree.Datum, err error) {
 				var v roachpb.Value
 				v.RawBytes = []byte(tree.MustBeDBytes(args[0]))
+
 				return tree.NewDString(v.PrettyPrint()), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",

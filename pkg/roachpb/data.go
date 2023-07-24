@@ -810,10 +810,18 @@ func (v Value) computeChecksum(key []byte) uint32 {
 // In `1:3:Float/6.28`, the `1` is the column id diff as stored, `3` is the
 // computed (i.e. not stored) actual column id, `Float` is the type, and `6.28`
 // is the encoded value.
-func (v Value) PrettyPrint() string {
+func (v Value) PrettyPrint() (ret string) {
 	if len(v.RawBytes) == 0 {
 		return "/<empty>"
 	}
+	// In certain cases untagged bytes could be malformed because they are
+	// coming from user input, in which case recover with an error instead
+	// of crashing.
+	defer func() {
+		if r := recover(); r != nil {
+			ret = fmt.Sprintf("/<err: paniced parsing with %v>", r)
+		}
+	}()
 	var buf bytes.Buffer
 	t := v.GetTag()
 	buf.WriteRune('/')
