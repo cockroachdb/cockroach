@@ -34,9 +34,6 @@ const (
 	// defaultPushTxnsAge is the default age at which a Processor will begin to
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = 10 * time.Second
-	// defaultCheckStreamsInterval is the default interval at which a Processor
-	// will check all streams to make sure they have not been canceled.
-	defaultCheckStreamsInterval = 1 * time.Second
 )
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
@@ -72,10 +69,6 @@ type Config struct {
 	// shutting down the Processor. 0 for no timeout.
 	EventChanTimeout time.Duration
 
-	// CheckStreamsInterval specifies interval at which a Processor will check
-	// all streams to make sure they have not been canceled.
-	CheckStreamsInterval time.Duration
-
 	// Metrics is for production monitoring of RangeFeeds.
 	Metrics *Metrics
 
@@ -100,9 +93,6 @@ func (sc *Config) SetDefaults() {
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge
 		}
-	}
-	if sc.CheckStreamsInterval == 0 {
-		sc.CheckStreamsInterval = defaultCheckStreamsInterval
 	}
 }
 

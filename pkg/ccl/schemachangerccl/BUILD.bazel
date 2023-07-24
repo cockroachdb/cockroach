@@ -21,8 +21,6 @@ go_test(
         "main_test.go",
         "schemachanger_ccl_test.go",
         ":test_gen_backup_base",  # keep
-        ":test_gen_backup_mixed_base",  # keep
-        ":test_gen_backup_mixed_ccl",  # keep
         ":test_gen_ccl",  # keep
     ],
     args = select({
@@ -63,26 +61,16 @@ sctest_gen(
     name = "test_gen_backup_base",
     out = "backup_base_generated_test.go",
     ccl = True,
-    new_cluster_func = "sctest.SingleNodeCluster",
+    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
     package = "schemachangerccl",
     suffix = "_base",
     test_data = ["//pkg/sql/schemachanger:end_to_end_testdata_definitions"],
-    tests = ["Backup"],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
+    tests = [
+        "BackupRollbacks",
+        "BackupRollbacksMixedVersion",
+        "BackupSuccess",
+        "BackupSuccessMixedVersion",
     ],
-)
-
-sctest_gen(
-    name = "test_gen_backup_mixed_base",
-    out = "backup_base_mixed_generated_test.go",
-    ccl = True,
-    new_cluster_func = "sctest.SingleNodeMixedCluster",
-    package = "schemachangerccl",
-    suffix = "_base",
-    test_data = ["//pkg/sql/schemachanger:end_to_end_testdata_definitions"],
-    tests = ["BackupMixedVersionElements"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
@@ -93,32 +81,22 @@ sctest_gen(
     name = "test_gen_ccl",
     out = "ccl_generated_test.go",
     ccl = True,
-    new_cluster_func = "newMultiRegionCluster",
+    new_cluster_factory = "MultiRegionTestClusterFactory{}",
     package = "schemachangerccl",
     suffix = "_ccl",
     test_data = [":end_to_end_ccl_testdata_definitions"],
     tests = [
-        "Backup",
+        "BackupRollbacks",
+        "BackupRollbacksMixedVersion",
+        "BackupSuccess",
+        "BackupSuccessMixedVersion",
         "EndToEndSideEffects",
+        "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
         "Pause",
+        "PauseMixedVersion",
         "Rollback",
     ],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
-    ],
-)
-
-sctest_gen(
-    name = "test_gen_backup_mixed_ccl",
-    out = "backup_ccl_mixed_generated_test.go",
-    ccl = True,
-    new_cluster_func = "newMultiRegionMixedCluster",
-    package = "schemachangerccl",
-    suffix = "_ccl",
-    test_data = [":end_to_end_ccl_testdata_definitions"],
-    tests = ["BackupMixedVersionElements"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

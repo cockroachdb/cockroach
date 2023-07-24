@@ -2677,6 +2677,22 @@ func (c *clusterImpl) ConnE(
 	if err != nil {
 		return nil, err
 	}
+
+	// When running roachtest locally, we set a max connection lifetime
+	// to avoid errors like the following:
+	//
+	// `read tcp 127.0.0.1:63742 -> 127.0.0.1:26257: read: connection reset by peer`
+	//
+	// The pq issue below seems related. This was only observed in local
+	// runs so the lifetime is only applied in that context intentionally;
+	// for cloud runs, we use the connection pool's default behaviour.
+	//
+	// https://github.com/lib/pq/issues/835
+	if c.spec.Cloud == spec.Local {
+		localConnLifetime := 10 * time.Second
+		db.SetConnMaxLifetime(localConnLifetime)
+	}
+
 	return db, nil
 }
 
