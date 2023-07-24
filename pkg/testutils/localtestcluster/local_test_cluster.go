@@ -194,7 +194,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		AmbientCtx:              cfg.AmbientCtx,
 		Stopper:                 ltc.stopper,
 		Clock:                   cfg.Clock,
-		DB:                      cfg.DB,
+		Storage:                 liveness.NewKVStorage(cfg.DB),
 		Gossip:                  cfg.Gossip,
 		LivenessThreshold:       active,
 		RenewalDuration:         renewal,

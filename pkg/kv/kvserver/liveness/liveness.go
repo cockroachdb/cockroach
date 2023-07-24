@@ -318,7 +318,7 @@ type NodeLivenessOptions struct {
 	Settings                *cluster.Settings
 	Gossip                  Gossip
 	Clock                   *hlc.Clock
-	DB                      *kv.DB
+	Storage                 Storage
 	LivenessThreshold       time.Duration
 	RenewalDuration         time.Duration
 	HistogramWindowInterval time.Duration
@@ -342,7 +342,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		ambientCtx:            opts.AmbientCtx,
 		stopper:               opts.Stopper,
 		clock:                 opts.Clock,
-		storage:               &storageImpl{db: opts.DB},
+		storage:               opts.Storage,
 		livenessThreshold:     opts.LivenessThreshold,
 		renewalDuration:       opts.RenewalDuration,
 		selfSem:               make(chan struct{}, 1),
