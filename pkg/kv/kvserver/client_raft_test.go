@@ -5999,3 +5999,65 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 		require.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
 	}
 }
+
+// TestInvalidConfChangeRejection is a regression test for [1]. It proposes
+// an (intentionally) invalid configuration change and makes sure that raft
+// does not drop it.
+//
+// [1]: https://github.com/cockroachdb/cockroach/issues/105797
+func TestInvalidConfChangeRejection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test against a stuck command, so set a timeout to get
+	// a shot at a graceful failure on regression.
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
+	defer cancel()
+
+	// When our configuration change shows up below raft, we need to apply it as a
+	// no-op, since the config change is intentionally invalid and assertions
+	// would fail if we were to try to actually apply it.
+	injErr := errors.New("injected error")
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+				if args.Req != nil && args.Req.Txn != nil && args.Req.Txn.Name == "fake" {
+					return 0, kvpb.NewError(injErr)
+				}
+				return 0, nil
+			}}}},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(keys.MustAddr(k))
+
+	// Try to leave a joint config even though we're not in one. This is something
+	// that will lead raft to propose an empty entry instead of our conf change.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/105797
+	var ba kvpb.BatchRequest
+	now := tc.Server(0).Clock().Now()
+	txn := roachpb.MakeTransaction("fake", k, roachpb.NormalUserPriority, now, 500*time.Millisecond.Nanoseconds(), 1)
+	ba.Txn = &txn
+	ba.Timestamp = now
+	ba.Add(&kvpb.EndTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: k,
+		},
+		Commit: true,
+		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+			ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
+				Desc: repl.Desc(),
+			},
+		},
+	})
+
+	_, pErr := repl.Send(ctx, &ba)
+	// Verify that we see the configuration change below raft, where we rejected it
+	// (since it would've otherwise blow up the Replica: after all, we intentionally
+	// proposed an invalid configuration change.
+	require.True(t, errors.Is(pErr.GoError(), injErr), "%+v", pErr.GoError())
+}

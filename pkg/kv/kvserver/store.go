@@ -291,18 +291,19 @@ func newRaftConfig(
 	strg raft.Storage, id uint64, appliedIndex uint64, storeCfg StoreConfig, logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
-		ID:                        id,
-		Applied:                   appliedIndex,
-		AsyncStorageWrites:        true,
-		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
-		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
-		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
-		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
-		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
-		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
-		MaxInflightBytes:          storeCfg.RaftMaxInflightBytes,
-		Storage:                   strg,
-		Logger:                    logger,
+		ID:                          id,
+		Applied:                     appliedIndex,
+		AsyncStorageWrites:          true,
+		ElectionTick:                storeCfg.RaftElectionTimeoutTicks,
+		HeartbeatTick:               storeCfg.RaftHeartbeatIntervalTicks,
+		MaxUncommittedEntriesSize:   storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:    storeCfg.RaftMaxCommittedSizePerReady,
+		DisableConfChangeValidation: true, // see https://github.com/cockroachdb/cockroach/issues/105797
+		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
+		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
+		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
+		Storage:                     strg,
+		Logger:                      logger,
 
 		PreVote: true,
 	}
