@@ -121,9 +121,23 @@ func FloatsMatch(expectedString, actualString string) (bool, error) {
 	actual = math.Abs(actual)
 	// Check that 15 significant digits match. We do so by normalizing the
 	// numbers and then checking one digit at a time.
+	//
+	// normalize converts f to base * 10**power representation where base is in
+	// [1.0, 10.0) range.
+	normalize := func(f float64) (base float64, power int) {
+		for f >= 10 {
+			f = f / 10
+			power++
+		}
+		for f < 1 {
+			f *= 10
+			power--
+		}
+		return f, power
+	}
 	var expPower, actPower int
-	expected, expPower = math.Frexp(expected)
-	actual, actPower = math.Frexp(actual)
+	expected, expPower = normalize(expected)
+	actual, actPower = normalize(actual)
 	if expPower != actPower {
 		return false, nil
 	}
