@@ -60,6 +60,9 @@ func NewStatsCompactor(
 // that exceeded the limit defined by `sql.stats.persisted_rows.max`
 // (persistedsqlstats.SQLStatsMaxPersistedRows).
 func (c *StatsCompactor) DeleteOldestEntries(ctx context.Context) error {
+	if c.knobs.OverrideDeleteEntries != nil {
+		return c.knobs.OverrideDeleteEntries()
+	}
 	if err := c.removeStaleRowsPerShard(
 		ctx,
 		stmtStatsCleanupOps,
