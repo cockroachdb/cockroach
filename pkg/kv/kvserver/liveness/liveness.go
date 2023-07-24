@@ -316,7 +316,7 @@ type NodeLivenessOptions struct {
 	AmbientCtx              log.AmbientContext
 	Stopper                 *stop.Stopper
 	Settings                *cluster.Settings
-	Gossip                  *gossip.Gossip
+	Gossip                  Gossip
 	Clock                   *hlc.Clock
 	DB                      *kv.DB
 	LivenessThreshold       time.Duration
