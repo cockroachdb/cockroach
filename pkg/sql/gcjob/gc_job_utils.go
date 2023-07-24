@@ -227,29 +227,12 @@ func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus
 	case !flag && anyWaitingForMVCCGC:
 		return sql.RunningStatusWaitingForMVCCGC
 	case !flag:
+		// TODO (SQL Foundations): delete this once `TestCancelSchemaChange` is
+		// unskipped which shouldn't need this running status anymore.
 		return sql.RunningStatusWaitingGC // legacy status
 	default:
 		return jobs.RunningStatus(b.String())
 	}
-}
-
-// getAllTablesWaitingForGC returns a slice with all of the table IDs which have
-// note yet been been GC'd. This is used to determine which tables' statuses
-// need to be updated.
-func getAllTablesWaitingForGC(
-	details *jobspb.SchemaChangeGCDetails, progress *jobspb.SchemaChangeGCProgress,
-) []descpb.ID {
-	allRemainingTableIDs := make([]descpb.ID, 0, len(progress.Tables))
-	if len(details.Indexes) > 0 {
-		allRemainingTableIDs = append(allRemainingTableIDs, details.ParentID)
-	}
-	for _, table := range progress.Tables {
-		if table.Status != jobspb.SchemaChangeGCProgress_CLEARED {
-			allRemainingTableIDs = append(allRemainingTableIDs, table.ID)
-		}
-	}
-
-	return allRemainingTableIDs
 }
 
 // validateDetails ensures that the job details payload follows the structure
@@ -298,19 +281,4 @@ func persistProgress(
 	}); err != nil {
 		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
-}
-
-// getDropTimes returns the data stored in details as a map for convenience.
-func getDropTimes(
-	details *jobspb.SchemaChangeGCDetails,
-) (map[descpb.ID]int64, map[descpb.IndexID]int64) {
-	tableDropTimes := make(map[descpb.ID]int64)
-	for _, table := range details.Tables {
-		tableDropTimes[table.ID] = table.DropTime
-	}
-	indexDropTimes := make(map[descpb.IndexID]int64)
-	for _, index := range details.Indexes {
-		indexDropTimes[index.IndexID] = index.DropTime
-	}
-	return tableDropTimes, indexDropTimes
 }

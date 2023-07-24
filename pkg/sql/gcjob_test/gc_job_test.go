@@ -199,7 +199,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
-				RunningStatus: sql.RunningStatusWaitingGC,
+				RunningStatus: sql.RunningStatusDeletingData,
 				NonCancelable: true,
 			}
 
@@ -218,7 +218,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			// Check that the job started.
 			jobIDStr := strconv.Itoa(int(job.ID()))
-			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
+			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusDeletingData, lookupJR); err != nil {
 				t.Fatal(err)
 			}
 

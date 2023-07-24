@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -53,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -110,6 +108,8 @@ const (
 	RunningStatusDeletingData jobs.RunningStatus = "deleting data"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
+	// TODO (SQL Foundations): delete this once `TestCancelSchemaChange` is
+	// unskipped which shouldn't need this running status anymore.
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
 	// RunningStatusDeleteOnly is for jobs that are currently waiting on
 	// the cluster to converge to seeing the schema element in the DELETE_ONLY
@@ -541,10 +541,9 @@ func startGCJob(
 	userName username.SQLUsername,
 	schemaChangeDescription string,
 	details jobspb.SchemaChangeGCDetails,
-	useLegacyGCJob bool,
 ) error {
 	jobRecord := CreateGCJobRecord(
-		schemaChangeDescription, userName, details, useLegacyGCJob,
+		schemaChangeDescription, userName, details,
 	)
 	jobID := jobRegistry.MakeJobID()
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -766,7 +765,6 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				sc.job.Payload().UsernameProto.Decode(),
 				sc.job.Payload().Description,
 				gcDetails,
-				!storage.CanUseMVCCRangeTombstones(ctx, sc.settings),
 			); err != nil {
 				return err
 			}
@@ -1102,7 +1100,6 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 					},
 				},
 			},
-			!storage.CanUseMVCCRangeTombstones(ctx, sc.settings),
 		)
 		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, gcJobID, txn); err != nil {
 			return err
@@ -1311,7 +1308,6 @@ func (sc *SchemaChanger) createIndexGCJobWithDropTime(
 
 	gcJobRecord := CreateGCJobRecord(
 		jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails,
-		!sc.settings.Version.IsActive(ctx, clusterversion.V23_1_UseDelRangeInGCJob),
 	)
 	jobID := sc.jobRegistry.MakeJobID()
 	if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, jobID, txn); err != nil {
@@ -2306,10 +2302,7 @@ func (sc *SchemaChanger) reverseMutation(
 // CreateGCJobRecord creates the job record for a GC job, setting some
 // properties which are common for all GC jobs.
 func CreateGCJobRecord(
-	originalDescription string,
-	userName username.SQLUsername,
-	details jobspb.SchemaChangeGCDetails,
-	useLegacyGCJob bool,
+	originalDescription string, userName username.SQLUsername, details jobspb.SchemaChangeGCDetails,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)
 	if len(details.Indexes) > 0 {
@@ -2321,17 +2314,13 @@ func CreateGCJobRecord(
 			descriptorIDs = append(descriptorIDs, table.ID)
 		}
 	}
-	runningStatus := RunningStatusDeletingData
-	if useLegacyGCJob {
-		runningStatus = RunningStatusWaitingGC
-	}
 	return jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", originalDescription),
 		Username:      userName,
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: runningStatus,
+		RunningStatus: RunningStatusDeletingData,
 		NonCancelable: true,
 	}
 }
@@ -2751,7 +2740,6 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			r.job.Payload().UsernameProto.Decode(),
 			r.job.Payload().Description,
 			multiTableGCDetails,
-			!storage.CanUseMVCCRangeTombstones(ctx, p.ExecCfg().Settings),
 		); err != nil {
 			return err
 		}

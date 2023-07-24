@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -65,45 +64,7 @@ type schemaChangeGCResumer struct {
 	job *jobs.Job
 }
 
-// performGC GCs any schema elements that are in the DELETING state and returns
-// a bool indicating if it GC'd any elements.
-func performGC(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	details *jobspb.SchemaChangeGCDetails,
-	progress *jobspb.SchemaChangeGCProgress,
-) error {
-	if details.Tenant != nil {
-		return errors.Wrapf(
-			gcTenant(ctx, execCfg, details.Tenant.ID, progress),
-			"attempting to GC tenant %+v", details.Tenant,
-		)
-	}
-	if details.Indexes != nil {
-		return errors.Wrap(gcIndexes(ctx, execCfg, details.ParentID, progress), "attempting to GC indexes")
-	} else if details.Tables != nil {
-		if err := gcTables(ctx, execCfg, progress); err != nil {
-			return errors.Wrap(err, "attempting to GC tables")
-		}
-
-		// Drop database zone config when all the tables have been GCed.
-		if details.ParentID != descpb.InvalidID && isDoneGC(progress) {
-			if err := deleteDatabaseZoneConfig(
-				ctx,
-				execCfg.DB,
-				execCfg.Codec,
-				execCfg.Settings,
-				details.ParentID,
-			); err != nil {
-				return errors.Wrap(err, "deleting database zone config")
-			}
-		}
-	}
-	return nil
-}
-
-// performGC GCs any schema elements that are in the DELETING state and returns
-// a bool indicating if it GC'd any elements.
+// deleteData marks tombstones on the ranges of the dropped table or index.
 func deleteData(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -308,9 +269,6 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		return err
 	}
 
-	if !shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
-		return r.legacyWaitAndClearTableData(ctx, execCfg, details, progress)
-	}
 	return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
 }
 
@@ -418,99 +376,6 @@ func checkForEmptySpan(ctx context.Context, db *kv.DB, from, to roachpb.Key) (em
 		return false, err
 	}
 	return ba.RawResponse().Responses[0].GetIsSpanEmpty().IsEmpty(), nil
-}
-
-func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
-	ctx context.Context,
-	execCfg sql.ExecutorConfig,
-	details *jobspb.SchemaChangeGCDetails,
-	progress *jobspb.SchemaChangeGCProgress,
-) error {
-	tableDropTimes, indexDropTimes := getDropTimes(details)
-
-	gossipUpdateC, cleanup := execCfg.GCJobNotifier.AddNotifyee(ctx)
-	defer cleanup()
-
-	// Now that we've registered to be notified, check to see if we raced
-	// with the new version becoming active.
-	if shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
-		return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
-	}
-
-	var timerDuration time.Duration
-	ts := timeutil.DefaultTimeSource{}
-
-	for {
-		idleWait := idleWaitDuration.Get(execCfg.SV())
-		if err := waitForWork(
-			ctx, r.job.MarkIdle, ts, timerDuration, idleWait, gossipUpdateC,
-		); err != nil {
-			return err
-		}
-		// We'll be notified if the new version becomes active, so check and
-		// see if it's now time to change to the new protocol.
-		if shouldUseDelRange(
-			ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs,
-		) {
-			return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
-		}
-
-		// Refresh the status of all elements in case any GC TTLs have changed.
-		var expired bool
-		var earliestDeadline time.Time
-		if details.Tenant == nil {
-			remainingTables := getAllTablesWaitingForGC(details, progress)
-			expired, earliestDeadline = refreshTables(
-				ctx, &execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job.ID(), progress,
-			)
-		} else {
-			var err error
-			expired, earliestDeadline, err = refreshTenant(ctx, &execCfg, details.Tenant.DropTime, details, progress)
-			if err != nil {
-				return err
-			}
-		}
-		timerDuration = time.Until(earliestDeadline)
-
-		if expired {
-			// Some elements have been marked as DELETING to save the progress.
-			persistProgress(ctx, &execCfg, r.job.ID(), progress, runningStatusGC(progress))
-			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
-				if err := fn(r.job.ID()); err != nil {
-					return err
-				}
-			}
-			if err := performGC(ctx, &execCfg, details, progress); err != nil {
-				return err
-			}
-			persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingGC)
-
-			// Trigger immediate re-run in case of more expired elements.
-			timerDuration = 0
-		}
-
-		if isDoneGC(progress) {
-			return nil
-		}
-
-		// Schedule the next check for GC.
-		if timerDuration > MaxSQLGCInterval {
-			timerDuration = MaxSQLGCInterval
-		}
-	}
-}
-
-func shouldUseDelRange(
-	ctx context.Context,
-	details *jobspb.SchemaChangeGCDetails,
-	s *cluster.Settings,
-	knobs *sql.GCJobTestingKnobs,
-) bool {
-	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
-	return details.Tenant == nil &&
-		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
-			// Allow this testing knob to override the storage setting, for convenience.
-			knobs.SkipWaitingForMVCCGC)
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the
