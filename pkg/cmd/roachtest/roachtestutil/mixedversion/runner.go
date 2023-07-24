@@ -22,6 +22,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -61,6 +62,7 @@ type (
 		group     ctxgroup.Group
 		ctx       context.Context
 		events    chan backgroundEvent
+		logger    *logger.Logger
 		stopFuncs []StopFunc
 	}
 
@@ -81,6 +83,19 @@ type (
 		clusterVersionsAfter  []roachpb.Version
 	}
 
+	// crdbMonitor is a thin wrapper around the roachtest monitor API
+	// (cluster.NewMonitor) that produces error events through a channel
+	// whenever an unexpected node death happens. It also allows us to
+	// provide an API for test authors to inform the framework that a
+	// node death is expected if the test performs its own restarts or
+	// chaos events.
+	crdbMonitor struct {
+		once      sync.Once
+		crdbNodes option.NodeListOption
+		monitor   cluster.Monitor
+		errCh     chan error
+	}
+
 	testRunner struct {
 		ctx       context.Context
 		cancel    context.CancelFunc
@@ -94,6 +109,7 @@ type (
 		clusterVersions atomic.Value
 
 		background *backgroundRunner
+		monitor    *crdbMonitor
 
 		connCache struct {
 			mu    syncutil.Mutex
@@ -123,24 +139,18 @@ func newTestRunner(
 		logger:     l,
 		cluster:    c,
 		crdbNodes:  crdbNodes,
-		background: newBackgroundRunner(ctx),
+		background: newBackgroundRunner(ctx, l),
+		monitor:    newCRDBMonitor(ctx, c, crdbNodes),
 		seed:       randomSeed,
 	}
 }
 
 // run implements the test running logic, which boils down to running
 // each step in sequence.
-func (tr *testRunner) run() error {
-	defer tr.closeConnections()
-	defer func() {
-		// Stop background functions explicitly so that the corresponding
-		// termination is marked `TriggeredByTest` (not necessary for
-		// correctness, just for clarity).
-		tr.logger.Printf("stopping background functions")
-		tr.background.Terminate()
-	}()
-
+func (tr *testRunner) run() (retErr error) {
 	stepsErr := make(chan error)
+	defer func() { tr.teardown(stepsErr, retErr != nil) }()
+
 	go func() {
 		defer close(stepsErr)
 		for _, step := range tr.plan.steps {
@@ -165,6 +175,9 @@ func (tr *testRunner) run() error {
 			}
 
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
+
+		case err := <-tr.monitor.Err():
+			return tr.testFailure(err.Error(), tr.logger)
 		}
 	}
 }
@@ -186,6 +199,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			if err := tr.refreshClusterVersions(); err != nil {
 				return err
 			}
+			tr.monitor.Init()
 		}
 	}
 
@@ -242,16 +256,10 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 		tr.logStep(prefix, ss, l)
 	}()
 
-	if err := func() (retErr error) {
-		defer func() {
-			if r := recover(); r != nil {
-				l.Printf("panic stack trace:\n%s", string(debug.Stack()))
-				retErr = fmt.Errorf("panic (stack trace above): %v", r)
-			}
-		}()
+	if err := panicAsError(l, func() error {
 		return ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l))
-	}(); err != nil {
-		if isContextCanceled(err) {
+	}); err != nil {
+		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
 			// Avoid creating a `stepError` (which involves querying binary
 			// and cluster versions) when the context was canceled as the
@@ -333,6 +341,36 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	}
 
 	return tf
+}
+
+// teardown groups together all tasks that happen once a test finishes.
+func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
+	if testFailed {
+		tr.logger.Printf("mixed-version test FAILED")
+	} else {
+		tr.logger.Printf("mixed-version test PASSED")
+	}
+
+	tr.cancel()
+
+	// Stop background functions explicitly so that the corresponding
+	// termination is marked `TriggeredByTest` (not necessary for
+	// correctness, just for clarity).
+	tr.logger.Printf("stopping background functions")
+	tr.background.Terminate()
+
+	// If the test failed, we wait for any currently running steps to
+	// return before passing control back to the roachtest
+	// framework. This achieves a test.log that does not contain any
+	// test step output once roachtest started to collect failure
+	// artifacts, which would be confusing.
+	if testFailed {
+		tr.logger.Printf("waiting for all steps to finish after context cancelation")
+		waitForChannel(stepsChan, "test steps", tr.logger)
+	}
+
+	tr.logger.Printf("closing database connections")
+	tr.closeConnections()
 }
 
 func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
@@ -462,11 +500,44 @@ func (tr *testRunner) closeConnections() {
 	}
 }
 
-func newBackgroundRunner(ctx context.Context) *backgroundRunner {
+func newCRDBMonitor(
+	ctx context.Context, c cluster.Cluster, crdbNodes option.NodeListOption,
+) *crdbMonitor {
+	return &crdbMonitor{
+		crdbNodes: crdbNodes,
+		monitor:   c.NewMonitor(ctx, crdbNodes),
+		errCh:     make(chan error),
+	}
+}
+
+// Init must be called once the cluster is initialized and the
+// cockroach process is running on the nodes. Init is idempotent.
+func (cm *crdbMonitor) Init() {
+	cm.once.Do(func() {
+		go func() {
+			if err := cm.monitor.WaitE(); err != nil {
+				cm.errCh <- err
+			}
+		}()
+	})
+}
+
+// Err returns a channel that will receive errors whenever an
+// unexpected node death is observed.
+func (cm *crdbMonitor) Err() chan error {
+	return cm.errCh
+}
+
+func (cm *crdbMonitor) ExpectDeaths(n int) {
+	cm.monitor.ExpectDeaths(int32(n))
+}
+
+func newBackgroundRunner(ctx context.Context, l *logger.Logger) *backgroundRunner {
 	g := ctxgroup.WithContext(ctx)
 	return &backgroundRunner{
 		group:  g,
 		ctx:    ctx,
+		logger: l,
 		events: make(chan backgroundEvent),
 	}
 }
@@ -481,11 +552,20 @@ func (br *backgroundRunner) Start(name string, fn func(context.Context) error) c
 	var expectedContextCancelation bool
 	br.group.Go(func() error {
 		err := fn(bgCtx)
-		br.events <- backgroundEvent{
+		event := backgroundEvent{
 			Name:            name,
 			Err:             err,
-			TriggeredByTest: err != nil && isContextCanceled(err) && expectedContextCancelation,
+			TriggeredByTest: err != nil && isContextCanceled(bgCtx) && expectedContextCancelation,
 		}
+
+		select {
+		case br.events <- event:
+			// exit goroutine
+		case <-br.ctx.Done():
+			// Test already finished, exit goroutine.
+			return nil
+		}
+
 		return err
 	})
 
@@ -503,11 +583,20 @@ func (br *backgroundRunner) Start(name string, fn func(context.Context) error) c
 // started during the test. This includes background functions created
 // during test runtime (using `helper.Background()`), as well as
 // background steps declared in the test setup (using
-// `BackgroundFunc`, `Workload`, et al).
+// `BackgroundFunc`, `Workload`, et al). Returns when all background
+// functions have returned.
 func (br *backgroundRunner) Terminate() {
 	for _, stop := range br.stopFuncs {
 		stop()
 	}
+
+	doneCh := make(chan error)
+	go func() {
+		defer close(doneCh)
+		_ = br.group.Wait()
+	}()
+
+	waitForChannel(doneCh, "background functions", br.logger)
 }
 
 func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
@@ -571,9 +660,9 @@ func (h *Helper) Background(
 			return fmt.Errorf("failed to create logger for background function %q: %w", name, err)
 		}
 
-		err = fn(ctx, bgLogger)
+		err = panicAsError(bgLogger, func() error { return fn(ctx, bgLogger) })
 		if err != nil {
-			if isContextCanceled(err) {
+			if isContextCanceled(ctx) {
 				return err
 			}
 
@@ -594,6 +683,20 @@ func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) cont
 		l.Printf("running command `%s` on nodes %v in the background", cmd, nodes)
 		return h.runner.cluster.RunE(ctx, nodes, cmd)
 	})
+}
+
+// ExpectDeath alerts the testing infrastructure that a node is
+// expected to die. Regular restarts as part of the mixedversion
+// testing are already taken into account. This function should only
+// be used by tests that perform their own node restarts or chaos
+// events.
+func (h *Helper) ExpectDeath() {
+	h.ExpectDeaths(1)
+}
+
+// ExpectDeaths is the general version of `ExpectDeath()`.
+func (h *Helper) ExpectDeaths(n int) {
+	h.runner.monitor.ExpectDeaths(n)
 }
 
 // loggerFor creates a logger instance to be used by background
@@ -654,6 +757,39 @@ func loadAtomicVersions(v atomic.Value) []roachpb.Version {
 	return v.Load().([]roachpb.Version)
 }
 
+// panicAsError ensures that the any panics that might happen while
+// the function passed runs are captured and returned as regular
+// errors. A stack trace is included in the logs when that happens to
+// facilitate debugging.
+func panicAsError(l *logger.Logger, f func() error) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+			retErr = fmt.Errorf("panic (stack trace above): %v", r)
+		}
+	}()
+	return f()
+}
+
+// waitForChannel waits for the given channel `ch` to close; returns
+// when that happens. If the channel does not close within 5 minutes,
+// the function logs a message and returns.
+//
+// The main use-case for this function is waiting for user-provided
+// hooks to return after the context passed to them is canceled. We
+// want to allow some time for them to finish, but we also don't want
+// to block indefinitely if a function inadvertently ignores context
+// cancelation.
+func waitForChannel(ch chan error, desc string, l *logger.Logger) {
+	maxWait := 5 * time.Minute
+	select {
+	case <-ch:
+		// return
+	case <-time.After(maxWait):
+		l.Printf("waited for %s for %s to finish, giving up", maxWait, desc)
+	}
+}
+
 func formatVersions(versions []roachpb.Version) string {
 	var pairs []string
 	for idx, version := range versions {
@@ -663,15 +799,13 @@ func formatVersions(versions []roachpb.Version) string {
 	return fmt.Sprintf("[%s]", strings.Join(pairs, ", "))
 }
 
-// isContextCanceled returns a boolean indicating whether the error
-// given happened because some context was canceled.
-func isContextCanceled(err error) bool {
-	// TODO(renato): unfortunately, we have to resort to string
-	// comparison here. The most common use case for this function is
-	// detecting cluster commands that fail when the test context is
-	// canceled (after test success or failure), and roachtest does not
-	// return an error that wraps the context cancelation (in other
-	// words, `errors.Is` doesn't work). Once we fix this behavior, we
-	// should use structured errors here.
-	return strings.Contains(err.Error(), context.Canceled.Error())
+// isContextCanceled returns a boolean indicating whether the context
+// passed is canceled.
+func isContextCanceled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

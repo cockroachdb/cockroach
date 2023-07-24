@@ -31,11 +31,13 @@ type monitorImpl struct {
 		Failed() bool
 		WorkerStatus(...interface{})
 	}
-	l         *logger.Logger
-	nodes     string
-	ctx       context.Context
-	cancel    func()
-	g         *errgroup.Group
+	l      *logger.Logger
+	nodes  string
+	ctx    context.Context
+	cancel func()
+	g      *errgroup.Group
+
+	numTasks  int32 // atomically
 	expDeaths int32 // atomically
 }
 
@@ -79,6 +81,8 @@ func (m *monitorImpl) ResetDeaths() {
 var errTestFatal = errors.New("t.Fatal() was called")
 
 func (m *monitorImpl) Go(fn func(context.Context) error) {
+	atomic.AddInt32(&m.numTasks, 1)
+
 	m.g.Go(func() (err error) {
 		defer func() {
 			r := recover()
@@ -170,15 +174,21 @@ func (m *monitorImpl) wait() error {
 	}
 
 	// 1. The first goroutine waits for the worker errgroup to exit.
+	// Note that this only happens if the caller created at least one
+	// task for the monitor. This check enables the roachtest monitor to
+	// be used in cases where we just want to monitor events in the
+	// cluster without running any background tasks through the monitor.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer func() {
-			m.cancel()
-			wg.Done()
+	if atomic.LoadInt32(&m.numTasks) > 0 {
+		wg.Add(1)
+		go func() {
+			defer func() {
+				m.cancel()
+				wg.Done()
+			}()
+			setErr(errors.Wrap(m.g.Wait(), "function passed to monitor.Go failed"))
 		}()
-		setErr(errors.Wrap(m.g.Wait(), "function passed to monitor.Go failed"))
-	}()
+	}
 
 	// 2. The second goroutine reads from the monitoring channel, watching for any
 	// unexpected death events.
