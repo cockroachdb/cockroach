@@ -10,7 +10,11 @@
 
 package sqlstats
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+)
 
 // TestingKnobs provides hooks and knobs for unit tests.
 type TestingKnobs struct {
@@ -42,6 +46,10 @@ type TestingKnobs struct {
 	// SkipZoneConfigBootstrap used for backup tests where we want to skip
 	// the Zone Config TTL setup.
 	SkipZoneConfigBootstrap bool
+
+	OverrideCompactionRetryOptions func() (retry.Options, int)
+
+	OverrideDeleteEntries func() error
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

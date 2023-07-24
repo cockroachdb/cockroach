@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessionphase",
+        "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/uuid",
     ],
