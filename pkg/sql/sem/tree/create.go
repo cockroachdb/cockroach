@@ -463,9 +463,12 @@ const (
 // ColumnTableDef represents a column definition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
-	Name              Name
-	Type              ResolvableTypeReference
-	IsSerial          bool
+	Name     Name
+	Type     ResolvableTypeReference
+	IsSerial bool
+	// IsCreateAs is set to true if the Type is resolved after parsing.
+	// CREATE AS statements must not display column types during formatting.
+	IsCreateAs        bool
 	GeneratedIdentity struct {
 		IsGeneratedAsIdentity   bool
 		GeneratedAsIdentityType GeneratedIdentityType
@@ -745,7 +748,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 
 	// ColumnTableDef node type will not be specified if it represents a CREATE
 	// TABLE ... AS query.
-	if node.Type != nil {
+	if !node.IsCreateAs && node.Type != nil {
 		ctx.WriteByte(' ')
 		node.formatColumnType(ctx)
 	}
