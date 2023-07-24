@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -503,17 +504,22 @@ func (b *Builder) buildScan(
 	// We collect VirtualComputed columns separately; these cannot be scanned,
 	// they can only be projected afterward.
 	var scanColIDs, virtualColIDs opt.ColSet
+	var virtualMutationColOrds util.FastIntSet
 	outScope.cols = make([]scopeColumn, len(ordinals))
 	for i, ord := range ordinals {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		name := col.ColName()
+		kind := col.Kind()
+		mutation := kind == cat.WriteOnly || kind == cat.DeleteOnly
 		if col.IsVirtualComputed() {
 			virtualColIDs.Add(colID)
+			if mutation {
+				virtualMutationColOrds.Add(ord)
+			}
 		} else {
 			scanColIDs.Add(colID)
 		}
-		kind := col.Kind()
 		outScope.cols[i] = scopeColumn{
 			id:           colID,
 			name:         scopeColName(name),
@@ -521,7 +527,7 @@ func (b *Builder) buildScan(
 			typ:          col.DatumType(),
 			visibility:   columnVisibility(col.Visibility()),
 			kind:         kind,
-			mutation:     kind == cat.WriteOnly || kind == cat.DeleteOnly,
+			mutation:     mutation,
 			tableOrdinal: ord,
 		}
 	}
@@ -649,7 +655,7 @@ func (b *Builder) buildScan(
 	private.Flags.DisableNotVisibleIndex = disableNotVisibleIndex
 
 	b.addCheckConstraintsForTable(tabMeta)
-	b.addComputedColsForTable(tabMeta)
+	b.addComputedColsForTable(tabMeta, virtualMutationColOrds)
 	tabMeta.CacheIndexPartitionLocalities(b.evalCtx)
 
 	outScope.expr = b.factory.ConstructScan(&private)
@@ -778,7 +784,13 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // caches them in the table metadata as scalar expressions. These expressions
 // are used as "known truths" about table data. Any columns for which the
 // expression contains non-immutable operators are omitted.
-func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+// `includeVirtualMutationColOrds` is the set of virtual computed column
+// ordinals which are under mutation, but whose computed expressions should be
+// built anyway. Normally `addComputedColsForTable` does not build expressions
+// for columns under mutation.
+func (b *Builder) addComputedColsForTable(
+	tabMeta *opt.TableMeta, includeVirtualMutationColOrds util.FastIntSet,
+) {
 	// We do not want to track view deps here, otherwise a view depending
 	// on a table with a computed column of a UDT will result in a
 	// type dependency being added between the view and the UDT,
@@ -796,7 +808,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 		if !tabCol.IsComputed() {
 			continue
 		}
-		if tabCol.IsMutation() {
+		if tabCol.IsMutation() && !includeVirtualMutationColOrds.Contains(i) {
 			// Mutation columns can be NULL during backfill, so they won't equal the
 			// computed column expression value (in general).
 			continue
