@@ -178,6 +178,7 @@ func TestFloatsMatch(t *testing.T) {
 		{f1: "0.1234567890123456", f2: "0.1234567890123457", match: true},
 		{f1: "-0.1234567890123456", f2: "0.1234567890123456", match: false},
 		{f1: "-0.1234567890123456", f2: "-0.1234567890123455", match: true},
+		{f1: "0.142857142857143", f2: "0.14285714285714285", match: true},
 	} {
 		match, err := FloatsMatch(tc.f1, tc.f2)
 		if err != nil {
