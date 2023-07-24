@@ -16,23 +16,35 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   createSelectorForKeyedCachedDataField,
+  refreshExecutionDetails,
   refreshJob,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
+import { ListJobProfilerExecutionDetailsResponseMessage } from "src/util/api";
 
 const selectJob = createSelectorForKeyedCachedDataField("job", selectID);
+const selectExecutionDetails =
+  createSelectorForKeyedCachedDataField<ListJobProfilerExecutionDetailsResponseMessage>(
+    "jobProfiler",
+    selectID,
+  );
 
 const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): JobDetailsStateProps => {
+  const jobID = selectID(state, props);
   return {
     jobRequest: selectJob(state, props),
+    jobProfilerResponse: selectExecutionDetails(state, props),
+    jobProfilerLastUpdated: state.cachedData.jobProfiler[jobID]?.setAt,
+    jobProfilerDataIsValid: state.cachedData.jobProfiler[jobID]?.valid,
   };
 };
 
 const mapDispatchToProps = {
   refreshJob,
+  refreshExecutionDetails,
 };
 
 export default withRouter(

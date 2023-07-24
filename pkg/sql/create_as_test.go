@@ -351,6 +351,16 @@ func TestFormat(t *testing.T) {
 			setup:          "CREATE TABLE ctas_explicit_columns_source_tbl (id int PRIMARY KEY)",
 			expectedFormat: "CREATE TABLE defaultdb.public.ctas_explicit_columns_tbl (id) AS SELECT * FROM defaultdb.public.ctas_explicit_columns_source_tbl",
 		},
+		{
+			sql:            "CREATE MATERIALIZED VIEW cmvas_implicit_columns_tbl AS SELECT * FROM cmvas_implicit_columns_source_tbl",
+			setup:          "CREATE TABLE cmvas_implicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE MATERIALIZED VIEW defaultdb.public.cmvas_implicit_columns_tbl AS SELECT cmvas_implicit_columns_source_tbl.id FROM defaultdb.public.cmvas_implicit_columns_source_tbl WITH DATA",
+		},
+		{
+			sql:            "CREATE MATERIALIZED VIEW cmvas_explicit_columns_tbl (id2) AS SELECT * FROM cmvas_explicit_columns_source_tbl",
+			setup:          "CREATE TABLE cmvas_explicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE MATERIALIZED VIEW defaultdb.public.cmvas_explicit_columns_tbl (id2) AS SELECT cmvas_explicit_columns_source_tbl.id FROM defaultdb.public.cmvas_explicit_columns_source_tbl WITH DATA",
+		},
 	}
 
 	ctx := context.Background()
@@ -371,14 +381,18 @@ func TestFormat(t *testing.T) {
 			switch stmt := statements[0].AST.(type) {
 			case *tree.CreateTable:
 				name = stmt.Table.Table()
+			case *tree.CreateView:
+				name = stmt.Name.Table()
 			default:
 				require.Failf(t, "missing case", "unexpected type %T", stmt)
 			}
+			// Filter description starting with CREATE to filter out CMVAS
+			// "updating view reference" job.
 			query := fmt.Sprintf(
 				`SELECT description
 FROM [SHOW JOBS]
 WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
-AND description LIKE '%%%s%%'`,
+AND description LIKE 'CREATE%%%s%%'`,
 				name,
 			)
 			sqlRunner.CheckQueryResults(t, query, [][]string{{tc.expectedFormat}})
