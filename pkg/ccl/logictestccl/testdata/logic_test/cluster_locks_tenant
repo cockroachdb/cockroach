@@ -74,41 +74,41 @@ user_name   query             phase
 testuser    SELECT * FROM t   executing
 
 # looking at each transaction separately, validate the expected results in the lock table
-query TTTTTTBB colnames,rowsort,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended
+query TTTTTTTBB colnames,rowsort,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended
 FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
 ----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
-test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
-test          public      t           /Table/106/1/"l"/0  Exclusive       Replicated    true    false
-test          public      t           /Table/106/1/"m"/0  Exclusive       Replicated    true    false
-test          public      t           /Table/106/1/"p"/0  Exclusive       Replicated    true    false
-test          public      t           /Table/106/1/"s"/0  Exclusive       Replicated    true    false
-test          public      t           /Table/106/1/"t"/0  Exclusive       Replicated    true    false
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability   isolation_level   granted  contended
+test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated   SERIALIZABLE      true     true
+test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated   SERIALIZABLE      true     false
+test          public      t           /Table/106/1/"l"/0  Exclusive       Replicated   SERIALIZABLE      true     false
+test          public      t           /Table/106/1/"m"/0  Exclusive       Replicated   SERIALIZABLE      true     false
+test          public      t           /Table/106/1/"p"/0  Exclusive       Replicated   SERIALIZABLE      true     false
+test          public      t           /Table/106/1/"s"/0  Exclusive       Replicated   SERIALIZABLE      true     false
+test          public      t           /Table/106/1/"t"/0  Exclusive       Replicated   SERIALIZABLE      true     false
 
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended
 FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn2'
 ----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability   isolation_level   granted  contended
+test          public      t           /Table/106/1/"b"/0  None            Replicated   SERIALIZABLE      false   true
 
 # check that we can't see keys, potentially revealing PII, with VIEWACTIVITYREDACTED
 user testuser2
 
-query TTTTTTBB colnames,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended
+query TTTTTTTBB colnames,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended
 FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
 ----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           ·                   Exclusive       Replicated    true    true
-test          public      t           ·                   Exclusive       Replicated    true    false
-test          public      t           ·                   Exclusive       Replicated    true    false
-test          public      t           ·                   Exclusive       Replicated    true    false
-test          public      t           ·                   Exclusive       Replicated    true    false
-test          public      t           ·                   Exclusive       Replicated    true    false
-test          public      t           ·                   Exclusive       Replicated    true    false
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability   isolation_level   granted  contended
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    true
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Replicated   SERIALIZABLE      true    false
 
 user root
 
@@ -179,15 +179,15 @@ user_name   query                                         phase
 testuser    DELETE FROM t WHERE (k >= 'b') AND (k < 'x')  executing
 
 # looking at each transaction separately, validate the expected results in the lock table
-query TTTTTTBB colnames,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn3'
+query TTTTTTTBB colnames,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn3'
 ----
-database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  granted  contended
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
 
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn4'
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn4'
 ----
-database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  granted  contended
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
 
 query I
 SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
@@ -235,16 +235,16 @@ SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name IN ('t','t2')
 user testuser
 
 query error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 
 user testuser2
 
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name IN ('t', 't2')
+query TTTTTTTBB colnames
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name IN ('t', 't2')
 ----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           ·                   Exclusive       Unreplicated  true    false
-test          public      t           ·                   Exclusive       Unreplicated  true    false
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability    isolation_level   granted contended
+test          public      t           ·                   Exclusive       Unreplicated  SERIALIZABLE      true    false
+test          public      t           ·                   Exclusive       Unreplicated  SERIALIZABLE      true    false
 
 user root
 
