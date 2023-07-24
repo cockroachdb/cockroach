@@ -116,7 +116,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.ScanArgs(t, "epoch", &epoch)
 				}
 
-				iso := scanIsoLevel(t, d)
+				iso := concurrency.ScanIsoLevel(t, d)
 				priority := scanTxnPriority(t, d)
 
 				uncertaintyLimit := ts

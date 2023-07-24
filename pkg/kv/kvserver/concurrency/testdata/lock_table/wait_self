@@ -37,13 +37,13 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
 
 dequeue r=req1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
 
 scan r=req2
 ----
@@ -73,7 +73,7 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
@@ -130,7 +130,7 @@ acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
@@ -146,4 +146,3 @@ new: state=doneWaiting
 scan r=req4
 ----
 start-waiting: false
-

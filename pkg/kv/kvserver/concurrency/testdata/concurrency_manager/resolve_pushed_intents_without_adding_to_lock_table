@@ -34,7 +34,7 @@ debug-lock-table
 ----
 num=1
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -146,7 +146,7 @@ debug-lock-table
 ----
 num=1
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -202,23 +202,23 @@ debug-lock-table
 ----
 num=9
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
 
 sequence req=req2
 ----
@@ -317,7 +317,7 @@ debug-lock-table
 ----
 num=1
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -373,23 +373,23 @@ debug-lock-table
 ----
 num=9
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
 
 sequence req=req2
 ----

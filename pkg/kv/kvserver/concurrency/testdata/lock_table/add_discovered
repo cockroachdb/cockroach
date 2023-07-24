@@ -42,13 +42,13 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 dequeue r=req1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 new-request r=req2 txn=txn2 ts=10,1 spans=intent@a
 ----
@@ -89,7 +89,7 @@ add-discovered r=req2 k=a txn=txn3
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
 
@@ -109,7 +109,7 @@ dequeue r=req3
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, ts: 10.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2

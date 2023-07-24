@@ -29,13 +29,13 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 dequeue r=req1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # -------------------------------------------------------------
 # Wait on this lock as:
@@ -93,7 +93,7 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 4, txn: none
     req: 2, txn: 00000000-0000-0000-0000-000000000002
@@ -200,7 +200,7 @@ update txn=txn1 ts=11,1 epoch=0 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 4, txn: none
     req: 2, txn: 00000000-0000-0000-0000-000000000002
@@ -219,7 +219,7 @@ update txn=txn1 ts=13,1 epoch=0 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 13.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -239,7 +239,7 @@ dequeue r=req2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 13.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -256,7 +256,7 @@ update txn=txn1 ts=10,1 epoch=0 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 13.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -272,7 +272,7 @@ update txn=txn1 ts=15,1 epoch=0 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 15.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 15.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 4, txn: none
    queued writers:
@@ -290,7 +290,7 @@ update txn=txn1 ts=17,1 epoch=0 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 17.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 17.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
@@ -308,7 +308,7 @@ dequeue r=req4
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 17.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 17.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
@@ -322,7 +322,7 @@ update txn=txn1 ts=19,1 epoch=0 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 19.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 19.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
@@ -393,7 +393,7 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1]
 
 new-txn txn=txn1 ts=10 epoch=1 seq=5
 ----
@@ -405,7 +405,7 @@ acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1, 5]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1, 5]
 
 new-txn txn=txn1 ts=10 epoch=1 seq=7
 ----
@@ -417,7 +417,7 @@ acquire r=req3 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7]
 
 new-txn txn=txn1 ts=10 epoch=1 seq=10
 ----
@@ -429,7 +429,7 @@ acquire r=req4 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7, 10]
 
 # No seqnum change since lock is not held at seqnum 3, 8, 9.
 
@@ -437,7 +437,7 @@ update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7, 10]
 
 # No change since update is using older epoch.
 
@@ -445,19 +445,19 @@ update txn=txn1 ts=10 epoch=0 span=a ignored-seqs=3,5-7
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1, 5, 7, 10]
 
 update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,5-7
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1, 10]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1, 10]
 
 update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=9-11
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 10.000000000,0, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [1]
 
 # No seqnum change since update is using older epoch. But since the update is using
 # a higher timestamp, the ts is advanced.
@@ -466,7 +466,7 @@ update txn=txn1 ts=15 epoch=0 span=a ignored-seqs=1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 15.000000000,0, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl seqs: [1]
 
 # No change, since seqnum 3 is not held. Note that the ts is not updated.
 
@@ -474,14 +474,14 @@ update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 15.000000000,0, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl seqs: [1]
 
 # Timestamp is updated again.
 update txn=txn1 ts=16 epoch=1 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 16.000000000,0, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 16.000000000,0, info: unrepl seqs: [1]
 
 # Seqnum 1 is also ignored, so the lock is released. Note that it does not
 # matter that the update is using an older timestamp.

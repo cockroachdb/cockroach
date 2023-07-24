@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
@@ -61,7 +62,7 @@ time-tick [m=<int>] [s=<int>] [ms=<int>] [ns=<int>]
 
   Forces the manual clock to tick forward m minutes, s seconds, ms milliseconds, and ns nanoseconds.
 
-new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
+new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>] [iso=<level>]
 ----
 
  Creates a TxnMeta.
@@ -247,6 +248,7 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("seq") {
 					d.ScanArgs(t, "seq", &seq)
 				}
+				iso := ScanIsoLevel(t, d)
 				txnMeta, ok := txnsByName[txnName]
 				var id uuid.UUID
 				if ok {
@@ -259,6 +261,7 @@ func TestLockTableBasic(t *testing.T) {
 					Epoch:          enginepb.TxnEpoch(epoch),
 					Sequence:       enginepb.TxnSeq(seq),
 					WriteTimestamp: ts,
+					IsoLevel:       iso,
 				}
 				return ""
 
@@ -717,6 +720,26 @@ func scanSpans(
 		lockSpans.Add(str, getSpan(t, d, spanStr))
 	}
 	return latchSpans, lockSpans
+}
+
+func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
+	const key = "iso"
+	if !d.HasArg(key) {
+		return isolation.Serializable
+	}
+	var isoS string
+	d.ScanArgs(t, key, &isoS)
+	switch isoS {
+	case "serializable":
+		return isolation.Serializable
+	case "snapshot":
+		return isolation.Snapshot
+	case "read-committed":
+		return isolation.ReadCommitted
+	default:
+		d.Fatalf(t, "unknown isolation level: %s", isoS)
+		return 0
+	}
 }
 
 func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
@@ -1868,10 +1891,10 @@ func TestLockStateSafeFormat(t *testing.T) {
 		seqs: []enginepb.TxnSeq{1},
 	}
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
 		redact.Sprint(l).Redact())
 }
 
