@@ -11,16 +11,22 @@
 package liveness
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -385,4 +391,178 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			require.Equal(t, tc.expectedStatus, nv.LivenessStatus())
 		})
 	}
+}
+
+type mockGossip struct {
+	m map[string]gossip.Callback
+}
+
+func (g *mockGossip) RegisterCallback(
+	pattern string, method gossip.Callback, opts ...gossip.CallbackOption,
+) func() {
+	if g.m == nil {
+		g.m = map[string]gossip.Callback{}
+	}
+	g.m[pattern] = method
+	return func() {
+		delete(g.m, pattern)
+	}
+}
+
+func (g *mockGossip) GetNodeID() roachpb.NodeID {
+	return 1
+}
+
+func mockRecord(nodeID roachpb.NodeID) Record {
+	return Record{Liveness: livenesspb.Liveness{NodeID: nodeID}}
+}
+
+type mockStorage struct{}
+
+func (s *mockStorage) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
+	return mockRecord(nodeID), nil
+}
+
+func (s *mockStorage) Update(
+	ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error,
+) (Record, error) {
+	return Record{Liveness: update.newLiveness}, nil
+}
+
+func (s *mockStorage) Create(ctx context.Context, nodeID roachpb.NodeID) error {
+	return nil
+}
+
+func (s *mockStorage) Scan(ctx context.Context) ([]Record, error) {
+	return []Record{mockRecord(2), mockRecord(3)}, nil
+}
+
+func TestNodeLivenessIsLiveCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
+	mc := timeutil.NewManualTime(timeutil.Unix(1, 0))
+	g := &mockGossip{}
+	s := &mockStorage{}
+	nl := NewNodeLiveness(NodeLivenessOptions{
+		AmbientCtx:              log.MakeTestingAmbientCtxWithNewTracer(),
+		Stopper:                 stopper,
+		Settings:                st,
+		Gossip:                  g,
+		Clock:                   hlc.NewClockForTesting(mc),
+		Storage:                 s,
+		LivenessThreshold:       24 * time.Hour,
+		RenewalDuration:         23 * time.Hour,
+		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
+	})
+
+	require.Len(t, g.m, 2)
+
+	update := func(nodeID roachpb.NodeID) {
+		fn := g.m[livenessRegex]
+		k := gossip.MakeNodeLivenessKey(nodeID)
+		exp := nl.clock.Now().ToLegacyTimestamp()
+		exp.WallTime++ // stays valid until we bump `mc`
+		lv := livenesspb.Liveness{
+			NodeID:     nodeID,
+			Epoch:      1,
+			Expiration: exp,
+			Membership: livenesspb.MembershipStatus_ACTIVE,
+		}
+		var v roachpb.Value
+		require.NoError(t, v.SetProto(&lv))
+		fn(k, v)
+	}
+
+	m := struct {
+		syncutil.Mutex
+		m map[string]int
+	}{m: map[string]int{}}
+
+	getMap := func() map[string]int {
+		m.Lock()
+		defer m.Unlock()
+		mm := map[string]int{}
+		for k, v := range m.m {
+			mm[k] = v
+		}
+		return mm
+	}
+
+	const (
+		preStartPreGossip   = "pre-start-pre-gossip"
+		preStartPostGossip  = "pre-start-post-gossip"
+		postStartPreGossip  = "post-start-pre-gossip"
+		postStartPostGossip = "post-start-post-gossip"
+	)
+
+	reg := func(name string) {
+		nl.RegisterCallback(func(liveness livenesspb.Liveness) {
+			if liveness.NodeID == 1 {
+				// Ignore calls that come from the liveness heartbeating itself,
+				// since these are on a goroutine and we just want a deterministic
+				// test here.
+				return
+			}
+			m.Lock()
+			defer m.Unlock()
+			m.m[name]++
+		})
+	}
+
+	reg(preStartPreGossip)
+	// n2 becomes live right after (n1's) Liveness is instantiated, before it's started.
+	// This should invoke the callback that is already registered. There is no concurrency
+	// yet so we don't have to lock `m`.
+	update(2)
+	require.Equal(t, map[string]int{
+		preStartPreGossip: 1,
+	}, getMap())
+
+	reg(preStartPostGossip)
+	nl.Start(ctx)
+	reg(postStartPreGossip)
+	update(3)
+	reg(postStartPostGossip)
+
+	// Each callback gets called twice (once for n2 once for n3), regardless of when
+	// it was registered.
+	require.Equal(t, map[string]int{
+		preStartPreGossip:   2,
+		preStartPostGossip:  2,
+		postStartPreGossip:  2,
+		postStartPostGossip: 2,
+	}, getMap())
+
+	// Additional gossip updates don't trigger more callbacks unless node
+	// is non-live in the meantime.
+	update(2)
+	update(3)
+	require.Equal(t, map[string]int{
+		preStartPreGossip:   2,
+		preStartPostGossip:  2,
+		postStartPreGossip:  2,
+		postStartPostGossip: 2,
+	}, getMap())
+
+	mc.Advance(time.Second) // n2 and n3 are now non-live
+
+	require.Equal(t, map[string]int{
+		preStartPreGossip:   2,
+		preStartPostGossip:  2,
+		postStartPreGossip:  2,
+		postStartPostGossip: 2,
+	}, getMap())
+
+	// Heartbeat from 3 triggers callbacks because old liveness
+	// is now non-live whereas the new one is.
+	update(3)
+	require.Equal(t, map[string]int{
+		preStartPreGossip:   3,
+		preStartPostGossip:  3,
+		postStartPreGossip:  3,
+		postStartPostGossip: 3,
+	}, getMap())
 }
