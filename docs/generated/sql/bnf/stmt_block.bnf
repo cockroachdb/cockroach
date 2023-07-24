@@ -1357,6 +1357,7 @@ unreserved_keyword ::=
 	| 'SHARED'
 	| 'SHOW'
 	| 'SIMPLE'
+	| 'SIZE'
 	| 'SKIP'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'SKIP_MISSING_FOREIGN_KEYS'
@@ -3206,6 +3207,7 @@ var_list ::=
 show_backup_options ::=
 	'AS_JSON'
 	| 'CHECK_FILES'
+	| 'SKIP' 'SIZE'
 	| 'DEBUG_IDS'
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'KMS' '=' string_or_placeholder_opt_list
@@ -3896,6 +3898,7 @@ bare_label_keywords ::=
 	| 'SHOW'
 	| 'SIMILAR'
 	| 'SIMPLE'
+	| 'SIZE'
 	| 'SKIP'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'SKIP_MISSING_FOREIGN_KEYS'
