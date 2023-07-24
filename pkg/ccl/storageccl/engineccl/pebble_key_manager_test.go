@@ -38,8 +38,8 @@ func writeToFile(t *testing.T, fs vfs.FS, filename string, b []byte) {
 	breader := bytes.NewReader(b)
 	_, err = io.Copy(f, breader)
 	require.NoError(t, err)
-	err = f.Close()
-	require.NoError(t, err)
+	require.NoError(t, f.Sync())
+	require.NoError(t, f.Close())
 }
 
 const (
