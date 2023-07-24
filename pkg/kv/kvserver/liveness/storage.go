@@ -24,11 +24,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// storageImpl is the subset of liveness that deals with reading and writing the
-// liveness records to kv. All calls to modify liveness are centrialized here.
+// Storage is the subset of liveness that deals with reading and writing the
+// liveness records to kv. All calls to modify liveness are centralized here.
+type Storage interface {
+	Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error)
+	Update(
+		ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error,
+	) (Record, error)
+	Create(ctx context.Context, nodeID roachpb.NodeID) error
+	Scan(ctx context.Context) ([]Record, error)
+}
+
+// storageImpl implements Storage by storing entries in the replicated KV liveness range.
 type storageImpl struct {
 	db *kv.DB
 }
+
+var _ Storage = (*storageImpl)(nil)
 
 // LivenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
