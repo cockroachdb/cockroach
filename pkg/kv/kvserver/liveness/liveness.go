@@ -514,7 +514,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	}
 	newLiveness.Draining = drain
 
-	update := livenessUpdate{
+	update := LivenessUpdate{
 		oldLiveness: oldLivenessRec.Liveness,
 		newLiveness: newLiveness,
 		oldRaw:      oldLivenessRec.raw,
@@ -595,7 +595,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	newLiveness := oldLivenessRec.Liveness
 	newLiveness.Membership = targetStatus
 
-	update := livenessUpdate{
+	update := LivenessUpdate{
 		newLiveness: newLiveness,
 		oldLiveness: oldLivenessRec.Liveness,
 		oldRaw:      oldLivenessRec.raw,
@@ -825,7 +825,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		return errors.Errorf("proposed liveness update expires earlier than previous record")
 	}
 
-	update := livenessUpdate{
+	update := LivenessUpdate{
 		oldLiveness: oldLiveness,
 		newLiveness: newLiveness,
 	}
@@ -1042,7 +1042,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		return errors.Errorf("cannot increment epoch on live node: %+v", liveness)
 	}
 
-	update := livenessUpdate{
+	update := LivenessUpdate{
 		newLiveness: liveness,
 		oldLiveness: liveness,
 	}
@@ -1104,7 +1104,7 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 // This includes the encoded bytes, and it can be used to update the local
 // cache.
 func (nl *NodeLiveness) updateLiveness(
-	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
+	ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	if err := nl.verifyDiskHealth(ctx); err != nil {
 		return Record{}, err
@@ -1164,7 +1164,7 @@ func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 }
 
 func (nl *NodeLiveness) updateLivenessAttempt(
-	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
+	ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	// If the caller is not manually providing the previous value in
 	// update.oldRaw. we need to read it from our cache.

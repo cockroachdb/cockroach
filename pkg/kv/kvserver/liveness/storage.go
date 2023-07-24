@@ -30,9 +30,9 @@ type storageImpl struct {
 	db *kv.DB
 }
 
-// livenessUpdate contains the information for CPutting a new version of a
+// LivenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
-type livenessUpdate struct {
+type LivenessUpdate struct {
 	newLiveness livenesspb.Liveness
 	oldLiveness livenesspb.Liveness
 	// oldRaw is the raw value from which `old` was decoded. Used for CPuts as the
@@ -71,12 +71,12 @@ func (ls *storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, 
 }
 
 // Update will attempt to update the liveness record using a CPut with the
-// oldRaw from the livenessUpdate. If the oldRaw does not match, the
+// oldRaw from the LivenessUpdate. If the oldRaw does not match, the
 // handleCondFailed func is called with the current data stored for this node.
 // This method does not retry, but normally the caller will retry using the
 // returned value on a condition failure.
 func (ls *storageImpl) Update(
-	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
+	ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	var v *roachpb.Value
 	if err := ls.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
