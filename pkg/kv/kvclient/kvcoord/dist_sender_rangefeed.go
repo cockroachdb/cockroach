@@ -736,7 +736,7 @@ func (ds *DistSender) singleRangeFeed(
 	for {
 		stuckWatcher.stop() // if timer is running from previous iteration, stop it now
 		if transport.IsExhausted() {
-			return args.Timestamp, newSendError("sending to all replicas failed")
+			return args.Timestamp, newSendError(errors.New("sending to all replicas failed"))
 		}
 		maybeCleanupStream()
 
