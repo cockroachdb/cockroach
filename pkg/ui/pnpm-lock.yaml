@@ -416,6 +416,12 @@ importers:
       sass-loader:
         specifier: ^10.2.0
         version: 10.2.0(sass@1.34.0)(webpack@4.41.5)
+      schema-utils:
+        specifier: 3.3.0
+        version: 3.3.0
+      semver:
+        specifier: 7.5.3
+        version: 7.5.3
       sinon:
         specifier: ^9.0.2
         version: 9.0.2
