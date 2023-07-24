@@ -1,0 +1,582 @@
+subtest regression_93083
+
+# Regression test for #93083. UDFs with empty bodies should execute successfully
+# and return NULL.
+statement ok
+CREATE FUNCTION f93083() RETURNS INT LANGUAGE SQL AS '';
+
+query I
+SELECT f93083()
+----
+NULL
+
+subtest end
+
+# Regression test for #93314
+subtest regression_93314
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE TYPE e_93314 AS ENUM ('a', 'b');
+CREATE TABLE t_93314 (i INT, e e_93314);
+INSERT INTO t_93314 VALUES (1, 'a');
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE OR REPLACE FUNCTION f_93314 () RETURNS t_93314 AS
+$$
+  SELECT i, e
+  FROM t_93314
+  ORDER BY i
+  LIMIT 1;
+$$ LANGUAGE SQL;
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT f_93314();
+----
+(1,a)
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE TABLE t_93314_alias (i INT, e _e_93314);
+INSERT INTO t_93314_alias VALUES (1, ARRAY['a', 'b']::_e_93314);
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE OR REPLACE FUNCTION f_93314_alias () RETURNS t_93314_alias AS
+$$
+  SELECT i, e
+  FROM t_93314_alias
+  ORDER BY i
+  LIMIT 1;
+$$ LANGUAGE SQL;
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT f_93314_alias();
+----
+(1,"{a,b}")
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE TYPE comp_93314 AS (a INT, b INT);
+CREATE TABLE t_93314_comp (a INT, c comp_93314, FAMILY (a, c));
+
+skipif config local-mixed-22.2-23.1
+statement ok
+INSERT INTO t_93314_comp VALUES (1, (2,3));
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE FUNCTION f_93314_comp() RETURNS comp_93314 AS
+$$
+  SELECT (1, 2);
+$$ LANGUAGE SQL;
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT f_93314_comp()
+----
+(1,2)
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE FUNCTION f_93314_comp_t() RETURNS t_93314_comp AS
+$$
+  SELECT a, c FROM t_93314_comp LIMIT 1;
+$$ LANGUAGE SQL;
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT f_93314_comp_t()
+----
+(1,"(2,3)")
+
+skipif config local-mixed-22.2-23.1
+query TTTTTBBBTITTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
+ORDER BY oid;
+----
+100110  f_93314         105  1546506610  14  false  false  false  v  0  100109  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100112  f_93314_alias   105  1546506610  14  false  false  false  v  0  100111  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100116  f_93314_comp    105  1546506610  14  false  false  false  v  0  100113  ·  {}  NULL  SELECT (1:::INT8, 2:::INT8);
+100117  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100115  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+
+# Regression test for #95240. Strict UDFs that are inlined should result in NULL
+# when presented with NULL arguments.
+statement ok
+CREATE FUNCTION f95240(i INT) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 33';
+CREATE TABLE t95240 (a INT);
+INSERT INTO t95240 VALUES (1), (NULL)
+
+query I rowsort
+SELECT f95240(a) FROM t95240
+----
+33
+NULL
+
+onlyif config local
+query T
+EXPLAIN CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+----
+distribution: local
+vectorized: true
+·
+• create function
+
+# Regression test for #96326. Strict UDFs with no arguments should not error
+# while being called.
+statement ok
+CREATE FUNCTION f96326() RETURNS INT LANGUAGE SQL IMMUTABLE STRICT AS 'SELECT 1';
+
+query I
+SELECT f96326();
+----
+1
+
+subtest end
+
+subtest regression_95364
+
+statement ok
+CREATE FUNCTION f_95364() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $dropped_fn_id
+SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f_95364';
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+1
+
+statement ok
+DROP FUNCTION f_95364;
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+0
+
+statement ok
+CREATE DATABASE db_95364;
+
+statement ok
+USE db_95364;
+
+statement ok
+CREATE FUNCTION f_95364_2() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $dropped_fn_id
+SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f_95364_2';
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+1
+
+statement ok
+USE test;
+
+statement ok
+DROP DATABASE db_95364 CASCADE;
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+0
+
+statement ok
+USE test;
+
+statement ok
+CREATE SCHEMA sc_95364;
+
+statement ok
+CREATE FUNCTION sc_95364.f_95364_3() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $dropped_fn_id
+SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f_95364_3';
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+1
+
+statement ok
+DROP SCHEMA sc_95364 CASCADE;
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+0
+
+
+subtest end
+
+subtest regression_94146
+
+# Regression test for #94146.
+statement ok
+CREATE FUNCTION f_94146(i INT2) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 2';
+CREATE FUNCTION f_94146(i INT4) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 4';
+CREATE FUNCTION f_94146(i INT8) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 8';
+
+query I
+SELECT f_94146(1::INT8)
+----
+8
+
+query I
+SELECT f_94146(1::INT4)
+----
+4
+
+query I
+SELECT f_94146(1::INT2)
+----
+2
+
+subtest end
+
+subtest regression_97130
+
+statement ok
+CREATE FUNCTION f_97130() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $pre_search_path
+SHOW search_path
+
+statement ok
+SET search_path = public,public
+
+statement ok
+SELECT f_97130();
+
+statement ok
+SET search_path = $pre_search_path
+
+subtest end
+
+subtest regression_97400
+
+# Make sure that creating a UDF with builtin function name is ok.
+statement ok
+CREATE FUNCTION abs(val INT) RETURNS INT
+CALLED ON NULL INPUT
+LANGUAGE SQL
+AS $$ SELECT val+100 $$;
+
+query I
+SELECT abs(-1)
+----
+1
+
+query I
+SELECT public.abs(-1)
+----
+99
+
+subtest end
+
+subtest regression_97854
+
+# Regression test for #97854.
+statement ok
+CREATE FUNCTION f_97854 (i INT) RETURNS CHAR LANGUAGE SQL AS $$ SELECT 'i' $$;
+CREATE FUNCTION f_97854 (f FLOAT) RETURNS CHAR LANGUAGE SQL AS $$ SELECT 'f' $$;
+
+# TODO(#88318): In Postgres, the float overload is chosen.
+statement error pgcode 42725 ambiguous call: f_97854\(decimal\).*
+SELECT f_97854(1.0)
+
+subtest end
+
+# Regression test for #93861 - non-strict UDFs should be evaluated with NULL
+# arguments.
+subtest regression_93861
+
+statement ok
+CREATE TABLE t93861(x INT);
+INSERT INTO t93861 VALUES (1), (2), (NULL);
+CREATE FUNCTION f93861_scalar (i INT) RETURNS INT CALLED ON NULL INPUT
+  LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f93861_strict_scalar (i INT) RETURNS INT STRICT
+  LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f93861_setof (i INT) RETURNS SETOF INT CALLED ON NULL INPUT
+  LANGUAGE SQL AS $$ SELECT * FROM generate_series(1, 3) $$;
+CREATE FUNCTION f93861_strict_setof (i INT) RETURNS SETOF INT STRICT
+  LANGUAGE SQL AS $$ SELECT * FROM generate_series(1, 3) $$;
+
+query III rowsort
+SELECT x, f93861_scalar(x), f93861_strict_scalar(x) FROM t93861;
+----
+1     1  1
+2     1  1
+NULL  1  NULL
+
+query II rowsort
+SELECT x, f93861_setof(x) FROM t93861;
+----
+1     1
+1     2
+1     3
+2     1
+2     2
+2     3
+NULL  1
+NULL  2
+NULL  3
+
+query II rowsort
+SELECT x, f93861_strict_setof(x) FROM t93861;
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
+
+subtest end
+
+# Regression test for #93082 - invalidate a cached query with a UDF if the UDF
+# has been dropped.
+subtest regression_93082
+
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+DROP FUNCTION fn;
+
+statement error pgcode 42883 pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+subtest end
+
+# Regression test for #93321 - invalidate a cached query with an unqualified UDF
+# reference after the database is switched.
+subtest regression_93321
+
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+CREATE DATABASE d;
+USE d;
+
+statement error pgcode 42883 pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+statement ok
+USE test;
+DROP DATABASE d CASCADE;
+DROP FUNCTION fn;
+
+# Regression test for #100923. Do not attempt to inline an empty UDF and error.
+statement ok
+CREATE FUNCTION f100923() RETURNS BOOL STABLE LANGUAGE SQL AS ''
+
+query B rowsort
+SELECT f100923() FROM (VALUES (10), (20)) v(i)
+----
+NULL
+NULL
+
+subtest end
+
+# Regression test for #101253. UDF bodies may contain dollar signs.
+subtest regression_101253
+
+statement error pgcode 42601 pq: at or near "sfv": syntax error
+CREATE FUNCTION f_101253() RETURNS RECORD VOLATILE NOT LEAKPROOF LANGUAGE SQL AS $$
+  SELECT * FROM (VALUES (e'\x1b'), ('y$$sFV'), (e'\x06'));
+$$;
+
+statement ok
+CREATE FUNCTION f_101253() RETURNS RECORD VOLATILE NOT LEAKPROOF LANGUAGE SQL AS $func$
+  SELECT * FROM (VALUES (e'\x1b'), ('y$$sFV'), (e'\x06'));
+$func$;
+
+subtest end
+
+# Regression test for #100915. Do not error when attempting to inline a UDF when
+# it has a subquery argument that corresponds to a parameter that is referenced
+# multiple times in the UDF body.
+subtest regression_100915
+
+statement ok
+CREATE FUNCTION f100915(i INT) RETURNS BOOL STABLE LANGUAGE SQL AS $$
+  SELECT i = 0 OR i = 10
+$$
+
+query B rowsort
+SELECT f100915((SELECT y FROM (VALUES (10), (20)) y(y) WHERE x=y)) FROM (VALUES (10), (20)) x(x)
+----
+true
+false
+
+query B rowsort
+SELECT f100915(20-(SELECT y FROM (VALUES (10), (20)) y(y) WHERE x=y)) FROM (VALUES (10), (20)) x(x)
+----
+true
+true
+
+subtest end
+
+subtest regression_103869
+
+statement ok
+CREATE SEQUENCE sq_103869;
+
+statement ok
+CREATE FUNCTION f_103869(sq REGCLASS) RETURNS INT
+LANGUAGE SQL
+AS $$
+    SELECT setval(sq, 1);
+$$;
+
+query I
+SELECT f_103869('sq_103869'::REGCLASS);
+----
+1
+
+statement ok
+CREATE FUNCTION f_103869(sq STRING) RETURNS INT
+LANGUAGE SQL
+AS $$
+    SELECT setval(sq, 2);
+$$
+
+query I
+SELECT f_103869('sq_103869')
+----
+2
+
+
+subtest end
+
+# Regression test for #104927. Correctly resolve table references in UDFs as
+# TupleStars.
+subtest regression_104927
+
+statement ok
+CREATE TABLE t104927 (
+  i INT,
+  s STRING
+);
+INSERT INTO t104927 VALUES (1, 'foo');
+
+query T
+SELECT json_agg(r) FROM (
+  SELECT i, s
+  FROM t104927
+) AS r
+----
+[{"i": 1, "s": "foo"}]
+
+statement ok
+CREATE FUNCTION f104927() RETURNS TEXT LANGUAGE SQL AS $$
+  SELECT json_agg(r) FROM (
+    SELECT i, s
+    FROM t104927
+  ) AS r
+$$
+
+# The output should match the output above where the query was run directly.
+query T
+SELECT f104927()
+----
+[{"i": 1, "s": "foo"}]
+
+
+subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/104242.
+# Verify that statements that use UDFs with unresolved names that require
+# AST annotations work correctly.
+subtest udf_with_unresolved_names
+
+statement ok
+CREATE TABLE tab104242 (a INT);
+
+statement ok
+CREATE TYPE typ104242 AS ENUM ('foo');
+
+statement ok
+CREATE FUNCTION func104242() RETURNS INT LANGUAGE SQL AS $$
+  SELECT 1 FROM tab104242 WHERE NULL::typ104242 IN ()
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION func104242]
+----
+CREATE FUNCTION public.func104242()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1 FROM test.public.tab104242 WHERE NULL IN ();
+$$
+
+statement ok
+CREATE FUNCTION func104242_not_null() RETURNS INT LANGUAGE SQL AS $$
+  SELECT 1 FROM tab104242 WHERE 'foo'::typ104242 IN ()
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION func104242_not_null]
+----
+CREATE FUNCTION public.func104242_not_null()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1 FROM test.public.tab104242 WHERE 'foo':::test.public.typ104242 IN ();
+$$
+
+subtest end
+
+
+# Regression test for #105259. Do not type-check subqueries in UDFs outside
+# optbuilder. Doing so can cause internal errors.
+subtest regression_105259
+
+statement ok
+CREATE TYPE e105259 AS ENUM ('foo');
+
+statement ok
+CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT (SELECT 'foo')::e105259;
+  SELECT NULL;
+$$
+
+query T
+SELECT f()
+----
+NULL
+
+statement ok
+ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
+
+# Renaming the enum value corrupts the UDF. This is expected behavior.
+statement error pgcode 22P02 invalid input value for enum e105259: "foo"
+SELECT f()
+
+subtest end

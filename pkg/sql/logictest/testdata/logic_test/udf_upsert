@@ -98,6 +98,8 @@ SELECT * FROM t_ocdn
 6  6  2
 7  7  7
 
+subtest end
+
 subtest on_conflict_do_update
 
 statement ok
@@ -124,9 +126,11 @@ SELECT f_ocdu(1,4,6);
 ----
 (1,4,3)
 
-statement error pq: duplicate key value violates unique constraint \"t_ocdu_b_key\"
+statement error pgcode 23505 pq: duplicate key value violates unique constraint \"t_ocdu_b_key\"
 SELECT f_ocdu(2,4,6);
 
+
+subtest end
 
 subtest upsert
 
@@ -163,6 +167,8 @@ SELECT f_upsert_2vals(1,9,2,8);
 (2,8)
 
 
+subtest end
+
 subtest constraints
 
 statement ok
@@ -174,7 +180,7 @@ $$
   UPSERT INTO t_check1(a) VALUES (NULL) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_null();
 
 statement ok
@@ -183,7 +189,7 @@ $$
   UPSERT INTO t_check1(b) VALUES ('abcd') RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_len()
 
 statement ok
@@ -192,10 +198,10 @@ $$
   UPSERT INTO t_check1(b,a) VALUES (j,i) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_vals(NULL, 'ab');
 
-statement error failed to satisfy CHECK constraint
+statement error pgcode 23514 failed to satisfy CHECK constraint
 SELECT f_check_vals(3, 'abcd');
 
 statement ok
@@ -207,7 +213,7 @@ $$
   UPSERT INTO t_check2(a) VALUES (NULL) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error null value in column "a" violates not-null constraint
+statement error pgcode 23502 null value in column "a" violates not-null constraint
 SELECT f_check_colerr_null();
 
 statement ok
@@ -216,7 +222,7 @@ $$
   UPSERT INTO t_check2(b) VALUES ('abcd') RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error value too long for type CHAR\(3\)
+statement error pgcode 22001 value too long for type CHAR\(3\)
 SELECT f_check_colerr_len()
 
 statement ok
@@ -225,8 +231,10 @@ $$
   UPSERT INTO t_check2(a,b) VALUES (i,j) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error null value in column "a" violates not-null constraint
+statement error pgcode 23502 null value in column "a" violates not-null constraint
 SELECT f_check_colerr_vals(NULL, 'ab')
 
-statement error value too long for type CHAR\(3\)
+statement error pgcode 22001 value too long for type CHAR\(3\)
 SELECT f_check_colerr_vals(NULL, 'abcd')
+
+subtest end

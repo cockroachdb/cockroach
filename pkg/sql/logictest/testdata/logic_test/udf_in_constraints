@@ -229,7 +229,7 @@ CREATE TABLE t2(
   FAMILY fam_0 (a, b)
 );
 
-statement error cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
+statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
 DROP FUNCTION f1;
 
 statement ok
@@ -368,26 +368,26 @@ CREATE TABLE t1 (
   FAMILY fam_0 (a, b)
 );
 
-statement error failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
+statement error pgcode 23514 failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (1,0);
 
 statement ok
 INSERT INTO t1 VALUES (1,1);
 
-statement error validation of CHECK "public\.f1\(a\) > 10:::INT8" failed on row: a=1, b=1
+statement error pgcode 23514 validation of CHECK "public\.f1\(a\) > 10:::INT8" failed on row: a=1, b=1
 ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 10);
 
 # Make sure that constraint still works after a function is renamed.
 statement ok
 ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 1);
 
-statement error pq: failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (2, -1);
 
 statement ok
 ALTER FUNCTION f1 RENAME to f2;
 
-statement error pq: failed to satisfy CHECK constraint \(public\.f2\(b\) > 1:::INT8\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(public\.f2\(b\) > 1:::INT8\)
 INSERT INTO t1 VALUES (2, -1);
 
 query T
@@ -433,5 +433,6 @@ statement ok
 CREATE TABLE t_circle(a INT PRIMARY KEY, b INT);
 CREATE FUNCTION f_circle() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_circle $$;
 
+# TODO(107369): This does not appear to error in postgres.
 statement error .*cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
 ALTER TABLE t_circle ADD CONSTRAINT ckb CHECK (b + f_circle() > 1);

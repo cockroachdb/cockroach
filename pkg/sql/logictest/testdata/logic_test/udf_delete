@@ -12,7 +12,7 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 statement ok
 CREATE VIEW kview AS SELECT k,v FROM kv
 
-statement error pq: "test.public.kview" is not a table
+statement error pgcode 42809 pq: "test.public.kview" is not a table
 CREATE FUNCTION f_view() RETURNS RECORD AS
 $$
   DELETE FROM kview;
@@ -300,3 +300,5 @@ SELECT * FROM u_a;
 ----
 1  a  10
 2  b  20
+
+subtest end

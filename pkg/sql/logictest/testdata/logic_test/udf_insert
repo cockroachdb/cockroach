@@ -1,7 +1,7 @@
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT DEFAULT 0);
 
-statement error pq: return type mismatch in function declared to return record\nDETAIL: Function's final statement must be SELECT or INSERT/UPDATE/DELETE RETURNING.
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record\nDETAIL: Function's final statement must be SELECT or INSERT/UPDATE/DELETE RETURNING.
 CREATE FUNCTION f_err() RETURNS RECORD AS
 $$
   INSERT INTO t VALUES (1,2);
@@ -18,20 +18,22 @@ SELECT f_void();
 ----
 NULL
 
-statement error missing "a" primary key column
+# TODO(107369): This doesn't error in postgres, and this is the error code for
+# invalid foreign key, which may not make sense.
+statement error pgcode 42830 missing "a" primary key column
 CREATE FUNCTION f_err(b INT) RETURNS RECORD AS
 $$
   INSERT INTO t (b) VALUES (b);
   SELECT * FROM t WHERE t.a=a AND t.b=b;
 $$ LANGUAGE SQL;
 
-statement error pq: volatile statement not allowed in stable function
+statement error pgcode 22023 pq: volatile statement not allowed in stable function
 CREATE FUNCTION f_err(i INT, j INT) RETURNS RECORD STABLE AS
 $$
   INSERT INTO t VALUES (i,j) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error pq: volatile statement not allowed in immutable function
+statement error pgcode 22023 pq: volatile statement not allowed in immutable function
 CREATE FUNCTION f_err(i INT, j INT) RETURNS RECORD IMMUTABLE AS
 $$
   INSERT INTO t VALUES (i,j) RETURNING *;
@@ -54,7 +56,7 @@ SELECT f_insert(3,4);
 ----
 (3,4)
 
-statement error duplicate key
+statement error pgcode 23505 duplicate key
 SELECT f_insert(3,4);
 
 query II rowsort
@@ -138,7 +140,7 @@ SELECT f_2values(7,8,9,10);
 (7,8)
 (9,10)
 
-statement error pq: duplicate key value violates unique constraint "t_multi_pkey"
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_multi_pkey"
 SELECT f_2values(42,42,42,42);
 
 statement ok
@@ -155,7 +157,7 @@ SELECT f_2inserts(11,12,13,14);
 (11,12)
 (13,14)
 
-statement error pq: duplicate key value violates unique constraint "t_multi_pkey"
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_multi_pkey"
 SELECT f_2inserts(42,42,42,42);
 
 # None of the duplicate key inserts should have succeeded.
@@ -163,6 +165,8 @@ query I
 SELECT count(*) FROM t_multi WHERE a = 42;
 ----
 0
+
+subtest end
 
 subtest schema_changes
 
@@ -241,6 +245,8 @@ SELECT f_record(6);
 ----
 (6)
 
+subtest end
+
 subtest constraints
 
 statement ok
@@ -256,5 +262,7 @@ $$
   INSERT INTO t_checkb VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=0 RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error pq: failed to satisfy CHECK constraint \(b > 1:::INT8\)
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(b > 1:::INT8\)
 SELECT f_checkb();
+
+subtest end

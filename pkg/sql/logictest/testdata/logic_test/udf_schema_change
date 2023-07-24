@@ -1,0 +1,649 @@
+statement ok
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+
+
+subtest alter_function_options
+
+statement ok
+CREATE FUNCTION f_test_alter_opt(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+----
+CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement error pgcode 42601 pq: IMMUTABLE: conflicting or redundant options
+ALTER FUNCTION f_test_alter_opt IMMUTABLE IMMUTABLE
+
+statement error pgcode 42P13 leak proof function must be immutable, but got volatility: STABLE
+ALTER FUNCTION f_test_alter_opt STABLE LEAKPROOF
+
+statement ok
+ALTER FUNCTION f_test_alter_opt IMMUTABLE LEAKPROOF STRICT;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+----
+CREATE FUNCTION public.f_test_alter_opt(IN INT8)
+  RETURNS INT8
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+subtest end
+
+subtest alter_function_name
+
+statement ok
+CREATE FUNCTION f_test_alter_name(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_alter_name_same_in(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_alter_name_diff_in() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
+----
+CREATE FUNCTION public.f_test_alter_name(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement error pgcode 42723 pq: function f_test_alter_name\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
+
+statement error pgcode 42723 pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
+
+statement ok
+ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
+
+statement error pgcode 42883 pq: unknown function: f_test_alter_name\(\): function undefined
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+----
+CREATE FUNCTION public.f_test_alter_name_new(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
+
+statement error pgcode 42883 pq: unknown function: f_test_alter_name_new\(\): function undefined
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in] ORDER BY 1
+----
+CREATE FUNCTION public.f_test_alter_name_diff_in()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+
+subtest end
+
+subtest alter_function_set_schema
+
+statement ok
+CREATE FUNCTION f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f_test_sc(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+CREATE SCHEMA test_alter_sc;
+CREATE FUNCTION test_alter_sc.f_test_sc() RETURNS INT LANGUAGE SQL AS $$ SELECT 3 $$;
+
+statement ok
+CREATE FUNCTION get_function_id(namespace STRING, name STRING, argmodes STRING[])
+  RETURNS INT
+  LANGUAGE SQL
+  AS $$
+SELECT oid::INT8 - 100000
+  FROM pg_proc
+ WHERE proname = name
+   AND pronamespace = namespace::REGNAMESPACE
+   AND proargmodes = argmodes
+$$
+
+let $public_f_test_sc
+SELECT get_function_id('public', 'f_test_sc', ARRAY[]:::STRING[]);
+
+let $public_f_test_sc_int
+SELECT get_function_id('public', 'f_test_sc', ARRAY['i']);
+
+let $test_alter_sc_f_test_sc
+SELECT get_function_id('test_alter_sc', 'f_test_sc', ARRAY[]:::STRING[]);
+
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc')
+ORDER BY oid
+----
+100112  f_test_sc  SELECT 1;
+100113  f_test_sc  SELECT 2;
+100115  f_test_sc  SELECT 3;
+
+query TT
+  WITH fns AS (
+            SELECT crdb_internal.pb_to_json(
+                    'cockroach.sql.sqlbase.Descriptor',
+                    descriptor,
+                    false
+                   )->'function' AS fn
+              FROM system.descriptor
+             WHERE id
+                   IN (
+                        $public_f_test_sc,
+                        $public_f_test_sc_int,
+                        $test_alter_sc_f_test_sc
+                    )
+           )
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
+----
+112  105
+113  105
+115  114
+
+statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
+ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
+
+statement error pgcode 42723 pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
+ALTER FUNCTION f_test_sc() SET SCHEMA test_alter_sc;
+
+# Make sure moving to same schema has not effects.
+statement ok
+ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;
+
+query TT
+  WITH fns AS (
+            SELECT crdb_internal.pb_to_json(
+                    'cockroach.sql.sqlbase.Descriptor',
+                    descriptor,
+                    false
+                   )->'function' AS fn
+              FROM system.descriptor
+             WHERE id
+                   IN (
+                        $public_f_test_sc,
+                        $public_f_test_sc_int,
+                        $test_alter_sc_f_test_sc
+                    )
+           )
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
+----
+112  105
+113  105
+115  114
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc] ORDER BY 1
+----
+CREATE FUNCTION public.f_test_sc()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.f_test_sc(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
+$$
+
+# Make sure moving to another schema changes function's parentSchemaId and
+# schema's function list.
+statement ok
+ALTER FUNCTION f_test_sc(INT) SET SCHEMA test_alter_sc;
+
+query TT
+  WITH fns AS (
+            SELECT crdb_internal.pb_to_json(
+                    'cockroach.sql.sqlbase.Descriptor',
+                    descriptor,
+                    false
+                   )->'function' AS fn
+              FROM system.descriptor
+             WHERE id
+                   IN (
+                        $public_f_test_sc,
+                        $public_f_test_sc_int,
+                        $test_alter_sc_f_test_sc
+                    )
+           )
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
+----
+112  105
+113  114
+115  114
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc];
+----
+CREATE FUNCTION public.f_test_sc()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc] ORDER BY 1
+----
+CREATE FUNCTION test_alter_sc.f_test_sc()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 3;
+$$
+CREATE FUNCTION test_alter_sc.f_test_sc(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
+$$
+
+
+subtest end
+
+subtest udt_rewrite
+
+statement ok
+CREATE FUNCTION f_udt_rewrite() RETURNS notmyworkday LANGUAGE SQL AS $$ SELECT 'Monday':: notmyworkday $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_udt_rewrite];
+----
+CREATE FUNCTION public.f_udt_rewrite()
+  RETURNS test.public.notmyworkday
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'Monday':::test.public.notmyworkday;
+$$
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+statement ok
+ALTER TYPE notmyworkday RENAME TO notmyworkday_new;
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+statement ok
+ALTER TYPE notmyworkday_new RENAME TO notmyworkday;
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+
+subtest end
+
+subtest db_rename
+
+statement ok
+CREATE DATABASE rename_db1;
+SET DATABASE = rename_db1;
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc1.workday AS ENUM ('Mon');
+CREATE TABLE sc1.tbl(a INT PRIMARY KEY);
+CREATE SEQUENCE sc1.sq;
+
+statement ok
+CREATE FUNCTION sc1.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc1.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc1.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+CREATE FUNCTION sc2.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc2.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc2.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+1
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+2
+
+statement error pgcode 2BP01 pq: cannot rename database because relation "rename_db1.sc1.f_tbl" depends on relation "rename_db1.sc1.tbl"
+ALTER DATABASE rename_db1 RENAME TO rename_db2;
+
+statement ok
+DROP FUNCTION sc1.f_tbl()
+
+statement error pgcode 2BP01 pq: cannot rename database because relation "rename_db1.sc2.f_tbl" depends on relation "rename_db1.sc1.tbl"
+ALTER DATABASE rename_db1 RENAME TO rename_db2;
+
+statement ok
+DROP FUNCTION sc2.f_tbl()
+
+statement ok
+ALTER DATABASE rename_db1 RENAME TO rename_db2;
+USE rename_db2;
+
+# Make sure that db renaming does not affect types and sequences in UDF.
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+3
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+4
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE DATABASE rename_sc1;
+SET DATABASE = rename_sc1;
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc1.workday AS ENUM ('Mon');
+CREATE TABLE sc1.tbl(a INT PRIMARY KEY);
+CREATE SEQUENCE sc1.sq;
+
+statement ok
+CREATE FUNCTION sc1.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc1.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc1.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+CREATE FUNCTION sc2.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc2.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc2.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+1
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+2
+
+statement error pgcode 2BP01 pq: cannot rename schema because relation "rename_sc1.sc1.f_tbl" depends on relation "rename_sc1.sc1.tbl"
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+statement ok
+DROP FUNCTION sc1.f_tbl()
+
+statement error pgcode 2BP01 pq: cannot rename schema because relation "rename_sc1.sc2.f_tbl" depends on relation "rename_sc1.sc1.tbl"
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+statement ok
+DROP FUNCTION sc2.f_tbl()
+
+statement ok
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+# Cannot refer to the old schema name.
+statement error pgcode 3F000 pq: schema "sc1" does not exist
+SELECT sc1.f_type()
+
+statement error pgcode 3F000 pq: schema "sc1" does not exist
+SELECT sc1.f_seq()
+
+# Make sure that schema renaming does not affect types and sequences in UDF.
+query T
+SELECT sc1_new.f_type()
+----
+Mon
+
+query I
+SELECT sc1_new.f_seq()
+----
+3
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+4
+
+statement ok
+SET DATABASE = test
+
+
+subtest end
+
+subtest select_from_seq_rename
+
+statement ok
+CREATE DATABASE tdb_seq_select;
+SET DATABASE = tdb_seq_select;
+
+statement ok
+CREATE SCHEMA sc;
+CREATE SEQUENCE sc.sq;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT last_value FROM sc.sq $$;
+
+query I
+SELECT f()
+----
+0
+
+statement ok
+ALTER SEQUENCE sc.sq RENAME TO sq_new;
+
+statement error pgcode 42P01 pq: relation "tdb_seq_select.sc.sq" does not exist
+SELECT f()
+
+statement ok
+ALTER SEQUENCE sc.sq_new RENAME TO sq;
+SELECT f();
+
+statement ok
+ALTER SCHEMA sc RENAME TO sc_new;
+
+statement error pgcode 3F000 pq: unknown schema "sc"
+SELECT f()
+
+statement ok
+ALTER SCHEMA sc_new RENAME TO sc;
+SELECT f()
+
+statement ok
+ALTER DATABASE tdb_seq_select RENAME TO tdb_seq_select_new;
+SET DATABASE = tdb_seq_select_new;
+
+statement error pgcode 3D000 pq: database "tdb_seq_select" does not exist
+SELECT f()
+
+statement ok
+ALTER DATABASE tdb_seq_select_new RENAME TO tdb_seq_select;
+SET DATABASE = tdb_seq_select;
+SELECT f()
+
+statement ok
+SET DATABASE = test;
+
+
+subtest end
+
+subtest udt_alter
+
+statement ok
+CREATE TABLE t_alter (
+  a INT PRIMARY KEY,
+  b TEXT,
+  c INT
+)
+
+statement ok
+CREATE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
+  SELECT 1, 'foobar', 2
+$$
+
+query T
+SELECT f_rtbl();
+----
+(1,foobar,2)
+
+statement ok
+ALTER TABLE t_alter DROP COLUMN c;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ADD COLUMN c INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,foobar,2)
+
+statement ok
+SET enable_experimental_alter_column_type_general=true
+
+statement ok
+ALTER TABLE t_alter ALTER c TYPE FLOAT;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ALTER c TYPE INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,foobar,2)
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE CHAR(3)
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE TEXT
+
+statement ok
+ALTER TABLE t_alter ADD COLUMN d INT;
+
+statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
+  SELECT 1, 'foobar', 2
+$$
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
+  SELECT 1, 'foobar', 2, 3
+$$
+
+query T
+SELECT f_rtbl();
+----
+(1,foobar,2,3)
