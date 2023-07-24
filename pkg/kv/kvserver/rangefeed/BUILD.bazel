@@ -45,6 +45,7 @@ go_test(
     name = "rangefeed_test",
     size = "large",
     srcs = [
+        "bench_test.go",
         "budget_test.go",
         "catchup_scan_bench_test.go",
         "catchup_scan_test.go",
