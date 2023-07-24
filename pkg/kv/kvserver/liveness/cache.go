@@ -28,6 +28,12 @@ type UpdateInfo struct {
 	lastUnavailableTime hlc.Timestamp
 }
 
+// Gossip is the subset of *gossip.Gossip used by liveness.
+type Gossip interface {
+	RegisterCallback(pattern string, method gossip.Callback, opts ...gossip.CallbackOption) func()
+	GetNodeID() roachpb.NodeID
+}
+
 // cache stores updates to both Liveness records and the store descriptor map.
 // It doesn't store the entire StoreDescriptor, only the time when it is
 // updated. The StoreDescriptor is sent directly from nodes so doesn't require
@@ -38,7 +44,7 @@ type UpdateInfo struct {
 // change to take this into account. Only epoch leases will use the liveness
 // timestamp directly.
 type cache struct {
-	gossip                *gossip.Gossip
+	gossip                Gossip
 	clock                 *hlc.Clock
 	notifyLivenessChanged func(old, new livenesspb.Liveness)
 	mu                    struct {
@@ -54,7 +60,7 @@ type cache struct {
 }
 
 func newCache(
-	g *gossip.Gossip, clock *hlc.Clock, cbFn func(livenesspb.Liveness, livenesspb.Liveness),
+	g Gossip, clock *hlc.Clock, cbFn func(livenesspb.Liveness, livenesspb.Liveness),
 ) *cache {
 	c := cache{}
 	c.gossip = g
@@ -86,7 +92,7 @@ func newCache(
 // selfID returns the ID for this node according to Gossip. This will be 0
 // until the node has joined the cluster.
 func (c *cache) selfID() roachpb.NodeID {
-	return c.gossip.NodeID.Get()
+	return c.gossip.GetNodeID()
 }
 
 // livenessGossipUpdate is the gossip callback used to keep the
