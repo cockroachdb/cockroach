@@ -18,6 +18,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/internal/workloadreplay"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 const (
@@ -424,6 +428,7 @@ type queryComparisonHelper struct {
 
 	statements            []string
 	statementsAndExplains []sqlAndOutput
+	colTypes              []string
 }
 
 // runQuery runs the given query and returns the output. If the stmt doesn't
@@ -448,6 +453,14 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 			return nil, err
 		}
 		defer rows.Close()
+		cts, err := rows.ColumnTypes()
+		if err != nil {
+			return nil, err
+		}
+		h.colTypes = make([]string, len(cts))
+		for i, ct := range cts {
+			h.colTypes[i] = ct.DatabaseTypeName()
+		}
 		return sqlutils.RowsToStrMatrix(rows)
 	}
 
@@ -503,4 +516,108 @@ func (h *queryComparisonHelper) logVerboseOutput() {
 // statements run so far.
 func (h *queryComparisonHelper) makeError(err error, msg string) error {
 	return errors.Wrapf(err, "%s. %d statements run", msg, h.stmtNo)
+}
+
+func joinAndSortRows(rowMatrix1, rowMatrix2 [][]string, sep string) (rows1, rows2 []string) {
+	for _, row := range rowMatrix1 {
+		rows1 = append(rows1, strings.Join(row[:], sep))
+	}
+	for _, row := range rowMatrix2 {
+		rows2 = append(rows2, strings.Join(row[:], sep))
+	}
+	sort.Strings(rows1)
+	sort.Strings(rows2)
+	return rows1, rows2
+}
+
+// unsortedMatricesDiffWithFloatComp sorts and compares the rows in rowMatrix1
+// to rowMatrix2 and outputs a diff or message related to the comparison. If a
+// string comparison of the rows fails, and they contain floats or decimals, it
+// performs an approximate comparison of the values.
+func unsortedMatricesDiffWithFloatComp(
+	rowMatrix1, rowMatrix2 [][]string, colTypes []string,
+) (string, error) {
+	rows1, rows2 := joinAndSortRows(rowMatrix1, rowMatrix2, ",")
+	result := cmp.Diff(rows1, rows2)
+	if result == "" {
+		return result, nil
+	}
+	if len(rows1) != len(rows2) || len(colTypes) != len(rowMatrix1[0]) || len(colTypes) != len(rowMatrix2[0]) {
+		return result, nil
+	}
+	var needApproxMatch bool
+	for i := range colTypes {
+		// On s390x, check that values for both float and decimal coltypes are
+		// approximately equal to take into account platform differences in floating
+		// point calculations. On other architectures, check float values only.
+		if (runtime.GOARCH == "s390x" && colTypes[i] == "DECIMAL") ||
+			colTypes[i] == "FLOAT4" || colTypes[i] == "FLOAT8" {
+			needApproxMatch = true
+			break
+		}
+	}
+	if !needApproxMatch {
+		return result, nil
+	}
+	// Use an unlikely string as a separator so that we can make a comparison
+	// using sorted rows. We don't use the rows sorted above because splitting
+	// the rows could be ambiguous.
+	sep := ",unsortedMatricesDiffWithFloatComp separator,"
+	rows1, rows2 = joinAndSortRows(rowMatrix1, rowMatrix2, sep)
+	for i := range rows1 {
+		// Split the sorted rows.
+		row1 := strings.Split(rows1[i], sep)
+		row2 := strings.Split(rows2[i], sep)
+
+		for j := range row1 {
+			if runtime.GOARCH == "s390x" && colTypes[j] == "DECIMAL" {
+				// On s390x, check that values for both float and decimal coltypes are
+				// approximately equal to take into account platform differences in floating
+				// point calculations. On other architectures, check float values only.
+				match, err := floatcmp.FloatsMatchApprox(row1[j], row2[j])
+				if err != nil {
+					return "", err
+				}
+				if !match {
+					return result, nil
+				}
+			} else if colTypes[j] == "FLOAT4" || colTypes[j] == "FLOAT8" {
+				// Check that float values are approximately equal.
+				var err error
+				var match bool
+				if runtime.GOARCH == "s390x" {
+					match, err = floatcmp.FloatsMatchApprox(row1[j], row2[j])
+				} else {
+					match, err = floatcmp.FloatsMatch(row1[j], row2[j])
+				}
+				if err != nil {
+					return "", err
+				}
+				if !match {
+					return result, nil
+				}
+			} else {
+				// Check that other columns are equal with a string comparison.
+				if row1[j] != row2[j] {
+					return result, nil
+				}
+			}
+		}
+	}
+	return "", nil
+}
+
+// unsortedMatricesDiff sorts and compares rows of data.
+func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
+	var rows1 []string
+	for _, row := range rowMatrix1 {
+		rows1 = append(rows1, strings.Join(row[:], ","))
+	}
+	var rows2 []string
+	for _, row := range rowMatrix2 {
+		rows2 = append(rows2, strings.Join(row[:], ","))
+	}
+	sort.Strings(rows1)
+	sort.Strings(rows2)
+	return cmp.Diff(rows1, rows2)
 }
