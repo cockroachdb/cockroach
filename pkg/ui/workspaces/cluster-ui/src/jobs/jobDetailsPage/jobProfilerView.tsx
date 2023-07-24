@@ -11,12 +11,8 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment-timezone";
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  RequestState,
-  ListJobProfilerExecutionDetailsResponse,
-  ListJobProfilerExecutionDetailsRequest,
-} from "src/api";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import { RequestState } from "src/api";
+import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
 import { Row, Col } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -29,19 +25,29 @@ import classnames from "classnames/bind";
 import styles from "./jobProfilerView.module.scss";
 import { EmptyTable } from "src/empty";
 import { useScheduleFunction } from "src/util/hooks";
+import { DownloadFile, DownloadFileRef } from "src/downloadFile";
+import {
+  GetJobProfilerExecutionDetailRequest,
+  GetJobProfilerExecutionDetailResponse,
+  ListJobProfilerExecutionDetailsRequest,
+  ListJobProfilerExecutionDetailsResponse,
+} from "src/api/jobProfilerApi";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const cx = classnames.bind(styles);
 
 export type JobProfilerStateProps = {
   jobID: long;
-  executionDetailsResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
+  executionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
   lastUpdated: moment.Moment;
   isDataValid: boolean;
+  onDownloadExecutionFileClicked: (
+    req: GetJobProfilerExecutionDetailRequest,
+  ) => Promise<GetJobProfilerExecutionDetailResponse>;
 };
 
 export type JobProfilerDispatchProps = {
-  refreshExecutionDetails: (
+  refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
 };
@@ -49,7 +55,34 @@ export type JobProfilerDispatchProps = {
 export type JobProfilerViewProps = JobProfilerStateProps &
   JobProfilerDispatchProps;
 
-export function makeJobProfilerViewColumns(): ColumnDescriptor<string>[] {
+export function extractFileExtension(filename: string): string {
+  const parts = filename.split(".");
+  // The extension is the last part after the last dot (if it exists).
+  return parts.length > 1 ? parts[parts.length - 1] : "";
+}
+
+export function getContentTypeForFile(filename: string): string {
+  const extension = extractFileExtension(filename);
+  switch (extension) {
+    case "txt":
+      return "text/plain";
+    case "zip":
+      return "application/zip";
+    case "html":
+      return "text/html";
+    default:
+      return "";
+  }
+}
+
+export function makeJobProfilerViewColumns(
+  jobID: Long,
+  onDownloadExecutionFileClicked: (
+    req: GetJobProfilerExecutionDetailRequest,
+  ) => Promise<GetJobProfilerExecutionDetailResponse>,
+): ColumnDescriptor<string>[] {
+  const downloadRef: React.RefObject<DownloadFileRef> =
+    React.createRef<DownloadFileRef>();
   return [
     {
       name: "executionDetailFiles",
@@ -57,17 +90,64 @@ export function makeJobProfilerViewColumns(): ColumnDescriptor<string>[] {
       hideTitleUnderline: true,
       cell: (executionDetails: string) => executionDetails,
     },
+    {
+      name: "actions",
+      title: "",
+      hideTitleUnderline: true,
+      className: cx("column-size-medium"),
+      cell: (executionDetailFile: string) => {
+        return (
+          <div className={cx("crl-job-profiler-view__actions-column")}>
+            <DownloadFile ref={downloadRef} />
+            <Button
+              as="a"
+              size="small"
+              intent="tertiary"
+              className={cx("download-execution-detail-button")}
+              onClick={() => {
+                const req =
+                  new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest(
+                    {
+                      job_id: jobID,
+                      filename: executionDetailFile,
+                    },
+                  );
+                onDownloadExecutionFileClicked(req).then(resp => {
+                  const type = getContentTypeForFile(executionDetailFile);
+                  const executionFileBytes = new Blob([resp.data], {
+                    type: type,
+                  });
+                  Promise.resolve().then(() => {
+                    downloadRef.current.download(
+                      executionDetailFile,
+                      executionFileBytes,
+                    );
+                  });
+                });
+              }}
+            >
+              <Icon iconName="Download" />
+              Download
+            </Button>
+          </div>
+        );
+      },
+    },
   ];
 }
 
 export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
   jobID,
-  executionDetailsResponse,
+  executionDetailFilesResponse,
   lastUpdated,
   isDataValid,
-  refreshExecutionDetails,
+  onDownloadExecutionFileClicked,
+  refreshExecutionDetailFiles,
 }: JobProfilerViewProps) => {
-  const columns = makeJobProfilerViewColumns();
+  const columns = makeJobProfilerViewColumns(
+    jobID,
+    onDownloadExecutionFileClicked,
+  );
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: true,
     columnTitle: "executionDetailFiles",
@@ -77,8 +157,8 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
       job_id: jobID,
     });
   const refresh = useCallback(() => {
-    refreshExecutionDetails(req);
-  }, [refreshExecutionDetails, req]);
+    refreshExecutionDetailFiles(req);
+  }, [refreshExecutionDetailFiles, req]);
   const [refetch] = useScheduleFunction(
     refresh,
     true,
@@ -119,7 +199,7 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
         <Row gutter={24}>
           <Col className="gutter-row" span={24}>
             <SortedTable
-              data={executionDetailsResponse.data?.files}
+              data={executionDetailFilesResponse.data?.files}
               columns={columns}
               tableWrapperClassName={cx("sorted-table")}
               sortSetting={sortSetting}
