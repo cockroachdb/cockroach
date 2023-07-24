@@ -15,652 +15,38 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"math"
-	"os"
-	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
-
-type stageExecType int
-
-const (
-	_                 stageExecType = iota
-	stageExecuteQuery stageExecType = 1
-	stageExecuteStmt  stageExecType = 2
-)
-
-// stageExecStmt represents statements that will be executed during a given
-// stage, including any expected errors from this statement or any schema change
-// running concurrently.
-type stageExecStmt struct {
-	execType               stageExecType
-	stmts                  []string
-	expectedOutput         string
-	observedOutput         string
-	schemaChangeErrorRegex *regexp.Regexp
-	// schemaChangeErrorRegexRollback will cause a rollback.
-	schemaChangeErrorRegexRollback *regexp.Regexp
-}
-
-// HasSchemaChangeError indicates if a schema change error will be observed,
-// if the current DML statement is executed.
-func (e *stageExecStmt) HasSchemaChangeError() bool {
-	return e.schemaChangeErrorRegex != nil
-}
-
-func (e *stageExecStmt) HasAnySchemaChangeError() *regexp.Regexp {
-	if e.schemaChangeErrorRegex != nil {
-		return e.schemaChangeErrorRegex
-	}
-	return e.schemaChangeErrorRegexRollback
-}
-
-// stageKeyOrdinalLatest targets the latest ordinal in a stage.
-const stageKeyOrdinalLatest = math.MaxUint16
-
-// stageKey represents a phase and stage range to target (in an
-// inclusive manner).
-type stageKey struct {
-	minOrdinal int
-	maxOrdinal int
-	phase      scop.Phase
-	rollback   bool
-}
-
-// makeStageKey constructs a stage key targeting a single ordinal.
-func makeStageKey(phase scop.Phase, ordinal int, rollback bool) stageKey {
-	return stageKey{
-		phase:      phase,
-		minOrdinal: ordinal,
-		maxOrdinal: ordinal,
-		rollback:   rollback,
-	}
-}
-
-// AsInt converts the stage index into a unique numeric integer.
-func (s *stageKey) AsInt() int {
-	// Assuming we never have plans with more than 1000 stages per-phase.
-	return (int(s.phase) * 1000) + s.minOrdinal
-}
-
-// String implements fmt.Stringer
-func (s *stageKey) String() string {
-	if s.minOrdinal == s.maxOrdinal {
-		return fmt.Sprintf("(phase = %s stageOrdinal=%d)",
-			s.phase, s.minOrdinal)
-	}
-	return fmt.Sprintf("(phase = %s stageMinOrdinal=%d stageMaxOrdinal=%d),",
-		s.phase, s.minOrdinal, s.maxOrdinal)
-}
-
-// IsEmpty detects if a stage key is empty.
-func (s *stageKey) IsEmpty() bool {
-	return s.phase == 0
-}
-
-type stageKeyEntry struct {
-	stageKey
-	stmt *stageExecStmt
-}
-
-// stageExecStmtMap maps statements that should be executed based on a given
-// stage. This function also tracks output that should be used for rewrites.
-type stageExecStmtMap struct {
-	entries    []stageKeyEntry
-	usedMap    map[*stageExecStmt]struct{}
-	rewriteMap map[string]*stageExecStmt
-}
-
-func makeStageExecStmtMap() *stageExecStmtMap {
-	return &stageExecStmtMap{
-		usedMap:    make(map[*stageExecStmt]struct{}),
-		rewriteMap: make(map[string]*stageExecStmt),
-	}
-}
-
-// getExecStmts gets the statements to be used for a particular phase and a
-// particular stage.
-func (m *stageExecStmtMap) getExecStmts(targetKey stageKey) []*stageExecStmt {
-	var stmts []*stageExecStmt
-	if targetKey.minOrdinal != targetKey.maxOrdinal {
-		panic(fmt.Sprintf("only a single ordinal key can be looked up %v ", targetKey))
-	}
-	for _, key := range m.entries {
-		if key.stageKey.phase == targetKey.phase &&
-			key.stageKey.rollback == targetKey.rollback &&
-			targetKey.minOrdinal >= key.stageKey.minOrdinal &&
-			targetKey.minOrdinal <= key.stageKey.maxOrdinal {
-			stmts = append(stmts, key.stmt)
-		}
-	}
-	return stmts
-}
-
-// AssertMapIsUsed asserts that all DML statements are injected at various
-// stages.
-func (m *stageExecStmtMap) AssertMapIsUsed(t *testing.T) {
-	// If there is any rollback error, then not all stages will be used.
-	for _, e := range m.entries {
-		if e.stmt.schemaChangeErrorRegexRollback != nil {
-			return
-		}
-	}
-	if len(m.entries) != len(m.usedMap) {
-		for _, entry := range m.entries {
-			if _, ok := m.usedMap[entry.stmt]; !ok {
-				t.Logf("Missing stage: %v of type %d", entry.stageKey, entry.stmt.execType)
-			}
-		}
-	}
-	require.Equal(t, len(m.usedMap), len(m.entries), "All declared entries was not used")
-}
-
-// GetInjectionRuns returns a set of stage keys, where each key corresponds to a
-// separate run of the schema change statement with the DML statements injected
-// "appropriately". That is, for each stageKey (phase:startStage:endStage) in
-// the return, we run the schema change statement and during each stage `s` within
-// [startStage, endStage], we run DML statements that are requested to be injected
-// in phase:`s`.
-//
-// The rule to generate the return is to aggregate all stages where injected DML
-// statements does not cause the schema change to error, until the first schema change
-// error is hit.
-// For example if we have the following DML statements concurrently with
-// schema changes:
-// 1) Statement A from phases 1:14 that will fail.
-// 2) Statement B from phases 15:16 where the schema change will fail.
-// We are going to generate the following runs of statements to inject:
-//  1. 1:14 with statement A
-//  2. 15:15 with statement B
-//  3. 16:16 with statement B
-//
-// For each run the original DDL (schema change will be executed) with the
-// DML statements from the given ranges.
-func (m *stageExecStmtMap) GetInjectionRuns(
-	totalPostCommit int, totalPostCommitNonRevertible int,
-) []stageKey {
-	var start stageKey
-	var end stageKey
-	var result []stageKey
-	// First split any ranges that have schema change errors to have their own
-	// entries. i.e. If stages 1 to N will generate schema change errors due to
-	// some statement, we need to have one entry for each one. Additionally,
-	// convert any latest ordinal values, to actual values.
-	var forcedSplitEntries []stageKeyEntry
-	for _, key := range m.entries {
-		if key.stmt.execType != stageExecuteStmt {
-			continue
-		}
-		if key.maxOrdinal == stageKeyOrdinalLatest {
-			switch key.phase {
-			case scop.PostCommitPhase:
-				key.maxOrdinal = totalPostCommit
-			case scop.PostCommitNonRevertiblePhase:
-				key.maxOrdinal = totalPostCommitNonRevertible
-			default:
-				panic("unknown phase type for latest")
-			}
-		}
-		// Skip over anything in the pre-commit phase.
-		if key.phase == scop.PreCommitPhase {
-			continue
-		}
-		if !key.stmt.HasSchemaChangeError() && !key.rollback {
-			forcedSplitEntries = append(forcedSplitEntries, key)
-		} else if !key.rollback {
-			for i := key.minOrdinal; i <= key.maxOrdinal; i++ {
-				forcedSplitEntries = append(forcedSplitEntries,
-					stageKeyEntry{
-						stageKey: stageKey{
-							minOrdinal: i,
-							maxOrdinal: i,
-							phase:      key.phase,
-							rollback:   key.rollback,
-						},
-						stmt: key.stmt,
-					},
-				)
-			}
-		}
-	}
-	// Next loop over those split entries, and try and generate runs until we
-	// hit a schema change error or until we run out of statements.
-	for i, key := range forcedSplitEntries {
-		addEntry := func() {
-			keyRange := stageKey{
-				minOrdinal: start.minOrdinal,
-				maxOrdinal: end.maxOrdinal,
-				phase:      end.phase,
-			}
-			result = append(result, keyRange)
-		}
-		if !key.stmt.HasSchemaChangeError() && start.IsEmpty() {
-			// If we see a schema change error, and no other statements were executed
-			// earlier, then this is an entry on its own.
-			start = key.stageKey
-			end = key.stageKey
-		} else if !start.IsEmpty() && (key.stmt.HasSchemaChangeError() || key.phase != start.phase) {
-			// If we already have a start, and we either hit a schema change error
-			// or separate phase, then we need to emit a new entry.
-			setStart := true
-			if (key.phase == start.phase && !key.stmt.HasSchemaChangeError()) || start.IsEmpty() {
-				setStart = false
-				end = key.stageKey
-				if start.IsEmpty() {
-					start = end
-				}
-			}
-			addEntry()
-			start, end = stageKey{}, stageKey{}
-			if setStart {
-				start = key.stageKey
-				end = key.stageKey
-				// If we are forced to emit an entry because of a phase change,
-				// then the current entry may need to be added if a schemchange
-				// error exists,
-				if key.stmt.HasSchemaChangeError() {
-					addEntry()
-					start, end = stageKey{}, stageKey{}
-				}
-			}
-		} else {
-			end = key.stageKey
-			// If the start is empty, then we had a schema change error on this
-			// entry already, so just added it directly.
-			if start.IsEmpty() {
-				start = end
-				addEntry()
-				start, end = stageKey{}, stageKey{}
-			}
-		}
-		// No matter what for the last entry always emit an entry
-		// if a start and end were set.
-		if i == len(forcedSplitEntries)-1 && !start.IsEmpty() {
-			addEntry()
-		}
-	}
-	return result
-}
-
-// ParseStageQuery parses a stage-query statement.
-func (m *stageExecStmtMap) ParseStageQuery(t *testing.T, d *datadriven.TestData) {
-	m.parseStageCommon(t, d, stageExecuteQuery)
-}
-
-// ParseStageExec parses a stage-exec statement.
-func (m *stageExecStmtMap) ParseStageExec(t *testing.T, d *datadriven.TestData) {
-	m.parseStageCommon(t, d, stageExecuteStmt)
-}
-
-// parseStageCommon processes common arguments for "stage-exec"-directive and
-// "stage-query" directive, which include:
-//   - "phase": The phase in which this statement/query should be injected, of the
-//     string scop.Phase.
-//   - "stage": A range of stage ordinals, of the form "stage=x:y", in the
-//     specified phase where this statement should be injected.
-//     Note: There is a few shorthands for the notation. If we want to inject
-//     only at one particular stage, we can use "stage=x" If we want to inject
-//     the statement in all stages, we can use "stage=:". If we want to inject
-//     the statement in all stages starting from the x-th stage, we can use
-//     "stage=x:".
-//     Note: PreCommitPhase with stage 1 can be used to inject failures that will
-//     only happen for DML injection testing.
-//   - "schemaChangeExecError": assert that the DML injection will cause the
-//     schema change to fail with a particular error at the same stage.
-//   - "schemaChangeExecErrorForRollback": assert that the DML injection will cause
-//     the schema change to fail with a particular error in a future stage.
-//   - "rollback": mark that the injection happens during rollback.
-//
-// Note: statements can refer to builtin variable names with a dollar sign ($):
-//   - $stageKey - A unique identifier for stages and phases
-//   - $successfulStageCount - Number of stages of the that have been successfully
-//     executed with injections
-func (m *stageExecStmtMap) parseStageCommon(
-	t *testing.T, d *datadriven.TestData, execType stageExecType,
-) {
-	var key stageKey
-	var schemaChangeErrorRegex *regexp.Regexp
-	var schemaChangeErrorRegexRollback *regexp.Regexp
-	stmts := strings.Split(d.Input, ";")
-	require.NotEmpty(t, stmts)
-	// Remove any trailing empty lines.
-	if stmts[len(stmts)-1] == "" {
-		stmts = stmts[0 : len(stmts)-1]
-	}
-	for _, cmdArg := range d.CmdArgs {
-		switch cmdArg.Key {
-		case "phase":
-			found := false
-			for i := scop.EarliestPhase; i <= scop.LatestPhase; i++ {
-				if cmdArg.Vals[0] == i.String() {
-					key.phase = i
-					found = true
-					break
-				}
-			}
-			require.Truef(t, found, "invalid phase name %s", cmdArg.Key)
-			if !found {
-				panic("phase not mapped")
-			}
-		case "stage":
-			// Detect ranges, otherwise we are looking at single value.
-			if strings.Contains(cmdArg.Vals[0], ":") {
-				rangeVals := strings.Split(cmdArg.Vals[0], ":")
-				key.minOrdinal = 1
-				key.maxOrdinal = stageKeyOrdinalLatest
-				if len(rangeVals) >= 1 && len(rangeVals[0]) > 0 {
-					ordinal, err := strconv.Atoi(rangeVals[0])
-					require.Greater(t, ordinal, 0, "minimum ordinal is zero")
-					require.NoError(t, err)
-					key.minOrdinal = ordinal
-				}
-				if len(rangeVals) == 2 && len(rangeVals[1]) > 0 {
-					ordinal, err := strconv.Atoi(rangeVals[1])
-					require.Greater(t, ordinal, 0, "minimum ordinal is zero")
-					require.NoError(t, err)
-					require.GreaterOrEqualf(t, key.maxOrdinal, key.minOrdinal, "ordinals range is invalid")
-					key.maxOrdinal = ordinal
-				}
-			} else {
-				ordinal, err := strconv.Atoi(cmdArg.Vals[0])
-				require.Greater(t, ordinal, 0, "minimum ordinal is zero")
-				require.NoError(t, err)
-				key.minOrdinal = ordinal
-				key.maxOrdinal = ordinal
-			}
-		case "schemaChangeExecError":
-			schemaChangeErrorRegex = regexp.MustCompile(strings.Join(cmdArg.Vals, " "))
-			require.Nil(t, schemaChangeErrorRegexRollback, "future and current stage errors cannot be set concurrently")
-		case "schemaChangeExecErrorForRollback":
-			schemaChangeErrorRegexRollback = regexp.MustCompile(strings.Join(cmdArg.Vals, " "))
-			require.Nil(t, schemaChangeErrorRegex, "rollback and current stage errors cannot be set concurrently")
-		case "rollback":
-			rollback, err := strconv.ParseBool(cmdArg.Vals[0])
-			require.NoError(t, err)
-			key.rollback = rollback
-		default:
-			require.Failf(t, "unknown key encountered", "key was %s", cmdArg.Key)
-		}
-	}
-	entry := stageKeyEntry{
-		stageKey: key,
-		stmt: &stageExecStmt{
-			execType:                       execType,
-			stmts:                          stmts,
-			observedOutput:                 "",
-			expectedOutput:                 d.Expected,
-			schemaChangeErrorRegex:         schemaChangeErrorRegex,
-			schemaChangeErrorRegexRollback: schemaChangeErrorRegexRollback,
-		},
-	}
-	m.entries = append(m.entries, entry)
-	m.rewriteMap[d.Pos] = entry.stmt
-}
-
-// GetExpectedOutputForPos returns the expected output for a given line,
-// in rewrite mode this is updated.
-func (m *stageExecStmtMap) GetExpectedOutputForPos(pos string) string {
-	return m.rewriteMap[pos].expectedOutput
-}
-
-type execInjectionCallback func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int) []*stageExecStmt
-
-type stageExecVariables struct {
-	successfulStageCount int
-	stage                stageKey
-}
-
-// Exec executes the statements for given stage and validates the output.
-func (e *stageExecStmt) Exec(
-	t *testing.T, runner *sqlutils.SQLRunner, stageVariables *stageExecVariables, rewrite bool,
-) {
-	for idx, stmt := range e.stmts {
-		// Skip empty statements.
-		if len(stmt) == 0 {
-			continue
-		}
-		// Bind any variables for the statement.
-		boundSQL := os.Expand(stmt, func(s string) string {
-			switch s {
-			case "successfulStageCount":
-				return strconv.Itoa(stageVariables.successfulStageCount)
-			case "stageKey":
-				return strconv.Itoa(stageVariables.stage.AsInt() * 1000)
-			default:
-				t.Fatalf("unknown variable name %s", s)
-			}
-			return ""
-		})
-		switch e.execType {
-		case stageExecuteStmt:
-			_, err := runner.DB.ExecContext(context.Background(), boundSQL)
-			if err != nil {
-				if idx != len(e.stmts)-1 {
-					// We require that only the last statement in a stage-exec block can cause an error.
-					t.Fatalf("unexpected error encountered; only the last statement can cause an error")
-				} else {
-					// Fail the test unless the error is expected (from e.expectedOutput), or
-					// "rewrite" is set, in which case we record the error and proceed.
-					errorMatches := testutils.IsError(err, strings.TrimSuffix(e.expectedOutput, "\n"))
-					if !errorMatches {
-						if !rewrite {
-							t.Fatalf("unexpected error: got: %v, expected: %v", err, e.expectedOutput)
-						}
-						e.expectedOutput = err.Error()
-					}
-				}
-			}
-		case stageExecuteQuery:
-			var expectedQueryResult [][]string
-			for _, expectedRow := range strings.Split(strings.TrimSuffix(e.expectedOutput, "\n"), "\n") {
-				expectRowArray := strings.Split(expectedRow, ",")
-				expectedQueryResult = append(expectedQueryResult, expectRowArray)
-			}
-			results := runner.QueryStr(t, boundSQL)
-			if !reflect.DeepEqual(results, expectedQueryResult) {
-				if !rewrite {
-					t.Fatalf("query '%s': expected:\n%v\ngot:\n%v\n",
-						stmt, sqlutils.MatrixToStr(expectedQueryResult), sqlutils.MatrixToStr(results))
-				}
-				e.expectedOutput = sqlutils.MatrixToStr(results)
-			}
-		default:
-			t.Fatal("unknown execType")
-		}
-	}
-}
-
-// GetInjectionCallback gets call back that will inject statements based on a
-// given stage.
-func (m *stageExecStmtMap) GetInjectionCallback(t *testing.T, rewrite bool) execInjectionCallback {
-	return func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int) []*stageExecStmt {
-		execStmts := m.getExecStmts(stage)
-		for _, execStmt := range execStmts {
-			m.usedMap[execStmt] = struct{}{}
-			execStmt.Exec(t, runner, &stageExecVariables{
-				successfulStageCount: successfulStageCount,
-				stage:                stage,
-			}, rewrite)
-		}
-		return execStmts
-	}
-}
-
-// cumulativeTest is a foundational helper for building tests over the
-// datadriven format used by this package. This style of test will call
-// the passed function for each test directive in the file. The setup
-// statements passed to the function will be all statements from all
-// previous test and setup blocks combined.
-// To support injection of statements and rewriting the cumulative function
-// will go through the file twice using the data driven functions:
-//
-//  1. The first pass will collect all the stage-exec/stage-query statements,
-//     setup commands. Then executing the test statement and setup statements
-//     via the tf callback. The callback can if the rewrite is enabled update
-//     the expected output inside stageExecStmtMap (see stageExecStmt.Exec).
-//
-//  2. The second pass will for any stage-exec/stage-query functions look up
-//     the output using stageExecStmtMap.GetExpectedOutputForPos and return
-//     it, only when rewrite is enabled.
-func cumulativeTest(
-	t *testing.T,
-	testKind, relTestCaseDir string,
-	tf func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], stageExecMap *stageExecStmtMap),
-) {
-	skip.UnderStress(t)
-	skip.UnderRace(t)
-	testCaseDir := datapathutils.RewritableDataPath(t, relTestCaseDir)
-	testCaseDefinition := filepath.Join(testCaseDir, filepath.Base(testCaseDir)+".definition")
-	var setup []statements.Statement[tree.Statement]
-	stageExecMap := makeStageExecStmtMap()
-	rewrite := false
-	var testStmts statements.Statements
-	var lines []string
-	numTestStmts := 0
-
-	// First pass collect stage-exec/stage-query/setup commands and execute them
-	// once the test command is encountered. Only a single test command is allowed
-	// via an assertion which guarantees all others appear first.
-	// This pass does no "checking" in the sense that "it does not compare any
-	// actual to any expected" (look: it always returns d.Expected!). Its only
-	// purpose is to run the "test"-ed statement, inject DMLs as specified, and
-	// collect output of those DML injections, so they can be used to rewrite the
-	// expected output of those DML injected in the second pass.
-	datadriven.RunTest(t, testCaseDefinition, func(t *testing.T, d *datadriven.TestData) string {
-		// Assert that only one "test"-directive statement shows up and nothing can
-		// follow it afterwards.
-		require.Zero(t, numTestStmts, "only one test command per-test, "+
-			"and it must be the last one.")
-		switch d.Cmd {
-		case "skip":
-			var issue int
-			var csv string
-			d.ScanArgs(t, "issue-num", &issue)
-			d.MaybeScanArgs(t, "tests", &csv)
-			for _, skippedKind := range strings.Split(csv, ",") {
-				if strings.HasPrefix(t.Name(), skippedKind) {
-					skip.WithIssue(t, issue)
-				}
-			}
-		case "setup":
-			// Store setup stmts into `setup` slice (without executing them).
-			stmts, err := parser.Parse(d.Input)
-			setup = append(setup, stmts...)
-			require.NoError(t, err)
-			require.NotEmpty(t, stmts)
-		case "stage-exec":
-			stageExecMap.ParseStageExec(t, d)
-		case "stage-query":
-			stageExecMap.ParseStageQuery(t, d)
-		case "test":
-			stmts, err := parser.Parse(d.Input)
-			require.NoError(t, err)
-			require.NotEmpty(t, stmts)
-			testStmts = stmts
-			for _, stmt := range stmts {
-				lines = append(lines, stmt.SQL)
-			}
-			rewrite = d.Rewrite
-			numTestStmts++
-			tf(t, testCaseDir, rewrite, setup, testStmts, stageExecMap)
-		default:
-			t.Fatalf("unknown command type %s", d.Cmd)
-		}
-		return d.Expected
-	})
-
-	// Second pass is reserved to rewrite expected output of DML injections. For
-	// all other directives, this pass effectively ignores them by returning
-	// d.Expected.
-	if rewrite {
-		datadriven.RunTest(t, testCaseDefinition, func(t *testing.T, d *datadriven.TestData) string {
-			if d.Cmd == "stage-exec" || d.Cmd == "stage-query" {
-				// Retrieve the actual output of each DML injection block (from first
-				// pass), indexed by file:line.
-				return stageExecMap.GetExpectedOutputForPos(d.Pos)
-			}
-			return d.Expected
-		})
-	}
-}
-
-// TODO(ajwerner): For all the non-rollback variants, we'd really actually
-// like them to run over each of the rollback stages too.
 
 // Rollback tests that the schema changer job rolls back properly.
-// This data-driven test uses the same input as EndToEndSideEffects
-// but ignores the expected output.
-func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
-	countRevertiblePostCommitStages := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	) (n int) {
-		processPlanInPhase(
-			t, newCluster, setup, stmts, scop.PostCommitPhase,
-			func(p scplan.Plan) { n = len(p.StagesForCurrentPhase()) },
-			func(db *gosql.DB) {},
-		)
-		return n
-	}
-	var testRollbackCase func(
-		t *testing.T, testCaseDir string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
-	)
-	testFunc := func(t *testing.T, testCaseDir string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		n := countRevertiblePostCommitStages(t, setup, stmts)
-		if n == 0 {
-			t.Logf("test case has no revertible post-commit stages, skipping...")
+func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
+	// These tests are expensive.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
+	testRollbackCase := func(t *testing.T, cs CumulativeTestCaseSpec) {
+		if cs.Phase != scop.PostCommitPhase {
+			skip.IgnoreLint(t, "cannot roll back outside of post-commit phase")
 			return
 		}
-		t.Logf("test case has %d revertible post-commit stages", n)
-		for i := 1; i <= n; i++ {
-			if !t.Run(
-				fmt.Sprintf("rollback stage %d of %d", i, n),
-				func(t *testing.T) { testRollbackCase(t, testCaseDir, rewrite, setup, stmts, i, n) },
-			) {
-				return
-			}
-		}
-	}
-
-	testRollbackCase = func(
-		t *testing.T, testCaseDir string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
-	) {
 		var numInjectedFailures uint32
 		var numCheckedExplainInRollback uint32
 		beforeStage := func(p scplan.Plan, stageIdx int) error {
@@ -674,20 +60,19 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 					return nil
 				}
 				atomic.AddUint32(&numCheckedExplainInRollback, 1)
-				fileNameSuffix := fmt.Sprintf("__rollback_%d_of_%d", ord, n)
-				explainedStmt := fmt.Sprintf("rollback at post-commit stage %d of %d", ord, n)
+				fileNameSuffix := fmt.Sprintf("__rollback_%d_of_%d", cs.StageOrdinal, cs.StagesCount)
+				explainedStmt := fmt.Sprintf("rollback at post-commit stage %d of %d", cs.StageOrdinal, cs.StagesCount)
 				const inRollback = true
-				checkExplainDiagrams(t, testCaseDir, setup, stmts, explainedStmt, fileNameSuffix, p.CurrentState, inRollback, rewrite)
+				checkExplainDiagrams(t, cs.Path, cs.Setup, cs.Stmts, explainedStmt, fileNameSuffix, p.CurrentState, inRollback, cs.Rewrite)
 				return nil
 			}
-			if s.Phase == scop.PostCommitPhase && s.Ordinal == ord {
+			if s.Phase == scop.PostCommitPhase && s.Ordinal == cs.StageOrdinal {
 				atomic.AddUint32(&numInjectedFailures, 1)
-				return errors.Errorf("boom %d", ord)
+				return errors.Errorf("boom %d", cs.StageOrdinal)
 			}
 			return nil
 		}
-
-		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		knobs := &scexec.TestingKnobs{
 			BeforeStage: beforeStage,
 			OnPostCommitPlanError: func(err error) error {
 				panic(fmt.Sprintf("%+v", err))
@@ -698,168 +83,64 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 				}
 				panic(fmt.Sprintf("%+v", err))
 			},
-		})
-		defer cleanup()
-
-		tdb := sqlutils.MakeSQLRunner(db)
-		var before [][]string
-		beforeFunc := func() {
+		}
+		ctx := context.Background()
+		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
+			tdb := sqlutils.MakeSQLRunner(db)
+			var before [][]string
+			require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
 			before = tdb.QueryStr(t, fetchDescriptorStateQuery)
-		}
-		onError := func(err error) error {
-			// If the statement execution failed, then we expect to end up in the same
-			// state as when we started.
-			require.Equal(t, before, tdb.QueryStr(t, fetchDescriptorStateQuery))
-			return err
-		}
-		err := executeSchemaChangeTxn(
-			context.Background(), t, setup, stmts, db, beforeFunc, nil, onError,
-		)
-		if atomic.LoadUint32(&numInjectedFailures) == 0 {
-			require.NoError(t, err)
-		} else {
-			require.Regexp(t, fmt.Sprintf("boom %d", ord), err)
-			require.NotZero(t, atomic.LoadUint32(&numCheckedExplainInRollback))
-		}
-	}
-	cumulativeTest(t, "Rollback", relPath, testFunc)
-}
-
-// fetchDescriptorStateQuery returns the CREATE statements for all descriptors
-// minus any COMMENT ON statements because these aren't consistently backed up.
-const fetchDescriptorStateQuery = `
-SELECT
-	split_part(create_statement, ';', 1) AS create_statement
-FROM
-	( 
-		SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
-		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
-		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
-    UNION ALL SELECT function_id as descriptor_id, create_statement FROM crdb_internal.create_function_statements
-	)
-WHERE descriptor_id IN (SELECT id FROM system.namespace)
-ORDER BY
-	create_statement;`
-
-// Pause tests that the schema changer can handle being paused and resumed
-// correctly. This data-driven test uses the same input as EndToEndSideEffects
-// but ignores the expected output.
-func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
-	var postCommit, nonRevertible int
-	countStages := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	) {
-		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase, func(
-			p scplan.Plan,
-		) {
-			postCommit = len(p.StagesForCurrentPhase())
-			nonRevertible = len(p.Stages) - postCommit
-		}, nil)
-	}
-	var testPauseCase func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
-	)
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		countStages(t, setup, stmts)
-		n := postCommit + nonRevertible
-		if n == 0 {
-			t.Logf("test case has no revertible post-commit stages, skipping...")
-			return
-		}
-		t.Logf("test case has %d revertible post-commit stages", n)
-		for i := 1; i <= n; i++ {
-			if !t.Run(
-				fmt.Sprintf("pause stage %d of %d", i, n),
-				func(t *testing.T) { testPauseCase(t, setup, stmts, i) },
-			) {
-				return
+			err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
+			if err != nil {
+				// If the statement execution failed, then we expect to end up in the same
+				// state as when we started.
+				require.Equal(t, before, tdb.QueryStr(t, fetchDescriptorStateQuery))
+			} else {
+				waitForSchemaChangesToFinish(t, tdb)
+			}
+			if atomic.LoadUint32(&numInjectedFailures) == 0 {
+				require.NoError(t, err)
+			} else {
+				require.Regexp(t, fmt.Sprintf("boom %d", cs.StageOrdinal), err)
+				require.NotZero(t, atomic.LoadUint32(&numCheckedExplainInRollback))
 			}
 		}
-
-		// Need to reset "postCommit" and "nonRevertible" before testFunc being
-		// called for next test. The reason is that if a test did not generate any
-		// post commit phase, the "countStates()" function won't take any effect
-		// since "processPlanInPhase()" only calls the input "processFunc" for the
-		// specified phase. So that such test would inherit "postCommit" and
-		// "nonRevertible" from a previous test which generates post commit phase
-		// stages.
-		postCommit = 0
-		nonRevertible = 0
+		factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
 	}
-	testPauseCase = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int) {
-		var numInjectedFailures uint32
-		// TODO(ajwerner): It'd be nice to assert something about the number of
-		// remaining stages before the pause and then after. It's not totally
-		// trivial, as we don't checkpoint during non-mutation stages, so we'd
-		// need to look back and find the last mutation phase.
-		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
-			BeforeStage: func(p scplan.Plan, stageIdx int) error {
-				if atomic.LoadUint32(&numInjectedFailures) > 0 {
-					return nil
-				}
-				s := p.Stages[stageIdx]
-				if s.Phase == scop.PostCommitPhase && s.Ordinal == ord ||
-					s.Phase == scop.PostCommitNonRevertiblePhase && s.Ordinal+postCommit == ord {
-					atomic.AddUint32(&numInjectedFailures, 1)
-					return jobs.MarkPauseRequestError(errors.Errorf("boom %d", ord))
-				}
-				return nil
-			},
-		})
-		defer cleanup()
-		tdb := sqlutils.MakeSQLRunner(db)
-		onError := func(err error) error {
-			// Check that it's a pause error, with a job.
-			// Resume the job and wait for the job.
-			re := regexp.MustCompile(
-				`job (\d+) was paused before it completed with reason: boom (\d+)`,
-			)
-			match := re.FindStringSubmatch(err.Error())
-			require.NotNil(t, match)
-			idx, err := strconv.Atoi(match[2])
-			require.NoError(t, err)
-			require.Equal(t, ord, idx)
-			jobID, err := strconv.Atoi(match[1])
-			require.NoError(t, err)
-			t.Logf("found job %d", jobID)
-			tdb.Exec(t, "RESUME JOB $1", jobID)
-			tdb.CheckQueryResultsRetry(t, "SELECT status, error FROM [SHOW JOB "+match[1]+"]", [][]string{
-				{"succeeded", ""},
-			})
-			return nil
-		}
-		require.NoError(t, executeSchemaChangeTxn(
-			context.Background(), t, setup, stmts, db, nil, nil, onError,
-		))
-		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
-	}
-	cumulativeTest(t, "Pause", relPath, testFunc)
+	cumulativeTestForEachPostCommitStage(t, relPath, factory, testRollbackCase)
 }
 
 // ExecuteWithDMLInjection tests that the schema changer behaviour is sane
 // once we start injecting DML statements into execution.
-func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewClusterFunc) {
+func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFactory) {
+	// These tests are expensive.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
 	jobErrorMutex := syncutil.Mutex{}
 	var testDMLInjectionCase func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement], key stageKey, injectPreCommit bool,
+		t *testing.T, ts CumulativeTestSpec, key stageKey, injectPreCommit bool,
 	)
 	var injectionFunc execInjectionCallback
-	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], execMap *stageExecStmtMap) {
+	testFunc := func(t *testing.T, ts CumulativeTestSpec) {
 		// Count number of stages in PostCommit and PostCommitNonRevertible phase
 		// for running `stmts` after properly running `setup`.
 		var postCommit, nonRevertible int
-		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase, func(
-			p scplan.Plan,
-		) {
-			postCommit = len(p.StagesForCurrentPhase())
-			nonRevertible = len(p.Stages) - postCommit
-		}, nil)
-
-		injectionFunc = execMap.GetInjectionCallback(t, rewrite)
-		injectionRanges := execMap.GetInjectionRuns(postCommit, nonRevertible)
-		defer execMap.AssertMapIsUsed(t)
+		withPostCommitPlanAfterSchemaChange(t, ts, factory, func(_ *gosql.DB, p scplan.Plan) {
+			for _, s := range p.Stages {
+				switch s.Phase {
+				case scop.PostCommitPhase:
+					postCommit++
+				case scop.PostCommitNonRevertiblePhase:
+					nonRevertible++
+				}
+			}
+		})
+		injectionFunc = ts.stageExecMap.GetInjectionCallback(t, ts.Rewrite)
+		injectionRanges := ts.stageExecMap.GetInjectionRuns(postCommit, nonRevertible)
+		defer ts.stageExecMap.AssertMapIsUsed(t)
 		injectPreCommits := []bool{false}
-		if execMap.getExecStmts(makeStageKey(scop.PreCommitPhase, 1, false)) != nil {
+		if ts.stageExecMap.getExecStmts(makeStageKey(scop.PreCommitPhase, 1, false)) != nil {
 			injectPreCommits = []bool{false, true}
 		}
 		// Test both happy and unhappy paths with pre-commit injection, this
@@ -869,14 +150,15 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 			for _, injection := range injectionRanges {
 				if !t.Run(
 					fmt.Sprintf("injection stage %v", injection),
-					func(t *testing.T) { testDMLInjectionCase(t, setup, stmts, injection, injectPreCommit) },
+					func(t *testing.T) { testDMLInjectionCase(t, ts, injection, injectPreCommit) },
 				) {
 					return
 				}
 			}
 		}
 	}
-	testDMLInjectionCase = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement], injection stageKey, injectPreCommit bool) {
+	testDMLInjectionCase = func(t *testing.T, ts CumulativeTestSpec, injection stageKey,
+		injectPreCommit bool) {
 		// Create a new cluster with the `BeforeStage` knob properly set for the DML injection framework.
 		var schemaChangeErrorRegex *regexp.Regexp
 		var lastRollbackStageKey *stageKey
@@ -884,7 +166,8 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 		successfulStages := 0
 		var clusterCreated atomic.Bool
 		var tdb *sqlutils.SQLRunner
-		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		ctx := context.Background()
+		knobs := &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				if !clusterCreated.Load() {
 					// Do nothing if cluster creation isn't finished. Certain schema
@@ -928,34 +211,37 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 				}
 				return nil
 			},
-		})
-		defer cleanup()
-		clusterCreated.Store(true)
-		tdb = sqlutils.MakeSQLRunner(db)
+		}
+		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
+			clusterCreated.Store(true)
+			tdb = sqlutils.MakeSQLRunner(db)
 
-		// Now run the schema change and the `BeforeStage` knob will inject DMLs
-		// as specified in `injection`.
-		errorDetected := false
-		onError := func(err error) error {
-			// Mute the error if it matches what the DML injection specifies.
-			if schemaChangeErrorRegex != nil && schemaChangeErrorRegex.MatchString(err.Error()) {
-				errorDetected = true
-				return nil
+			// Now run the schema change and the `BeforeStage` knob will inject DMLs
+			// as specified in `injection`.
+			errorDetected := false
+			require.NoError(t, setupSchemaChange(ctx, t, ts, db))
+			defer waitForSchemaChangesToFinish(t, tdb)
+			if err := executeSchemaChangeTxn(ctx, t, ts, db); err != nil {
+				// Mute the error if it matches what the DML injection specifies.
+				if schemaChangeErrorRegex != nil && schemaChangeErrorRegex.MatchString(err.Error()) {
+					errorDetected = true
+				} else {
+					require.NoError(t, err)
+				}
+			} else {
+				waitForSchemaChangesToFinish(t, tdb)
 			}
-			return err
+			// Re-inject anything from the rollback once the job transaction
+			// commits, this enforces any sanity checks one last time in
+			// the final descriptor state.
+			if lastRollbackStageKey != nil {
+				injectionFunc(*lastRollbackStageKey, tdb, successfulStages)
+			}
+			require.Equal(t, errorDetected, schemaChangeErrorRegex != nil)
 		}
-		require.NoError(t, executeSchemaChangeTxn(
-			context.Background(), t, setup, stmts, db, nil, nil, onError,
-		))
-		// Re-inject anything from the rollback once the job transaction
-		// commits, this enforces any sanity checks one last time in
-		// the final descriptor state.
-		if lastRollbackStageKey != nil {
-			injectionFunc(*lastRollbackStageKey, tdb, successfulStages)
-		}
-		require.Equal(t, errorDetected, schemaChangeErrorRegex != nil)
+		factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
 	}
-	cumulativeTest(t, "ExecuteWithDMLInjection", relPath, testFunc)
+	cumulativeTest(t, relPath, testFunc)
 }
 
 // Used for saving corpus information in TestGenerateCorpus
@@ -968,7 +254,11 @@ func init() {
 // GenerateSchemaChangeCorpus executes each post commit stage of a given set of
 // statements and writes them into a corpus file. This file can be later used to
 // validate mixed version / forward compatibility.
-func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewClusterFunc) {
+func GenerateSchemaChangeCorpus(t *testing.T, path string, factory TestServerFactory) {
+	// These tests are expensive.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
 	if corpusPath == "" {
 		skip.IgnoreLintf(t, "requires declarative-corpus path parameter")
 	}
@@ -982,1158 +272,106 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 			panic(err)
 		}
 	}()
-	var testCorpusCollect func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	)
-	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		if !t.Run("starting",
-			func(t *testing.T) { testCorpusCollect(t, setup, stmts) },
-		) {
-			return
-		}
-	}
-	testCorpusCollect = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement]) {
+	testFunc := func(t *testing.T, ts CumulativeTestSpec) {
 		// If any of the statements are not supported, then skip over this
 		// file for the corpus.
-		for _, stmt := range stmts {
+		for _, stmt := range ts.Stmts {
 			if !scbuild.IsFullySupportedWithFalsePositive(stmt.AST, clusterversion.TestingClusterVersion) {
 				return
 			}
 		}
-		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		ctx := context.Background()
+		factory.WithSchemaChangerKnobs(&scexec.TestingKnobs{
 			BeforeStage: cc.GetBeforeStage("EndToEndCorpus", t),
+		}).Run(ctx, t, func(s serverutils.TestServerInterface, db *gosql.DB) {
+			require.NoError(t, setupSchemaChange(ctx, t, ts, db))
+			require.NoError(t, executeSchemaChangeTxn(ctx, t, ts, db))
+			waitForSchemaChangesToFinish(t, sqlutils.MakeSQLRunner(db))
 		})
-
-		defer cleanup()
-		require.NoError(t, executeSchemaChangeTxn(
-			context.Background(), t, setup, stmts, db, nil, nil, nil,
-		))
 	}
-	cumulativeTest(t, "GenerateSchemaChangeCorpus", path, testFunc)
+	cumulativeTest(t, path, testFunc)
 }
 
-// runAllBackups runs all the backup tests, disabling the random skipping.
-var runAllBackups = flag.Bool(
-	"run-all-backups", false,
-	"if true, run all backups instead of a random subset",
-)
+// Pause tests that the schema changer can handle being paused and resumed
+// correctly.
+func Pause(t *testing.T, path string, factory TestServerFactory) {
+	// These tests are expensive.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
 
-// runAllBackups runs all the mixed version tests, disabling the random skipping.
-var runAllMixedTests = flag.Bool(
-	"run-all-mixed", false,
-	"if true, run all mixed version tests instead of a random subset",
-)
+	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
+		pause(t, factory, cs)
+	})
+}
 
-// Backup tests that the schema changer can handle being backed up and
-// restored correctly. This data-driven test uses the same input as
-// EndToEndSideEffects but ignores the expected output. Note that the
-// cluster constructor needs to provide a cluster with CCL BACKUP/RESTORE
-// functionality enabled.
-func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
-	var after [][]string // CREATE_STATEMENT for all descriptors after finishing `stmts` in each test case.
-	var dbName string
-	r, _ := randutil.NewTestRand()
-	const runRate = .5
+// PauseMixedVersion is like Pause but in a mixed-version cluster which gets
+// upgraded while the job is paused.
+func PauseMixedVersion(t *testing.T, path string, factory TestServerFactory) {
+	// These tests are expensive.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
 
-	maybeRandomlySkip := func(t *testing.T) {
-		if !*runAllBackups && r.Float64() >= runRate {
-			skip.IgnoreLint(t, "skipping due to randomness")
-		}
-	}
+	factory.WithMixedVersion()
+	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
+		pause(t, factory, cs)
+	})
+}
 
-	// A function that executes `setup` first and then count the number of
-	// postCommit and postCommitNonRevertible stages for executing `stmts`.
-	// It also initializes `after` and `dbName` here.
-	countStages := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	) (postCommit, nonRevertible int) {
-		var pl scplan.Plan
-		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase,
-			func(p scplan.Plan) {
-				pl = p
-				postCommit = len(p.StagesForCurrentPhase())
-				nonRevertible = len(p.Stages) - postCommit
-			}, func(db *gosql.DB) {
-				tdb := sqlutils.MakeSQLRunner(db)
-				var ok bool
-				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(pl.TargetState))
-				if ok {
-					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-				}
-				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
-			})
-		return postCommit, nonRevertible
-	}
-
-	// A function that execute `stmts` (after finishing `setup`) until `ord`-th
-	// stage:
-	// - If a revertible stage, take a backup, inject an error to trigger a
-	//   rollback, and take a backup at each of the reverting stages.
-	// - If a non-revertible stage, take a backup.
-	//
-	// For each backup taken, we later restore them in various "flavors" (restore
-	// database, restore all tables, etc. See comments below for details) and
-	// expect that after the restore, the schema change job (either in reverting
-	// or not) is completed and the database is in an expected state.
-	testBackupRestoreCase := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
-	) {
-		// If tables are empty then, backfills should never lead to rollbacks
-		// in restores.
-		hasDMLInSetup := false
-		for _, setupStmt := range setup {
-			hasDMLInSetup = hasDMLInSetup || statements.IsANSIDML(setupStmt.AST)
-		}
-		type stage struct {
-			p        scplan.Plan
-			stageIdx int
-			resume   chan error
-		}
-		successExpected := atomic.Bool{}
-		stageChan := make(chan stage)
-		var closeStageChan sync.Once
-		ctx, cancel := context.WithCancel(context.Background())
-		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
-			BeforeStage: func(p scplan.Plan, stageIdx int) error {
-				// If this plan contains any backfills, we will not
-				// back up or restore those indexes, so failure can occur
-				if p.Stages[stageIdx].Type() == scop.BackfillType && hasDMLInSetup {
-					successExpected.Store(false)
-				}
-				if p.Stages[stageIdx].Phase == scop.StatementPhase {
-					return nil
-				}
-				if p.Stages[stageIdx].Phase == scop.PreCommitPhase {
-					if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
-						// We've seen all stmts in the test case (bc we're in PreCommitPhase)
-						// and there is no PostCommitPhase in the plan.
-						closeStageChan.Do(func() {
-							close(stageChan)
-						})
-					}
-					return nil
-				}
-
-				if stageChan != nil {
-					s := stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
-					select {
-					case stageChan <- s:
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-					select {
-					case err := <-s.resume:
-						return err
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-				}
+func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
+	re := regexp.MustCompile(`job (\d+) was paused before it completed with reason: boom (\d+)`)
+	var numInjectedFailures uint32
+	knobs := &scexec.TestingKnobs{
+		BeforeStage: func(p scplan.Plan, stageIdx int) error {
+			if atomic.LoadUint32(&numInjectedFailures) > 0 {
 				return nil
-			},
-		})
-
-		// Start with full database backup/restore.
-		defer cleanup()
-		defer cancel()
-
-		conn, err := db.Conn(ctx)
-		require.NoError(t, err)
-		tdb := sqlutils.MakeSQLRunner(conn)
-		// TODO(postamar): remove this threshold bump
-		//   This requires the test cases to be properly parallelized.
-		tdb.SucceedsSoonDuration = testutils.RaceSucceedsSoonDuration
-		tdb.Exec(t, "create database backups")
-		var g errgroup.Group
-		var before [][]string
-		beforeFunc := func() {
-			tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-			before = tdb.QueryStr(t, fetchDescriptorStateQuery)
-		}
-		g.Go(func() error {
-			return executeSchemaChangeTxn(
-				context.Background(), t, setup, stmts, db, beforeFunc, nil, nil,
-			)
-		})
-		type backup struct {
-			name            string
-			isRollback      bool
-			successExpected bool
-			url             string
-			s               stage
-		}
-		var backups []backup
-		var done bool
-		var rollbackStage int
-		type stageKey struct {
-			stage    int
-			rollback bool
-		}
-		completedStages := make(map[stageKey]struct{})
-		for i := 0; !done; i++ {
-			// We want to let the stages up to ord continue unscathed. Then, we'll
-			// start taking backups at ord. If ord corresponds to a revertible stage,
-			// we'll inject an error, forcing the schema change to roll back. At each
-			// subsequent stage during rollback, we also take a backup.
-			// At the very end, we'll have one backup where things should succeed and
-			// N backups where we're reverting. In each case, we want to have the end
-			// state of the restored set of descriptors match what we have in the
-			// original cluster.
-			// Caveat: For the very first backup taken during rollback, all targets
-			// will still have its original, un-reverted target status (simply an
-			// artifact of the job system machinery), and therefore post-restore, the
-			// schema change job is expected to finish forward, instead of reverting.
-			// Thus, technically, there will be 2 backups where things should succeed
-			// and N-1 backups where we're reverting.
-			//
-			// Lastly, we'll hit an ord corresponding to the first non-revertible
-			// stage. At this point, we'll take a backup for each non-revertible
-			// stage and confirm that restoring them and letting the jobs run
-			// leaves the database in the right state.
-			s := <-stageChan
-			// If there is no post-commit stages. Just consider it as done.
-			if s.p.Stages == nil {
-				done = true
-				stageChan = nil
-				break
 			}
-			// Move the index backwards if we see the same stage repeat due to a txn
-			// retry error for example.
-			stage := stageKey{
-				stage:    s.stageIdx,
-				rollback: s.p.InRollback,
-			}
-			if _, ok := completedStages[stage]; ok {
-				i--
-				if stage.rollback {
-					rollbackStage--
-				}
-			}
-			completedStages[stage] = struct{}{}
-			shouldFail := ord == i &&
-				s.p.Stages[s.stageIdx].Phase != scop.PostCommitNonRevertiblePhase &&
-				!s.p.InRollback
-			done = len(s.p.Stages) == s.stageIdx+1 && !shouldFail
-			t.Logf("stage %d/%d in %v (rollback=%v) %d %q %v",
-				s.stageIdx+1, len(s.p.Stages), s.p.Stages[s.stageIdx].Phase, s.p.InRollback, ord, dbName, done)
-
-			// If the database has been dropped, there is nothing for
-			// us to do here.
-			var exists bool
-			tdb.QueryRow(t,
-				`SELECT count(*) > 0 FROM system.namespace WHERE "parentID" = 0 AND name = $1`,
-				dbName).Scan(&exists)
-			if !exists || (i < ord && !done) {
-				close(s.resume)
-				continue
-			}
-
-			// This test assumes that all the descriptors being modified in the
-			// transaction are in the same database.
-			//
-			// TODO(ajwerner): Deal with trying to restore just some of the tables.
-			backupURL := fmt.Sprintf("userfile://backups.public.userfiles_$user/data%d", i)
-			tdb.Exec(t, fmt.Sprintf("BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
-			backups = append(backups, backup{
-				name:            dbName,
-				isRollback:      rollbackStage > 0,
-				successExpected: successExpected.Load(),
-				url:             backupURL,
-				s:               s,
-			})
-
-			if s.p.InRollback {
-				rollbackStage++
-			}
-			if done {
-				t.Logf("reached final stage, waiting for completion")
-				stageChan = nil // allow the restored jobs to proceed
-			}
-			if shouldFail {
-				s.resume <- errors.Newf("boom %d", i)
-			} else {
-				close(s.resume)
-			}
-		}
-		if err := g.Wait(); rollbackStage > 0 {
-			require.Regexp(t, fmt.Sprintf("boom %d", ord), err)
-		} else {
-			require.NoError(t, err)
-		}
-
-		t.Logf("finished")
-
-		for i, b := range backups {
-			// For each backup, we restore it in three flavors.
-			// 1. RESTORE DATABASE
-			// 2. RESTORE DATABASE WITH schema_only
-			// 3. RESTORE TABLE tbl1, tbl2, ..., tblN
-			// We then assert that the restored database should correctly finish
-			// the ongoing schema change job when the backup was taken, and
-			// reaches the expected state as if the back/restore had not happened at all.
-			// Skip a backup randomly.
-			type backupConsumptionFlavor struct {
-				name         string
-				restoreSetup []string
-				restoreQuery string
-			}
-			flavors := []backupConsumptionFlavor{
-				{
-					name: "restore database",
-					restoreSetup: []string{
-						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
-						"SET use_declarative_schema_changer = 'off'",
-					},
-					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s'", dbName, b.url),
-				},
-				{
-					name: "restore database with schema-only",
-					restoreSetup: []string{
-						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
-						"SET use_declarative_schema_changer = 'off'",
-					},
-					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' with schema_only", dbName, b.url),
-				},
-			}
-
-			// For the third flavor, we restore all tables in the backup.
-			// Skip it if there is no tables or if there is user-defined schemas to
-			// restore.
-			backupHasUDS := false
-			rows := tdb.QueryStr(t, `
-			SELECT parent_schema_name, object_name, object_type
-			FROM [SHOW BACKUP FROM LATEST IN $1]
-			WHERE database_name = $2 AND object_type IN ('table', 'schema')`, b.url, dbName)
-			var tablesToRestore []string
-			for _, row := range rows {
-				switch row[2] {
-				case "table":
-					tablesToRestore = append(tablesToRestore, fmt.Sprintf("%s.%s.%s", dbName, row[0], row[1]))
-				case "schema":
-					if row[1] != "public" {
-						backupHasUDS = true
-					}
-				}
-			}
-
-			if len(tablesToRestore) > 0 && !backupHasUDS {
-				flavors = append(flavors, backupConsumptionFlavor{
-					name: "restore all tables in database",
-					restoreSetup: []string{
-						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
-						fmt.Sprintf("CREATE DATABASE %q", dbName),
-						"SET use_declarative_schema_changer = 'off'",
-					},
-					restoreQuery: fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN '%s' WITH skip_missing_sequences, skip_missing_udfs",
-						strings.Join(tablesToRestore, ","), b.url),
-				})
-			}
-
-			// TODO (xiang): Add here the fourth flavor that restores
-			// only a subset, maybe randomly chosen, of all tables with
-			// `RESTORE TABLE`. Currently, it's blocked by issue #87518.
-			// We will need to change what the expected output will be
-			// in this case, since it will no longer be simply `before`
-			// and `after`.
-
-			containsUDF := func(expr tree.Expr) (bool, error) {
-				var foundUDF bool
-				_, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-					if fe, ok := expr.(*tree.FuncExpr); ok {
-						ref := fe.Func.FunctionReference.(*tree.UnresolvedName)
-						fn, err := ref.ToFunctionName()
-						require.NoError(t, err)
-						fd, err := tree.GetBuiltinFuncDefinition(fn, &sessiondata.DefaultSearchPath)
-						require.NoError(t, err)
-						if fd == nil {
-							foundUDF = true
-						}
-					}
-					return true, expr, nil
-				})
-				if err != nil {
-					return false, err
-				}
-				return foundUDF, nil
-			}
-
-			removeDefsDependOnUDFs := func(n *tree.CreateTable) {
-				var newDefs tree.TableDefs
-				for _, def := range n.Defs {
-					var usesUDF bool
-					switch d := def.(type) {
-					case *tree.CheckConstraintTableDef:
-						usesUDF, err = containsUDF(d.Expr)
-						require.NoError(t, err)
-						if usesUDF {
-							continue
-						}
-					case *tree.ColumnTableDef:
-						if d.DefaultExpr.Expr != nil {
-							usesUDF, err = containsUDF(d.DefaultExpr.Expr)
-							require.NoError(t, err)
-							if usesUDF {
-								d.DefaultExpr = struct {
-									Expr           tree.Expr
-									ConstraintName tree.Name
-								}{}
-							}
-						}
-					}
-					newDefs = append(newDefs, def)
-				}
-				n.Defs = newDefs
-			}
-
-			for _, flavor := range flavors {
-				t.Run(flavor.name, func(t *testing.T) {
-					maybeRandomlySkip(t)
-					t.Logf("testing backup %d (rollback=%v)", i, b.isRollback)
-					tdb.ExecMultiple(t, flavor.restoreSetup...)
-					tdb.Exec(t, flavor.restoreQuery)
-					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-					waitForSchemaChangesToFinish(t, tdb)
-					wasSchemaChangeSuccessful := schemaChangeQueryLatestStatus(t, tdb) == "succeeded"
-					// Validate if the schema change was successful after the restore,
-					// only if no backfill's are required.
-					if !b.isRollback && !wasSchemaChangeSuccessful && b.successExpected {
-						t.Fatalf("schema change failed when successful completion was expected")
-					}
-					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
-
-					if flavor.name != "restore all tables in database" {
-						if b.isRollback || !wasSchemaChangeSuccessful {
-							require.Equal(t, before, afterRestore)
-						} else {
-							require.Equal(t, after, afterRestore)
-						}
-					} else {
-						// If the flavor restore only tables, there can be missing UDF
-						// dependencies which cause check constraints or expressions
-						// dropped through RESTORE due to missing UDFs. We need to remove
-						// those kind of table elements from original AST.
-						var expected [][]string
-						if b.isRollback || !wasSchemaChangeSuccessful {
-							expected = before
-						} else {
-							expected = after
-						}
-						require.Equal(t, len(expected), len(afterRestore))
-						for i := range expected {
-							require.Equal(t, 1, len(expected[i]))
-							require.Equal(t, 1, len(afterRestore[i]))
-							afterNode, _ := parser.ParseOne(expected[i][0])
-							afterRestoreNode, _ := parser.ParseOne(afterRestore[i][0])
-							if _, ok := afterNode.AST.(*tree.CreateTable); !ok {
-								require.Equal(t, expected[i][0], afterRestore[i][0])
-							} else {
-								createTbl := afterNode.AST.(*tree.CreateTable)
-								removeDefsDependOnUDFs(createTbl)
-								createTblRestored := afterRestoreNode.AST.(*tree.CreateTable)
-								require.Equal(t, tree.AsString(createTbl), tree.AsString(createTblRestored))
-							}
-						}
-					}
-					// Hack to deal with corrupt userfiles tables due to #76764.
-					const validateQuery = `
-SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
-`
-					tdb.CheckQueryResults(t, validateQuery, [][]string{})
-					tdb.Exec(t, fmt.Sprintf("DROP DATABASE %q CASCADE", dbName))
-					tdb.Exec(t, "USE backups")
-					tdb.CheckQueryResults(t, validateQuery, [][]string{})
-				})
-			}
-		}
-	}
-
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		postCommit, nonRevertible := countStages(t, setup, stmts)
-		n := postCommit + nonRevertible
-		t.Logf(
-			"test case has %d revertible post-commit stages and %d non-revertible"+
-				" post-commit stages", postCommit, nonRevertible,
-		)
-		for i := 0; i <= n; i++ {
-			if !t.Run(
-				fmt.Sprintf("backup and restore at stage %d of %d", i, n),
-				func(t *testing.T) {
-					maybeRandomlySkip(t)
-					testBackupRestoreCase(t, setup, stmts, i)
-				},
-			) {
-				return
-			}
-		}
-	}
-
-	cumulativeTest(t, "Backup", path, testFunc)
-}
-
-func maybeGetDatabaseForIDs(
-	t *testing.T, tdb *sqlutils.SQLRunner, ids catalog.DescriptorIDSet,
-) (dbName string, exists bool) {
-	err := tdb.DB.QueryRowContext(context.Background(), `
-SELECT name
-  FROM system.namespace
- WHERE id
-       IN (
-            SELECT DISTINCT
-                   COALESCE(
-                    d->'database'->>'id',
-                    d->'schema'->>'parentId',
-                    d->'type'->>'parentId',
-                    d->'table'->>'parentId'
-                   )::INT8
-              FROM (
-                    SELECT crdb_internal.pb_to_json('desc', descriptor) AS d
-                      FROM system.descriptor
-                     WHERE id IN (SELECT * FROM ROWS FROM (unnest($1::INT8[])))
-                   )
-        )
-`, pq.Array(ids.Ordered())).
-		Scan(&dbName)
-	if errors.Is(err, gosql.ErrNoRows) {
-		return "", false
-	}
-
-	require.NoError(t, err)
-	return dbName, true
-}
-
-// processPlanInPhase will call processFunc with the plan as of the first
-// stage in the requested phase. processFunc will be called at most once.
-func processPlanInPhase(
-	t *testing.T,
-	newCluster NewClusterFunc,
-	setup, stmts []statements.Statement[tree.Statement],
-	phaseToProcess scop.Phase,
-	processFunc func(p scplan.Plan),
-	after func(db *gosql.DB),
-) {
-	var processOnce sync.Once
-	_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
-		BeforeStage: func(p scplan.Plan, _ int) error {
-			if p.Params.ExecutionPhase == phaseToProcess && processFunc != nil {
-				processOnce.Do(func() { processFunc(p) })
+			if s := p.Stages[stageIdx]; cs.Phase == s.Phase && cs.StageOrdinal == s.Ordinal {
+				atomic.AddUint32(&numInjectedFailures, 1)
+				return jobs.MarkPauseRequestError(errors.Errorf("boom %d", cs.StageOrdinal))
 			}
 			return nil
 		},
-	})
-	defer cleanup()
-	require.NoError(t, executeSchemaChangeTxn(
-		context.Background(), t, setup, stmts, db, nil, nil, nil,
-	))
-	if after != nil {
-		after(db)
 	}
-}
-
-// executeSchemaChangeTxn spins up a test cluster, executes the setup
-// statements with the legacy schema changer, then executes the test statements
-// with the declarative schema changer.
-func executeSchemaChangeTxn(
-	ctx context.Context,
-	t *testing.T,
-	setup []statements.Statement[tree.Statement],
-	stmts []statements.Statement[tree.Statement],
-	db *gosql.DB,
-	before func(),
-	txnStartCallback func(),
-	onError func(err error) error,
-) (err error) {
-
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	// Execute the setup statements with the legacy schema changer so that the
-	// declarative schema changer testing knobs don't get used.
-	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
-	for _, stmt := range setup {
-		_, err := db.Exec(stmt.SQL)
-		if err != nil {
-			// nolint:errcmp
-			switch errT := err.(type) {
-			case *pq.Error:
-				if string(errT.Code) == pgcode.FeatureNotSupported.String() {
-					skip.IgnoreLint(t, "skipping due to unimplemented feature in old cluster version.")
-				}
-			}
-			return err
-		}
-	}
-	waitForSchemaChangesToFinish(t, tdb)
-	if before != nil {
-		before()
-	}
-
-	// Execute the tested statements with the declarative schema changer and fail
-	// the test if it all takes too long. This prevents the test suite from
-	// hanging when a regression is introduced.
-	{
-		c := make(chan error, 1)
-		go func() {
-			conn, err := db.Conn(ctx)
-			if err != nil {
-				c <- err
-				return
-			}
-			defer func() { _ = conn.Close() }()
-			c <- crdb.Execute(func() (err error) {
-				_, err = conn.ExecContext(
-					ctx, "SET use_declarative_schema_changer = 'unsafe_always'",
-				)
-				if err != nil {
-					return err
-				}
-				var tx *gosql.Tx
-				tx, err = conn.BeginTx(ctx, nil)
-				if err != nil {
-					return err
-				}
-				defer func() {
-					if err != nil {
-						err = errors.WithSecondaryError(err, tx.Rollback())
-					} else {
-						err = tx.Commit()
-					}
-				}()
-				if txnStartCallback != nil {
-					txnStartCallback()
-				}
-				for _, stmt := range stmts {
-					if _, err := tx.Exec(stmt.SQL); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		}()
-		testutils.SucceedsSoon(t, func() error {
-			select {
-			case e := <-c:
-				err = e
-				return nil
-			default:
-				return errors.New("waiting for statements to execute")
-			}
-		})
-	}
-
-	if err != nil && onError != nil {
-		err = onError(err)
-	}
-	if err != nil {
-		return err
-	}
-
-	// Ensure we're really done here.
-	waitForSchemaChangesToFinish(t, tdb)
-	return nil
-}
-
-// ValidateMixedVersionElements executes each phase within a mixed version
-// state for the cluster.
-func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
-	var testValidateMixedVersionElements func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	)
-	downlevelClusterFunc := func(t *testing.T, knobs *scexec.TestingKnobs,
-	) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()) {
-		return newCluster(t, knobs, true)
-	}
-	countPostCommitStages := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	) (postCommitCount int, postCommitNonRevertibleCount int) {
-		processPlanInPhase(
-			t, downlevelClusterFunc, setup, stmts, scop.PostCommitPhase,
-			func(p scplan.Plan) {
-				for _, s := range p.Stages {
-					if s.Phase == scop.PostCommitPhase {
-						postCommitCount += 1
-					} else if s.Phase == scop.PostCommitNonRevertiblePhase {
-						postCommitNonRevertibleCount += 1
-					}
-				}
-			},
-			func(db *gosql.DB) {},
-		)
-		return postCommitCount, postCommitNonRevertibleCount
-	}
-	r, _ := randutil.NewTestRand()
-	const runRate = .5
-
-	maybeRandomlySkip := func(t *testing.T) {
-		if !*runAllMixedTests && r.Float64() >= runRate {
-			skip.IgnoreLint(t, "skipping due to randomness")
-		}
-	}
-
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		// Skip this test if any of the stmts is not fully supported.
-		if err := areStmtsFullySupportedAtClusterVersion(t, setup, stmts, downlevelClusterFunc); err != nil {
-			skip.IgnoreLint(t, "test is skipped because", err.Error())
-		}
-
-		if !t.Run("pause upgrade and resume at each stage",
-			func(t *testing.T) { testValidateMixedVersionElements(t, setup, stmts) },
-		) {
-			return
-		}
-	}
-
-	testValidateMixedVersionElements = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement]) {
-		postCommitCount, postCommitNonRevertibleCount := countPostCommitStages(t, setup, stmts)
-		stageCounts := []int{postCommitCount, postCommitNonRevertibleCount}
-		stageTypes := []scop.Phase{scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase}
-
-		for stageTypIdx := range stageCounts {
-			stageType := stageTypes[stageTypIdx]
-			for stageOrdinal := 1; stageOrdinal <= stageCounts[stageTypIdx]; stageOrdinal++ {
-				t.Run(fmt.Sprintf("%s_%d_of_%d", stageType, stageOrdinal, stageCounts[stageTypIdx]), func(t *testing.T) {
-					maybeRandomlySkip(t)
-					jobPauseResumeChannel := make(chan jobspb.JobID)
-					waitForPause := make(chan struct{})
-					pauseComplete := false
-					_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
-						BeforeStage: func(p scplan.Plan, stageIdx int) error {
-							if stageOrdinal == p.Stages[stageIdx].Ordinal &&
-								p.Stages[stageIdx].Phase == stageType && !pauseComplete {
-								jobPauseResumeChannel <- p.JobID
-								<-waitForPause
-								pauseComplete = true
-								return kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "test")
-							}
-							return nil
-						},
-					}, true /*down level*/)
-					tdb := sqlutils.MakeSQLRunner(db)
-					// Use shorter liveness heartbeat interval and longer liveness ttl to
-					// avoid errors caused by refused connections.
-					tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'`)
-					tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.ttl = '120s'`)
-
-					// Wait for the schema changer job to hit desired stage, pause the job,
-					// perform a cluster upgrade, and resume the job.
-					go func() {
-						jobID := <-jobPauseResumeChannel
-						_, err := db.Exec("PAUSE JOB $1", jobID)
-						require.NoError(t, err)
-						tdb.CheckQueryResultsRetry(t, fmt.Sprintf(
-							`SELECT status FROM [SHOW JOBS] WHERE job_id = %d`, jobID,
-						), [][]string{{"paused"}})
-						close(waitForPause)
-						_, err = db.Exec("SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
-						require.NoError(t, err)
-						tdb.Exec(t, `RESUME JOB $1`, jobID)
-					}()
-
-					defer cleanup()
-					require.NoError(t, executeSchemaChangeTxn(
-						context.Background(), t, setup, stmts, db, nil, nil, func(err error) error {
-							return nil // FIXME: Check for pause
-						},
-					))
-
-					// The resumed job should eventually succeed after upgrade.
-					query := `SELECT statement, status FROM [SHOW JOBS] WHERE job_type = 'NEW SCHEMA CHANGE' AND status != 'succeeded'`
-					testutils.SucceedsSoon(t, func() error {
-						row := tdb.QueryStr(t, query)
-						if len(row) > 0 {
-							return errors.AssertionFailedf("expected 0 unsuccessful schema change jobs;"+
-								" get %d: %v", len(row), row[0])
-						}
-						return nil
-					})
-				})
-			}
-		}
-	}
-
-	cumulativeTest(t, "ValidateMixedVersionElements", path, testFunc)
-}
-
-// areStmtsFullySupportedAtClusterVersion determines if `stmts` are fully supported
-// by running `stmts` in a transaction with declarative schema changer.
-// It returns any error it encounters.
-func areStmtsFullySupportedAtClusterVersion(
-	t *testing.T,
-	setup []statements.Statement[tree.Statement],
-	stmts []statements.Statement[tree.Statement],
-	clusterFunc func(t *testing.T, knobs *scexec.TestingKnobs) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()),
-) error {
 	ctx := context.Background()
-	s, db, cleanup := clusterFunc(t, nil /* knobs */)
-	defer cleanup()
-	cv := s.ClusterSettings().Version
+	// TODO(ajwerner): It'd be nice to assert something about the number of
+	// remaining stages before the pause and then after. It's not totally
+	// trivial, as we don't checkpoint during non-mutation stages, so we'd
+	// need to look back and find the last mutation phase.
+	runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
+		tdb := sqlutils.MakeSQLRunner(db)
+		// Use shorter liveness heartbeat interval and longer liveness ttl to
+		// avoid errors caused by refused connections.
+		tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'`)
+		tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.ttl = '120s'`)
 
-	// Sieve 1: check whether the statements are even implemented and the schema
-	// changer mode.
-	for _, stmt := range stmts {
-		if !scbuild.IsFullySupportedWithFalsePositive(stmt.AST, cv.ActiveVersion(ctx)) {
-			return scerrors.NotImplementedError(stmt.AST)
-		}
-	}
-	// Sieve 2: false positives might fall through sieve 1 and we need to actually run
-	// it to account for version gates in the builder.
-	return executeSchemaChangeTxn(ctx, t, setup, stmts, db, nil, nil, nil)
-}
-
-func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
-	//testVersion := clusterversion.ClusterVersion{
-	//	Version: clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1),
-	//}
-	var after [][]string // CREATE_STATEMENT for all descriptors after finishing `stmts` in each test case.
-	var dbName string
-	r, _ := randutil.NewTestRand()
-	const runRate = .5
-
-	maybeRandomlySkip := func(t *testing.T) {
-		if !*runAllBackups && r.Float64() >= runRate {
-			skip.IgnoreLint(t, "skipping due to randomness")
-		}
-	}
-	downlevelClusterFunc := func(t *testing.T, knobs *scexec.TestingKnobs,
-	) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()) {
-		return newCluster(t, knobs, true)
-	}
-	// A function that executes `setup` first and then count the number of
-	// postCommit and postCommitNonRevertible stages for executing `stmts`.
-	// It also initializes `after` and `dbName` here.
-	countStages := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
-	) (postCommit, nonRevertible int) {
-		var pl scplan.Plan
-		processPlanInPhase(t, downlevelClusterFunc, setup, stmts, scop.PostCommitPhase,
-			func(p scplan.Plan) {
-				pl = p
-				postCommit = len(p.StagesForCurrentPhase())
-				nonRevertible = len(p.Stages) - postCommit
-			}, func(db *gosql.DB) {
-				tdb := sqlutils.MakeSQLRunner(db)
-				var ok bool
-				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(pl.TargetState))
-				if ok {
-					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-				}
-				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
-			})
-		return postCommit, nonRevertible
-	}
-
-	// A function that takes backup at `ord`-th stage while executing `stmts` after
-	// finishing `setup`. It also takes `ord` backups at each of the preceding stage
-	// if it's a revertible stage.
-	// It then restores the backup(s) in various "flavors" (see
-	// comment below for details) and expect the restore to finish the schema change job
-	// as if the backup/restore had never happened.
-	testBackupRestoreCase := func(
-		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
-	) {
-		// If tables are empty then, backfills should never lead to rollbacks
-		// in restores.
-		hasDMLInSetup := false
-		for _, setupStmt := range setup {
-			hasDMLInSetup = hasDMLInSetup || statements.IsANSIDML(setupStmt.AST)
-		}
-		successExpected := atomic.Bool{}
-		type stage struct {
-			p        scplan.Plan
-			stageIdx int
-			resume   chan error
-		}
-
-		stageChan := make(chan stage)
-		ctx, cancel := context.WithCancel(context.Background())
-		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
-			BeforeStage: func(p scplan.Plan, stageIdx int) error {
-				if p.Stages[stageIdx].Type() == scop.BackfillType && hasDMLInSetup {
-					// Restores for anything with a backfill can potentially,
-					// fail.
-					successExpected.Store(false)
-				}
-				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
-					if stageChan != nil {
-						close(stageChan)
-					}
-					return nil
-				}
-				if p.Stages[stageIdx].Phase < scop.PostCommitPhase {
-					return nil
-				}
-				if stageChan != nil {
-					s := stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
-					// Let the test program to proceed by sending to `stageChan`
-					select {
-					case stageChan <- s:
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-					// Wait on `s.resume` until the test program has taken a backup on
-					// the database. This is also where the test program injects error
-					// into the schema change to force reverting.
-					select {
-					case err := <-s.resume:
-						return err
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-				}
-				return nil
-			},
-		}, true)
-
-		// Start with full database backup/restore.
-		defer cleanup()
-		defer cancel()
-
-		conn, err := db.Conn(ctx)
-		require.NoError(t, err)
-		tdb := sqlutils.MakeSQLRunner(conn)
-		// TODO(postamar): remove this threshold bump
-		//   This requires the test cases to be properly parallelized.
-		tdb.SucceedsSoonDuration = testutils.RaceSucceedsSoonDuration
-		tdb.Exec(t, "create database backups")
-		var g errgroup.Group
-		var before [][]string
-		beforeFunc := func() {
-			tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-			before = tdb.QueryStr(t, fetchDescriptorStateQuery)
-		}
-		g.Go(func() error {
-			return executeSchemaChangeTxn(
-				context.Background(), t, setup, stmts, db, beforeFunc, nil, nil,
-			)
-		})
-		type backup struct {
-			name            string
-			isRollback      bool
-			successExpected bool
-			url             string
-			s               stage
-		}
-		var backups []backup
-		var done bool
-		var rollbackStage int
-		type stageKey struct {
-			stage    int
-			rollback bool
-		}
-		completedStages := make(map[stageKey]struct{})
-		for i := 0; !done; i++ {
-			// We want to let the stages up to ord continue unscathed. Then, we'll
-			// start taking backups at ord. If ord corresponds to a revertible
-			// stage, we'll inject an error, forcing the schema change to revert.
-			// At each subsequent stage, we also take a backup. At the very end,
-			// we'll have one backup where things should succeed and N backups
-			// where we're reverting. In each case, we want to have the end state
-			// of the restored set of descriptors match what we have in the original
-			// cluster.
-			//
-			// Lastly, we'll hit an ord corresponding to the first non-revertible
-			// stage. At this point, we'll take a backup for each non-revertible
-			// stage and confirm that restoring them and letting the jobs run
-			// leaves the database in the right state.
-
-			// `stageChan` and `s.resume` allow this for-loop (on `i`) to be in sync
-			// with the schema change job stages. E.g. if `i=0`, then we know that
-			// the schema change is blocked right before executing the 0-th stage.
-			s := <-stageChan
-			// If there is no post-commit stages. Just consider it as done.
-			if s.p.Stages == nil {
-				done = true
-				stageChan = nil
-				break
-			}
-			// Move the index backwards if we see the same stage repeat due to a txn
-			// retry error for example.
-			stage := stageKey{
-				stage:    s.stageIdx,
-				rollback: s.p.InRollback,
-			}
-			if _, ok := completedStages[stage]; ok {
-				i--
-				if stage.rollback {
-					rollbackStage--
-				}
-			}
-			completedStages[stage] = struct{}{}
-			shouldFail := ord == i &&
-				s.p.Stages[s.stageIdx].Phase != scop.PostCommitNonRevertiblePhase &&
-				!s.p.InRollback
-			done = len(s.p.Stages) == s.stageIdx+1 && !shouldFail
-			t.Logf("stage %d/%d in %v (rollback=%v) %d %q %v",
-				s.stageIdx+1, len(s.p.Stages), s.p.Stages[s.stageIdx].Phase, s.p.InRollback, ord, dbName, done)
-
-			// If the database has been dropped, there is nothing for
-			// us to do here.
-			var exists bool
-			tdb.QueryRow(t,
-				`SELECT count(*) > 0 FROM system.namespace WHERE "parentID" = 0 AND name = $1`,
-				dbName).Scan(&exists)
-			if !exists || (i < ord && !done) {
-				close(s.resume)
-				continue
-			}
-
-			// This test assumes that all the descriptors being modified in the
-			// transaction are in the same database.
-			//
-			// TODO(ajwerner): Deal with trying to restore just some of the tables.
-			backupURL := fmt.Sprintf("userfile://backups.public.userfiles_$user/data%d", i)
-			tdb.Exec(t, fmt.Sprintf(
-				"BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
-			backups = append(backups, backup{
-				name:            dbName,
-				isRollback:      rollbackStage > 0,
-				url:             backupURL,
-				successExpected: successExpected.Load(),
-				s:               s,
-			})
-
-			if s.p.InRollback {
-				rollbackStage++
-			}
-			if done {
-				t.Logf("reached final stage, waiting for completion")
-				stageChan = nil // allow the restored jobs to proceed
-			}
-			if shouldFail {
-				s.resume <- errors.Newf("boom %d", i)
-			} else {
-				close(s.resume)
-			}
-		}
-		if err := g.Wait(); rollbackStage > 0 {
-			require.Regexp(t, fmt.Sprintf("boom %d", ord), err)
-		} else {
+		require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
+		err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
+		if err != nil {
+			// Check that it's a pause error, with a job.
+			match := re.FindStringSubmatch(err.Error())
+			require.NotNil(t, match)
+			idx, err := strconv.Atoi(match[2])
 			require.NoError(t, err)
+			require.Equal(t, cs.StageOrdinal, idx)
+			jobID, err := strconv.Atoi(match[1])
+			require.NoError(t, err)
+
+			// Check that the job is paused.
+			qStatus := fmt.Sprintf(`SELECT status FROM [SHOW JOB %d]`, jobID)
+			tdb.CheckQueryResultsRetry(t, qStatus, [][]string{{"paused"}})
+			t.Logf("job %d is paused", jobID)
+
+			// Upgrade the cluster, if applicable.
+			tdb.Exec(t, "SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
+
+			// Resume the job and check that it succeeds.
+			tdb.Exec(t, "RESUME JOB $1", jobID)
+			t.Logf("job %d is resuming", jobID)
+			qStatusWithError := fmt.Sprintf(`SELECT status, error FROM [SHOW JOB %d]`, jobID)
+			tdb.CheckQueryResultsRetry(t, qStatusWithError, [][]string{{"succeeded", ""}})
 		}
-
-		t.Logf("finished")
-
-		_, err = db.Exec("SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
-		require.NoError(t, err)
-
-		for i, b := range backups {
-			// For each backup, we restore it in three flavors.
-			// 1. RESTORE DATABASE
-			// 2. RESTORE DATABASE WITH schema_only
-			// 3. RESTORE TABLE tbl1, tbl2, ..., tblN
-			// We then assert that the restored database should correctly finish
-			// the ongoing schema change job when the backup was taken, and
-			// reaches the expected state as if the back/restore had not happened at all.
-			// Skip a backup randomly.
-			type backupConsumptionFlavor struct {
-				name         string
-				restoreSetup []string
-				restoreQuery string
-			}
-			flavors := []backupConsumptionFlavor{
-				{
-					name: "restore database",
-					restoreSetup: []string{
-						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
-						"SET use_declarative_schema_changer = 'off'",
-					},
-					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s'", dbName, b.url),
-				},
-				{
-					name: "restore database with schema-only",
-					restoreSetup: []string{
-						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
-						"SET use_declarative_schema_changer = 'off'",
-					},
-					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' with schema_only", dbName, b.url),
-				},
-			}
-
-			// For the third flavor, we restore all tables in the backup.
-			// Skip it if there is no tables.
-			rows := tdb.QueryStr(t, `
-			SELECT parent_schema_name, object_name
-			FROM [SHOW BACKUP FROM LATEST IN $1]
-			WHERE database_name = $2 AND object_type = 'table'`, b.url, dbName)
-			var tablesToRestore []string
-			for _, row := range rows {
-				tablesToRestore = append(tablesToRestore, fmt.Sprintf("%s.%s.%s", dbName, row[0], row[1]))
-			}
-
-			if len(tablesToRestore) > 0 {
-				flavors = append(flavors, backupConsumptionFlavor{
-					name: "restore all tables in database",
-					restoreSetup: []string{
-						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
-						fmt.Sprintf("CREATE DATABASE %q", dbName),
-						"SET use_declarative_schema_changer = 'off'",
-					},
-					restoreQuery: fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN '%s' WITH skip_missing_sequences",
-						strings.Join(tablesToRestore, ","), b.url),
-				})
-			}
-
-			// TODO (xiang): Add here the fourth flavor that restores
-			// only a subset, maybe randomly chosen, of all tables with
-			// `RESTORE TABLE`. Currently, it's blocked by issue #87518.
-			// We will need to change what the expected output will be
-			// in this case, since it will no longer be simply `before`
-			// and `after`.
-
-			for _, flavor := range flavors {
-				t.Run(flavor.name, func(t *testing.T) {
-					maybeRandomlySkip(t)
-					t.Logf("testing backup %d (rollback=%v)", i, b.isRollback)
-					tdb.ExecMultiple(t, flavor.restoreSetup...)
-					tdb.Exec(t, flavor.restoreQuery)
-					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-					waitForSchemaChangesToFinish(t, tdb)
-					wasSchemaChangeSuccessful := schemaChangeQueryLatestStatus(t, tdb) == "succeeded"
-					// Validate if the schema change was successful after the restore,
-					// only if no backfill's are required.
-					if !b.isRollback && !wasSchemaChangeSuccessful && b.successExpected {
-						t.Fatalf("schema change failed when successful completion was expected")
-					}
-					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
-					if b.isRollback || !wasSchemaChangeSuccessful {
-						require.Equal(t, before, afterRestore)
-					} else {
-						require.Equal(t, after, afterRestore)
-					}
-					// Hack to deal with corrupt userfiles tables due to #76764.
-					const validateQuery = `
-SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
-`
-					tdb.CheckQueryResults(t, validateQuery, [][]string{})
-					tdb.Exec(t, fmt.Sprintf("DROP DATABASE %q CASCADE", dbName))
-					tdb.Exec(t, "USE backups")
-					tdb.CheckQueryResults(t, validateQuery, [][]string{})
-				})
-			}
-		}
+		waitForSchemaChangesToFinish(t, tdb)
+		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
 	}
-
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		// Skip this test if any of the stmts is not fully supported.
-		if err := areStmtsFullySupportedAtClusterVersion(t, setup, stmts, downlevelClusterFunc); err != nil {
-			skip.IgnoreLint(t, "test is skipped because", err.Error())
-		}
-
-		postCommit, nonRevertible := countStages(t, setup, stmts)
-		n := postCommit + nonRevertible
-		t.Logf(
-			"test case has %d revertible post-commit stages and %d non-revertible"+
-				" post-commit stages", postCommit, nonRevertible,
-		)
-		for i := 0; i <= n; i++ {
-			if !t.Run(
-				fmt.Sprintf("backup/restore stage %d of %d", i, n),
-				func(t *testing.T) {
-					maybeRandomlySkip(t)
-					testBackupRestoreCase(t, setup, stmts, i)
-				},
-			) {
-				return
-			}
-		}
-	}
-
-	cumulativeTest(t, "BackupMixedVersionElements", path, testFunc)
+	factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
 }
