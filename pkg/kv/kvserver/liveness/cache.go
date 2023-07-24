@@ -34,6 +34,9 @@ type Gossip interface {
 	GetNodeID() roachpb.NodeID
 }
 
+var livenessRegex = gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
+var storeRegex = gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
+
 // cache stores updates to both Liveness records and the store descriptor map.
 // It doesn't store the entire StoreDescriptor, only the time when it is
 // updated. The StoreDescriptor is sent directly from nodes so doesn't require
@@ -77,13 +80,11 @@ func newCache(
 		// nl.Start() is invoked. At the time of writing this invariant does
 		// not hold (which is a problem, since the node itself won't be live
 		// at this point, and requests routed to it will hang).
-		livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 		c.gossip.RegisterCallback(livenessRegex, c.livenessGossipUpdate)
 
 		// Enable redundant callbacks for the store keys because we use these
 		// callbacks as a clock to determine when a store was last updated even if it
 		// hasn't otherwise changed.
-		storeRegex := gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
 		c.gossip.RegisterCallback(storeRegex, c.storeGossipUpdate, gossip.Redundant)
 	}
 	return &c
