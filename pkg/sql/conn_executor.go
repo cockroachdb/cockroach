@@ -2922,13 +2922,18 @@ func (ex *connExecutor) execCopyOut(
 	}
 
 	if copyErr := ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
-		ex.mu.Lock()
-		queryMeta, ok := ex.mu.ActiveQueries[queryID]
-		if !ok {
-			return errors.AssertionFailedf("query %d not in registry", queryID)
+		if err := func() error {
+			ex.mu.Lock()
+			defer ex.mu.Unlock()
+			queryMeta, ok := ex.mu.ActiveQueries[queryID]
+			if !ok {
+				return errors.AssertionFailedf("query %d not in registry", queryID)
+			}
+			queryMeta.phase = executing
+			return nil
+		}(); err != nil {
+			return err
 		}
-		queryMeta.phase = executing
-		ex.mu.Unlock()
 
 		// We'll always have a txn on the planner since we called resetPlanner
 		// above.
@@ -3185,13 +3190,18 @@ func (ex *connExecutor) execCopyIn(
 	}
 
 	if copyErr = ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
-		ex.mu.Lock()
-		queryMeta, ok := ex.mu.ActiveQueries[queryID]
-		if !ok {
-			return errors.AssertionFailedf("query %d not in registry", queryID)
+		if err := func() error {
+			ex.mu.Lock()
+			defer ex.mu.Unlock()
+			queryMeta, ok := ex.mu.ActiveQueries[queryID]
+			if !ok {
+				return errors.AssertionFailedf("query %d not in registry", queryID)
+			}
+			queryMeta.phase = executing
+			return nil
+		}(); err != nil {
+			return err
 		}
-		queryMeta.phase = executing
-		ex.mu.Unlock()
 		return cm.run(ctx)
 	}); copyErr != nil {
 		// TODO(andrei): We don't have a full retriable error story for the copy machine.
