@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -91,6 +92,24 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 		sessiondata.RootUserSessionDataOverride,
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,
+	)
+	return err
+}
+
+// UpdateTTLJobName implement scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) UpdateTTLJobName(ctx context.Context, tbl *tabledesc.Mutable) error {
+	if !tbl.HasRowLevelTTL() {
+		return nil
+	}
+
+	_, err := mu.txn.ExecEx(
+		ctx,
+		"update-ttl-job-names",
+		mu.txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		"UPDATE system.scheduled_jobs SET schedule_name = ('row-level-ttl-' || $1) WHERE schedule_id = $2",
+		tbl.GetName(),
+		tbl.RowLevelTTL.ScheduleID,
 	)
 	return err
 }
