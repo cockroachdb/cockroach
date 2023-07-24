@@ -346,6 +346,10 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
+				case "crdb_internal.gen_rand_ident":
+					// Generates random identifiers, so a large number are dangerous and
+					// can take a long time.
+					continue
 				case "st_frechetdistance", "st_buffer":
 					// Some spatial function are slow and testing them here
 					// is not worth it.
