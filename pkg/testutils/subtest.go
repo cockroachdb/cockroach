@@ -18,16 +18,13 @@ import (
 // RunTrueAndFalse calls the provided function in a subtest, first with the
 // boolean argument set to false and next with the boolean argument set to true.
 func RunTrueAndFalse(t *testing.T, name string, fn func(t *testing.T, b bool)) {
-	for _, b := range []bool{false, true} {
-		t.Run(fmt.Sprintf("%s=%t", name, b), func(t *testing.T) {
-			fn(t, b)
-		})
-	}
+	t.Helper()
+	RunValues(t, name, []bool{false, true}, fn)
 }
 
 // RunValues calls the provided function in a subtest for each of the
 // provided values.
-func RunValues(t *testing.T, name string, values []interface{}, fn func(*testing.T, interface{})) {
+func RunValues[T any](t *testing.T, name string, values []T, fn func(*testing.T, T)) {
 	t.Helper()
 	for _, v := range values {
 		t.Run(fmt.Sprintf("%s=%v", name, v), func(t *testing.T) {

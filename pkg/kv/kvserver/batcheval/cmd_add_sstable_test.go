@@ -1114,14 +1114,14 @@ func TestEvalAddSSTable(t *testing.T) {
 		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
-		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {
-			testutils.RunValues(t, "ApproximateDiskBytes", []interface{}{0, 1000000}, func(t *testing.T, approxBytes interface{}) {
-				approxDiskBytes := uint64(approxBytes.(int))
+		testutils.RunValues(t, "RewriteConcurrency", []int64{0, 8}, func(t *testing.T, c int64) {
+			testutils.RunValues(t, "ApproximateDiskBytes", []int{0, 1000000}, func(t *testing.T, approxBytes int) {
+				approxDiskBytes := uint64(approxBytes)
 				for name, tc := range testcases {
 					t.Run(name, func(t *testing.T) {
 						ctx := context.Background()
 						st := cluster.MakeTestingClusterSettings()
-						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
+						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, c)
 						batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
 						engine := storage.NewDefaultInMemForTesting()
