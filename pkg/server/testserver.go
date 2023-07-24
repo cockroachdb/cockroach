@@ -1201,18 +1201,13 @@ func (ts *TestServer) StartTenant(
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
-	// Waiting for capabilities can take 3+ seconds since the
-	// rangefeedcache needs to wait for the closed timestamp
-	// before flushing updates. To avoid paying this cost in all
-	// cases, we only set the nodelocal storage capability if the
-	// caller has configured an ExternalIODir since nodelocal
-	// storage only works with that configured.
+	// Waiting for capabilities can time To avoid paying this cost in all
+	// cases, we only set the nodelocal storage capability if the caller has
+	// configured an ExternalIODir since nodelocal storage only works with
+	// that configured.
 	//
-	// TODO(ssd): We should do more here. We could have the caller
-	// pass in explicitly that they want these capabilities. Or,
-	// we could modify the system in some way to avoid waiting on
-	// capabilities for so long. Also, note that this doesn't
-	// apply to StartSharedProcessTenant.
+	// TODO(ssd): We do not set this capability in
+	// StartSharedProcessTenant.
 	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
 	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities)
 	if canGrantNodelocalCap && shouldGrantNodelocalCap {
@@ -1225,6 +1220,11 @@ func (ts *TestServer) StartTenant(
 				return nil, err
 			}
 		} else {
+			// Restart the capabilities watcher. Restarting the
+			// watcher forces a new initial scan which is faster
+			// than waiting out the closed timestamp interval
+			// required to see new updates.
+			ts.tenantCapabilitiesWatcher.TestingRestart()
 			if err := testutils.SucceedsSoonError(func() error {
 				capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
 				if !found {
