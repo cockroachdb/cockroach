@@ -22,10 +22,6 @@ import (
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	sch, resName := b.resolveSchemaForCreateTable(&cv.Name)
-	schID := b.factory.Metadata().AddSchema(sch)
-	viewName := tree.MakeTableNameFromPrefix(resName, tree.Name(cv.Name.Object()))
-
 	preFuncResolver := b.semaCtx.FunctionResolver
 	b.semaCtx.FunctionResolver = nil
 
@@ -40,14 +36,21 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	if b.sourceViews == nil {
 		b.sourceViews = make(map[string]struct{})
 	}
-	b.sourceViews[viewName.FQString()] = struct{}{}
+
+	viewName := &cv.Name
+	sch, resName := b.resolveSchemaForCreateTable(viewName)
+	viewName.ObjectNamePrefix = resName
+	schID := b.factory.Metadata().AddSchema(sch)
+
+	viewFQString := viewName.FQString()
+	b.sourceViews[viewFQString] = struct{}{}
 	defer func() {
 		b.insideViewDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
-		delete(b.sourceViews, viewName.FQString())
+		delete(b.sourceViews, viewFQString)
 
 		b.semaCtx.FunctionResolver = preFuncResolver
 		maybePanicOnUnknownFunction("view query")
@@ -91,17 +94,12 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
-			Schema:       schID,
-			ViewName:     &viewName,
-			IfNotExists:  cv.IfNotExists,
-			Replace:      cv.Replace,
-			Persistence:  cv.Persistence,
-			Materialized: cv.Materialized,
-			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
-			Columns:      p,
-			Deps:         b.schemaDeps,
-			TypeDeps:     b.schemaTypeDeps,
-			WithData:     cv.WithData,
+			Syntax:    cv,
+			Schema:    schID,
+			ViewQuery: tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
+			Columns:   p,
+			Deps:      b.schemaDeps,
+			TypeDeps:  b.schemaTypeDeps,
 		},
 	)
 	return outScope
