@@ -1664,9 +1664,7 @@ func TestRestoreCheckpointing(t *testing.T) {
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
-	testServerArgs := base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}
-	params.ServerArgs = testServerArgs
-	params.ServerArgs.Knobs = knobs
+	params.ServerArgs = base.TestServerArgs{Knobs: knobs}
 
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
