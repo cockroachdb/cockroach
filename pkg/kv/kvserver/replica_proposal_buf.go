@@ -1041,6 +1041,16 @@ func maybeDeductFlowTokens(
 		if admitHandle.handle == nil {
 			continue // nothing to do
 		}
+		if ents[i].Term == 0 && ents[i].Index == 0 {
+			// It's possible to have lost raft leadership right before stepping
+			// proposals through raft. They'll get forwarded to the new raft
+			// leader, and for flow token purposes, there's no tracking
+			// necessary. The token deductions below asserts on monotonic
+			// observations of log positions, which this empty position would
+			// otherwise violate. There's integration code elsewhere that will
+			// free up all tracked tokens as a result of this leadership change.
+			return
+		}
 		log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
 			raft.DescribeEntry(ents[i], func(bytes []byte) string {
 				return "<omitted>"
