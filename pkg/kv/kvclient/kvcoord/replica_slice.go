@@ -12,13 +12,13 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
+	"github.com/cockroachdb/errors"
 )
 
 // ReplicaInfo extends the Replica structure with the associated node
@@ -134,7 +134,7 @@ func NewReplicaSlice(
 	}
 	if len(rs) == 0 {
 		return nil, newSendError(
-			fmt.Sprintf("no replica node information available via gossip for r%d", desc.RangeID))
+			errors.Errorf("no replica node information available via gossip for r%d", desc.RangeID))
 	}
 	return rs, nil
 }

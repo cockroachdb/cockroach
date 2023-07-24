@@ -3662,7 +3662,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	abortErr := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &kvpb.ConditionFailedError{}
 	writeIntentErr := &kvpb.WriteIntentError{}
-	sendErr := sendError{}
+	sendErr := &sendError{}
 	ambiguousErr := &kvpb.AmbiguousResultError{}
 	randomErr := &kvpb.IntegerOverflowError{}
 
@@ -4439,7 +4439,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			// Return a sendError so DistSender retries the first range lookup in the
 			// user key-space for both batches.
 			if previouslyWaited := waitForInitialPuts(); !previouslyWaited {
-				return nil, newSendError("boom")
+				return nil, TestNewSendError("boom")
 			}
 			return br, nil
 		}
@@ -4744,7 +4744,7 @@ func TestRequestSubdivisionAfterDescriptorChangeWithUnavailableReplicasTerminate
 	transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		atomic.AddInt32(&numAttempts, 1)
 		require.Equal(t, 1, len(ba.Requests))
-		return nil, newSendError("boom")
+		return nil, TestNewSendError("boom")
 	}
 	rpcRetryOptions := &retry.Options{
 		MaxRetries: 5, // maxAttempts = 6
@@ -5169,7 +5169,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				get.Key = roachpb.Key("a")
 				ba.Add(get)
 				_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */)
-				require.IsType(t, sendError{}, err)
+				require.IsType(t, &sendError{}, err)
 				require.Regexp(t, "NotLeaseHolderError", err)
 				cached := rc.GetCached(ctx, tc.initialDesc.StartKey, false /* inverted */)
 				require.NotNil(t, cached)
