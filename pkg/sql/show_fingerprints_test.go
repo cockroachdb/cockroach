@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -85,4 +86,37 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 	if reflect.DeepEqual(fprint1, fprint2) {
 		t.Errorf("expected different fingerprints: %v vs %v", fprint1, fprint2)
 	}
+}
+
+// TestShowFingerprintsDuringSchemaChange is a regression test that asserts that
+// fingerprinting does not fail when done in the middle of a schema change using
+// an AOST query. In the middle of a schema change such as `ADD COLUMN ...
+// DEFAULT`, there may be non-public indexes in the descriptor. Prior to the
+// change which introduced this test, fingerprinting would attempt to read these
+// non-public indexes and fail.
+func TestShowFingerprintsDuringSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `USE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (
+		a INT PRIMARY KEY,
+		b INT
+	)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 0)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 1)`)
+
+	// At version 5, there are non-public indexes.
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN c INT DEFAULT -1`)
+	ts := schematestutils.FetchDescVersionModificationTime(
+		t, s, "d", "public", "foo", 5)
+	sqlDB.Exec(t, fmt.Sprintf(
+		`SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME %s`,
+		ts.AsOfSystemTime()))
 }

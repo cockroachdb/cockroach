@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"    // locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -55,8 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -68,7 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -77,7 +75,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2151,7 +2148,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`add_column_def: [2]->{"after": {"a": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
-			ts := fetchDescVersionModificationTime(t, s, `add_column_def`, 7)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `add_column_def`, 7)
 			assertPayloads(t, addColumnDef, []string{
 				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -2171,7 +2168,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`add_col_comp: [2]->{"after": {"a": 2, "b": 7}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
-			ts := fetchDescVersionModificationTime(t, s, `add_col_comp`, 7)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `add_col_comp`, 7)
 			assertPayloads(t, addColComp, []string{
 				fmt.Sprintf(`add_col_comp: [1]->{"after": {"a": 1, "b": 6, "c": 11}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -2192,7 +2189,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
-			ts := fetchDescVersionModificationTime(t, s, `drop_column`, 2)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `drop_column`, 2)
 
 			// Backfill for DROP COLUMN b.
 			assertPayloads(t, dropColumn, []string{
@@ -2243,9 +2240,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			// version 2. Then, when adding column c, it goes from 9->17, with the schema change being visible at
 			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
 			// being visible at the 7th step (version 23).
-			dropTS := fetchDescVersionModificationTime(t, s, `multiple_alters`, 2)
-			addTS := fetchDescVersionModificationTime(t, s, `multiple_alters`, 15)
-			addTS2 := fetchDescVersionModificationTime(t, s, `multiple_alters`, 23)
+			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 2)
+			addTS := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 15)
+			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 23)
 
 			assertPayloads(t, multipleAlters, []string{
 				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
@@ -2296,7 +2293,7 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
 
 			// The primary index swap occurs at version 7.
-			ts := fetchDescVersionModificationTime(t, s, `add_column_def`, 7)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `add_column_def`, 7)
 			assertPayloads(t, combinedFeed, []string{
 				fmt.Sprintf(`add_column_def: [1]->{"after": {"a": 1, "b": "d"}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
@@ -2317,82 +2314,6 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	if len(entries) > 0 {
 		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
 	}
-}
-
-// fetchDescVersionModificationTime fetches the `ModificationTime` of the specified
-// `version` of `tableName`'s table descriptor.
-func fetchDescVersionModificationTime(
-	t testing.TB, s TestServerWithSystem, tableName string, version int,
-) hlc.Timestamp {
-	tblKey := s.Codec.TablePrefix(keys.DescriptorTableID)
-	header := kvpb.RequestHeader{
-		Key:    tblKey,
-		EndKey: tblKey.PrefixEnd(),
-	}
-	dropColTblID := sqlutils.QueryTableID(t, s.DB, `d`, "public", tableName)
-	req := &kvpb.ExportRequest{
-		RequestHeader: header,
-		MVCCFilter:    kvpb.MVCCFilter_All,
-		StartTime:     hlc.Timestamp{},
-	}
-	hh := kvpb.Header{Timestamp: hlc.NewClockForTesting(nil).Now()}
-	res, pErr := kv.SendWrappedWith(context.Background(),
-		s.SystemServer.DB().NonTransactionalSender(), hh, req)
-	if pErr != nil {
-		t.Fatal(pErr.GoError())
-	}
-	for _, file := range res.(*kvpb.ExportResponse).Files {
-		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
-			KeyTypes:   storage.IterKeyTypePointsAndRanges,
-			LowerBound: keys.MinKey,
-			UpperBound: keys.MaxKey,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer it.Close()
-		for it.SeekGE(storage.NilKey); ; it.Next() {
-			if ok, err := it.Valid(); err != nil {
-				t.Fatal(err)
-			} else if !ok {
-				continue
-			}
-			k := it.UnsafeKey()
-			if _, hasRange := it.HasPointAndRange(); hasRange {
-				t.Fatalf("unexpected MVCC range key at %s", k)
-			}
-			remaining, _, _, err := s.Codec.DecodeIndexPrefix(k.Key)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, tableID, err := encoding.DecodeUvarintAscending(remaining)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tableID != uint64(dropColTblID) {
-				continue
-			}
-			unsafeValue, err := it.UnsafeValue()
-			require.NoError(t, err)
-			if unsafeValue == nil {
-				t.Fatal(errors.New(`value was dropped or truncated`))
-			}
-			value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
-			b, err := descbuilder.FromSerializedValue(&value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			require.NotNil(t, b)
-			if b.DescriptorType() == catalog.Table {
-				tbl := b.BuildImmutable().(catalog.TableDescriptor)
-				if int(tbl.GetVersion()) == version {
-					return tbl.GetModificationTime()
-				}
-			}
-		}
-	}
-	t.Fatal(errors.New(`couldn't find table desc for given version`))
-	return hlc.Timestamp{}
 }
 
 // Regression test for #34314
