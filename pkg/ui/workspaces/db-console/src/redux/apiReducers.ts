@@ -126,6 +126,9 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   api.getHotRanges,
   "hotRanges",
   hotRangesRequestToID,
+  1000, /* page limit */
+  null, /* invalidation period */
+  moment.duration(30, "minutes"),
 );
 
 export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
