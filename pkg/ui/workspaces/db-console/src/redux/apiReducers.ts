@@ -220,13 +220,13 @@ export const jobProfilerRequestKey = (
 ): string => `${req.job_id}`;
 
 const jobProfilerReducerObj = new KeyedCachedDataReducer(
-  api.getExecutionDetails,
+  api.listExecutionDetailFiles,
   "jobProfiler",
   jobProfilerRequestKey,
   null,
   moment.duration(10, "m"),
 );
-export const refreshExecutionDetails = jobProfilerReducerObj.refresh;
+export const refreshListExecutionDetailFiles = jobProfilerReducerObj.refresh;
 
 export const queryToID = (req: api.QueryPlanRequestMessage): string =>
   req.query;

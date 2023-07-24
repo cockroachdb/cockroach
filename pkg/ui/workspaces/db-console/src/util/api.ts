@@ -476,7 +476,7 @@ export function getJob(
   );
 }
 
-export function getExecutionDetails(
+export function listExecutionDetailFiles(
   req: ListJobProfilerExecutionDetailsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<ListJobProfilerExecutionDetailsResponseMessage> {
