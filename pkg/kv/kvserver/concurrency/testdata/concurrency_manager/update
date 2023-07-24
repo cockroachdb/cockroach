@@ -58,7 +58,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 2, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
@@ -85,7 +85,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 12.000000000,2, info: unrepl seqs: [0]
 
 # Issue another write to the same key for txn1 at its initial
 # timestamp. The timestamp in the lock table does not regress.
@@ -113,7 +113,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0, 1]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 12.000000000,2, info: unrepl seqs: [0, 1]
 
 reset namespace
 ----
@@ -177,7 +177,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 5, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 5
@@ -204,7 +204,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 12.000000000,2, info: unrepl seqs: [0]
 
 # The txn restarts at a new timestamp, but below the pushed
 # timestamp. It re-issues the same write at the new epoch. The
@@ -236,7 +236,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 1, ts: 12.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 1, iso: Serializable, ts: 12.000000000,2, info: unrepl seqs: [0]
 
 reset namespace
 ----
@@ -305,7 +305,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
    waiting readers:
     req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
@@ -332,7 +332,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 12.000000000,2, info: unrepl seqs: [0]
 
 # Issue another write to the same key for txn1 at its initial timestamp,
 # this time with a replicated durability. The timestamp in the lock
@@ -381,7 +381,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl, unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl seqs: [0]
    queued writers:
     active: true req: 9, txn: none
    distinguished req: 9

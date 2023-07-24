@@ -35,19 +35,19 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1]
 
 acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [1, 2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2]
 
 acquire r=req3 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 3]
 
 
 # ------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ acquire r=req4 k=a durability=u ignored-seqs=1,3 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [2, 5]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [2, 5]
 
 # ------------------------------------------------------------------------------
 # Re-acquire the (unreplicated) lock at a higher sequence number. This time,
@@ -82,7 +82,7 @@ acquire r=req5 k=a durability=u ignored-seqs=4 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [2, 5, 8]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [2, 5, 8]
 
 # ------------------------------------------------------------------------------
 # Ensure sequence numbers get pruned when acquiring replicated locks, and the
@@ -115,7 +115,7 @@ acquire r=req7 k=a durability=r ignored-seqs=8 strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: repl, unrepl seqs: [2, 5, 8]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl seqs: [2, 5, 8]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -129,7 +129,7 @@ acquire r=req8 k=a durability=u ignored-seqs=8 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: repl, unrepl seqs: [2, 5, 9]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl seqs: [2, 5, 9]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -152,7 +152,7 @@ acquire r=req9 k=a durability=u ignored-seqs=2-5,9 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: repl, unrepl seqs: [11]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl seqs: [11]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -174,7 +174,7 @@ acquire r=req10 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 11.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3

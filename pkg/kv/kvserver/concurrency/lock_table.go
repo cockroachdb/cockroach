@@ -767,9 +767,14 @@ func (g *lockTableGuardImpl) curLockMode() lock.Mode {
 	var reqMode lock.Mode
 	switch g.curStrength() {
 	case lock.None:
-		reqMode = lock.MakeModeNone(g.ts, isolation.Serializable)
+		iso := isolation.Serializable
+		if g.txn != nil {
+			iso = g.txn.IsoLevel
+		}
+		reqMode = lock.MakeModeNone(g.ts, iso)
 	case lock.Exclusive:
-		reqMode = lock.MakeModeExclusive(g.ts, isolation.Serializable)
+		assert(g.txn != nil, "only transactional requests can acquire exclusive locks")
+		reqMode = lock.MakeModeExclusive(g.ts, g.txn.IsoLevel)
 	case lock.Intent:
 		reqMode = lock.MakeModeIntent(g.ts)
 	default:
@@ -1209,7 +1214,7 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	}
 	txn, ts := l.getLockHolder()
 	if txn != nil { // lock is held
-		sb.Printf("  holder: txn: %v epoch: %d, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(ts))
+		sb.Printf("  holder: txn: %v epoch: %d, iso: %s, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(txn.IsoLevel), redact.Safe(ts))
 		if !l.holder.replicatedInfo.isEmpty() {
 			l.holder.replicatedInfo.safeFormat(sb)
 			if !l.holder.unreplicatedInfo.isEmpty() {
@@ -1717,8 +1722,7 @@ func (l *lockState) getLockMode() lock.Mode {
 	if l.isHeldReplicated() {
 		return lock.MakeModeIntent(lockHolderTS)
 	}
-	// TODO(arul): Thread in the correct isolation level here.
-	return lock.MakeModeExclusive(lockHolderTS, isolation.Serializable)
+	return lock.MakeModeExclusive(lockHolderTS, lockHolderTxn.IsoLevel)
 }
 
 // Removes the current lock holder from the lock.
