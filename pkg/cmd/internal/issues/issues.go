@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -316,7 +317,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		rRelated = &github.IssuesSearchResult{}
 	}
 
-	existingIssues := filterByExactTitleMatch(rExisting, title)
+	existingIssues := filterByPrefixTitleMatch(rExisting, title)
 	var foundIssue *int
 	if len(existingIssues) > 0 {
 		// We found an existing issue to post a comment into.
@@ -327,7 +328,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		data.MentionOnCreate = nil
 	}
 
-	data.RelatedIssues = filterByExactTitleMatch(rRelated, title)
+	data.RelatedIssues = filterByPrefixTitleMatch(rRelated, title)
 	data.InternalLog = ctx.Builder.String()
 	r := &Renderer{}
 	if err := formatter.Body(r, data); err != nil {
@@ -486,18 +487,19 @@ func HelpCommandAsLink(title, href string) func(r *Renderer) {
 	}
 }
 
-// filterByExactTitleMatch filters the search result passed and
-// removes any issues where the title does not match the expected
-// title exactly. This is done because the GitHub API does not support
-// searching by exact title; as a consequence, without this function,
-// there is a chance we would group together test failures for two
-// similarly named tests. That is confusing and undesirable behavior.
-func filterByExactTitleMatch(
+// filterByPrefixTitleMatch filters the search result passed and removes any
+// issues where the title does not match the expected title, optionally followed
+// by whitespace. This is done because the GitHub API does not support searching
+// by exact title; as a consequence, without this function, there is a chance we
+// would group together test failures for two similarly named tests. That is
+// confusing and undesirable behavior.
+func filterByPrefixTitleMatch(
 	result *github.IssuesSearchResult, expectedTitle string,
 ) []github.Issue {
+	expectedTitleRegex := regexp.MustCompile(`^` + expectedTitle + `(\s+|$)`)
 	var issues []github.Issue
 	for _, issue := range result.Issues {
-		if title := issue.Title; title != nil && *title == expectedTitle {
+		if title := issue.Title; title != nil && expectedTitleRegex.MatchString(*title) {
 			issues = append(issues, issue)
 		}
 	}
