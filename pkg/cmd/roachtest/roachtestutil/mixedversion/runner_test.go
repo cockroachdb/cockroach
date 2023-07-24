@@ -61,7 +61,7 @@ func testTestRunner() *testRunner {
 		cancel:     cancel,
 		logger:     nilLogger,
 		crdbNodes:  nodes,
-		background: newBackgroundRunner(runnerCtx),
+		background: newBackgroundRunner(runnerCtx, nilLogger),
 		seed:       seed,
 	}
 }
