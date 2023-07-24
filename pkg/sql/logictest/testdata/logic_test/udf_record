@@ -13,7 +13,7 @@ SELECT f_one();
 ----
 (1)
 
-statement error pq: a column definition list is required for functions returning \"record\"
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
 SELECT * FROM f_one();
 
 query I
@@ -129,6 +129,7 @@ SELECT f_table();
 ----
 (1,5)
 
+
 subtest datasource
 
 statement ok
@@ -142,7 +143,7 @@ SELECT f_tup();
 ----
 (1,2,3)
 
-statement error pq: a column definition list is required for functions returning \"record\"
+statement error pgcode 42601 pq: a column definition list is required for functions returning \"record\"
 SELECT * FROM f_tup();
 
 query III colnames
@@ -328,6 +329,8 @@ SELECT * FROM f_arg(1,2) AS foo(a INT, b INT);
 1 2
 
 # Test ambiguous function signatures with records
+subtest end
+
 subtest ambiguity
 
 # setof
@@ -344,10 +347,10 @@ $$
 $$ LANGUAGE SQL;
 
 # TODO(harding): In postgres, calls to f_amb_setof should succeed and return 0 rows.
-statement error pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
+statement error pgcode 42725 pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
 SELECT f_amb_setof(1, NULL);
 
-statement error pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
+statement error pgcode 42725 pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
 SELECT * FROM f_amb_setof(1, NULL) as foo(a int, b int);
 
 statement ok
@@ -363,13 +366,15 @@ $$
 $$ LANGUAGE SQL;
 
 # TODO(harding): In postgres, calls to f_amb should succeed and return NULL.
-statement error pq: ambiguous call: f_amb\(int, unknown\), candidates are
+statement error pgcode 42725 pq: ambiguous call: f_amb\(int, unknown\), candidates are
 SELECT f_amb(1, NULL);
 
 # TODO(harding): In postgres, calls to f_amb as a data source should succeed
 # and return NULL NULL.
-statement error pq: ambiguous call: f_amb\(int, unknown\), candidates are
+statement error pgcode 42725 pq: ambiguous call: f_amb\(int, unknown\), candidates are
 SELECT * FROM f_amb(1, NULL) as foo(a int, b int);
+
+subtest end
 
 subtest repro_102718
 
@@ -393,3 +398,164 @@ ORDER BY
 ----
 (a) foo
 (a) bar
+
+
+subtest end
+
+subtest implicit_record_types
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION imp_const_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')
+$$
+
+query TBT
+SELECT imp_const_tup(), (11,22,'b')::imp = imp_const_tup(), pg_typeof(imp_const_tup())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')::imp
+$$
+
+query TBT
+SELECT imp_const_cast(), (11,22,'b')::imp = imp_const_cast(), pg_typeof(imp_const_cast())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11 AS k, 22 AS a, 'b' AS b
+$$
+
+query TBT
+SELECT imp_const(), (11,22,'b')::imp = imp_const(), pg_typeof(imp_const())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_unnamed() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11, 22, 'b'
+$$
+
+query TBT
+SELECT imp_const_unnamed(), (11,22,'b')::imp = imp_const_unnamed(), pg_typeof(imp_const_unnamed())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup()) is omitted because we get different
+# results for different configurations, due to #58252.
+query TB
+SELECT imp_tup(), (1,2,'a')::imp = imp_tup()
+----
+(1,2,a)  true
+
+statement ok
+CREATE FUNCTION imp() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp
+$$
+
+query TBT
+SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
+----
+(1,2,a)  true  imp
+
+statement ok
+CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+  SELECT * FROM imp
+$$
+
+query TBT
+SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+----
+(1,2,a)  true  imp
+
+statement ok
+INSERT INTO imp VALUES (100, 200, 'z')
+
+statement ok
+CREATE FUNCTION imp_tup_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp ORDER BY b DESC
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations, due to #58252.
+query TB
+SELECT imp_tup_ordered(), (100,200,'z')::imp = imp_tup_ordered()
+----
+(100,200,z)  true
+
+statement ok
+CREATE FUNCTION imp_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp ORDER BY b DESC
+$$
+
+query TBT
+SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered(), pg_typeof(imp_ordered())
+----
+(100,200,z)  true  imp
+
+statement ok
+CREATE FUNCTION imp_identity(i imp) RETURNS imp LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+query TT
+SELECT imp_identity((1,2,'a')), imp_identity((1,2,'a')::imp)
+----
+(1,2,a)  (1,2,a)
+
+statement ok
+CREATE FUNCTION imp_a(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT (i).a
+$$
+
+query II
+SELECT imp_a((1,2,'a')), imp_a((1,2,'a')::imp)
+----
+2  2
+
+statement ok
+CREATE FUNCTION imp_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2, 3)
+$$
+
+query TBT
+SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
+----
+(1,2,3)  true  imp
+
+# TODO(107369): This is code 42846 in postgres.
+statement error pgcode 42P13 return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2)
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a FROM imp
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b::INT FROM imp
+$$
+
+statement error pgcode 42P13 return type mismatch in function declared to return int
+CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+subtest end

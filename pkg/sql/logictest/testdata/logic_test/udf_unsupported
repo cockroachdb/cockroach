@@ -1,0 +1,186 @@
+subtest disallow_udf_in_table
+
+statement ok
+CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT ON UPDATE (test_tbl_f() + 1));
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT AS (test_tbl_f() + 1) STORED);
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT, INDEX idx_b(test_tbl_f()));
+
+statement ok
+CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT);
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(test_tbl_f());
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+CREATE INDEX t_idx ON test_tbl_t(b) WHERE test_tbl_f() > 0;
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());
+
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ALTER COLUMN b SET ON UPDATE (test_tbl_f());
+
+subtest end
+
+
+subtest disallow_udf_in_views_and_udf
+
+statement ok
+CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement error pgcode 42883 pq: unknown function: test_vf_f\(\): function undefined\nHINT:.*intention was to use a user-defined function in the function body, which is currently not supported.
+CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT test_vf_f() $$;
+
+statement ok
+CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement error pgcode 42883 pq: unknown function: test_vf_f\(\): function undefined\nHINT:.*intention was to use a user-defined function in the view query, which is currently not supported.
+CREATE VIEW v AS SELECT test_vf_f();
+
+statement ok
+CREATE VIEW v AS SELECT lower('hello');
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION test_vf_f];
+----
+CREATE FUNCTION public.test_vf_f()
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT lower('hello':::STRING);
+$$
+
+subtest end
+
+
+subtest cross_db
+
+statement ok
+CREATE DATABASE cross_db1;
+CREATE SCHEMA cross_db1.sc;
+CREATE TYPE cross_db1.sc.workday AS ENUM ('MON');
+CREATE TABLE cross_db1.sc.tbl(a INT PRIMARY KEY, b cross_db1.sc.workday);
+CREATE VIEW cross_db1.sc.v AS SELECT a FROM cross_db1.sc.tbl;
+
+statement error pgcode 0A000 pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db(cross_db1.sc.workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pgcode 0A000 pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db() RETURNS cross_db1.sc.workday LANGUAGE SQL AS $$ SELECT 'MON'::cross_db1.sc.workday $$;
+
+statement error pgcode 0A000 pq: the function cannot refer to other databases
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.tbl $$;
+
+statement error pgcode 0A000 pq: the function cannot refer to other databases
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.v $$;
+
+subtest end
+
+
+subtest ddl
+
+# DDL is not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'CREATE TABLE t (a INT)'
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'ALTER TABLE t ADD COLUMN b BOOL'
+
+statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
+
+subtest end
+
+
+subtest prepared_statement
+
+# Prepared statements are not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: PREPARE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'PREPARE p AS SELECT * FROM t'
+
+subtest end
+
+
+subtest cte
+
+# CTEs are not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: CTE usage inside a function definition
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'WITH s AS (SELECT a FROM t) SELECT a FROM s'
+
+statement error pgcode 0A000 unimplemented: statement source \(square bracket syntax\) within user-defined function
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM [SELECT 1] a(a)'
+
+subtest end
+
+
+subtest recursion
+
+# Recursive UDFs are not currently supported.
+statement error pgcode 42883 unknown function: rec()
+CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT CASE i WHEN 0 THEN 0 ELSE i + rec(i-1) END'
+
+# References to other UDFs in UDF bodies are not currently supported.
+statement ok
+CREATE FUNCTION other_udf() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42883 unknown function: other_udf()
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
+
+subtest end
+
+
+subtest variadic
+
+# Variadic UDFS are not currently supported.
+statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
+CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
+
+subtest end
+
+
+# This test ensures the error message is understandable when creating a
+# function under a virtual or temporary schema.
+subtest udf_under_virtual_or_temp_schemas_102964
+
+statement error pgcode 42501 crdb_internal is a virtual schema and cannot be modified
+CREATE FUNCTION crdb_internal.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pgcode 42501 information_schema is a virtual schema and cannot be modified
+CREATE FUNCTION information_schema.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pgcode 42501 pg_catalog is a virtual schema and cannot be modified
+CREATE FUNCTION pg_catalog.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pgcode 42501 pg_extension is a virtual schema and cannot be modified
+CREATE FUNCTION pg_extension.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement ok
+SET experimental_enable_temp_tables=on;
+
+statement ok
+CREATE TEMP TABLE t_102964 (i INT PRIMARY KEY);
+
+let $temp_schema_102964
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%';
+
+statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary schema
+CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+subtest end
+
