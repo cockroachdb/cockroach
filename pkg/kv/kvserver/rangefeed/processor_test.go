@@ -155,15 +155,14 @@ func newTestProcessorWithTxnPusher(
 		pushTxnAge = 50 * time.Millisecond
 	}
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		TxnPusher:            txnPusher,
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         testProcessorEventCCap,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		TxnPusher:        txnPusher,
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     testProcessorEventCCap,
+		Metrics:          NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, makeIntentScannerConstructor(rtsIter)))
 	return p, stopper
@@ -566,16 +565,15 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         testProcessorEventCCap,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
-		MemBudget:            fb,
-		EventChanTimeout:     time.Millisecond,
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     testProcessorEventCCap,
+		Metrics:          NewMetrics(),
+		MemBudget:        fb,
+		EventChanTimeout: time.Millisecond,
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -635,16 +633,15 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         testProcessorEventCCap,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
-		MemBudget:            fb,
-		EventChanTimeout:     15 * time.Minute, // Enable timeout to allow consumer to process
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     testProcessorEventCCap,
+		Metrics:          NewMetrics(),
+		MemBudget:        fb,
+		EventChanTimeout: 15 * time.Minute, // Enable timeout to allow consumer to process
 		// events even if we reach memory budget capacity.
 	})
 	require.NoError(t, p.Start(stopper, nil))
@@ -1125,15 +1122,14 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         channelCapacity,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		MemBudget:            fb,
-		Metrics:              NewMetrics(),
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     channelCapacity,
+		MemBudget:        fb,
+		Metrics:          NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -1216,15 +1212,14 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         channelCapacity,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		MemBudget:            fb,
-		Metrics:              NewMetrics(),
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     channelCapacity,
+		MemBudget:        fb,
+		Metrics:          NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -1296,15 +1291,14 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         channelCapacity,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		MemBudget:            fb,
-		Metrics:              NewMetrics(),
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     channelCapacity,
+		MemBudget:        fb,
+		Metrics:          NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -1468,16 +1462,15 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClockForTesting(nil),
-		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval:     pushTxnInterval,
-		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         benchmarkEvents * b.N,
-		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
-		MemBudget:            budget,
-		EventChanTimeout:     time.Minute,
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:            hlc.NewClockForTesting(nil),
+		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval: pushTxnInterval,
+		PushTxnsAge:      pushTxnAge,
+		EventChanCap:     benchmarkEvents * b.N,
+		Metrics:          NewMetrics(),
+		MemBudget:        budget,
+		EventChanTimeout: time.Minute,
 	})
 	require.NoError(b, p.Start(stopper, nil))
 	ctx := context.Background()
