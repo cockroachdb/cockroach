@@ -109,6 +109,8 @@ DEPENDENCIES = [
     "@npm_cluster_ui//reselect",
     "@npm_cluster_ui//sass",
     "@npm_cluster_ui//sass-loader",
+    "@npm_cluster_ui//schema-utils",
+    "@npm_cluster_ui//semver",
     "@npm_cluster_ui//sinon",
     "@npm_cluster_ui//source-map-loader",
     "@npm_cluster_ui//style-loader",
@@ -184,6 +186,7 @@ webpack(
     ],
     data = glob([
         "src/**",
+        "build/webpack/**",
     ]) + [
         ".babelrc",
         "tsconfig.json",

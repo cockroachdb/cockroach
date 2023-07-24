@@ -14,6 +14,8 @@ const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
 const { ESBuildMinifyPlugin } = require("esbuild-loader");
 
+const { CopyEmittedFilesPlugin } = require("./build/webpack/copyEmittedFilesPlugin");
+
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
   env = env || {};
@@ -168,6 +170,19 @@ module.exports = (env, argv) => {
         /node_modules\/antd\/lib\/style\/index\.less/,
         path.resolve(__dirname, "src/core/antd-patch.less"),
       ),
+      // When requested with --env.copy-to=foo, copy all emitted files to
+      // arbitrary destination(s). Note that multiple destinations are supported
+      // but providing --env.copy-to multiple times at the command-line.
+      // This plugin does nothing in one-shot (i.e. non-watch) builds, or when
+      // no destinations are provided.
+      new CopyEmittedFilesPlugin({
+        destinations: (function() {
+          const copyTo = env["copy-to"] || [];
+          return typeof copyTo === "string"
+            ? [copyTo]
+            : copyTo;
+        })(),
+      }),
     ],
 
     // When importing a module whose path matches one of the following, just

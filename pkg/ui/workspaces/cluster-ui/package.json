@@ -138,6 +138,8 @@
     "reselect": "^4.0.0",
     "sass": "^1.34.0",
     "sass-loader": "^10.2.0",
+    "schema-utils": "3.0.0",
+    "semver": "6.3.0",
     "sinon": "^9.0.2",
     "source-map-loader": "^0.2.4",
     "style-loader": "^1.1.3",
