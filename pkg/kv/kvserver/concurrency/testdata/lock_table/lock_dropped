@@ -26,7 +26,7 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
 
 acquire r=req1 k=a durability=r strength=intent
 ----
@@ -44,7 +44,7 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
 
 scan r=reqContendReader
 ----
@@ -54,7 +54,7 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
    waiting readers:
     req: 1, txn: none
    distinguished req: 1
@@ -79,7 +79,7 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
 
 scan r=reqContendReader
 ----
@@ -93,7 +93,7 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
    waiting readers:
     req: 1, txn: none
    queued writers:
@@ -104,7 +104,7 @@ acquire r=req1 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: repl, unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl, unrepl seqs: [2]
    waiting readers:
     req: 1, txn: none
    queued writers:
@@ -139,7 +139,7 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
 
 new-txn txn=txn2 ts=10 epoch=0 seq=0
 ----
@@ -151,9 +151,9 @@ acquire r=req2 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
 
 new-request r=req3 txn=none ts=10 spans=none@a,c
 ----
@@ -170,7 +170,7 @@ acquire r=req2 k=b durability=r strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
    waiting readers:
     req: 3, txn: none
    distinguished req: 3

@@ -79,14 +79,14 @@ debug-lock-table
 ----
 num=3
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error hits lock. The request
@@ -145,7 +145,7 @@ num=2
    queued writers:
     active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
@@ -210,12 +210,12 @@ num=3
    queued writers:
     active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error discovers abandoned
@@ -276,7 +276,7 @@ debug-lock-table
 ----
 num=1
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,1, info: repl [holder finalized: aborted]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [holder finalized: aborted]
 
 reset
 ----
