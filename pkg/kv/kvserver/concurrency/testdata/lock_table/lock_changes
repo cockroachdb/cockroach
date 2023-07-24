@@ -20,13 +20,13 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
 
 release txn=txn2 span=a,c
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at same epoch with lower timestamp. This is allowed,
@@ -44,7 +44,7 @@ acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at same epoch with lower timestamp and different durability.
@@ -66,7 +66,7 @@ acquire r=req2 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl seqs: [2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl [(str: Exclusive seq: 2)]
    queued writers:
     active: true req: 1, txn: none
    distinguished req: 1
@@ -75,7 +75,7 @@ dequeue r=reqContend
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl seqs: [2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl [(str: Exclusive seq: 2)]
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at a different epoch. The old sequence numbers are discarded.
@@ -91,7 +91,7 @@ acquire r=req3 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl [(str: Exclusive seq: 1)]
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at a different epoch with lower timestamp. This is allowed,
@@ -109,7 +109,7 @@ acquire r=req4 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl [(str: Exclusive seq: 0)]
 
 # ---------------------------------------------------------------------------------
 # Reader waits until the timestamp of the lock is updated.
@@ -130,7 +130,7 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -145,7 +145,7 @@ acquire r=req6 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 10.000000000,0, info: repl, unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 10.000000000,0, info: repl, unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -158,7 +158,7 @@ acquire r=req6 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl, unrepl seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl, unrepl [(str: Exclusive seq: 0)]
 
 guard-state r=req5
 ----
@@ -186,7 +186,7 @@ add-discovered r=req7 k=a txn=txn1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl, unrepl seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl, unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -206,7 +206,7 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl, unrepl seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 14.000000000,0, info: repl, unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
