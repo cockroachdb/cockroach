@@ -1214,7 +1214,7 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	}
 	txn, ts := l.getLockHolder()
 	if txn != nil { // lock is held
-		sb.Printf("  holder: txn: %v epoch: %d, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(ts))
+		sb.Printf("  holder: txn: %v epoch: %d, iso: %s, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(txn.IsoLevel), redact.Safe(ts))
 		if !l.holder.replicatedInfo.isEmpty() {
 			l.holder.replicatedInfo.safeFormat(sb)
 			if !l.holder.unreplicatedInfo.isEmpty() {
