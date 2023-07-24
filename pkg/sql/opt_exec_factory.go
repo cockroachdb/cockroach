@@ -1817,17 +1817,12 @@ func (ef *execFactory) ConstructCreateTableAs(
 
 // ConstructCreateView is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateView(
+	createView *tree.CreateView,
 	schema cat.Schema,
-	viewName *cat.DataSourceName,
-	ifNotExists bool,
-	replace bool,
-	persistence tree.Persistence,
-	materialized bool,
 	viewQuery string,
 	columns colinfo.ResultColumns,
 	deps opt.SchemaDeps,
 	typeDeps opt.SchemaTypeDeps,
-	withData bool,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1844,17 +1839,12 @@ func (ef *execFactory) ConstructCreateView(
 	}
 
 	return &createViewNode{
-		viewName:     viewName,
-		ifNotExists:  ifNotExists,
-		replace:      replace,
-		materialized: materialized,
-		persistence:  persistence,
-		viewQuery:    viewQuery,
-		dbDesc:       schema.(*optSchema).database,
-		columns:      columns,
-		planDeps:     planDeps,
-		typeDeps:     typeDepSet,
-		withData:     withData,
+		createView: createView,
+		viewQuery:  viewQuery,
+		dbDesc:     schema.(*optSchema).database,
+		columns:    columns,
+		planDeps:   planDeps,
+		typeDeps:   typeDepSet,
 	}, nil
 }
 
