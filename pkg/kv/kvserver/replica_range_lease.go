@@ -445,6 +445,8 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	return nil
 }
 
+var logFailedHeartbeatOwnLiveness = log.Every(10 * time.Second)
+
 // requestLease sends a synchronous transfer lease or lease request to the
 // specified replica. It is only meant to be called from requestLeaseAsync,
 // since it does not coordinate with other in-flight lease requests.
@@ -465,9 +467,8 @@ func (p *pendingLeaseRequest) requestLease(
 	if status.Lease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED {
 		var err error
 		// If this replica is previous & next lease holder, manually heartbeat to become live.
-		if status.OwnedBy(nextLeaseHolder.StoreID) &&
-			p.repl.store.StoreID() == nextLeaseHolder.StoreID {
-			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
+		if status.OwnedBy(nextLeaseHolder.StoreID) && p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil && logFailedHeartbeatOwnLiveness.ShouldLog() {
 				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 			}
 		} else if status.Liveness.Epoch == status.Lease.Epoch {
