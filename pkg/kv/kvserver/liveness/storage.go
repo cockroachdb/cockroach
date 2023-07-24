@@ -42,7 +42,7 @@ type livenessUpdate struct {
 	oldRaw []byte
 }
 
-// get returns a slice containing the liveness record of all nodes that have
+// Get returns a slice containing the liveness record of all nodes that have
 // ever been a part of the cluster. The records are read from the KV layer in a
 // KV transaction.
 //
@@ -51,7 +51,7 @@ type livenessUpdate struct {
 // typically unnecessary. For updating liveness, it is still not necessary to
 // call get, since the handleCondFailed after a CPut will notify you of the
 // previous data.
-func (ls storageImpl) get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
+func (ls storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
 	var oldLiveness livenesspb.Liveness
 	record, err := ls.db.Get(ctx, keys.NodeLivenessKey(nodeID))
 	if err != nil {
@@ -70,12 +70,12 @@ func (ls storageImpl) get(ctx context.Context, nodeID roachpb.NodeID) (Record, e
 	}, nil
 }
 
-// update will attempt to update the liveness record using a CPut with the
+// Update will attempt to update the liveness record using a CPut with the
 // oldRaw from the livenessUpdate. If the oldRaw does not match, the
 // handleCondFailed func is called with the current data stored for this node.
 // This method does not retry, but normally the caller will retry using the
 // returned value on a condition failure.
-func (ls storageImpl) update(
+func (ls storageImpl) Update(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	var v *roachpb.Value
@@ -126,13 +126,13 @@ func (ls storageImpl) update(
 	return Record{Liveness: update.newLiveness, raw: v.TagAndDataBytes()}, nil
 }
 
-// create creates a liveness record for the node specified by the
+// Create creates a liveness record for the node specified by the
 // given node ID. This is typically used when adding a new node to a running
 // cluster, or when bootstrapping a cluster through a given node.
 //
 // NB: An existing liveness record is not overwritten by this method, we return
 // an error instead.
-func (ls storageImpl) create(ctx context.Context, nodeID roachpb.NodeID) error {
+func (ls storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error {
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// We start off at epoch=0, entrusting the initial heartbeat to increment it
 		// to epoch=1 to signal the very first time the node is up and running.
@@ -179,8 +179,8 @@ func (ls storageImpl) create(ctx context.Context, nodeID roachpb.NodeID) error {
 	return errors.AssertionFailedf("unexpected problem while creating liveness record for node %d", nodeID)
 }
 
-// scan will iterate over the KV liveness names and generate liveness records from them.
-func (ls storageImpl) scan(ctx context.Context) ([]Record, error) {
+// Scan will iterate over the KV liveness names and generate liveness records from them.
+func (ls storageImpl) Scan(ctx context.Context) ([]Record, error) {
 	kvs, err := ls.db.Scan(ctx, keys.NodeLivenessPrefix, keys.NodeLivenessKeyMax, 0)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to get liveness")

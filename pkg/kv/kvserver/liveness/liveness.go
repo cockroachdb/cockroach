@@ -580,7 +580,7 @@ func (nl *NodeLiveness) cacheUpdated(old livenesspb.Liveness, new livenesspb.Liv
 // NB: An existing liveness record is not overwritten by this method, we return
 // an error instead.
 func (nl *NodeLiveness) CreateLivenessRecord(ctx context.Context, nodeID roachpb.NodeID) error {
-	return nl.storage.create(ctx, nodeID)
+	return nl.storage.Create(ctx, nodeID)
 }
 
 func (nl *NodeLiveness) setMembershipStatusInternal(
@@ -923,7 +923,7 @@ func (nl *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 func (nl *NodeLiveness) ScanNodeVitalityFromKV(
 	ctx context.Context,
 ) (livenesspb.NodeVitalityMap, error) {
-	records, err := nl.storage.scan(ctx)
+	records, err := nl.storage.Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -993,7 +993,7 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (_ Record, ok bool) {
 func (nl *NodeLiveness) getLivenessRecordFromKV(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (Record, error) {
-	livenessRec, err := nl.storage.get(ctx, nodeID)
+	livenessRec, err := nl.storage.Get(ctx, nodeID)
 	if err == nil {
 		// Update our cache with the liveness record we just found.
 		nl.cache.maybeUpdate(ctx, livenessRec)
@@ -1182,7 +1182,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		}
 		update.oldRaw = l.raw
 	}
-	return nl.storage.update(ctx, update, handleCondFailed)
+	return nl.storage.Update(ctx, update, handleCondFailed)
 }
 
 // numLiveNodes is used to populate a metric that tracks the number of live
