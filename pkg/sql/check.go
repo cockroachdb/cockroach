@@ -434,6 +434,11 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 		return err
 	}
 	return inDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		// If the context is cancelled, then we should bail out, since
+		// the actual revalidate operation might not check anything.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		tableDesc, err := catalog.AsTableDescriptor(desc)
 		if err != nil {
 			return err
