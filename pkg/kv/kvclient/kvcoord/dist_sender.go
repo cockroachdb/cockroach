@@ -1766,7 +1766,7 @@ func (ds *DistSender) sendPartialBatch(
 			// deduceRetryEarlyExitError() call below the loop is inhibited.
 			pErr = kvpb.NewError(err)
 			switch {
-			case errors.HasType(err, sendError{}):
+			case IsSendError(err):
 				// We've tried all the replicas without success. Either they're all
 				// down, or we're using an out-of-date range descriptor. Evict from the
 				// cache and try again with an updated descriptor. Re-sending the
@@ -2021,7 +2021,7 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	// one to return; we may want to remember the "best" error we've seen (for
 	// example, a NotLeaseHolderError conveys more information than a
 	// RangeNotFound).
-	return newSendError(fmt.Sprintf("sending to all replicas failed; last error: %s", lastAttemptErr))
+	return newSendError(errors.Wrap(lastAttemptErr, "sending to all replicas failed; last error"))
 }
 
 // defaultSendClosedTimestampPolicy is used when the closed timestamp policy
@@ -2424,7 +2424,7 @@ func (ds *DistSender) sendToReplicas(
 								log.VEventf(
 									ctx, 2, "transport incompatible with updated routing; bailing early",
 								)
-								return nil, newSendError(fmt.Sprintf("leaseholder not found in transport; last error: %s", tErr.Error()))
+								return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
 							}
 						}
 					}
@@ -2640,28 +2640,32 @@ func skipStaleReplicas(
 // TODO(andrei): clean up this stuff and tighten the meaning of the different
 // errors.
 type sendError struct {
-	message string
+	cause error
 }
 
-// newSendError creates a sendError.
-func newSendError(msg string) error {
-	return sendError{message: msg}
+// newSendError creates a sendError that wraps the given error.
+func newSendError(err error) error {
+	return &sendError{cause: err}
 }
 
 // TestNewSendError creates a new sendError for the purpose of unit tests
 func TestNewSendError(msg string) error {
-	return newSendError(msg)
+	return newSendError(errors.NewWithDepthf(1, "%s", msg))
 }
 
-// SendErrorString is the prefix for all sendErrors, exported in order to
-// perform cross-node error-checks.
-const SendErrorString = "failed to send RPC"
-
-func (s sendError) Error() string {
-	return SendErrorString + ": " + s.message
+// Error implements error.
+func (s *sendError) Error() string {
+	return fmt.Sprintf("failed to send RPC: %s", s.cause)
 }
+
+// Cause implements errors.Causer.
+// NB: this is an obsolete method, use Unwrap() instead.
+func (s *sendError) Cause() error { return s.cause }
+
+// Unwrap implements errors.Wrapper.
+func (s *sendError) Unwrap() error { return s.cause }
 
 // IsSendError returns true if err is a sendError.
 func IsSendError(err error) bool {
-	return errors.HasType(err, sendError{})
+	return errors.HasType(err, &sendError{})
 }
