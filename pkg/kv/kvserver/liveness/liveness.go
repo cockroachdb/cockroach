@@ -262,7 +262,7 @@ type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
 	stopper           *stop.Stopper
 	clock             *hlc.Clock
-	storage           storage
+	storage           storageImpl
 	livenessThreshold time.Duration
 	cache             *cache
 	renewalDuration   time.Duration
@@ -342,7 +342,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		ambientCtx:            opts.AmbientCtx,
 		stopper:               opts.Stopper,
 		clock:                 opts.Clock,
-		storage:               storage{db: opts.DB},
+		storage:               storageImpl{db: opts.DB},
 		livenessThreshold:     opts.LivenessThreshold,
 		renewalDuration:       opts.RenewalDuration,
 		selfSem:               make(chan struct{}, 1),
