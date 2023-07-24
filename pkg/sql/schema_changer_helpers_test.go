@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -87,4 +88,47 @@ func TestCalculateSplitAtShards(t *testing.T) {
 			require.Equal(t, tc.expected, shards)
 		})
 	}
+}
+
+// TestNotFirstInLine tests that if a schema change's mutation is not first in
+// line, the error message clearly state what the blocking schema change job ID
+// is.
+func TestNotFirstInLine(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	desc := descpb.TableDescriptor{
+		ID: 104,
+		Mutations: []descpb.DescriptorMutation{
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{},
+				MutationID:  1,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{},
+				MutationID:  1,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Column{},
+				MutationID:  2,
+			},
+		},
+		MutationJobs: []descpb.TableDescriptor_MutationJob{
+			{
+				JobID:      12345,
+				MutationID: 1,
+			},
+			{
+				JobID:      67890,
+				MutationID: 2,
+			},
+		},
+	}
+	sc := SchemaChanger{
+		descID:     104,
+		mutationID: 2,
+	}
+	mut := tabledesc.NewBuilder(&desc).BuildExistingMutableTable()
+	err := sc.notFirstInLine(ctx, mut)
+	require.Equal(t, "schema change is not first in line and it is blocked by "+
+		"another schema change job 12345", err.Error())
 }

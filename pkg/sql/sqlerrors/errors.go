@@ -14,6 +14,7 @@ package sqlerrors
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -353,6 +354,11 @@ func NewInvalidVolatilityError(err error) error {
 func NewCannotModifyVirtualSchemaError(schema string) error {
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema))
+}
+
+func NewErrSchemaChangeNotFirstInLine(blockingJobID catpb.JobID) error {
+	return errors.Newf("schema change is not first in line and it is blocked by "+
+		"another schema change job %v", blockingJobID)
 }
 
 // QueryTimeoutError is an error representing a query timeout.

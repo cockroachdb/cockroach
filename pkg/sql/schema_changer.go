@@ -229,9 +229,12 @@ func IsPermanentSchemaChangeError(err error) bool {
 	if errors.IsAny(err,
 		context.Canceled,
 		context.DeadlineExceeded,
-		errSchemaChangeNotFirstInLine,
 		errTableVersionMismatchSentinel,
 	) {
+		return false
+	}
+
+	if strings.Contains(err.Error(), "schema change is not first in line") {
 		return false
 	}
 
@@ -251,8 +254,6 @@ func IsPermanentSchemaChangeError(err error) bool {
 
 	return true
 }
-
-var errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
 
 type errTableVersionMismatch struct {
 	version  descpb.DescriptorVersion
@@ -584,20 +585,38 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 		// descriptor, it seems possible for a job to be resumed after the mutation
 		// has already been removed. If there's a mutation provided, we should check
 		// whether it actually exists on the table descriptor and exit the job if not.
-		for i, mutation := range tableDesc.AllMutations() {
+		allMutations := tableDesc.AllMutations()
+		for i, mutation := range allMutations {
 			if mutation.MutationID() == sc.mutationID {
 				if i != 0 {
+					blockingJobID := mustGetJobIDWithMutationID(tableDesc, allMutations[0].MutationID())
 					log.Infof(ctx,
-						"schema change on %q (v%d): another change is still in progress",
-						desc.GetName(), desc.GetVersion(),
+						"schema change on %q (v%d): another schema change job %v is still in progress "+
+							"and it is blocking this job from proceeding",
+						desc.GetName(), desc.GetVersion(), blockingJobID,
 					)
-					return errSchemaChangeNotFirstInLine
+					return sqlerrors.NewErrSchemaChangeNotFirstInLine(blockingJobID)
 				}
 				break
 			}
 		}
 	}
 	return nil
+}
+
+func mustGetJobIDWithMutationID(
+	tableDesc catalog.TableDescriptor, mutationID descpb.MutationID,
+) (jobID catpb.JobID) {
+	for _, mutationJob := range tableDesc.GetMutationJobs() {
+		if mutationJob.MutationID == mutationID {
+			jobID = mutationJob.JobID
+		}
+	}
+	if jobID == catpb.InvalidJobID {
+		panic(fmt.Sprintf("mutation job with mutation ID %v is not found in table %q",
+			mutationID, tableDesc.GetName()))
+	}
+	return jobID
 }
 
 func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descriptor, error) {
