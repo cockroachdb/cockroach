@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -702,6 +701,7 @@ func (b *Builder) buildExistsSubquery(
 				false, /* multiColOutput */
 				false, /* generator */
 				false, /* tailCall */
+				nil,   /* exceptionHandler */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -818,6 +818,7 @@ func (b *Builder) buildSubquery(
 			false, /* multiColOutput */
 			false, /* generator */
 			false, /* tailCall */
+			nil,   /* exceptionHandler */
 		), nil
 	}
 
@@ -873,6 +874,7 @@ func (b *Builder) buildSubquery(
 			false, /* multiColOutput */
 			false, /* generator */
 			false, /* tailCall */
+			nil,   /* exceptionHandler */
 		), nil
 	}
 
@@ -923,11 +925,6 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	if udf.Def == nil {
 		return nil, errors.AssertionFailedf("expected non-nil UDF definition")
 	}
-	if udf.Def.ExceptionBlock != nil {
-		return nil, unimplemented.New("exception block",
-			"exception blocks for PLpgSQL functions are not yet supported",
-		)
-	}
 
 	// Build the argument expressions.
 	var err error
@@ -964,6 +961,39 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// statements.
 	enableStepping := udf.Def.Volatility == volatility.Volatile
 
+	// Build each routine for the exception handler, if one exists.
+	var exceptionHandler *tree.RoutineExceptionHandler
+	if udf.Def.ExceptionBlock != nil {
+		block := udf.Def.ExceptionBlock
+		exceptionHandler = &tree.RoutineExceptionHandler{
+			Codes:   block.Codes,
+			Actions: make([]*tree.RoutineExpr, len(block.Actions)),
+		}
+		for i, action := range block.Actions {
+			actionPlanGen := b.buildRoutinePlanGenerator(
+				action.Params,
+				action.Body,
+				action.BodyProps,
+				false, /* allowOuterWithRefs */
+				nil,   /* wrapRootExpr */
+			)
+			// Build a routine with no arguments for the exception handler. The actual
+			// arguments will be supplied when (if) the handler is invoked.
+			exceptionHandler.Actions[i] = tree.NewTypedRoutineExpr(
+				action.Name,
+				nil, /* args */
+				actionPlanGen,
+				action.Typ,
+				true, /* enableStepping */
+				action.CalledOnNullInput,
+				action.MultiColDataSource,
+				action.SetReturning,
+				false, /* tailCall */
+				nil,   /* exceptionHandler */
+			)
+		}
+	}
+
 	return tree.NewTypedRoutineExpr(
 		udf.Def.Name,
 		args,
@@ -974,6 +1004,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
 		udf.TailCall,
+		exceptionHandler,
 	), nil
 }
 
