@@ -236,7 +236,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Same(t, immByName, immByID)
 
 			// Don't write the descriptor, just write the namespace entry.
-			b := &kv.Batch{}
+			b := txn.KV().NewBatch()
 			err = descriptors.InsertNamespaceEntryToBatch(ctx, false /* kvTrace */, mut, b)
 			require.NoError(t, err)
 			err = txn.KV().Run(ctx, b)

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -755,7 +754,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 	requestHeader := kvpb.RequestHeader{
 		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
 	}
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	if storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings) {
 		b.AddRawRequest(&kvpb.DeleteRangeRequest{
 			RequestHeader:           requestHeader,

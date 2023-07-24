@@ -691,7 +691,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 	// Finally create the schemas on disk.
 	for i, mutDesc := range mutableSchemaDescs {
-		b := &kv.Batch{}
+		b := txn.KV().NewBatch()
 		kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 		if err := descsCol.WriteDescToBatch(ctx, kvTrace, mutDesc, b); err != nil {
 			return nil, err

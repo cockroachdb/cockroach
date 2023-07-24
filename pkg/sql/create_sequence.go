@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -155,7 +154,7 @@ func doCreateSequence(
 
 	// Initialize the sequence value.
 	seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(id))
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 
 	startVal := desc.SequenceOpts.Start
 	for _, option := range opts {
