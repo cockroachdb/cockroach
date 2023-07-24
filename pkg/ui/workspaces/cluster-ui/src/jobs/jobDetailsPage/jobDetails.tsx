@@ -40,6 +40,8 @@ import jobStyles from "src/jobs/jobs.module.scss";
 import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
 import {
+  GetJobProfilerExecutionDetailRequest,
+  GetJobProfilerExecutionDetailResponse,
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
   RequestState,
@@ -60,14 +62,17 @@ enum TabKeysEnum {
 
 export interface JobDetailsStateProps {
   jobRequest: RequestState<JobResponse>;
-  jobProfilerResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
+  jobProfilerExecutionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
   jobProfilerLastUpdated: moment.Moment;
   jobProfilerDataIsValid: boolean;
+  onDownloadExecutionFileClicked: (
+    req: GetJobProfilerExecutionDetailRequest,
+  ) => Promise<GetJobProfilerExecutionDetailResponse>;
 }
 
 export interface JobDetailsDispatchProps {
   refreshJob: (req: JobRequest) => void;
-  refreshExecutionDetails: (
+  refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
 }
@@ -130,10 +135,15 @@ export class JobDetails extends React.Component<
     return (
       <JobProfilerView
         jobID={id}
-        executionDetailsResponse={this.props.jobProfilerResponse}
-        refreshExecutionDetails={this.props.refreshExecutionDetails}
+        executionDetailFilesResponse={
+          this.props.jobProfilerExecutionDetailFilesResponse
+        }
+        refreshExecutionDetailFiles={this.props.refreshExecutionDetailFiles}
         lastUpdated={this.props.jobProfilerLastUpdated}
         isDataValid={this.props.jobProfilerDataIsValid}
+        onDownloadExecutionFileClicked={
+          this.props.onDownloadExecutionFileClicked
+        }
       />
     );
   };
