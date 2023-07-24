@@ -293,6 +293,9 @@ the test tags.
 If all invoked tests passed, the exit status is zero. If at least one test
 failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
+
+COCKROACH_ environment variables in the local environment are passed through to
+the cluster nodes on start.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if literalArtifacts == "" {
