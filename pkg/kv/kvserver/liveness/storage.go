@@ -51,7 +51,7 @@ type livenessUpdate struct {
 // typically unnecessary. For updating liveness, it is still not necessary to
 // call get, since the handleCondFailed after a CPut will notify you of the
 // previous data.
-func (ls storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
+func (ls *storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
 	var oldLiveness livenesspb.Liveness
 	record, err := ls.db.Get(ctx, keys.NodeLivenessKey(nodeID))
 	if err != nil {
@@ -75,7 +75,7 @@ func (ls storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, e
 // handleCondFailed func is called with the current data stored for this node.
 // This method does not retry, but normally the caller will retry using the
 // returned value on a condition failure.
-func (ls storageImpl) Update(
+func (ls *storageImpl) Update(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	var v *roachpb.Value
@@ -132,7 +132,7 @@ func (ls storageImpl) Update(
 //
 // NB: An existing liveness record is not overwritten by this method, we return
 // an error instead.
-func (ls storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error {
+func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error {
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// We start off at epoch=0, entrusting the initial heartbeat to increment it
 		// to epoch=1 to signal the very first time the node is up and running.
@@ -180,7 +180,7 @@ func (ls storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error {
 }
 
 // Scan will iterate over the KV liveness names and generate liveness records from them.
-func (ls storageImpl) Scan(ctx context.Context) ([]Record, error) {
+func (ls *storageImpl) Scan(ctx context.Context) ([]Record, error) {
 	kvs, err := ls.db.Scan(ctx, keys.NodeLivenessPrefix, keys.NodeLivenessKeyMax, 0)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to get liveness")
