@@ -45,6 +45,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	// Import the logmetrics package to trigger its own init function, which inits and injects
+	// metrics functionality into pkg/util/log.
+	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
@@ -130,8 +133,12 @@ type MetricsRecorder struct {
 		// nodeRegistry contains, as subregistries, the multiple component-specific
 		// registries which are recorded as "node level" metrics.
 		nodeRegistry *metric.Registry
-		desc         roachpb.NodeDescriptor
-		startedAt    int64
+		// logRegistry contains the global metrics registry used by the logging
+		// package. NB: The underlying metrics are global, but each server gets
+		// its own separate registry to avoid things such as colliding labels.
+		logRegistry *metric.Registry
+		desc        roachpb.NodeDescriptor
+		startedAt   int64
 
 		// storeRegistries contains a registry for each store on the node. These
 		// are not stored as subregistries, but rather are treated as wholly
@@ -190,6 +197,7 @@ func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *met
 		// tenant is initialized.
 		mr.mu.Do(func() {
 			mr.mu.nodeRegistry.AddLabel("tenant", catconstants.SystemTenantName)
+			mr.mu.logRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 		})
 	}
 	mr.mu.tenantRegistries[tenantID] = rec
@@ -204,16 +212,17 @@ func (mr *MetricsRecorder) RemoveTenantRegistry(tenantID roachpb.TenantID) {
 }
 
 // AddNode adds the Registry from an initialized node, along with its descriptor
-// and start time.
+// and start time. It also adds the logging registry.
 func (mr *MetricsRecorder) AddNode(
-	reg *metric.Registry,
+	nodeReg, logReg *metric.Registry,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
 	advertiseAddr, httpAddr, sqlAddr string,
 ) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
-	mr.mu.nodeRegistry = reg
+	mr.mu.nodeRegistry = nodeReg
+	mr.mu.logRegistry = logReg
 	mr.mu.desc = desc
 	mr.mu.startedAt = startedAt
 
@@ -230,20 +239,20 @@ func (mr *MetricsRecorder) AddNode(
 	metadata.AddLabel(sqlAddrLabelKey, sqlAddr)
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
-	reg.AddMetric(nodeIDGauge)
+	nodeReg.AddMetric(nodeIDGauge)
 
 	if !disableNodeAndTenantLabels {
 		nodeIDInt := int(desc.NodeID)
 		if nodeIDInt != 0 {
-			reg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
-			// We assume that all stores have been added to the registry
-			// prior to calling `AddNode`.
+			nodeReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+			logReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			for _, s := range mr.mu.storeRegistries {
 				s.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			}
 		}
 		if mr.tenantNameContainer != nil && mr.tenantNameContainer.String() != catconstants.SystemTenantName {
-			reg.AddLabel("tenant", mr.tenantNameContainer)
+			nodeReg.AddLabel("tenant", mr.tenantNameContainer)
+			logReg.AddLabel("tenant", mr.tenantNameContainer)
 		}
 	}
 }
@@ -276,7 +285,8 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 		return []byte("{}"), nil
 	}
 	topLevel := map[string]interface{}{
-		fmt.Sprintf("node.%d", mr.mu.desc.NodeID): mr.mu.nodeRegistry,
+		fmt.Sprintf("node.%d", mr.mu.desc.NodeID):     mr.mu.nodeRegistry,
+		fmt.Sprintf("node.%d.log", mr.mu.desc.NodeID): mr.mu.logRegistry,
 	}
 	// Add collection of stores to top level. JSON requires that keys be strings,
 	// so we must convert the store ID to a string.
@@ -301,6 +311,7 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	}
 	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
+	pm.ScrapeRegistry(mr.mu.logRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
 	}
@@ -359,6 +370,9 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		source:         mr.mu.desc.NodeID.String(),
 		timestampNanos: now.UnixNano(),
 	}
+	recorder.record(&data)
+	// Now record the log metrics.
+	recorder.registry = mr.mu.logRegistry
 	recorder.record(&data)
 
 	// Record time series from node-level registries for secondary tenants.
@@ -419,6 +433,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	metrics := make(map[string]metric.Metadata)
 
 	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics)
+	mr.mu.logRegistry.WriteMetricsMetadata(metrics)
 
 	// Get a random storeID.
 	var sID roachpb.StoreID
@@ -506,6 +521,9 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	}
 
 	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {
+		nodeStat.Metrics[name] = val
+	})
+	eachRecordableValue(mr.mu.logRegistry, func(name string, val float64) {
 		nodeStat.Metrics[name] = val
 	})
 

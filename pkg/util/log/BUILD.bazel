@@ -34,6 +34,7 @@ go_library(
         "log_decoder.go",
         "log_entry.go",
         "log_flush.go",
+        "metric.go",
         "redact.go",
         "registry.go",
         "sinks.go",
