@@ -731,6 +731,7 @@ go_test(
         "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/ccl",
+        "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
