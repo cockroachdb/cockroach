@@ -1451,9 +1451,9 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		// get there, the request will need to trigger a lease request on a follower
 		// replica, which will call a Raft election, acquire Raft leadership, then
 		// acquire the range lease.
+		log.Infof(ctx, "test: waiting for new lease...")
 		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
 		require.NoError(t, err)
-		log.Infof(ctx, "test: waiting for new lease...")
 		tc.WaitForValues(t, key, []int64{2, 2, 2, 0})
 		log.Infof(ctx, "test: waiting for new lease... done [%.2fs]", timeutil.Since(tBegin).Seconds())
 	}
