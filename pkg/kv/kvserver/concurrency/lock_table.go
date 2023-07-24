@@ -936,6 +936,12 @@ type unreplicatedLockHolderInfo struct {
 	ts hlc.Timestamp
 }
 
+// clear removes previously tracked unreplicated lock holder information.
+func (ulh *unreplicatedLockHolderInfo) clear() {
+	ulh.seqs = nil
+	ulh.ts = hlc.Timestamp{}
+}
+
 func (ulh *unreplicatedLockHolderInfo) isEmpty() bool {
 	return ulh.seqs == nil && ulh.ts.IsEmpty()
 }
@@ -1731,7 +1737,7 @@ func (l *lockState) clearLockHolder() {
 	l.holder.txn = nil
 	l.holder.startTime = time.Time{}
 	l.holder.replicatedInfo = replicatedLockHolderInfo{}
-	l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
+	l.holder.unreplicatedInfo.clear()
 }
 
 // scanAndMaybeEnqueue scans all locks held on the receiver's key and performs
@@ -2400,7 +2406,7 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 			// locks are held across epochs, and there is no per-epoch tracking in the
 			// lock table for them.
 			if acq.Durability == lock.Replicated {
-				l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
+				l.holder.unreplicatedInfo.clear()
 			}
 		}
 
@@ -2752,13 +2758,13 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 		//...update corresponds to a higher epoch.
 		case txn.Epoch > l.holder.txn.Epoch:
 			// Forget what was tracked previously.
-			l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
+			l.holder.unreplicatedInfo.clear()
 
 			// ...update corresponds to the current epoch.
 		case txn.Epoch == l.holder.txn.Epoch:
 			l.holder.unreplicatedInfo.seqs = removeIgnored(l.holder.unreplicatedInfo.seqs, up.IgnoredSeqNums)
 			if len(l.holder.unreplicatedInfo.seqs) == 0 {
-				l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
+				l.holder.unreplicatedInfo.clear()
 				isLocked = false
 				break
 			}
