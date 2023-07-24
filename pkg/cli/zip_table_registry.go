@@ -179,6 +179,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"granted",
 			"contended",
 			"duration",
+			"isolation_level",
 		},
 	},
 	"crdb_internal.cluster_queries": {
