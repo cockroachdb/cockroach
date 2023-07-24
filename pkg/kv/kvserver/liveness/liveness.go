@@ -687,6 +687,8 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 					return nil
 				}); err != nil {
 				log.Warningf(ctx, heartbeatFailureLogFormat, err)
+			} else if nl.onSelfHeartbeat != nil {
+				nl.onSelfHeartbeat(ctx)
 			}
 
 			nl.heartbeatToken <- struct{}{}
@@ -1124,9 +1126,6 @@ func (nl *NodeLiveness) updateLiveness(
 				continue
 			}
 			return Record{}, err
-		}
-		if nl.started.Get() && nl.onSelfHeartbeat != nil {
-			nl.onSelfHeartbeat(ctx)
 		}
 		return written, nil
 	}
