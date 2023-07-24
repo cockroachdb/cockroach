@@ -1918,7 +1918,7 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 		// as the tables we backed up. In addition, we need to wipe the
 		// cluster before attempting a restore.
 		restoredTables = collection.tables
-		if err := mvb.resetCluster(ctx, l, version); err != nil {
+		if err := mvb.resetCluster(ctx, l, h, version); err != nil {
 			return err
 		}
 	case *tableBackup:
@@ -1984,9 +1984,10 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
 func (mvb *mixedVersionBackup) resetCluster(
-	ctx context.Context, l *logger.Logger, version string,
+	ctx context.Context, l *logger.Logger, h *mixedversion.Helper, version string,
 ) error {
 	l.Printf("resetting cluster using version %q", clusterupgrade.VersionMsg(version))
+	h.ExpectDeaths(len(mvb.roachNodes))
 	if err := mvb.cluster.WipeE(ctx, l, true /* preserveCerts */, mvb.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
