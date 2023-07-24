@@ -1435,17 +1435,18 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	atomic.StoreInt32(&installPartition, 1)
 
 	// Wait until the lease expires.
-	log.Infof(ctx, "test: waiting for lease expiration")
+	log.Infof(ctx, "test: waiting for lease expiration on r%d", store0Repl.RangeID)
 	testutils.SucceedsSoon(t, func() error {
 		leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
 		if leaseStatus.IsValid() {
-			return errors.New("lease still valid")
+			return errors.Errorf("lease still valid: %+v", leaseStatus)
 		}
 		return nil
 	})
 	log.Infof(ctx, "test: lease expired")
 
 	{
+		tBegin := timeutil.Now()
 		// Increment the initial value again, which requires range availability. To
 		// get there, the request will need to trigger a lease request on a follower
 		// replica, which will call a Raft election, acquire Raft leadership, then
@@ -1454,7 +1455,7 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		require.NoError(t, err)
 		log.Infof(ctx, "test: waiting for new lease...")
 		tc.WaitForValues(t, key, []int64{2, 2, 2, 0})
-		log.Infof(ctx, "test: waiting for new lease... done")
+		log.Infof(ctx, "test: waiting for new lease... done [%.2fs]", timeutil.Since(tBegin).Seconds())
 	}
 
 	// Store 0 no longer holds the lease.
