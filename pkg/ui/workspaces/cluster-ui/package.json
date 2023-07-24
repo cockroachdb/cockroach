@@ -147,6 +147,8 @@
     "reselect": "^4.0.0",
     "sass": "^1.34.0",
     "sass-loader": "^10.2.0",
+    "schema-utils": "3.3.0",
+    "semver": "7.5.3",
     "sinon": "^9.0.2",
     "source-map": "0.6.1",
     "source-map-loader": "^0.2.4",
