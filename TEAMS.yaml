@@ -29,11 +29,13 @@ cockroachdb/sql-foundations:
   triage_column_id: 19467489
   label: T-sql-foundations
 cockroachdb/sql-queries:
+  # SQL Queries team uses GH projects v2, which doesn't have a REST API, so
+  # there is no triage column ID.
+  # See .github/workflows/add-issues-to-project.yml.
   aliases:
     cockroachdb/sql-queries-prs: other
     cockroachdb/sql-optimizer: other
     cockroachdb/sql-opt-prs: other
-  triage_column_id: 13549252
 cockroachdb/cluster-observability:
   triage_column_id: 12618343
 cockroachdb/kv:
