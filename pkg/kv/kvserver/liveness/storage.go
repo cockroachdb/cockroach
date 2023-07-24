@@ -42,6 +42,11 @@ type storageImpl struct {
 
 var _ Storage = (*storageImpl)(nil)
 
+// NewKVStorage returns a Storage backed by the node liveness range.
+func NewKVStorage(db *kv.DB) Storage {
+	return &storageImpl{db}
+}
+
 // LivenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
 type LivenessUpdate struct {
