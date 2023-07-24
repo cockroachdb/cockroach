@@ -129,3 +129,11 @@ var CompactionJobRowsToDeletePerTxn = settings.RegisterIntSetting(
 	10000,
 	settings.NonNegativeInt,
 )
+
+var CompactionNumRetryAttempts = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.stats.cleanup.num_retries",
+	"number of retries to attempt before failing the cleanup job",
+	10,
+	settings.NonNegativeInt,
+).WithPublic()

@@ -13,6 +13,7 @@ package persistedsqlstats_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"sync/atomic"
 	"testing"
@@ -32,13 +33,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -297,6 +301,68 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 	)
 
 	t.Logf("test complete")
+}
+
+func TestSQLStatsCompactionJobRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numRetryAttempts = 3
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+		OverrideCompactionRetryOptions: func() (retry.Options, int) {
+			return retry.Options{
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     30 * time.Second,
+				Multiplier:     1.3,
+			}, numRetryAttempts
+		},
+		OverrideDeleteEntries: func() error {
+			return errors.New("test override compaction failure")
+		},
+	}
+
+	t.Logf("starting test server")
+	ctx := context.Background()
+	server, conn, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Disable automatic flush since the test will handle the flush manually.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled = false")
+	// Change the automatic compaction job to avoid it running during the test.
+	// Test creates a new compactor and calls it directly.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
+
+	t.Logf("launching the stats compaction job")
+	jobID, err := launchSQLStatsCompactionJob(server)
+	require.NoError(t, err)
+
+	t.Logf("wait for the job to fail after retries")
+	testutils.SucceedsSoon(t, func() error {
+		var status jobs.Status
+		sqlDB.QueryRow(t, "SELECT status FROM system.jobs WHERE job_type = $1 AND id = $2",
+			jobspb.TypeAutoSQLStatsCompaction.String(), jobID).Scan(&status)
+		if status == jobs.StatusFailed {
+			return nil
+		}
+		return errors.New("waiting for compaction job to fail")
+	})
+
+	log.Flush()
+
+	// Gather expected compaction failure logs.
+	entries, err := log.FetchEntriesFromFiles(
+		0, /* startTimestamp */
+		math.MaxInt64,
+		10000, /* maxEntries */
+		regexp.MustCompile("sql stats compaction failed with error: test override compaction failure"),
+		log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+
+	// Ensure we have the expected number compaction failure logs, one for each retry.
+	require.Equal(t, numRetryAttempts, len(entries))
 }
 
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {

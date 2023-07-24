@@ -81,8 +81,13 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		MaxBackoff:     30 * time.Second,
 		Multiplier:     1.3,
 	}
+	maxRetryAttempts := int(persistedsqlstats.CompactionNumRetryAttempts.Get(&r.st.SV))
 
-	err = retry.WithMaxAttempts(ctx, retryOpts, 10 /* maxAttempts */, func() error {
+	knobs := p.ExecCfg().SQLStatsTestingKnobs
+	if knobs != nil && knobs.OverrideCompactionRetryOptions != nil {
+		retryOpts, maxRetryAttempts = p.ExecCfg().SQLStatsTestingKnobs.OverrideCompactionRetryOptions()
+	}
+	err = retry.WithMaxAttempts(ctx, retryOpts, maxRetryAttempts, func() error {
 		if err = statsCompactor.DeleteOldestEntries(ctx); err != nil {
 			log.Warningf(ctx, "sql stats compaction failed with error: %v, retrying...", err)
 			return err
