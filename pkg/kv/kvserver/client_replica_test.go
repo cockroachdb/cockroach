@@ -443,9 +443,9 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "observedTS", func(t *testing.T, observedTS bool) {
-		readOps := []interface{}{"get", "scan", "revScan"}
-		testutils.RunValues(t, "readOp", readOps, func(t *testing.T, readOp interface{}) {
-			testTxnReadWithinUncertaintyInterval(t, observedTS, readOp.(string))
+		readOps := []string{"get", "scan", "revScan"}
+		testutils.RunValues(t, "readOp", readOps, func(t *testing.T, readOp string) {
+			testTxnReadWithinUncertaintyInterval(t, observedTS, readOp)
 		})
 	})
 }

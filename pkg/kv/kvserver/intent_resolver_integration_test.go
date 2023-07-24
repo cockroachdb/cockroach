@@ -622,18 +622,18 @@ func TestReliableIntentCleanup(t *testing.T) {
 		}
 
 		// The actual tests are run here, using all combinations of parameters.
-		testutils.RunValues(t, "numKeys", []interface{}{1, 100, 100000}, func(t *testing.T, numKeys interface{}) {
+		testutils.RunValues(t, "numKeys", []int{1, 100, 100000}, func(t *testing.T, numKeys int) {
 			testutils.RunTrueAndFalse(t, "singleRange", func(t *testing.T, singleRange bool) {
 				testutils.RunTrueAndFalse(t, "txn", func(t *testing.T, txn bool) {
 					if !txn {
 						testNonTxn(t, testNonTxnSpec{
-							numKeys:     numKeys.(int),
+							numKeys:     numKeys,
 							singleRange: singleRange,
 						})
 						return
 					}
-					finalize := []interface{}{"commit", "rollback", "cancel", "cancelAsync"}
-					testutils.RunValues(t, "finalize", finalize, func(t *testing.T, finalize interface{}) {
+					finalize := []string{"commit", "rollback", "cancel", "cancelAsync"}
+					testutils.RunValues(t, "finalize", finalize, func(t *testing.T, finalize string) {
 						// TODO(erikgrinaker): cleanup does not always work reliably with
 						// context cancellation, so we skip these for now to deflake the test.
 						if finalize == "cancel" || finalize == "cancelAsync" {
@@ -642,22 +642,22 @@ func TestReliableIntentCleanup(t *testing.T) {
 						if finalize == "cancelAsync" {
 							// cancelAsync can't run together with abort.
 							testTxn(t, testTxnSpec{
-								numKeys:     numKeys.(int),
+								numKeys:     numKeys,
 								singleRange: singleRange,
-								finalize:    finalize.(string),
+								finalize:    finalize,
 							})
 							return
 						}
-						abort := []interface{}{"no", "push", "heartbeat"}
-						testutils.RunValues(t, "abort", abort, func(t *testing.T, abort interface{}) {
-							if abort.(string) == "no" {
+						abort := []string{"no", "push", "heartbeat"}
+						testutils.RunValues(t, "abort", abort, func(t *testing.T, abort string) {
+							if abort == "no" {
 								abort = "" // "no" just makes the test output better
 							}
 							testTxn(t, testTxnSpec{
-								numKeys:     numKeys.(int),
+								numKeys:     numKeys,
 								singleRange: singleRange,
-								finalize:    finalize.(string),
-								abort:       abort.(string),
+								finalize:    finalize,
+								abort:       abort,
 							})
 						})
 					})
