@@ -7635,6 +7635,10 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{CheckFiles: true}
  }
+ | SKIP SIZE
+ {
+ $$.val = &tree.ShowBackupOptions{SkipSize: true}
+ }
  | DEBUG_IDS
  {
  $$.val = &tree.ShowBackupOptions{DebugIDs: true}
