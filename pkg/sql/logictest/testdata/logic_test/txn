@@ -1523,3 +1523,20 @@ regular
 statement error pq: SET CLUSTER SETTING cannot be used inside a multi-statement transaction
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'on';
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SELECT cluster_logical_timestamp();
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+skipif config local-mixed-22.2-23.1
+statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
+SELECT cluster_logical_timestamp();
+
+statement ok
+ROLLBACK
