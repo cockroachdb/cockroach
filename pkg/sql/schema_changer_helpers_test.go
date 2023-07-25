@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,5 +88,76 @@ func TestCalculateSplitAtShards(t *testing.T) {
 			shards := calculateSplitAtShards(tc.maxSplit, tc.bucketCount)
 			require.Equal(t, tc.expected, shards)
 		})
+	}
+}
+
+// TestNotFirstInLine tests that if a schema change's mutation is not first in
+// line, the error message clearly state what the blocking schema change job ID
+// is.
+func TestNotFirstInLine(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	desc := descpb.TableDescriptor{
+		Name: "t",
+		ID:   104,
+		Mutations: []descpb.DescriptorMutation{
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{},
+				MutationID:  1,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{},
+				MutationID:  1,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Column{},
+				MutationID:  2,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Column{},
+				MutationID:  3,
+			},
+		},
+		MutationJobs: []descpb.TableDescriptor_MutationJob{
+			{
+				JobID:      11111,
+				MutationID: 1,
+			},
+			{
+				JobID:      22222,
+				MutationID: 2,
+			},
+			{
+				JobID:      33333,
+				MutationID: 3,
+			},
+		},
+	}
+	mut := tabledesc.NewBuilder(&desc).BuildExistingMutableTable()
+	{
+		sc := SchemaChanger{
+			descID:     104,
+			mutationID: 1,
+		}
+		err := sc.notFirstInLine(ctx, mut)
+		require.NoError(t, err)
+	}
+	{
+		sc := SchemaChanger{
+			descID:     104,
+			mutationID: 2,
+		}
+		err := sc.notFirstInLine(ctx, mut)
+		require.True(t, errors.Is(err, errSchemaChangeNotFirstInLine))
+		require.Regexp(t, `schema change is blocked by 1 other schema change job\(s\) \[11111\].*`, err.Error())
+	}
+	{
+		sc := SchemaChanger{
+			descID:     104,
+			mutationID: 3,
+		}
+		err := sc.notFirstInLine(ctx, mut)
+		require.True(t, errors.Is(err, errSchemaChangeNotFirstInLine))
+		require.Regexp(t, `schema change is blocked by 2 other schema change job\(s\) \[11111 22222\].*`, err.Error())
 	}
 }
