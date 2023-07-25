@@ -72,9 +72,15 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 
 	aggregatedTs := s.ComputeAggregatedTs()
 
-	if s.stmtsLimitSizeReached(ctx) || s.txnsLimitSizeReached(ctx) {
+	limitReached, err := s.StmtsLimitSizeReached(ctx)
+	if err != nil {
+		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
+		fmt.Println("err", err)
+	} else if limitReached {
 		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
+		fmt.Println("table limit reached")
 	} else {
+		fmt.Println("flushing")
 		var wg sync.WaitGroup
 		wg.Add(2)
 
@@ -92,7 +98,7 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	}
 }
 
-func (s *PersistedSQLStats) stmtsLimitSizeReached(ctx context.Context) bool {
+func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, error) {
 	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
 
 	readStmt := `
@@ -101,7 +107,7 @@ SELECT
 FROM
     system.statement_statistics
 `
-
+	readStmt += s.cfg.Knobs.GetAOSTClause()
 	row, err := s.cfg.DB.Executor().QueryRowEx(
 		ctx,
 		"fetch-stmt-count",
@@ -111,35 +117,10 @@ FROM
 	)
 
 	if err != nil {
-		return false
+		return false, err
 	}
 	actualSize := float64(tree.MustBeDInt(row[0]))
-	return actualSize > (maxPersistedRows * 1.5)
-}
-
-func (s *PersistedSQLStats) txnsLimitSizeReached(ctx context.Context) bool {
-	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
-
-	readStmt := `
-SELECT
-    count(*)
-FROM
-    system.transaction_statistics
-`
-
-	row, err := s.cfg.DB.Executor().QueryRowEx(
-		ctx,
-		"fetch-txn-count",
-		nil,
-		sessiondata.NodeUserSessionDataOverride,
-		readStmt,
-	)
-
-	if err != nil {
-		return false
-	}
-	actualSize := float64(tree.MustBeDInt(row[0]))
-	return actualSize > (maxPersistedRows * 1.5)
+	return actualSize > (maxPersistedRows * 1.5), nil
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
