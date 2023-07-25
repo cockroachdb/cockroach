@@ -2933,6 +2933,9 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						// If we're testing the below-raft check, disable the above-raft check.
+						// See: https://github.com/cockroachdb/cockroach/pull/107526
+						DisableAboveRaftLeaseTransferSafetyChecks: rejectAfterRevoke,
 						TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 							if rejectAfterRevoke && ba.IsSingleTransferLeaseRequest() {
 								transferLeaseReqBlockOnce.Do(func() {

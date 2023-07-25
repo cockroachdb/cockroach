@@ -949,7 +949,7 @@ func (r *Replica) AdminTransferLease(
 		raftStatus := r.raftStatusRLocked()
 		raftFirstIndex := r.raftFirstIndexRLocked()
 		snapStatus := raftutil.ReplicaMayNeedSnapshot(raftStatus, raftFirstIndex, nextLeaseHolder.ReplicaID)
-		if snapStatus != raftutil.NoSnapshotNeeded && !bypassSafetyChecks {
+		if snapStatus != raftutil.NoSnapshotNeeded && !bypassSafetyChecks && !r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks {
 			r.store.metrics.LeaseTransferErrorCount.Inc(1)
 			log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 				"need a snapshot: %s", nextLeaseHolder, snapStatus)
