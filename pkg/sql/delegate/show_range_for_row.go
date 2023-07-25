@@ -34,6 +34,14 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 	if idx.Table().IsVirtualTable() {
 		return nil, errors.New("SHOW RANGE FOR ROW may not be called on a virtual table")
 	}
+	// Use qualifyDataSourceNamesInAST similarly to the Builder so that
+	// CREATE TABLE AS can source from a delegated expression.
+	// For example: CREATE TABLE t2 AS SELECT * FROM [SHOW RANGE FROM TABLE t1 FOR ROW (0)];
+	if d.qualifyDataSourceNamesInAST {
+		resName.ExplicitSchema = true
+		resName.ExplicitCatalog = true
+		(n.TableOrIndex).Table = resName.ToUnresolvedObjectName().ToTableName()
+	}
 	span := idx.Span()
 	table := idx.Table()
 	idxSpanStart := hex.EncodeToString(span.Key)
