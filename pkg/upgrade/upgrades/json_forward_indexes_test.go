@@ -25,7 +25,6 @@ import (
 )
 
 func TestJSONForwardingIndexes(t *testing.T) {
-	skip.WithIssue(t, 107169, "flaky test")
 	var err error
 	skip.UnderStressRace(t)
 	defer leaktest.AfterTest(t)()
