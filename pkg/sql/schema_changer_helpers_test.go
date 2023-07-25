@@ -12,13 +12,18 @@ package sql
 
 import (
 	"context"
+	"regexp"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,5 +91,91 @@ func TestCalculateSplitAtShards(t *testing.T) {
 			shards := calculateSplitAtShards(tc.maxSplit, tc.bucketCount)
 			require.Equal(t, tc.expected, shards)
 		})
+	}
+}
+
+// TestNotFirstInLine tests that if a schema change's mutation is not first in
+// line, the error message clearly state what the blocking schema change job ID
+// is.
+func TestNotFirstInLine(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// A helper to extract blocking schema change job IDs from the error message
+	// which is of the form "schema change is blocked by x other schema change
+	// job(s) [yyy zzz]".
+	extractSortedBlockingJobIDsFromNotFirstInLineErr := func(errMsg string) []string {
+		p := regexp.MustCompile(`\[(.*?)\]`)
+		m := p.FindStringSubmatch(errMsg)
+		require.NotNilf(t, m, "did not find any blocking job IDs")
+		blockingJobIDs := strings.Fields(m[1])
+		sort.Slice(blockingJobIDs, func(i, j int) bool {
+			return blockingJobIDs[i] <= blockingJobIDs[j]
+		})
+		return blockingJobIDs
+	}
+
+	ctx := context.Background()
+	desc := descpb.TableDescriptor{
+		Name: "t",
+		ID:   104,
+		Mutations: []descpb.DescriptorMutation{
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{},
+				MutationID:  1,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Index{},
+				MutationID:  1,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Column{},
+				MutationID:  2,
+			},
+			{
+				Descriptor_: &descpb.DescriptorMutation_Column{},
+				MutationID:  3,
+			},
+		},
+		MutationJobs: []descpb.TableDescriptor_MutationJob{
+			{
+				JobID:      11111,
+				MutationID: 1,
+			},
+			{
+				JobID:      22222,
+				MutationID: 2,
+			},
+			{
+				JobID:      33333,
+				MutationID: 3,
+			},
+		},
+	}
+	mut := tabledesc.NewBuilder(&desc).BuildExistingMutableTable()
+	{
+		sc := SchemaChanger{
+			descID:     104,
+			mutationID: 1,
+		}
+		err := sc.notFirstInLine(ctx, mut)
+		require.NoError(t, err)
+	}
+	{
+		sc := SchemaChanger{
+			descID:     104,
+			mutationID: 2,
+		}
+		err := sc.notFirstInLine(ctx, mut)
+		require.True(t, errors.Is(err, errSchemaChangeNotFirstInLine))
+		require.Equal(t, []string{"11111"}, extractSortedBlockingJobIDsFromNotFirstInLineErr(err.Error()))
+	}
+	{
+		sc := SchemaChanger{
+			descID:     104,
+			mutationID: 3,
+		}
+		err := sc.notFirstInLine(ctx, mut)
+		require.True(t, errors.Is(err, errSchemaChangeNotFirstInLine))
+		require.Equal(t, []string{"11111", "22222"}, extractSortedBlockingJobIDsFromNotFirstInLineErr(err.Error()))
 	}
 }
