@@ -713,6 +713,13 @@ func scanSpans(
 			sa = spanset.SpanReadWrite
 		case lock.Exclusive:
 			sa = spanset.SpanReadWrite
+		case lock.Shared:
+			// Unlike non-locking reads, shared-locking reads are isolated at all
+			// timestamps (not just the request's timestamp); so we acquire a read
+			// latch at max timestamp. See
+			// https://github.com/cockroachdb/cockroach/issues/102264.
+			sa = spanset.SpanReadOnly
+			ts = hlc.MaxTimestamp
 		default:
 			d.Fatalf(t, "unsupported lock strength: %s", str)
 		}
