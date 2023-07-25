@@ -19,6 +19,7 @@ import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { indexUsageStatsSaga } from "./indexUsageStats";
 import { timeScaleSaga } from "src/redux/timeScale";
+import { jobsSaga } from "./jobs/jobsSagas";
 
 export default function* rootSaga() {
   yield all([
@@ -26,6 +27,7 @@ export default function* rootSaga() {
     fork(localSettingsSaga),
     fork(customAnalyticsSaga),
     fork(statementsSaga),
+    fork(jobsSaga),
     fork(analyticsSaga),
     fork(sessionsSaga),
     fork(sqlStatsSaga),
