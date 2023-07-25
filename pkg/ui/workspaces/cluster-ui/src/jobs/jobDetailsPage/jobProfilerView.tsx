@@ -50,6 +50,7 @@ export type JobProfilerDispatchProps = {
   refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
+  onRequestExecutionDetails: (jobID: long) => void;
 };
 
 export type JobProfilerViewProps = JobProfilerStateProps &
@@ -143,6 +144,7 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
   isDataValid,
   onDownloadExecutionFileClicked,
   refreshExecutionDetailFiles,
+  onRequestExecutionDetails,
 }: JobProfilerViewProps) => {
   const columns = makeJobProfilerViewColumns(
     jobID,
@@ -198,6 +200,20 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
         <p className={summaryCardStylesCx("summary--card__divider--large")} />
         <Row gutter={24}>
           <Col className="gutter-row" span={24}>
+            <Button
+              as="a"
+              size="small"
+              intent="secondary"
+              className={cx("request-execution-detail-button")}
+              onClick={() => {
+                onRequestExecutionDetails(jobID);
+              }}
+            >
+              Request Execution Details
+            </Button>
+            <p
+              className={summaryCardStylesCx("summary--card__divider--large")}
+            />
             <SortedTable
               data={executionDetailFilesResponse.data?.files}
               columns={columns}

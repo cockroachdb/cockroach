@@ -19,9 +19,11 @@ import {
   refreshListExecutionDetailFiles,
   refreshJob,
 } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { ListJobProfilerExecutionDetailsResponseMessage } from "src/util/api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { collectExecutionDetailsAction } from "oss/src/redux/jobs/jobsActions";
+import long from "long";
 
 const selectJob = createSelectorForKeyedCachedDataField("job", selectID);
 const selectExecutionDetailFiles =
@@ -49,6 +51,11 @@ const mapStateToProps = (
 const mapDispatchToProps = {
   refreshJob,
   refreshExecutionDetailFiles: refreshListExecutionDetailFiles,
+  onRequestExecutionDetails: (jobID: long) => {
+    return (dispatch: AppDispatch) => {
+      dispatch(collectExecutionDetailsAction({ job_id: jobID }));
+    };
+  },
 };
 
 export default withRouter(

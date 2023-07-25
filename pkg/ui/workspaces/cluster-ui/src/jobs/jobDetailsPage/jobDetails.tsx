@@ -40,6 +40,7 @@ import jobStyles from "src/jobs/jobs.module.scss";
 import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
 import {
+  CollectExecutionDetailsResponse,
   GetJobProfilerExecutionDetailRequest,
   GetJobProfilerExecutionDetailResponse,
   ListJobProfilerExecutionDetailsRequest,
@@ -49,6 +50,7 @@ import {
 import moment from "moment-timezone";
 import { CockroachCloudContext } from "src/contexts";
 import { JobProfilerView } from "./jobProfilerView";
+import long from "long";
 
 const { TabPane } = Tabs;
 
@@ -75,6 +77,7 @@ export interface JobDetailsDispatchProps {
   refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
+  onRequestExecutionDetails: (jobID: long) => void;
 }
 
 export interface JobDetailsState {
@@ -144,6 +147,7 @@ export class JobDetails extends React.Component<
         onDownloadExecutionFileClicked={
           this.props.onDownloadExecutionFileClicked
         }
+        onRequestExecutionDetails={this.props.onRequestExecutionDetails}
       />
     );
   };

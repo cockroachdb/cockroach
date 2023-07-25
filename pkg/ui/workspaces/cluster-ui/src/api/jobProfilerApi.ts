@@ -10,6 +10,7 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "./fetchData";
+import { SqlExecutionRequest, executeInternalSql } from "./sqlApi";
 
 export type ListJobProfilerExecutionDetailsRequest =
   cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
@@ -44,3 +45,43 @@ export const getExecutionDetailFile = (
     "30M",
   );
 };
+
+export type CollectExecutionDetailsRequest = {
+  job_id: Long;
+};
+
+export type CollectExecutionDetailsResponse = {
+  req_resp: boolean;
+};
+
+export function collectExecutionDetails({
+  job_id,
+}: CollectExecutionDetailsRequest): Promise<CollectExecutionDetailsResponse> {
+  const args: any = [job_id.toString()];
+
+  const collectExecutionDetails = {
+    sql: `SELECT crdb_internal.request_job_execution_details($1::INT) as req_resp`,
+    arguments: args,
+  };
+
+  const req: SqlExecutionRequest = {
+    execute: true,
+    statements: [collectExecutionDetails],
+  };
+
+  return executeInternalSql<CollectExecutionDetailsResponse>(req).then(res => {
+    // If request succeeded but query failed, throw error (caught by saga/cacheDataReducer).
+    if (res.error) {
+      throw res.error;
+    }
+
+    if (
+      res.execution?.txn_results[0]?.rows?.length === 0 ||
+      res.execution?.txn_results[0]?.rows[0]["req_resp"] === false
+    ) {
+      throw new Error("Failed to collect execution details");
+    }
+
+    return res.execution.txn_results[0].rows[0];
+  });
+}

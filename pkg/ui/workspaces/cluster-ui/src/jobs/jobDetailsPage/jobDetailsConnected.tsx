@@ -30,6 +30,7 @@ import {
   actions as jobProfilerActions,
 } from "src/store/jobs/jobProfiler.reducer";
 import { Dispatch } from "redux";
+import long from "long";
 
 const emptyState = createInitialState<JobResponse>();
 
@@ -52,6 +53,9 @@ const mapDispatchToProps = (dispatch: Dispatch): JobDetailsDispatchProps => ({
   refreshJob: (req: JobRequest) => jobActions.refresh(req),
   refreshExecutionDetailFiles: (req: ListJobProfilerExecutionDetailsRequest) =>
     dispatch(jobProfilerActions.refresh(req)),
+  onRequestExecutionDetails: (jobID: long) => {
+    dispatch(jobProfilerActions.collectExecutionDetails({ job_id: jobID }));
+  },
 });
 
 export const JobDetailsPageConnected = withRouter(
