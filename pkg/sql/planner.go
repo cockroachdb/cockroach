@@ -446,6 +446,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 	p.extendedEvalCtx.OriginalLocality = execCfg.Locality
+	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
 
 	p.sessionDataMutatorIterator = smi
 	p.autoCommit = false
