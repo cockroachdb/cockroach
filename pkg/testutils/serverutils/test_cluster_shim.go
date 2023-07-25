@@ -231,6 +231,10 @@ type TestClusterInterface interface {
 	// TODO(radu): we should verify that the queries in tests using SplitTable
 	// are indeed distributed as intended.
 	SplitTable(t *testing.T, desc catalog.TableDescriptor, sps []SplitPoint)
+
+	// ToggleReplicateQueues activates or deactivates the replication queues on all
+	// the stores on all the nodes.
+	ToggleReplicateQueues(active bool)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.
