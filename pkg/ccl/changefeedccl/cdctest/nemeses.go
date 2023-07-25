@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,7 +29,9 @@ import (
 // duplicates, which the two cdctest.Validator implementations verify for the
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
-func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, error) {
+func RunNemesis(
+	f TestFeedFactory, db *gosql.DB, isSinkless bool, rng *rand.Rand,
+) (Validator, error) {
 	// possible additional nemeses:
 	// - schema changes
 	// - merges
@@ -42,7 +43,6 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 	// - sink chaos
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
 
 	eventPauseCount := 10
 	if isSinkless {
