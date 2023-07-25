@@ -721,8 +721,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			// Set up the closed timestamp timing such that, when we block a merge and
 			// transfer the RHS lease, the closed timestamp advances over the LHS
 			// lease but not over the RHS lease.
-			const numNodes = 3
-			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, "cttest" /* dbName */, "kv" /* tableName */, numNodes)
+			tc, _, _ := setupClusterForClosedTSTesting(ctx, t, 5*time.Second, 100*time.Millisecond, clusterArgs, "cttest", "kv")
 			defer tc.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 			sqlDB.ExecMultiple(t, strings.Split(fmt.Sprintf(`
