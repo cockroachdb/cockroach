@@ -3003,10 +3003,17 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		// Replica.AdminTransferLease.
 		transferErrC := make(chan error, 1)
 		if rejectAfterRevoke {
-			_ = tc.Stopper().RunAsyncTask(ctx, "transfer lease", func(ctx context.Context) {
+			require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "transfer lease", func(ctx context.Context) {
 				transferErrC <- tc.TransferRangeLease(*repl0.Desc(), tc.Target(2))
-			})
-			<-transferLeaseReqBlockedC
+			}))
+			select {
+			case <-transferLeaseReqBlockedC:
+			// Expected case: lease transfer triggered our interceptor and is now
+			// waiting there for transferLeaseReqUnblockedCh.
+			case err := <-transferErrC:
+				// Unexpected case: lease transfer errored out before making it into the filter.
+				t.Fatalf("transferErrC unexpectedly signaled: %v", err)
+			}
 		}
 
 		// Truncate the log at index+1 (log entries < N are removed, so this
