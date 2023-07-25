@@ -144,6 +144,20 @@ proc flush_server_logs {} {
     report "END FLUSH LOGS"
 }
 
+proc flush_and_sync_logs {filename grep_text} {
+    report "BEGIN FLUSH LOGS $filename"
+    system "kill -HUP `cat server_pid` 2>/dev/null"
+    # Wait for flush to occur.
+    system "for i in `seq 1 5`; do
+              grep '$grep_text' $filename && exit 0;
+              echo still waiting
+              sleep 1
+            done
+            echo 'server failed to flush logs?'
+            exit 1"
+    report "END FLUSH LOGS"
+}
+
 proc force_stop_server {argv} {
     report "BEGIN FORCE STOP SERVER"
     system "kill -KILL `cat server_pid`"
