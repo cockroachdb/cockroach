@@ -281,6 +281,11 @@ func (v *tableImplicitRecordType) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (v *tableImplicitRecordType) ConcurrentSchemaChangeJobIDs() []catpb.JobID {
+	return nil
+}
+
 // SkipNamespace implements catalog.Descriptor. We never store table implicit
 // record type which is always constructed in memory.
 func (v *tableImplicitRecordType) SkipNamespace() bool {
