@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq/oid"
 )
 
@@ -483,7 +484,14 @@ type function struct {
 	overload *tree.Overload
 }
 
-var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
+type functionsMu struct {
+	syncutil.Mutex
+	// User-defined functions are added into the map after the initialization,
+	// so we need to protect the map with the mutex.
+	fns map[tree.FunctionClass]map[oid.Oid][]function
+}
+
+var functions = func() *functionsMu {
 	m := map[tree.FunctionClass]map[oid.Oid][]function{}
 	for _, def := range tree.FunDefs {
 		switch def.Name {
@@ -505,10 +513,6 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 
 		skip := false
 		for _, substr := range []string{
-			// crdb_internal.complete_stream_ingestion_job is a stateful
-			// function that requires a running stream ingestion job. Invoking
-			// this against random parameters is likely to fail and so we skip
-			// it.
 			"stream_ingestion",
 			"crdb_internal.force_",
 			"crdb_internal.unsafe_",
@@ -558,5 +562,5 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			})
 		}
 	}
-	return m
+	return &functionsMu{fns: m}
 }()

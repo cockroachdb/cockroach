@@ -1099,10 +1099,12 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 		IsUDF:      true,
 	}
 
-	functions[class][rtyp.Oid()] = append(functions[class][rtyp.Oid()], function{
+	functions.Lock()
+	functions.fns[class][rtyp.Oid()] = append(functions.fns[class][rtyp.Oid()], function{
 		def:      tree.NewFunctionDefinition(name.String(), &tree.FunctionProperties{}, nil /* def */),
 		overload: ov,
 	})
+	functions.Unlock()
 	return stmt, true
 }
 
