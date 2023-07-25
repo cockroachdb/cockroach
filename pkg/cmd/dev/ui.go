@@ -162,8 +162,24 @@ func (d *dev) assertNoLinkedNpmDeps(targets []buildTarget) error {
 				continue
 			}
 
-			// Resolve the possible symlink.
 			depPath := filepath.Join(crlModulesPath, depName)
+
+			// Determine if depName is a symlink. It should be when dependencies
+			// are installed via pnpm, but there are cases involving stale
+			// node_modules/ trees that can result in it being a regular
+			// directory.
+			isSymlink, err := d.os.IsSymlink(depPath)
+			if err != nil {
+				return fmt.Errorf("could not determine if %s is a symlink: %w", depPath, err)
+			}
+
+			// Regular directories cannot (by definition) link outside the Bazel
+			// workspace, so are safe to ignore.
+			if !isSymlink {
+				continue
+			}
+
+			// Resolve the symlink.
 			resolved, err := d.os.Readlink(depPath)
 			if err != nil {
 				return fmt.Errorf("could not evaluate symlink %s: %w", depPath, err)
@@ -591,7 +607,10 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 					filepath.Join(workspace, "pkg", "ui", "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "src", "js", "node_modules"),
+					filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "node_modules"),
 					filepath.Join(uiDirs.clusterUI, "node_modules"),
+					filepath.Join(uiDirs.e2eTests, "node_modules"),
+					filepath.Join(uiDirs.eslintPlugin, "node_modules"),
 				)
 			}
 
