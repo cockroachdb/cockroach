@@ -194,7 +194,8 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				go func(context.Context) {
+				m := c.NewMonitor(ctx, c.Node(1))
+				m.Go(func(context.Context) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
 					// catch that here, and only pass the error into
@@ -210,7 +211,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					if stmt == "" {
 						// If an empty statement is generated, then ignore it.
 						done <- errors.Newf("Empty statement returned by generate")
-						return
+						return nil
 					}
 
 					// TODO(yuzefovich): investigate why using the context with
@@ -225,7 +226,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						}
 					}
 					done <- err
-				}(ctx)
+					return nil
+				})
+				defer m.Wait()
 				select {
 				case <-time.After(timeout * 2):
 					// SQLSmith generates queries that either perform full table scans of

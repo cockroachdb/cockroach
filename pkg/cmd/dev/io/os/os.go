@@ -195,6 +195,35 @@ func (o *OS) Setenv(key, value string) error {
 	return err
 }
 
+// IsSymlink wraps around os.Lstat to determine if filename is a symbolic link
+// or not.
+func (o *OS) IsSymlink(filename string) (bool, error) {
+	command := fmt.Sprintf("stat %s", filename)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	isLinkStr, err := o.Next(command, func() (string, error) {
+		// Use os.Lstat here, since it does not attempt to resolve symlinks.
+		stat, err := os.Lstat(filename)
+		if err != nil {
+			return "", err
+		}
+
+		isLink := stat.Mode()&fs.ModeSymlink != 0
+
+		// o.Next only accepts string return values, so serialize a boolean
+		// and deserialize it outside of o.Next.
+		return strconv.FormatBool(isLink), nil
+	})
+
+	if err != nil {
+		return false, err
+	}
+
+	return strconv.ParseBool(isLinkStr)
+}
+
 // Readlink wraps around os.Readlink, which returns the destination of the named
 // symbolic link. If there is an error, it will be of type *PathError.
 func (o *OS) Readlink(filename string) (string, error) {
