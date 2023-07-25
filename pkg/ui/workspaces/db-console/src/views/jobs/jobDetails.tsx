@@ -18,10 +18,14 @@ import {
   createSelectorForKeyedCachedDataField,
   refreshListExecutionDetailFiles,
   refreshJob,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { ListJobProfilerExecutionDetailsResponseMessage } from "src/util/api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { collectExecutionDetailsAction } from "oss/src/redux/jobs/jobsActions";
+import long from "long";
+import { selectHasAdminRole } from "src/redux/user";
 
 const selectJob = createSelectorForKeyedCachedDataField("job", selectID);
 const selectExecutionDetailFiles =
@@ -43,12 +47,19 @@ const mapStateToProps = (
     jobProfilerLastUpdated: state.cachedData.jobProfiler[jobID]?.setAt,
     jobProfilerDataIsValid: state.cachedData.jobProfiler[jobID]?.valid,
     onDownloadExecutionFileClicked: clusterUiApi.getExecutionDetailFile,
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
 const mapDispatchToProps = {
   refreshJob,
   refreshExecutionDetailFiles: refreshListExecutionDetailFiles,
+  onRequestExecutionDetails: (jobID: long) => {
+    return (dispatch: AppDispatch) => {
+      dispatch(collectExecutionDetailsAction({ job_id: jobID }));
+    };
+  },
+  refreshUserSQLRoles: refreshUserSQLRoles,
 };
 
 export default withRouter(
