@@ -4,6 +4,9 @@
   "private": true,
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
+  "engines": {
+    "pnpm": ">=8.6.10"
+  },
   "pnpm": {
     "neverBuiltDependencies": [
       "contextify"
