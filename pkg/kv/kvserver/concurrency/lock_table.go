@@ -764,23 +764,24 @@ func (g *lockTableGuardImpl) curStrength() lock.Strength {
 // request. The value returned by this method are mutable as the request's scan
 // of the lock table progresses from lock to lock.
 func (g *lockTableGuardImpl) curLockMode() lock.Mode {
-	var reqMode lock.Mode
 	switch g.curStrength() {
 	case lock.None:
 		iso := isolation.Serializable
 		if g.txn != nil {
 			iso = g.txn.IsoLevel
 		}
-		reqMode = lock.MakeModeNone(g.ts, iso)
+		return lock.MakeModeNone(g.ts, iso)
+	case lock.Shared:
+		assert(g.txn != nil, "only transactional requests can acquire shared locks")
+		return lock.MakeModeShared()
 	case lock.Exclusive:
 		assert(g.txn != nil, "only transactional requests can acquire exclusive locks")
-		reqMode = lock.MakeModeExclusive(g.ts, g.txn.IsoLevel)
+		return lock.MakeModeExclusive(g.ts, g.txn.IsoLevel)
 	case lock.Intent:
-		reqMode = lock.MakeModeIntent(g.ts)
+		return lock.MakeModeIntent(g.ts)
 	default:
 		panic(fmt.Sprintf("unhandled request strength: %s", g.curStrength()))
 	}
-	return reqMode
 }
 
 // takeToResolveUnreplicated returns the list of unreplicated locks accumulated
@@ -1808,7 +1809,7 @@ func (l *lockState) getLockMode() lock.Mode {
 		case lock.Update:
 			panic(fmt.Sprintf("unhandled lock strength %s", lock.Update))
 		case lock.Shared:
-			panic(fmt.Sprintf("unhandled lock strength %s", lock.Shared))
+			return lock.MakeModeShared()
 		case lock.None:
 			panic(fmt.Sprintf("unhandled lock strength %s", lock.None))
 		}
@@ -3371,6 +3372,8 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	case lock.Intent:
 		assert(acq.Durability == lock.Replicated, "incorrect durability")
 	case lock.Exclusive:
+		assert(acq.Durability == lock.Unreplicated, "incorrect durability")
+	case lock.Shared:
 		assert(acq.Durability == lock.Unreplicated, "incorrect durability")
 	default:
 		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)

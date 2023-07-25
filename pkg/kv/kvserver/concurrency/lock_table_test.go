@@ -713,6 +713,9 @@ func scanSpans(
 			sa = spanset.SpanReadWrite
 		case lock.Exclusive:
 			sa = spanset.SpanReadWrite
+		case lock.Shared:
+			sa = spanset.SpanReadOnly
+			ts = hlc.MaxTimestamp
 		default:
 			d.Fatalf(t, "unsupported lock strength: %s", str)
 		}
