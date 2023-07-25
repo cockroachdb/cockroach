@@ -109,6 +109,7 @@ go_library(
         "multitenant_utils.go",
         "mvcc_gc.go",
         "network.go",
+        "network_logging.go",
         "nodejs_postgres.go",
         "npgsql.go",
         "npgsql_blocklist.go",
