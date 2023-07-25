@@ -212,7 +212,7 @@ func (srv *Service) createRawSheet(
 			vals = append(vals, numCell(entry.Summaries[run].Center))
 		}
 		delta := comparison.FormattedDelta
-		if delta == "~" {
+		if delta == "~" || delta == "?" {
 			vals = append(vals, strCell(delta))
 		} else {
 			vals = append(vals, percentCell(deltaToNum(delta)))
