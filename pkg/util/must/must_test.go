@@ -424,3 +424,35 @@ func TestFatalOn(t *testing.T) {
 
 	// We don't test failures, because it fatals.
 }
+
+// TestHandle tests that Handle() propagates errors as panics, and passes
+// non-must panics up the stack.
+func TestHandle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer noopFail()()
+
+	ctx := context.Background()
+
+	// Successful assertions shouldn't error.
+	require.NoError(t, must.Handle(ctx, func(ctx context.Context) {
+		_ = must.Equal(ctx, 1, 1, "equal")
+	}))
+
+	// Assertion failures should return an error. It includes a stack trace,
+	// including the must.Handle frame, but strips the must.Equal frame.
+	err := must.Handle(ctx, func(ctx context.Context) {
+		_ = must.Equal(ctx, 1, 2, "equal")
+	})
+	require.Error(t, err)
+	require.True(t, errors.HasAssertionFailure(err))
+	require.Contains(t, fmt.Sprintf("%+v", err), ".TestHandle")
+	require.Contains(t, fmt.Sprintf("%+v", err), "must.Handle")
+	require.NotContains(t, fmt.Sprintf("%+v", err), "must.Equal")
+
+	// Non-must panics are propagated.
+	require.Panics(t, func() {
+		_ = must.Handle(ctx, func(ctx context.Context) {
+			panic("panic")
+		})
+	})
+}

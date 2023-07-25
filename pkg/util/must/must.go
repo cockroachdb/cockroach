@@ -52,12 +52,6 @@
 // intentional: we don't want to fatal in release builds, so the caller must
 // consider how to handle the error there.
 //
-// This can also lead to non-fatal assertion failures being logged or reported
-// in two places: at the assertion failure site, and where the original caller
-// fails when it receives the error. This is also intentional, since it provides
-// additional details about the caller, who is often an RPC client on a
-// different node (thus stack traces can be insufficient by themselves).
-//
 // Some assertions may be too expensive to always run. For example, we may want
 // to recompute a range's MVCC stats after every write command, and assert that
 // they equal the incremental stats computed by the command. This can be done
@@ -141,6 +135,17 @@
 //	  // ...
 //	}
 //
+// Example: running a group of assertions without explicit error handling.
+//
+//	// nolint:errcheck
+//	if err := must.Handle(ctx, func(ctx context.Context) {
+//	  must.True(ctx, true, "true")
+//	  must.Equal(ctx, 1, 1, "1 == 1")
+//	  must.False(ctx, false, "false")
+//	}; err != nil {
+//	  return err
+//	}
+//
 // Example: Pebble returns a corruption error, so we should kill the process.
 // This is not an assertion, but rather legitimate error handling, so we fatal
 // via log.Fatalf() even in release builds.
@@ -198,6 +203,10 @@ func failDepth(ctx context.Context, depth int, format string, args ...interface{
 		log.ErrorfDepth(ctx, depth, "%+v", err)
 		MaybeSendReport(ctx, err)
 	}
+	// If we're running under Handle(), propagate the error as a panic.
+	if ctx.Value(handleKey{}) != nil {
+		panic(handleError{error: err})
+	}
 	return err
 }
 
@@ -235,6 +244,41 @@ func Expensive(f func() error) error {
 	}
 	return nil
 }
+
+// Handle runs the given closure and automatically converts non-fatal assertion
+// failures to a returned error, without needing to return them explicitly.
+// Fatal assertions fatal at the call site as usual.
+//
+// Non-fatal failures are propagated as panics that are recovered by Handle().
+// Panics not thrown by must are propagated to the caller.
+//
+// Within a Handle() closure, assertion failures never return errors, but the
+// errcheck linter will complain about unhandled errors. Either explicitly
+// ignore them with e.g. "_ = must.True()", or add a nolint:errcheck comment
+// above the call to Handle().
+//
+// gcassert:inline
+func Handle(ctx context.Context, f func(context.Context)) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok {
+				if hErr := (handleError{}); errors.As(e, &hErr) {
+					err = hErr.error
+					return
+				}
+			}
+			panic(r)
+		}
+	}()
+	f(context.WithValue(ctx, handleKey{}, struct{}{}))
+	return
+}
+
+type handleKey struct{}
+
+type handleError struct{ error }
+
+func (e handleError) Unwrap() error { return e.error }
 
 // True requires v to be true. Otherwise, fatals in dev builds or errors
 // in release builds (by default).
