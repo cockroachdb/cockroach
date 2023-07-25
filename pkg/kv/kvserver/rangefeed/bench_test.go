@@ -19,12 +19,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,14 +39,15 @@ type benchmarkRangefeedOpts struct {
 type opType string
 
 const (
-	writeOpType    opType = "write"
+	writeOpType    opType = "write"  // individual 1PC writes
+	commitOpType   opType = "commit" // intent + commit writes, 1 per txn
 	closedTSOpType opType = "closedts"
 )
 
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
 // a set of events and waiting until they are all emitted.
 func BenchmarkRangefeed(b *testing.B) {
-	for _, opType := range []opType{writeOpType, closedTSOpType} {
+	for _, opType := range []opType{writeOpType, commitOpType, closedTSOpType} {
 		for _, numRegistrations := range []int{1, 10, 100} {
 			name := fmt.Sprintf("opType=%s/numRegs=%d", opType, numRegistrations)
 			b.Run(name, func(b *testing.B) {
@@ -134,6 +137,21 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 				Timestamp: ts,
 				Value:     value,
 			}))
+		}
+
+	case commitOpType:
+		logicalOps = make([]enginepb.MVCCLogicalOp, 2*b.N)
+		// Write all intents first, then all commits. Txns are tracked in an
+		// internal heap, and we want to cover some of this cost, even though we
+		// write and commit them incrementally.
+		for i := 0; i < b.N; i++ {
+			var txnID uuid.UUID
+			txnID.DeterministicV4(uint64(i), uint64(b.N))
+			key := append(prefix, make([]byte, 4)...)
+			binary.BigEndian.PutUint32(key[len(prefix):], uint32(i))
+			ts := hlc.Timestamp{WallTime: int64(i + 1)}
+			logicalOps[i] = writeIntentOpWithKey(txnID, key, isolation.Serializable, ts)
+			logicalOps[b.N+i] = commitIntentOpWithKV(txnID, key, ts, value)
 		}
 
 	case closedTSOpType:
