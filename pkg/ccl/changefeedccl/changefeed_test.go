@@ -964,7 +964,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 		}
 		if n > 100 {
