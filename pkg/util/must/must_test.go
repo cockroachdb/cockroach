@@ -424,3 +424,19 @@ func TestFatalOn(t *testing.T) {
 
 	// We don't test failures, because it fatals.
 }
+
+func TestWith(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer noopFail()()
+
+	ctx := context.Background()
+
+	require.NoError(t, must.With(ctx, func(ctx context.Context) {
+		must.Equal(ctx, 1, 1, "equal")
+	}))
+
+	err := must.With(ctx, func(ctx context.Context) {
+		must.Equal(ctx, 1, 2, "equal")
+	})
+	require.Error(t, err)
+}
