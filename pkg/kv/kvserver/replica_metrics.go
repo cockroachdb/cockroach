@@ -28,12 +28,14 @@ import (
 
 // ReplicaMetrics contains details on the current status of the replica.
 type ReplicaMetrics struct {
-	Leader        bool
-	LeaseValid    bool
-	Leaseholder   bool
-	LeaseType     roachpb.LeaseType
-	LeaseStatus   kvserverpb.LeaseStatus
-	LivenessLease bool
+	Leader                    bool
+	LeaseValid                bool
+	Leaseholder               bool
+	LeaseType                 roachpb.LeaseType
+	LeaseStatus               kvserverpb.LeaseStatus
+	LivenessLease             bool
+	ViolatingLeasePreferences bool
+	LessPreferredLease        bool
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
@@ -74,6 +76,10 @@ func (r *Replica) Metrics(
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
 
+	storeAttrs := r.store.Attrs()
+	nodeAttrs := r.store.nodeDesc.Attrs
+	nodeLocality := r.store.nodeDesc.Locality
+
 	r.mu.RLock()
 
 	var qpUsed, qpCap int64
@@ -92,6 +98,9 @@ func (r *Replica) Metrics(
 		raftStatus:            r.raftSparseStatusRLocked(),
 		leaseStatus:           r.leaseStatusAtRLocked(ctx, now),
 		storeID:               r.store.StoreID(),
+		storeAttrs:            storeAttrs,
+		nodeAttrs:             nodeAttrs,
+		nodeLocality:          nodeLocality,
 		quiescent:             r.mu.quiescent,
 		ticking:               ticking,
 		latchMetrics:          latchMetrics,
@@ -118,6 +127,8 @@ type calcReplicaMetricsInput struct {
 	raftStatus            *raftSparseStatus
 	leaseStatus           kvserverpb.LeaseStatus
 	storeID               roachpb.StoreID
+	storeAttrs, nodeAttrs roachpb.Attributes
+	nodeLocality          roachpb.Locality
 	quiescent             bool
 	ticking               bool
 	latchMetrics          concurrency.LatchMetrics
@@ -130,14 +141,23 @@ type calcReplicaMetricsInput struct {
 }
 
 func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
-	var validLease, validLeaseOwner, livenessLease bool
+	var validLease, validLeaseOwner, livenessLease, violatingLeasePreferences, lessPreferredLease bool
 	var validLeaseType roachpb.LeaseType
 	if d.leaseStatus.IsValid() {
 		validLease = true
 		validLeaseOwner = d.leaseStatus.Lease.OwnedBy(d.storeID)
 		validLeaseType = d.leaseStatus.Lease.Type()
-		livenessLease = validLeaseOwner &&
-			keys.NodeLivenessSpan.Overlaps(d.desc.RSpan().AsRawSpanWithNoLocals())
+		if validLeaseOwner {
+			livenessLease = keys.NodeLivenessSpan.Overlaps(d.desc.RSpan().AsRawSpanWithNoLocals())
+			switch makeLeasePreferenceStatus(
+				d.leaseStatus, d.storeID, d.storeAttrs, d.nodeAttrs,
+				d.nodeLocality, d.conf.LeasePreferences) {
+			case leasePreferencesViolating:
+				violatingLeasePreferences = true
+			case leasePreferencesLessPreferred:
+				lessPreferredLease = true
+			}
+		}
 	}
 
 	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
@@ -154,18 +174,20 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 
 	const raftLogTooLargeMultiple = 4
 	return ReplicaMetrics{
-		Leader:          leader,
-		LeaseValid:      validLease,
-		Leaseholder:     validLeaseOwner,
-		LeaseType:       validLeaseType,
-		LeaseStatus:     d.leaseStatus,
-		LivenessLease:   livenessLease,
-		Quiescent:       d.quiescent,
-		Ticking:         d.ticking,
-		RangeCounter:    rangeCounter,
-		Unavailable:     unavailable,
-		Underreplicated: underreplicated,
-		Overreplicated:  overreplicated,
+		Leader:                    leader,
+		LeaseValid:                validLease,
+		Leaseholder:               validLeaseOwner,
+		LeaseType:                 validLeaseType,
+		LeaseStatus:               d.leaseStatus,
+		LivenessLease:             livenessLease,
+		ViolatingLeasePreferences: violatingLeasePreferences,
+		LessPreferredLease:        lessPreferredLease,
+		Quiescent:                 d.quiescent,
+		Ticking:                   d.ticking,
+		RangeCounter:              rangeCounter,
+		Unavailable:               unavailable,
+		Underreplicated:           underreplicated,
+		Overreplicated:            overreplicated,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		BehindCount:           leaderBehindCount,

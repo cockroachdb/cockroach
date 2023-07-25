@@ -496,7 +496,7 @@ func HelpCommandAsLink(title, href string) func(r *Renderer) {
 func filterByPrefixTitleMatch(
 	result *github.IssuesSearchResult, expectedTitle string,
 ) []github.Issue {
-	expectedTitleRegex := regexp.MustCompile(`^` + expectedTitle + `(\s+|$)`)
+	expectedTitleRegex := regexp.MustCompile(`^` + regexp.QuoteMeta(expectedTitle) + `(\s+|$)`)
 	var issues []github.Issue
 	for _, issue := range result.Issues {
 		if title := issue.Title; title != nil && expectedTitleRegex.MatchString(*title) {

@@ -76,7 +76,7 @@ func IsStoreValid(
 		return true
 	}
 	for _, subConstraints := range constraints {
-		if constraintsOK := constraint.ConjunctionsCheck(
+		if constraintsOK := constraint.CheckStoreConjunction(
 			store, subConstraints.Constraints,
 		); constraintsOK {
 			return true
