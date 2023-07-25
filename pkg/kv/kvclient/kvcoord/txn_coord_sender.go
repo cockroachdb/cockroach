@@ -1158,13 +1158,12 @@ func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 
 // ManualRestart is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
-) {
+	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-
-	if tc.mu.txnState == txnFinalized {
-		log.Fatalf(ctx, "ManualRestart called on finalized txn: %s", tc.mu.txn)
+	if tc.mu.txnState != txnPending && tc.mu.txnState != txnRetryableError {
+		return errors.AssertionFailedf("cannot manually restart, current state: %s", tc.mu.txnState)
 	}
 
 	// Invalidate any writes performed by any workers after the retry updated
@@ -1172,13 +1171,19 @@ func (tc *TxnCoordSender) ManualRestart(
 	// have been performed at the wrong epoch).
 	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
 
+	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
+		msg, tc.mu.txn.ID, tc.mu.txn)
+
+	// Move to a retryable error state, where all Send() calls fail until the
+	// state is cleared.
+	tc.mu.txnState = txnRetryableError
+	tc.mu.storedRetryableErr = pErr
+
+	// Reset state as this manual restart incremented the transaction's epoch.
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.epochBumpedLocked()
 	}
-
-	// The txn might have entered the txnError state after the epoch was bumped.
-	// Reset the state for the retry.
-	tc.mu.txnState = txnPending
+	return pErr
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the kv.TxnSender interface.
@@ -1337,22 +1342,6 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.Clone()
-}
-
-// PrepareRetryableError is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) PrepareRetryableError(
-	ctx context.Context, msg redact.RedactableString,
-) error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState != txnPending {
-		return errors.AssertionFailedf("cannot set a retryable error. current state: %s", tc.mu.txnState)
-	}
-	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
-	tc.mu.storedRetryableErr = pErr
-	tc.mu.txnState = txnRetryableError
-	return pErr
 }
 
 // Step is part of the TxnSender interface.
