@@ -30,6 +30,7 @@ import (
 
 type benchmarkRangefeedOpts struct {
 	numRegistrations int
+	budget           int64
 }
 
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
@@ -40,6 +41,25 @@ func BenchmarkRangefeed(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
 				numRegistrations: numRegistrations,
+				budget:           math.MaxInt64,
+			})
+		})
+	}
+}
+
+// BenchmarkRangefeedBudget benchmarks the effect of enabling/disabling the
+// processor budget. It sets up a single processor and registration, and
+// processes a set of events.
+func BenchmarkRangefeedBudget(b *testing.B) {
+	for _, budget := range []bool{false, true} {
+		b.Run(fmt.Sprintf("budget=%t", budget), func(b *testing.B) {
+			var budgetSize int64
+			if budget {
+				budgetSize = math.MaxInt64
+			}
+			runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
+				numRegistrations: 1,
+				budget:           budgetSize,
 			})
 		})
 	}
@@ -53,6 +73,10 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	var budget *FeedBudget
+	if opts.budget > 0 {
+		budget = newTestBudget(opts.budget)
+	}
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
 	// Set up processor.
@@ -61,7 +85,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		Clock:            hlc.NewClockForTesting(nil),
 		Metrics:          NewMetrics(),
 		Span:             span,
-		MemBudget:        newTestBudget(math.MaxInt64),
+		MemBudget:        budget,
 		EventChanCap:     b.N,
 		EventChanTimeout: time.Hour,
 	})
