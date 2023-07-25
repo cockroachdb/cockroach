@@ -1451,64 +1451,6 @@ func (c *consumer) Consumed() int {
 	return int(atomic.LoadInt32(&c.sentValues))
 }
 
-func BenchmarkProcessorWithBudget(b *testing.B) {
-	benchmarkEvents := 1
-
-	var budget *FeedBudget
-	if false {
-		budget = newTestBudget(math.MaxInt64)
-	}
-
-	stopper := stop.NewStopper()
-	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
-	p := NewProcessor(Config{
-		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:            hlc.NewClockForTesting(nil),
-		Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-		PushTxnsInterval: pushTxnInterval,
-		PushTxnsAge:      pushTxnAge,
-		EventChanCap:     benchmarkEvents * b.N,
-		Metrics:          NewMetrics(),
-		MemBudget:        budget,
-		EventChanTimeout: time.Minute,
-	})
-	require.NoError(b, p.Start(stopper, nil))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-
-	// Add a registration.
-	r1Stream := newTestStream()
-
-	var r1Done future.ErrorFuture
-	_, _ = p.Register(
-		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
-		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
-		r1Stream,
-		func() {},
-		&r1Done,
-	)
-	p.syncEventAndRegistrations()
-
-	b.ResetTimer()
-	for bi := 0; bi < b.N; bi++ {
-		for i := 0; i < benchmarkEvents; i++ {
-			p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
-				roachpb.Key("k"),
-				hlc.Timestamp{WallTime: int64(bi*benchmarkEvents + i + 2)},
-				[]byte("this is value")))
-		}
-	}
-
-	p.syncEventAndRegistrations()
-
-	// Sanity check that subscription was not dropped.
-	if p.reg.Len() == 0 {
-		require.NoError(b, waitErrorFuture(&r1Done))
-	}
-}
-
 // TestSizeOfEvent tests the size of the event struct. It is fine if this struct
 // changes in size, as long as this is done consciously.
 func TestSizeOfEvent(t *testing.T) {
