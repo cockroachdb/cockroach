@@ -84,7 +84,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		// Disable the replicateQueue so that it doesn't interfere with replica
 		// membership ranges.
 		clusterArgs.ReplicationMode = base.ReplicationManual
-		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, clusterArgs, dbName, tableName)
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, dbName, tableName)
 		defer tc.Stopper().Stop(ctx)
 
 		if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
@@ -155,7 +155,7 @@ func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
 	clusterArgs.ReplicationMode = base.ReplicationManual
 	knobs, ltk := makeReplicationTestKnobs()
 	clusterArgs.ServerArgs.Knobs = knobs
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, clusterArgs, dbName, tableName)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, dbName, tableName)
 	defer tc.Stopper().Stop(ctx)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
@@ -191,7 +191,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -269,7 +269,7 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	ctx := context.Background()
-	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
@@ -376,7 +376,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	repls := replsForRange(ctx, t, tc, desc)
 	// Disable the automatic merging.
 	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
@@ -456,7 +456,7 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	ctx := context.Background()
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -489,7 +489,7 @@ func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -536,7 +536,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -578,7 +578,7 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "tsFromServer", func(t *testing.T, tsFromServer bool) {
 		ctx := context.Background()
-		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 		defer tc.Stopper().Stop(ctx)
 		repls := replsForRange(ctx, t, tc, desc)
 
@@ -1194,11 +1194,14 @@ func aggressiveResolvedTimestampPushKnobs() *kvserver.StoreTestingKnobs {
 func setupClusterForClosedTSTesting(
 	ctx context.Context,
 	t *testing.T,
-	targetDuration time.Duration,
+	targetDuration, sideTransportInterval time.Duration,
 	clusterArgs base.TestClusterArgs,
 	dbName, tableName string,
 ) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
 	const numNodes = 3
+	if sideTransportInterval == 0 {
+		sideTransportInterval = targetDuration / 4
+	}
 	tc, desc := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
 	sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlRunner.ExecMultiple(t, strings.Split(fmt.Sprintf(`
@@ -1206,7 +1209,7 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
-`, targetDuration, targetDuration/4),
+`, targetDuration, sideTransportInterval),
 		";")...)
 
 	// Disable replicate queues to avoid errant lease transfers.
