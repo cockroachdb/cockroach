@@ -2101,7 +2101,14 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Node(c.Spec().NodeCount)
-			mvt := mixedversion.NewTest(ctx, t, t.L(), c, roachNodes)
+			mvt := mixedversion.NewTest(
+				ctx, t, t.L(), c, roachNodes,
+				// We use a longer upgrade timeout in this test to give the
+				// migrations enough time to finish considering all the data
+				// that might exist in the cluster by the time the upgrade is
+				// attempted.
+				mixedversion.UpgradeTimeout(30*time.Minute),
+			)
 			testRNG := mvt.RNG()
 
 			uploadVersion(ctx, t, c, workloadNode, clusterupgrade.MainVersion)
