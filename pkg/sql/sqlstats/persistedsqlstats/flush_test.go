@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -458,6 +460,18 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	verifyNodeID(t, sqlConn, "SELECT _", false, "gateway_disabled")
 }
 
+func countStats(t *testing.T, sqlConn *sqlutils.SQLRunner) (numStmtStats int64, numTxnStats int64) {
+	sqlConn.QueryRow(t, `
+		SELECT count(*)
+		FROM system.statement_statistics`).Scan(&numStmtStats)
+
+	sqlConn.QueryRow(t, `
+		SELECT count(*)
+		FROM system.transaction_statistics`).Scan(&numTxnStats)
+
+	return numStmtStats, numTxnStats
+}
+
 func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	skip.WithIssue(t, 97488)
 	defer leaktest.AfterTest(t)()
@@ -522,6 +536,64 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		rows.Scan(&count)
 		require.LessOrEqual(t, count, int64(15))
 	}
+}
+
+func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	sqlConn.Exec(t, `INSERT INTO system.users VALUES ('node', NULL, true, 3); GRANT node TO root`)
+	waitForFollowerReadTimestamp(t, sqlConn)
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+
+	const minNumExpectedStmts = int64(3)
+	// Maximum number of persisted rows less than minNumExpectedStmts/1.5
+	const maxNumPersistedRows = 1
+	sqlConn.Exec(t, "SELECT 1")
+	sqlConn.Exec(t, "SELECT 1, 2")
+	sqlConn.Exec(t, "SELECT 1, 2, 3")
+
+	pss.Flush(ctx)
+	stmtStatsCountFlush, _ := countStats(t, sqlConn)
+
+	// Ensure we have some rows in system.statement_statistics
+	require.GreaterOrEqual(t, stmtStatsCountFlush, minNumExpectedStmts)
+
+	// Set sql.stats.persisted_rows.max
+	sqlConn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.persisted_rows.max=%d", maxNumPersistedRows))
+	testutils.SucceedsSoon(t, func() error {
+		var appliedSetting int
+		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.persisted_rows.max")
+		row.Scan(&appliedSetting)
+		if appliedSetting != maxNumPersistedRows {
+			return errors.Newf("waiting for sql.stats.persisted_rows.max to be applied")
+		}
+		return nil
+	})
+
+	// Begin a transaction.
+	sqlConn.Exec(t, "BEGIN")
+	// Lock the table. Create a state of contention.
+	sqlConn.Exec(t, "SELECT * FROM system.statement_statistics FOR UPDATE")
+
+	// Ensure that we can read from the table despite it being locked, due to the follower read (AOST).
+	// Expect that the number of statements in the table exceeds sql.stats.persisted_rows.max * 1.5
+	// (meaning that the limit will be reached) and no error. We need SucceedsSoon here for the follower
+	// read timestamp to catch up enough for this state to be reached.
+	testutils.SucceedsSoon(t, func() error {
+		limitReached, err := pss.StmtsLimitSizeReached(ctx)
+		if limitReached != true {
+			return errors.New("waiting for limit reached to be true")
+		}
+		return err
+	})
+
+	// Close the transaction.
+	sqlConn.Exec(t, "COMMIT")
 }
 
 type stubTime struct {
@@ -716,4 +788,18 @@ WHERE
 	}
 	require.Equal(t, nodeID, gatewayNodeID, "Gateway NodeID")
 	require.Equal(t, "[1]", allNodesIds, "All NodeIDs from statistics")
+}
+
+func waitForFollowerReadTimestamp(t *testing.T, sqlConn *sqlutils.SQLRunner) {
+	var hlcTimestamp time.Time
+	sqlConn.QueryRow(t, `SELECT hlc_to_timestamp(cluster_logical_timestamp())`).Scan(&hlcTimestamp)
+
+	testutils.SucceedsSoon(t, func() error {
+		var followerReadTimestamp time.Time
+		sqlConn.QueryRow(t, `SELECT follower_read_timestamp()`).Scan(&followerReadTimestamp)
+		if followerReadTimestamp.Before(hlcTimestamp) {
+			return errors.New("waiting for follower_read_timestamp to be passed hlc timestamp")
+		}
+		return nil
+	})
 }
