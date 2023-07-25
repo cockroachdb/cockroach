@@ -599,6 +599,18 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	return fnName, ret, nil
 }
 
+// FunctionDesc returns the descriptor for the function with the given OID.
+func (sr *schemaResolver) FunctionDesc(
+	ctx context.Context, oid oid.Oid,
+) (catalog.FunctionDescriptor, error) {
+	if !funcdesc.IsOIDUserDefinedFunc(oid) {
+		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not user-defined", oid)
+	}
+	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Get()
+	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
+	return g.Function(ctx, descID)
+}
+
 func (sr *schemaResolver) ResolveProcedure(
 	ctx context.Context, name *tree.UnresolvedObjectName, path tree.SearchPath,
 ) (*tree.Overload, error) {
