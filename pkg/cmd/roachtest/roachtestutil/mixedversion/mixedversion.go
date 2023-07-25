@@ -138,6 +138,7 @@ var (
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
 		useFixturesProbability: 0.7,
+		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
 	}
 )
 
@@ -232,9 +233,10 @@ type (
 	}
 
 	// testOptions contains some options that can be changed by the user
-	// that expose some control over the generated test plan.
+	// that expose some control over the generated test plan and behaviour.
 	testOptions struct {
 		useFixturesProbability float64
+		upgradeTimeout         time.Duration
 	}
 
 	customOption func(*testOptions)
@@ -296,6 +298,14 @@ func NeverUseFixtures(opts *testOptions) {
 // fixtures.
 func AlwaysUseFixtures(opts *testOptions) {
 	opts.useFixturesProbability = 1
+}
+
+// UpgradeTimeout allows test authors to provide a different timeout
+// to apply when waiting for an upgrade to finish.
+func UpgradeTimeout(timeout time.Duration) customOption {
+	return func(opts *testOptions) {
+		opts.upgradeTimeout = timeout
+	}
 }
 
 // NewTest creates a Test struct that users can use to create and run
@@ -605,8 +615,9 @@ func (s uploadCurrentVersionStep) Run(
 // the cluster and equal to the binary version of the first node in
 // the `nodes` field.
 type waitForStableClusterVersionStep struct {
-	id    int
-	nodes option.NodeListOption
+	id      int
+	nodes   option.NodeListOption
+	timeout time.Duration
 }
 
 func (s waitForStableClusterVersionStep) ID() int                { return s.id }
@@ -622,7 +633,7 @@ func (s waitForStableClusterVersionStep) Description() string {
 func (s waitForStableClusterVersionStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
-	return clusterupgrade.WaitForClusterUpgrade(ctx, l, s.nodes, h.Connect)
+	return clusterupgrade.WaitForClusterUpgrade(ctx, l, s.nodes, h.Connect, s.timeout)
 }
 
 // preserveDowngradeOptionStep sets the `preserve_downgrade_option`
