@@ -29,21 +29,32 @@ import (
 )
 
 type benchmarkRangefeedOpts struct {
+	opType           opType
 	numRegistrations int
 	budget           int64
 }
 
+type opType string
+
+const (
+	writeOpType    opType = "write"
+	closedTSOpType opType = "closedts"
+)
+
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
 // a set of events and waiting until they are all emitted.
 func BenchmarkRangefeed(b *testing.B) {
-	for _, numRegistrations := range []int{1, 10, 100} {
-		name := fmt.Sprintf("numRegs=%d", numRegistrations)
-		b.Run(name, func(b *testing.B) {
-			runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-				numRegistrations: numRegistrations,
-				budget:           math.MaxInt64,
+	for _, opType := range []opType{writeOpType, closedTSOpType} {
+		for _, numRegistrations := range []int{1, 10, 100} {
+			name := fmt.Sprintf("opType=%s/numRegs=%d", opType, numRegistrations)
+			b.Run(name, func(b *testing.B) {
+				runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
+					opType:           opType,
+					numRegistrations: numRegistrations,
+					budget:           math.MaxInt64,
+				})
 			})
-		})
+		}
 	}
 }
 
@@ -58,6 +69,7 @@ func BenchmarkRangefeedBudget(b *testing.B) {
 				budgetSize = math.MaxInt64
 			}
 			runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
+				opType:           writeOpType,
 				numRegistrations: 1,
 				budget:           budgetSize,
 			})
@@ -107,19 +119,34 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	}
 
 	// Construct b.N events beforehand -- we don't want to measure this cost.
-	prefix := roachpb.Key("key-")
-	value := roachpb.MakeValueFromString("a few bytes of data").RawBytes
-	ops := make([]enginepb.MVCCLogicalOp, 0, b.N)
+	var (
+		logicalOps       []enginepb.MVCCLogicalOp
+		closedTimestamps []hlc.Timestamp
+		prefix           = roachpb.Key("key-")
+		value            = roachpb.MakeValueFromString("a few bytes of data").RawBytes
+	)
+	switch opts.opType {
+	case writeOpType:
+		logicalOps = make([]enginepb.MVCCLogicalOp, 0, b.N)
+		for i := 0; i < b.N; i++ {
+			key := append(prefix, make([]byte, 4)...)
+			binary.BigEndian.PutUint32(key[len(prefix):], uint32(i))
+			ts := hlc.Timestamp{WallTime: int64(i + 1)}
+			logicalOps = append(logicalOps, makeLogicalOp(&enginepb.MVCCWriteValueOp{
+				Key:       key,
+				Timestamp: ts,
+				Value:     value,
+			}))
+		}
 
-	for i := 0; i < b.N; i++ {
-		key := append(prefix, make([]byte, 4)...)
-		binary.BigEndian.PutUint32(key[len(prefix):], uint32(i))
-		ts := hlc.Timestamp{WallTime: int64(i + 1)}
-		ops = append(ops, makeLogicalOp(&enginepb.MVCCWriteValueOp{
-			Key:       key,
-			Timestamp: ts,
-			Value:     value,
-		}))
+	case closedTSOpType:
+		closedTimestamps = make([]hlc.Timestamp, 0, b.N)
+		for i := 0; i < b.N; i++ {
+			closedTimestamps = append(closedTimestamps, hlc.Timestamp{WallTime: int64(i + 1)})
+		}
+
+	default:
+		b.Fatalf("unknown operation type %q", opts.opType)
 	}
 
 	// Wait for catchup scans and flush checkpoint events.
@@ -128,9 +155,14 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	// Run the benchmark. We accounted for b.N when constructing events.
 	b.ResetTimer()
 
-	for _, op := range ops {
-		if !p.ConsumeLogicalOps(ctx, op) {
-			b.Fatal("failed to submit op")
+	for _, logicalOp := range logicalOps {
+		if !p.ConsumeLogicalOps(ctx, logicalOp) {
+			b.Fatal("failed to submit logical operation")
+		}
+	}
+	for _, closedTS := range closedTimestamps {
+		if !p.ForwardClosedTS(ctx, closedTS) {
+			b.Fatal("failed to forward closed timestamp")
 		}
 	}
 	p.syncEventAndRegistrations()
