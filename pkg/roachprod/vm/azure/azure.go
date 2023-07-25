@@ -432,8 +432,9 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 		return "", errors.Wrapf(err, "could not decode JWT claims segment")
 	}
 
-	// This is in an email address format, we just want the username.
-	return data.Username[:strings.Index(data.Username, "@")], nil
+	// If this is in an email address format, we just want the username.
+	username, _, _ := strings.Cut(data.Username, "@")
+	return username, nil
 }
 
 // List implements the vm.Provider interface. This will query all
