@@ -299,7 +299,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 		}
 		for _, op := range testData {
 			kv := op.kv
-			err := storage.MVCCPut(ctx, engine, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, op.txn)
+			err := storage.MVCCPut(ctx, engine, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, storage.NoLogicalReplication, op.txn)
 			require.NoError(t, err)
 		}
 		return engine

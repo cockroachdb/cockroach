@@ -844,7 +844,7 @@ func MVCCPutProto(
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCPut(ctx, rw, ms, key, timestamp, localTimestamp, value, txn)
+	return MVCCPut(ctx, rw, ms, key, timestamp, localTimestamp, value, NoLogicalReplication, txn)
 }
 
 // MVCCBlindPutProto sets the given key to the protobuf-serialized byte string
@@ -865,7 +865,7 @@ func MVCCBlindPutProto(
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCBlindPut(ctx, writer, ms, key, timestamp, localTimestamp, value, txn)
+	return MVCCBlindPut(ctx, writer, ms, key, timestamp, localTimestamp, value, NoLogicalReplication, txn)
 }
 
 // MVCCBlindPutInlineWithPrev updates an inline value using a blind put when the
@@ -1502,6 +1502,7 @@ func MVCCPut(
 	timestamp hlc.Timestamp,
 	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	// If we're not tracking stats for the key and we're writing a non-versioned
@@ -1517,7 +1518,8 @@ func MVCCPut(
 		)
 		defer iter.Close()
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, txn, nil)
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp,
+		value, txn, nil, lrsHandling)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -1538,9 +1540,10 @@ func MVCCBlindPut(
 	timestamp hlc.Timestamp,
 	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, localTimestamp, value, txn, nil)
+	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, localTimestamp, value, txn, nil, lrsHandling)
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
@@ -1559,6 +1562,7 @@ func MVCCDelete(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	localTimestamp hlc.ClockTimestamp,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) (foundKey bool, err error) {
 	iter := newMVCCIterator(
@@ -1573,8 +1577,7 @@ func MVCCDelete(
 	defer buf.release()
 
 	// TODO(yuzefovich): can we avoid the put if the key does not exist?
-	return mvccPutInternal(
-		ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, buf, nil)
+	return mvccPutInternal(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, buf, nil, lrsHandling)
 }
 
 var noValue = roachpb.Value{}
@@ -1594,14 +1597,14 @@ func mvccPutUsingIter(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	lrsHandling LogicalReplicationBehavior,
 ) error {
 	buf := newPutBuffer()
 	defer buf.release()
 
 	// Most callers don't care about the returned exReplaced value. The ones that
 	// do can call mvccPutInternal directly.
-	_, err := mvccPutInternal(
-		ctx, writer, iter, ms, key, timestamp, localTimestamp, value, txn, buf, valueFn)
+	_, err := mvccPutInternal(ctx, writer, iter, ms, key, timestamp, localTimestamp, value, txn, buf, valueFn, lrsHandling)
 	return err
 }
 
@@ -1822,6 +1825,7 @@ func mvccPutInternal(
 	txn *roachpb.Transaction,
 	buf *putBuffer,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	lrsHandling LogicalReplicationBehavior,
 ) (bool, error) {
 	if len(key) == 0 {
 		return false, emptyKeyError()
@@ -1882,6 +1886,11 @@ func mvccPutInternal(
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
+		switch keys.PrettyPrint(nil, txn.Key) {
+		case "/Table/104/1/6/0", "/Table/104/1/7/0", "/Table/104/1/42/0":
+			log.Infof(ctx, "mvccPutInternal: txnID=%s handle=%t k=%s", txn.ID, lrsHandling, keys.PrettyPrint(nil, txn.Key))
+		}
+
 		readTimestamp = txn.ReadTimestamp
 		if readTimestamp != timestamp {
 			return false, errors.AssertionFailedf(
@@ -2169,6 +2178,24 @@ func mvccPutInternal(
 		}
 	}
 
+	if ok && lrsHandling == MaintainLogicalReplication && txn != nil {
+		var lrs enginepb.LogicalReplicationState
+		lrs.WriteSeq = txn.Sequence
+
+		for _, h := range buf.newMeta.IntentHistory {
+			v, err := DecodeMVCCValue(h.Value)
+			if err != nil {
+				return false, err
+			}
+			log.Infof(ctx, "Adding history for k=%s txn=%s curSeq=%d seq=%d v=%s", keys.PrettyPrint(nil, txn.Key), txn.ID, txn.Sequence, h.Sequence, v.String())
+			lrs.History = append(lrs.History, enginepb.LogicalReplicationState_History{
+				WriteSeq: h.Sequence,
+				RawBytes: h.Value,
+			})
+		}
+		versionValue.MVCCValueHeader.ReplicationState = &lrs
+	}
+
 	if !versionValue.LocalTimestampNeeded(versionKey.Timestamp) ||
 		!writer.ShouldWriteLocalTimestamps(ctx) {
 		versionValue.LocalTimestamp = hlc.ClockTimestamp{}
@@ -2321,7 +2348,7 @@ func MVCCIncrement(
 		newValue.InitChecksum(key)
 		return newValue, nil
 	}
-	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
+	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn, false)
 
 	return newInt64Val, err
 }
@@ -2336,6 +2363,17 @@ const (
 	// CPutFailIfMissing is used to indicate the existing value must match the
 	// expected value exactly i.e. if a value is expected, it must exist.
 	CPutFailIfMissing CPutMissingBehavior = false
+)
+
+// LogicalReplicationBehavior describes if MVCC ops should maintain logical
+// replication state.
+type LogicalReplicationBehavior bool
+
+const (
+	// MaintainLogicalReplication instructs MVCC op to maintain logical replication state.
+	MaintainLogicalReplication LogicalReplicationBehavior = true
+	// NoLogicalReplication disables logical replication state maintenance.
+	NoLogicalReplication LogicalReplicationBehavior = false
 )
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
@@ -2363,6 +2401,7 @@ func MVCCConditionalPut(
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	iter := newMVCCIterator(
@@ -2373,8 +2412,7 @@ func MVCCConditionalPut(
 	)
 	defer iter.Close()
 
-	return mvccConditionalPutUsingIter(
-		ctx, rw, iter, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, txn)
+	return mvccConditionalPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, lrsHandling, txn)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -2396,10 +2434,11 @@ func MVCCBlindConditionalPut(
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	return mvccConditionalPutUsingIter(
-		ctx, writer, nil, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, txn)
+	return mvccConditionalPutUsingIter(ctx, writer, nil, ms, key, timestamp, localTimestamp,
+		value, expVal, allowIfDoesNotExist, lrsHandling, txn)
 }
 
 func mvccConditionalPutUsingIter(
@@ -2413,6 +2452,7 @@ func mvccConditionalPutUsingIter(
 	value roachpb.Value,
 	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
@@ -2429,7 +2469,7 @@ func mvccConditionalPutUsingIter(
 		}
 		return value, nil
 	}
-	return mvccPutUsingIter(ctx, writer, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
+	return mvccPutUsingIter(ctx, writer, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn, lrsHandling)
 }
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
@@ -2450,6 +2490,7 @@ func MVCCInitPut(
 	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	iter := newMVCCIterator(
@@ -2459,7 +2500,7 @@ func MVCCInitPut(
 		},
 	)
 	defer iter.Close()
-	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
+	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, failOnTombstones, lrsHandling, txn)
 }
 
 // MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
@@ -2479,10 +2520,11 @@ func MVCCBlindInitPut(
 	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	return mvccInitPutUsingIter(
-		ctx, rw, nil, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
+		ctx, rw, nil, ms, key, timestamp, localTimestamp, value, failOnTombstones, lrsHandling, txn)
 }
 
 func mvccInitPutUsingIter(
@@ -2495,6 +2537,7 @@ func mvccInitPutUsingIter(
 	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
+	lrsHandling LogicalReplicationBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
@@ -2512,7 +2555,7 @@ func mvccInitPutUsingIter(
 		}
 		return value, nil
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
+	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn, lrsHandling)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -3099,9 +3142,7 @@ func MVCCDeleteRange(
 
 	var keys []roachpb.Key
 	for i, kv := range res.KVs {
-		if _, err := mvccPutInternal(
-			ctx, rw, iter, ms, kv.Key, timestamp, localTimestamp, noValue, txn, buf, nil,
-		); err != nil {
+		if _, err := mvccPutInternal(ctx, rw, iter, ms, kv.Key, timestamp, localTimestamp, noValue, txn, buf, nil, false); err != nil {
 			return nil, nil, 0, err
 		}
 		if returnKeys {
@@ -3281,8 +3322,7 @@ func MVCCPredicateDeleteRange(
 		} else {
 			// Use Point tombstones
 			for i := int64(0); i < runSize; i++ {
-				if _, err := mvccPutInternal(ctx, rw, pointTombstoneIter, ms, buf[i], endTime, localTimestamp, noValue,
-					nil, pointTombstoneBuf, nil); err != nil {
+				if _, err := mvccPutInternal(ctx, rw, pointTombstoneIter, ms, buf[i], endTime, localTimestamp, noValue, nil, pointTombstoneBuf, nil, false); err != nil {
 					return err
 				}
 			}

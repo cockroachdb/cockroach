@@ -926,6 +926,11 @@ func (tt *Table) GetDatabaseID() descpb.ID {
 	return tt.DatabaseID
 }
 
+// IsSchemaLocked is part of the cat.Table interface.
+func (tt *Table) IsSchemaLocked() bool {
+	return false
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {

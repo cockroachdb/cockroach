@@ -713,7 +713,7 @@ func updateFinalizedTxn(
 			// BatchRequest writes.
 			return nil
 		}
-		_, err := storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		_, err := storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, storage.NoLogicalReplication, nil)
 		return err
 	}
 	txn.LockSpans = externalLocks

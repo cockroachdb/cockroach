@@ -1359,6 +1359,11 @@ func (ot *optTable) GetDatabaseID() descpb.ID {
 	return ot.desc.GetParentID()
 }
 
+// IsSchemaLocked is part of the cat.Table interface.
+func (ot *optTable) IsSchemaLocked() bool {
+	return ot.desc.IsSchemaLocked()
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -2346,6 +2351,11 @@ func (ot *optVirtualTable) HomeRegionColName() (colName string, ok bool) {
 // GetDatabaseID is part of the cat.Table interface.
 func (ot *optVirtualTable) GetDatabaseID() descpb.ID {
 	return 0
+}
+
+// IsSchemaLocked is part of the cat.Table interface.
+func (ot *optVirtualTable) IsSchemaLocked() bool {
+	return false
 }
 
 // CollectTypes is part of the cat.DataSource interface.

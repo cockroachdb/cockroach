@@ -177,7 +177,7 @@ func TestMVCCHistories(t *testing.T) {
 	// Timestamp for MVCC stats calculations, in nanoseconds.
 	const statsTS = 100e9
 
-	datadriven.Walk(t, datapathutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "mvcc_histories/logical_replication"), func(t *testing.T, path string) {
 		st := cluster.MakeTestingClusterSettings()
 
 		if strings.Contains(path, "_norace") {
@@ -1081,6 +1081,13 @@ func cmdGCPointsClearRange(e *evalCtx) error {
 	})
 }
 
+func (e *evalCtx) logicalReplicationBehavior() storage.LogicalReplicationBehavior {
+	if e.hasArg("lrs") {
+		return storage.MaintainLogicalReplication
+	}
+	return storage.NoLogicalReplication
+}
+
 func cmdCPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
@@ -1101,7 +1108,7 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw storage.ReadWriter) error {
-		if err := storage.MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, localTs, val, expVal, behavior, txn); err != nil {
+		if err := storage.MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, localTs, val, expVal, behavior, e.logicalReplicationBehavior(), txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -1122,7 +1129,7 @@ func cmdInitPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("initput", func(rw storage.ReadWriter) error {
-		if err := storage.MVCCInitPut(e.ctx, rw, e.ms, key, ts, localTs, val, failOnTombstones, txn); err != nil {
+		if err := storage.MVCCInitPut(e.ctx, rw, e.ms, key, ts, localTs, val, failOnTombstones, e.logicalReplicationBehavior(), txn); err != nil {
 			return err
 		}
 		if resolve {
@@ -1139,7 +1146,7 @@ func cmdDelete(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
-		foundKey, err := storage.MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
+		foundKey, err := storage.MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, e.logicalReplicationBehavior(), txn)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
 			// We want to output foundKey even if a WriteTooOldError is returned,
 			// since the error may be swallowed/deferred during evaluation.
@@ -1358,7 +1365,7 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
-		if err := storage.MVCCPut(e.ctx, rw, e.ms, key, ts, localTs, val, txn); err != nil {
+		if err := storage.MVCCPut(e.ctx, rw, e.ms, key, ts, localTs, val, e.logicalReplicationBehavior(), txn); err != nil {
 			return err
 		}
 		if resolve {

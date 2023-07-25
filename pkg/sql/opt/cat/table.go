@@ -176,6 +176,9 @@ type Table interface {
 	// GetDatabaseID returns the owning database id of the table, or zero, if the
 	// owning database could not be determined.
 	GetDatabaseID() descpb.ID
+
+	// IsSchemaLocked returns true if the underlying table has schema changes locked.
+	IsSchemaLocked() bool
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check

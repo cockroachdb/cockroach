@@ -624,6 +624,10 @@ const (
 	// planFlagContainsNonDefaultLocking is set if the plan has a node with
 	// non-default key locking strength.
 	planFlagContainsNonDefaultLocking
+
+	// planFlagLogicalReplicationActive is set if the plan involves any tables
+	// that are part of logical replication stream.
+	planFlagLogicalReplicationActive
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

@@ -135,9 +135,7 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 			return err
 		}
 
-		if err := storage.MVCCPut(
-			ctx, eng, nil /* ms */, k, hlc.Timestamp{}, hlc.ClockTimestamp{}, v, nil, /* txn */
-		); err != nil {
+		if err := storage.MVCCPut(ctx, eng, nil, k, hlc.Timestamp{}, hlc.ClockTimestamp{}, v, storage.NoLogicalReplication, nil); err != nil {
 			return err
 		}
 	}

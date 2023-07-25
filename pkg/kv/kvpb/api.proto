@@ -102,6 +102,7 @@ message RequestHeaderPure {
   bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  bool maintain_logical_replication = 7;
 }
 
 // RequestHeaderPure is not to be used directly. It's generated only for use of
@@ -116,6 +117,7 @@ message RequestHeaderCrdbTest {
   bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  bool maintain_logical_replication = 7;
 }
 
 // RequestHeader is supplied with every storage node request.
@@ -175,6 +177,9 @@ message RequestHeader {
   // A zero-indexed transactional sequence number.
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  // Indicates that the mutation request is part of logical replication, and should maintain
+  // the state required for this.
+  bool maintain_logical_replication = 7;
 }
 
 // ResponseHeader is returned with every storage node response. Note that this is

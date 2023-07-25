@@ -2005,6 +2005,10 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
 	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
 
+	if err := planner.txn.MaintainLogicalReplicationState(flags.IsSet(planFlagLogicalReplicationActive)); err != nil {
+		return err
+	}
+
 	return nil
 }
 

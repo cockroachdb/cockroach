@@ -14,9 +14,10 @@ import "github.com/cockroachdb/cockroach/pkg/util/buildutil"
 
 func (r *RequestHeader) pure() RequestHeaderPure {
 	return RequestHeaderPure{
-		Key:      r.Key,
-		EndKey:   r.EndKey,
-		Sequence: r.Sequence,
+		Key:                        r.Key,
+		EndKey:                     r.EndKey,
+		Sequence:                   r.Sequence,
+		MaintainLogicalReplication: r.MaintainLogicalReplication,
 	}
 }
 

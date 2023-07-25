@@ -183,8 +183,7 @@ func writeNodeRecoveryResults(
 		fullErr = errors.CombineErrors(fullErr,
 			errors.Wrap(err, "failed to write loss of quorum recovery cleanup action"))
 	} else {
-		_, err = storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
-			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		_, err = storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, storage.NoLogicalReplication, nil)
 		fullErr = errors.CombineErrors(fullErr,
 			errors.Wrap(err, "failed to clean loss of quorum recovery cleanup action"))
 	}
@@ -222,7 +221,6 @@ func ReadCleanupActionsInfo(
 // RemoveCleanupActionsInfo removes cleanup actions info if it is present in the
 // reader.
 func RemoveCleanupActionsInfo(ctx context.Context, writer storage.ReadWriter) error {
-	_, err := storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+	_, err := storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, storage.NoLogicalReplication, nil)
 	return err
 }

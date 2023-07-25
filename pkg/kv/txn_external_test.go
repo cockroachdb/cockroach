@@ -829,3 +829,26 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestFoo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b INT);")
+	sqlDB.Exec(t, "ALTER TABLE t SET (schema_locked=t);")
+	sqlDB.Exec(t, `
+INSERT INTO t (a, b) VALUES (6, 7), (7, 6), (42, 99);
+UPDATE t SET b=42 WHERE a=6;
+
+SAVEPOINT sp;
+DELETE FROM t WHERE a=6;
+UPDATE t SET b=7 WHERE a < 100;
+ROLLBACK TO SAVEPOINT sp;
+
+UPDATE t SET b=99 WHERE a=6;
+`)
+}

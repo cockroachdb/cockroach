@@ -466,7 +466,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 
 	for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -505,7 +505,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	})
 
 	// Exercise deletion.
-	if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, nil); err != nil {
+	if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, NoLogicalReplication, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Returns the kv_1_1_1 even though it is outside (startTime, endTime].
@@ -525,7 +525,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 		},
 		ReadTimestamp: ts4,
 	}
-	if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
+	if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, NoLogicalReplication, &txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -602,7 +602,7 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 
 	for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -638,7 +638,7 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 	})
 
 	// Exercise deletion.
-	if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, nil); err != nil {
+	if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, NoLogicalReplication, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Returns the kv_1_1_1 even though it is outside (startTime, endTime].
@@ -658,7 +658,7 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 		},
 		ReadTimestamp: ts4,
 	}
-	if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
+	if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, NoLogicalReplication, &txn1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -723,7 +723,7 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 	defer e.Close()
 	for _, kv := range []MVCCKeyValue{inline1_1_1, kv2_1_1, kv2_2_2, inline3_2_1} {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -793,11 +793,11 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 	defer e.Close()
 	for _, kv := range []MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1} {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+		if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := MVCCPut(ctx, e, nil, txn.TxnMeta.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, testValue2, &txn); err != nil {
+	if err := MVCCPut(ctx, e, nil, txn.TxnMeta.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, testValue2, NoLogicalReplication, &txn); err != nil {
 		t.Fatal(err)
 	}
 	t.Run("PolicyError returns error if an intent is in the time range", func(t *testing.T) {
@@ -958,7 +958,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 			v := roachpb.Value{RawBytes: kv.Value}
-			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, NoLogicalReplication, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -976,18 +976,18 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, latest, kvs(kv1_2_2)))
 
 		// Exercise deletion.
-		if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, nil); err != nil {
+		if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1Deleted3, kv2_2_2)))
 
 		// Exercise intent handling.
 		txn1, intentErr1 := makeKVTxn(testKey1, ts4)
-		if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
+		if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, NoLogicalReplication, &txn1); err != nil {
 			t.Fatal(err)
 		}
 		txn2, intentErr2 := makeKVTxn(testKey2, ts4)
-		if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn2); err != nil {
+		if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, NoLogicalReplication, &txn2); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents-1",
@@ -1024,7 +1024,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 			v := roachpb.Value{RawBytes: kv.Value}
-			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, NoLogicalReplication, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1042,18 +1042,18 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1)))
 
 		// Exercise deletion.
-		if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, nil); err != nil {
+		if _, err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1Deleted3, kv1_2_2, kv2_2_2)))
 
 		// Exercise intent handling.
 		txn1, intentErr1 := makeKVTxn(testKey1, ts4)
-		if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
+		if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, NoLogicalReplication, &txn1); err != nil {
 			t.Fatal(err)
 		}
 		txn2, intentErr2 := makeKVTxn(testKey2, ts4)
-		if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn2); err != nil {
+		if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, NoLogicalReplication, &txn2); err != nil {
 			t.Fatal(err)
 		}
 		// Single intent tests are verifying behavior when intent collection is not enabled.
@@ -1142,7 +1142,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 		},
 		ReadTimestamp: ts1,
 	}
-	if err := MVCCPut(ctx, e, nil, kA, ts1, hlc.ClockTimestamp{}, vA1, txn); err != nil {
+	if err := MVCCPut(ctx, e, nil, kA, ts1, hlc.ClockTimestamp{}, vA1, NoLogicalReplication, txn); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1160,7 +1160,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 		// in intentInterleavingIter to be violated.
 		b := e.NewBatch()
 		defer b.Close()
-		if err := MVCCPut(ctx, b, nil, kA, ts1, hlc.ClockTimestamp{}, vA2, txn); err != nil {
+		if err := MVCCPut(ctx, b, nil, kA, ts1, hlc.ClockTimestamp{}, vA2, NoLogicalReplication, txn); err != nil {
 			return err
 		}
 		return b.Commit(false)
@@ -1255,17 +1255,17 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	// kA:3 -> vA3
 	// kA:2 -> vA2
 	// kB -> (intent deletion)
-	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA1.ReadTimestamp, hlc.ClockTimestamp{}, vA1, txnA1))
-	require.NoError(t, MVCCPut(ctx, db, nil, kB, txnB1.ReadTimestamp, hlc.ClockTimestamp{}, vB1, txnB1))
-	require.NoError(t, MVCCPut(ctx, db, nil, kC, txnC1.ReadTimestamp, hlc.ClockTimestamp{}, vC1, txnC1))
+	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA1.ReadTimestamp, hlc.ClockTimestamp{}, vA1, NoLogicalReplication, txnA1))
+	require.NoError(t, MVCCPut(ctx, db, nil, kB, txnB1.ReadTimestamp, hlc.ClockTimestamp{}, vB1, NoLogicalReplication, txnB1))
+	require.NoError(t, MVCCPut(ctx, db, nil, kC, txnC1.ReadTimestamp, hlc.ClockTimestamp{}, vC1, NoLogicalReplication, txnC1))
 	require.NoError(t, db.Flush())
 	require.NoError(t, db.Compact())
 	_, _, _, err := MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
 	_, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
-	require.NoError(t, MVCCPut(ctx, db, nil, kA, ts2, hlc.ClockTimestamp{}, vA2, nil))
-	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA3.WriteTimestamp, hlc.ClockTimestamp{}, vA3, txnA3))
+	require.NoError(t, MVCCPut(ctx, db, nil, kA, ts2, hlc.ClockTimestamp{}, vA2, NoLogicalReplication, nil))
+	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA3.WriteTimestamp, hlc.ClockTimestamp{}, vA3, NoLogicalReplication, txnA3))
 	require.NoError(t, db.Flush())
 
 	// The kA ts1 intent has been resolved. There's now a new intent on kA, but
@@ -1314,7 +1314,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 
 	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
 		v := roachpb.MakeValueFromString(value)
-		if err := MVCCPut(ctx, db1, nil, roachpb.Key(key), hlc.Timestamp{WallTime: ts}, hlc.ClockTimestamp{}, v, txn); err != nil {
+		if err := MVCCPut(ctx, db1, nil, roachpb.Key(key), hlc.Timestamp{WallTime: ts}, hlc.ClockTimestamp{}, v, NoLogicalReplication, txn); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1600,7 +1600,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 			value.InitChecksum(key)
 			ts := hlc.Timestamp{WallTime: baseTimestamp + 100*int64(i%keyAgeInterval)}
-			if err := MVCCPut(context.Background(), batch, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if err := MVCCPut(context.Background(), batch, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 				b.Fatal(err)
 			}
 		}

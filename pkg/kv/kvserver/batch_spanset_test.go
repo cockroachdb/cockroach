@@ -550,6 +550,7 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 		hlc.Timestamp{WallTime: 10}, // irrelevant
 		hlc.ClockTimestamp{},        // irrelevant
 		value,
+		storage.NoLogicalReplication,
 		nil, // txn
 	); err != nil {
 		t.Fatal(err)

@@ -103,12 +103,12 @@ func TestCatchupScan(t *testing.T) {
 	// Put with no intent.
 	for _, kv := range []storage.MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1, kv2_2_2, kv2_5_3} {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := storage.MVCCPut(ctx, eng, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, storage.NoLogicalReplication, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Put with an intent.
-	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn); err != nil {
+	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, storage.NoLogicalReplication, &txn); err != nil {
 		t.Fatal(err)
 	}
 	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
@@ -152,7 +152,7 @@ func TestCatchupScanInlineError(t *testing.T) {
 	defer eng.Close()
 
 	// Write an inline value.
-	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("inline"), hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("inline"), hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), storage.NoLogicalReplication, nil))
 
 	// Run a catchup scan across the span and watch it error.
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
@@ -184,15 +184,12 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	tsIntent := tsCutoff.Add(-10, 0)          // the intent is below the lower bound
 	tsVersionInWindow := tsCutoff.Add(10, 0)  // an unrelated version is above the lower bound
 
-	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("b"),
-		tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("b"), tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), storage.NoLogicalReplication, nil))
 
 	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), isolation.Serializable, roachpb.NormalUserPriority, tsIntent, 100, 0)
-	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("d"),
-		tsIntent, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("intent"), &txn))
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("d"), tsIntent, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("intent"), storage.NoLogicalReplication, &txn))
 
-	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("e"),
-		tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("bar"), nil))
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("e"), tsVersionInWindow, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("bar"), storage.NoLogicalReplication, nil))
 
 	// Run a catchup scan across the span and watch it succeed.
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}

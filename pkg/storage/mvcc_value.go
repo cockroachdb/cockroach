@@ -131,8 +131,16 @@ func (v MVCCValue) String() string {
 func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	if v.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
 		w.Printf("{")
+		addSpace := false
 		if !v.LocalTimestamp.IsEmpty() {
 			w.Printf("localTs=%s", v.LocalTimestamp)
+			addSpace = true
+		}
+		if lrs := v.MVCCValueHeader.ReplicationState; lrs != nil {
+			if addSpace {
+				w.Print(" ")
+			}
+			w.Printf("lrs={seq=%d h=%d}", lrs.WriteSeq, len(lrs.History))
 		}
 		w.Printf("}")
 	}

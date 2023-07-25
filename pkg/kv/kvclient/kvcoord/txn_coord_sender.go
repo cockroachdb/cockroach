@@ -421,6 +421,15 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	return nil
 }
 
+// MaintainLogicalReplicationState is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) MaintainLogicalReplicationState(enable bool) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	tc.interceptorAlloc.txnSeqNumAllocator.maintainLogicalReplicationState = enable
+	return nil
+}
+
 func generateTxnDeadlineExceededErr(txn *roachpb.Transaction, deadline hlc.Timestamp) *kvpb.Error {
 	exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
 	extraMsg := redact.Sprintf(

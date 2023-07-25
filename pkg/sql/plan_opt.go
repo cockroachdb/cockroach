@@ -717,6 +717,17 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.mem = mem
 		planTop.catalog = opc.catalog
 	}
+
+	// TODO(yevgeniy): Implement proper mechanism to determine if the table
+	// participates in the logical replication.  For now, use schema locked bit as
+	// a placeholder.
+	for _, t := range mem.Metadata().AllTables() {
+		if t.Table.IsSchemaLocked() {
+			planTop.flags.Set(planFlagLogicalReplicationActive)
+			break
+		}
+	}
+
 	return nil
 }
 

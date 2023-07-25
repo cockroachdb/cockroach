@@ -77,6 +77,10 @@ type txnSeqNumAllocator struct {
 	//   TxnCoordSender.Step. Reads will only observe writes performed before
 	//   the last call to TxnCoordSender.Step.
 	steppingMode kv.SteppingMode
+
+	// maintainLogicalReplicationState indicates that the mutation
+	// should also persist logical replication state.
+	maintainLogicalReplicationState bool
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -104,6 +108,7 @@ func (s *txnSeqNumAllocator) SendLocked(
 		} else {
 			oldHeader.Sequence = s.writeSeq
 		}
+		oldHeader.MaintainLogicalReplication = !kvpb.IsReadOnly(req) && s.maintainLogicalReplicationState
 		req.SetHeader(oldHeader)
 	}
 
