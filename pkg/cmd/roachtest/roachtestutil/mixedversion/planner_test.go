@@ -264,8 +264,7 @@ func Test_startClusterID(t *testing.T) {
 // timeout in the clusterupgrade package is used; otherwise, the
 // custom value is enforced.
 func Test_upgradeTimeout(t *testing.T) {
-	findUpgradeWaitStep := func(plan *TestPlan) []waitForStableClusterVersionStep {
-		var zero waitForStableClusterVersionStep
+	findUpgradeWaitSteps := func(plan *TestPlan) []waitForStableClusterVersionStep {
 		var steps []waitForStableClusterVersionStep
 		for _, s := range plan.steps {
 			if step, isUpgrade := s.(waitForStableClusterVersionStep); isUpgrade {
@@ -273,7 +272,7 @@ func Test_upgradeTimeout(t *testing.T) {
 			}
 		}
 		if len(steps) == 0 {
-			require.Fail(t, "could not find any %T step in the plan", zero)
+			require.Fail(t, "could not find any waitForStableClusterVersionStep in the plan")
 		}
 		return steps
 	}
@@ -282,7 +281,7 @@ func Test_upgradeTimeout(t *testing.T) {
 		mvt := newTest(opts...)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
-		waitUpgrades := findUpgradeWaitStep(plan)
+		waitUpgrades := findUpgradeWaitSteps(plan)
 
 		for _, s := range waitUpgrades {
 			require.Equal(t, expectedTimeout, s.timeout)
