@@ -1206,8 +1206,14 @@ func setupClusterForClosedTSTesting(
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
+SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
 `, targetDuration, targetDuration/4),
 		";")...)
+
+	// Disable replicate queues to avoid errant lease transfers.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/101824.
+	tc.ToggleReplicateQueues(false)
 
 	return tc, tc.ServerConn(0), desc
 }
