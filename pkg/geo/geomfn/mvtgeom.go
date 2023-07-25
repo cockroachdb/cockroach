@@ -19,28 +19,25 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-// AsMVTGeometry returns a geometry converted into Mapbox Vector Tile coordinate space.
+// AsMVTGeometry returns a geometry converted into Mapbox Vector Tile coordinate
+// space. nil, nil is returned if the geometry is empty.
 func AsMVTGeometry(
 	g geo.Geometry, bounds geo.CartesianBoundingBox, extent int, buffer int, clipGeometry bool,
-) (geo.Geometry, error) {
+) (*geo.Geometry, error) {
 	bbox := bounds.BoundingBox
 	err := validateInputParams(bbox, extent, buffer)
 	if err != nil {
-		return geo.Geometry{}, err
+		return nil, err
 	}
 	gt, err := g.AsGeomT()
 	if err != nil {
-		return geo.Geometry{}, errors.Wrap(err, "failed to convert geometry to geom.T")
+		return nil, errors.Wrap(err, "failed to convert geometry to geom.T")
 	}
 	if geometrySmallerThanHalfBoundingBox(gt, bbox, extent) {
-		return geo.Geometry{}, nil
+		return nil, nil
 	}
 
-	out, err := transformToMVTGeom(gt, g, bbox, extent, buffer, clipGeometry)
-	if err != nil {
-		return geo.Geometry{}, err
-	}
-	return *out, nil
+	return transformToMVTGeom(gt, g, bbox, extent, buffer, clipGeometry)
 }
 
 func validateInputParams(bbox geopb.BoundingBox, extent int, buffer int) error {
