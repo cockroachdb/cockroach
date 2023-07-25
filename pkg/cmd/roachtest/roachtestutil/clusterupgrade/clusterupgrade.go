@@ -286,7 +286,7 @@ func WaitForClusterUpgrade(
 		return nil
 	}
 
-	l.Printf("waiting for cluster to auto-upgrade to %s", newVersion)
+	l.Printf("waiting for cluster to auto-upgrade to %s for %s", newVersion, timeout)
 	if err := waitForUpgrade(firstNode, timeout); err != nil {
 		return err
 	}

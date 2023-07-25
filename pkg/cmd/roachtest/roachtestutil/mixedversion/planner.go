@@ -145,7 +145,6 @@ func (p *testPlanner) initSteps() []testStep {
 // nodes to be the same and then run any after-finalization hooks the
 // user may have provided.
 func (p *testPlanner) finalSteps() []testStep {
-	fmt.Printf(">>>> option timeout: %s\n", p.options.upgradeTimeout)
 	return append([]testStep{
 		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
 	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.finalContext(false /* finalizing */))...)
