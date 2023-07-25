@@ -24,9 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -140,6 +142,10 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = catalog.ExecuteDDL("CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Revoke access to the underlying table. The user should retain indirect
 	// access via the view.
@@ -148,6 +154,7 @@ func TestMemoIsStale(t *testing.T) {
 	// Initialize context with starting values.
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData().Database = "t"
+	evalCtx.SessionData().SearchPath = sessiondata.MakeSearchPath([]string{"public"})
 	// MakeTestingEvalContext created a fake planner that can only provide the
 	// memory monitor and will encounter a nil-pointer error when other methods
 	// are accessed. In this test, GetDatabaseSurvivalGoal method will be called
@@ -157,7 +164,7 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.StreamManagerFactory = nil
 
 	var o xform.Optimizer
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a, b+one() FROM abcview WHERE c='foo'")
 	o.Memo().Metadata().AddSchema(catalog.Schema())
 
 	ctx := context.Background()
@@ -173,7 +180,7 @@ func TestMemoIsStale(t *testing.T) {
 		// tests as written still pass if the default value is 0. To detect this, we
 		// create a new memo with the changed setting and verify it's not stale.
 		var o2 xform.Optimizer
-		opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")
+		opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, "SELECT a, b+one() FROM abcview WHERE c='foo'")
 
 		if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
 			t.Fatal(err)
@@ -388,6 +395,15 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = false
 	notStale()
 
+	// User no longer has execution privilege on a UDF.
+	catalog.RevokeExecution(catalog.Function("one").Oid)
+	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	if exp := "user does not have privilege to execute function"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected %q error, but got %+v", exp, err)
+	}
+	catalog.GrantExecution(catalog.Function("one").Oid)
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
@@ -396,6 +412,10 @@ func TestMemoIsStale(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.ExecuteDDL("CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,6 +430,12 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abc")).TabVersion = 1
 	stale()
 	catalog.Table(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abc")).TabVersion = 0
+	notStale()
+
+	// Function Version changes.
+	catalog.Function("one").Version = 1
+	stale()
+	catalog.Function("one").Version = 0
 	notStale()
 }
 

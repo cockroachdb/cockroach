@@ -396,7 +396,7 @@ func (md *Metadata) CheckDependencies(
 	}
 
 	// Ensure that all required privileges for the data sources are still valid.
-	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
+	if err := md.checkPrivileges(ctx, optCatalog); err != nil {
 		return false, err
 	}
 
@@ -481,9 +481,9 @@ func maybeSwallowMetadataResolveErr(err error) error {
 	return err
 }
 
-// checkDataSourcePrivileges checks that none of the privileges required by the
+// checkPrivileges checks that none of the privileges required by the
 // query for the referenced data sources have been revoked.
-func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog cat.Catalog) error {
+func (md *Metadata) checkPrivileges(ctx context.Context, optCatalog cat.Catalog) error {
 	for _, dataSource := range md.dataSourceDeps {
 		privileges := md.privileges[dataSource.ID()]
 		for privs := privileges; privs != 0; {
@@ -499,6 +499,11 @@ func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog ca
 			}
 			// Set the just-handled privilege bit to zero and look for next.
 			privs &= ^(1 << priv)
+		}
+	}
+	for _, overload := range md.udfDeps {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, overload.Oid); err != nil {
+			return err
 		}
 	}
 	return nil

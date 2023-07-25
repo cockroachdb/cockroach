@@ -98,7 +98,9 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
 
+	tc.currUDFOid++
 	overload := &tree.Overload{
+		Oid:               tc.currUDFOid,
 		Types:             paramTypes,
 		ReturnType:        tree.FixedReturnType(retType),
 		IsUDF:             true,
@@ -118,6 +120,27 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		Overloads: []tree.QualifiedOverload{prefixedOverload},
 	}
 	tc.udfs[name] = def
+}
+
+// RevokedExecution revokes execution of the function with the given OID.
+func (tc *Catalog) RevokeExecution(oid oid.Oid) {
+	tc.revokedUDFOids.Add(int(oid))
+}
+
+// GrantExecution grants execution of the function with the given OID.
+func (tc *Catalog) GrantExecution(oid oid.Oid) {
+	tc.revokedUDFOids.Remove(int(oid))
+}
+
+// Function returns the overload of the function with the given name. It returns
+// nil if the function does not exist.
+func (tc *Catalog) Function(name string) *tree.Overload {
+	for _, def := range tc.udfs {
+		if def.Name == name {
+			return def.Overloads[0].Overload
+		}
+	}
+	return nil
 }
 
 func collectFuncOptions(

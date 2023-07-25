@@ -623,6 +623,12 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+
+	// Check for execution privileges.
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+		panic(err)
+	}
+
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in

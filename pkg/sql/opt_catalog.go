@@ -421,6 +421,15 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	return oc.planner.CheckAnyPrivilege(ctx, desc)
 }
 
+// CheckExecutionPrivilege is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+	desc, err := oc.planner.FunctionDesc(ctx, oid)
+	if err != nil {
+		return err
+	}
+	return oc.planner.CheckPrivilege(ctx, desc, privilege.EXECUTE)
+}
+
 // HasAdminRole is part of the cat.Catalog interface.
 func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)
