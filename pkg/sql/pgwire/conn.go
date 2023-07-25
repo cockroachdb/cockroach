@@ -187,9 +187,6 @@ func (c *conn) processCommands(
 				_ = c.writeErr(ctx, retErr, &c.writerState.buf)
 				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 				c.stmtBuf.Close()
-				// Send a ready for query to make sure the client can react.
-				// TODO(andrei, jordan): Why are we sending this exactly?
-				c.bufferReadyForQuery('I')
 			}
 		}
 		if !authOK {
