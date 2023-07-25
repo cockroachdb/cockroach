@@ -56,6 +56,13 @@ func RunningJobExists(
 		typeStrs = s.String()
 	}
 
+	orderBy := " ORDER BY created"
+	if ignoreJobID == jobspb.InvalidJobID {
+		// There is no need to order by the created column if there is no job to
+		// ignore.
+		orderBy = ""
+	}
+
 	stmt := `
 SELECT
   id
@@ -63,8 +70,7 @@ FROM
   system.jobs
 WHERE
 	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created
+  status IN ` + NonTerminalStatusTupleString + orderBy + `
 LIMIT 1`
 	it, err := txn.QueryIterator(
 		ctx,
