@@ -16,6 +16,16 @@ true
 link-backup cluster=s1 src-path=show_backup_validate,valid-22.2 dest-path=valid-22.2
 ----
 
+query-sql
+SELECT sum(size_bytes) FROM [SHOW BACKUP 'valid-22.2' IN 'nodelocal://1/'];
+----
+1120
+
+query-sql
+SELECT sum(size_bytes) FROM [SHOW BACKUP 'valid-22.2' IN 'nodelocal://1/' WITH skip size];
+----
+0
+
 # This backup is completely valid, but has no jobs.
 query-sql regex=No\sproblems\sfound!
 SELECT * FROM [SHOW BACKUP VALIDATE FROM 'valid-22.2' IN 'nodelocal://1/'];
