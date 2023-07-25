@@ -17,7 +17,7 @@ go_test(
         "dockerNetwork": "standard",
         "Pool": "large",
     },
-    shard_count = 10,
+    shard_count = 11,
     tags = [
         "cpu:2",
     ],

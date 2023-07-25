@@ -442,6 +442,14 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
+	// Check that the role still has execution privilege on the user defined
+	// functions.
+	for _, overload := range md.udfDeps {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, overload.Oid); err != nil {
+			return false, err
+		}
+	}
+
 	// Check that any references to builtin functions do not now resolve to a UDF
 	// with the same signature (e.g. after changes to the search path).
 	for name := range md.builtinRefsByName {
