@@ -97,6 +97,13 @@ send "SELECT 550+5;\r"
 eexpect 555
 eexpect root@
 
+# Use this distinct query to be the boundary - if we see this stmt in the
+# exec log, then we should expect all the previous statements in the log too.
+
+send "SELECT 111;\r"
+eexpect 111
+eexpect root@
+
 flush_server_logs
 
 # Now check the items are there in the log file. We need to iterate
@@ -107,12 +114,12 @@ flush_server_logs
 # previous statement is also in the log file after this check
 # succeeds.
 system "for i in `seq 1 3`; do
-  grep 'SELECT ..*550..* +' $logfile && exit 0;
+  grep 'SELECT ..*111..*' $logfile && exit 0;
   echo still waiting;
   sleep 1;
 done;
-echo 'not finding two separate txn counter values?';
-grep 'SELECT ..*550..* +' $logfile;
+echo 'not finding expected last query log?';
+grep 'SELECT ..*111..*' $logfile;
 exit 1;"
 
 # Two separate single-stmt txns.
