@@ -19,7 +19,8 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-// AsMVTGeometry returns a geometry converted into Mapbox Vector Tile coordinate space.
+// AsMVTGeometry returns a geometry converted into Mapbox Vector Tile coordinate
+// space.
 func AsMVTGeometry(
 	g geo.Geometry, bounds geo.CartesianBoundingBox, extent int, buffer int, clipGeometry bool,
 ) (geo.Geometry, error) {
@@ -36,11 +37,7 @@ func AsMVTGeometry(
 		return geo.Geometry{}, nil
 	}
 
-	out, err := transformToMVTGeom(gt, g, bbox, extent, buffer, clipGeometry)
-	if err != nil {
-		return geo.Geometry{}, err
-	}
-	return *out, nil
+	return transformToMVTGeom(gt, g, bbox, extent, buffer, clipGeometry)
 }
 
 func validateInputParams(bbox geopb.BoundingBox, extent int, buffer int) error {
@@ -76,50 +73,50 @@ func geometrySmallerThanHalfBoundingBox(gt geom.T, bbox geopb.BoundingBox, exten
 // transformToMVTGeom transforms a geometry into vector tile coordinate space.
 func transformToMVTGeom(
 	gt geom.T, g geo.Geometry, bbox geopb.BoundingBox, extent int, buffer int, clipGeometry bool,
-) (*geo.Geometry, error) {
+) (geo.Geometry, error) {
 	basicType, err := getBasicType(gt)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get geom.T basic type")
+		return geo.Geometry{}, errors.Wrap(err, "failed to get geom.T basic type")
 	}
 	basicTypeGeometry, err := convertToBasicType(g, basicType)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert geometry to basic type")
+		return geo.Geometry{}, errors.Wrap(err, "failed to convert geometry to basic type")
 	}
 	if basicTypeGeometry.Empty() {
-		return &geo.Geometry{}, nil
+		return geo.Geometry{}, nil
 	}
 
 	removeRepeatedPointsGeometry, err := RemoveRepeatedPoints(basicTypeGeometry, 0)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to remove repeated points")
+		return geo.Geometry{}, errors.Wrap(err, "failed to remove repeated points")
 	}
 	// Remove points on straight lines
 	simplifiedGeometry, empty, err := Simplify(removeRepeatedPointsGeometry, 0, false)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to simplify geometry")
+		return geo.Geometry{}, errors.Wrap(err, "failed to simplify geometry")
 	}
 	if empty {
-		return &geo.Geometry{}, nil
+		return geo.Geometry{}, nil
 	}
 
 	affinedGeometry, err := transformToTileCoordinateSpace(simplifiedGeometry, bbox, extent)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	snappedGeometry, err := snapToIntegersGrid(affinedGeometry)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	out, err := clipAndValidateMVTOutput(snappedGeometry, basicType, extent, buffer, clipGeometry)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to clip and validate")
+		return geo.Geometry{}, errors.Wrap(err, "failed to clip and validate")
 	}
 	if out.Empty() {
-		return &geo.Geometry{}, nil
+		return geo.Geometry{}, nil
 	}
-	return &out, nil
+	return out, nil
 }
 
 func transformToTileCoordinateSpace(
