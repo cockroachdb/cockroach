@@ -196,6 +196,10 @@ func failDepth(ctx context.Context, depth int, format string, args ...interface{
 		log.ErrorfDepth(ctx, depth, "%+v", err)
 		MaybeSendReport(ctx, err)
 	}
+	// If we're running under Handle(), propagate the error as a panic.
+	if ctx.Value(handleKey{}) != nil {
+		panic(handlePanic{err: err})
+	}
 	return err
 }
 
@@ -231,6 +235,40 @@ func Expensive(f func() error) error {
 	}
 	return nil
 }
+
+// Handle runs the given closure and automatically converts non-fatal assertion
+// failures to a returned error, without needing to return them explicitly.
+// Fatal assertions fatal at the call site as usual.
+//
+// Non-fatal assertions failures are propagated as panics that are recovered by
+// Handle() and returned. Panics not thrown by must are propagated to the
+// caller.
+//
+// Within a Handle() closure, assertion failures never return errors, but the
+// errcheck linter will complain about unhandled errors. Either explicitly
+// ignore them with e.g. "_ = must.True()", or add a nolint:errcheck comment
+// above the call to Handle().
+//
+// gcassert:inline
+func Handle(ctx context.Context, f func(context.Context)) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if f, ok := r.(handlePanic); ok {
+				err = f.err
+			} else {
+				panic(r)
+			}
+		}
+	}()
+	f(context.WithValue(ctx, handleKey{}, struct{}{}))
+	return
+}
+
+// withKey is a context key for Handle().
+type handleKey struct{}
+
+// handlePanic is thrown and recovered via Handle().
+type handlePanic struct{ err error }
 
 // True requires v to be true. Otherwise, fatals in dev builds or errors
 // in release builds (by default).
