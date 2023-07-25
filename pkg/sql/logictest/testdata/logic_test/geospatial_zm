@@ -397,3 +397,14 @@ FROM ( VALUES
 a10080b518c09a0c                                                a10080b518c09a0c                                                      a10080b518c09a0c
 a208030280b518c09a0c0e04c0cf24c0843d070a                        a2080f0280b518c09a0cb06d04c0cf24c0843dbf3e0a                          a2088f0280b518c09a0cb06dc0b802c0cf24c0843dbf3ea08d06
 a30801010480b518c0cf2402c09a0cc09a0c00ffb418bf9a0c0ac09a0c0009  a3080d010480b518c0cf24d00fc09a0cc09a0c00ffb418bf9a0c904ec09a0c008f4e  a3080d010480b518c0cf24d00fc09a0cc09a0c00ffb418bf9a0c904ec09a0c008f4e
+
+# Regression test for incorrectly not using DNull represenation for empty
+# geometry which then led to an internal error on the remote node (#106884).
+statement ok
+CREATE TABLE t106884 AS SELECT 1;
+SELECT st_asmvtgeom(
+          '01060000C000000000'::GEOMETRY,
+          'BOX(-2.4310452547766257 -0.7340617188515679,1.4606149586106913 1.509111744681483)'::BOX2D,
+          1::INT4
+        )::GEOMETRY
+        FROM t106884;

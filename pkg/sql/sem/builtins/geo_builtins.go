@@ -4588,11 +4588,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0]).Geometry
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, 4096, 256, true)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
+				return asMVTGeometry(g, bbox, 4096, 256, true)
 			},
 			Info: infoBuilder{
 				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
@@ -4616,11 +4612,7 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				g := tree.MustBeDGeometry(args[0]).Geometry
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
 				extent := int(tree.MustBeDInt(args[2]))
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, 256, true)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
+				return asMVTGeometry(g, bbox, extent, 256, true)
 			},
 			Info: infoBuilder{
 				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
@@ -4645,11 +4637,7 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
 				extent := int(tree.MustBeDInt(args[2]))
 				buffer := int(tree.MustBeDInt(args[3]))
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, buffer, true)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
+				return asMVTGeometry(g, bbox, extent, buffer, true)
 			},
 			Info: infoBuilder{
 				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
@@ -4675,11 +4663,7 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				extent := int(tree.MustBeDInt(args[2]))
 				buffer := int(tree.MustBeDInt(args[3]))
 				clip := bool(tree.MustBeDBool(args[4]))
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, buffer, clip)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
+				return asMVTGeometry(g, bbox, extent, buffer, clip)
 			},
 			Info: infoBuilder{
 				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds if required.
@@ -7897,4 +7881,17 @@ func geosVersion() string {
 		return fmt.Sprintf("failed to start with GEOS: %s", err.Error())
 	}
 	return geosV
+}
+
+func asMVTGeometry(
+	g geo.Geometry, bounds geo.CartesianBoundingBox, extent int, buffer int, clipGeometry bool,
+) (tree.Datum, error) {
+	newGeom, err := geomfn.AsMVTGeometry(g, bounds, extent, buffer, clipGeometry)
+	if err != nil {
+		return nil, err
+	}
+	if newGeom.Empty() {
+		return tree.DNull, nil
+	}
+	return &tree.DGeometry{Geometry: newGeom}, nil
 }
