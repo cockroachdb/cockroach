@@ -676,3 +676,57 @@ statement ok
 DROP USER u_test_owner;
 
 subtest end
+
+statement ok
+CREATE USER tester
+
+statement ok
+CREATE SCHEMA test;
+
+statement ok
+GRANT USAGE ON SCHEMA test TO tester;
+
+statement ok
+CREATE FUNCTION test.my_add(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';
+
+statement ok
+SET ROLE tester
+
+# The tester role receives execute privileges to functions via the public role.
+statement ok
+SELECT test.my_add(1,2)
+
+statement ok
+SET ROLE root
+
+# Revoke execute privilege from the public role.
+statement ok
+REVOKE EXECUTE ON FUNCTION test.my_add FROM public
+
+# The root role can still execute the function.
+statement ok
+SELECT test.my_add(1,2)
+
+statement ok
+SET ROLE tester
+
+skipif config local-mixed-22.2-23.1
+statement error pgcode 42501 user tester does not have EXECUTE privilege on function my_add
+SELECT test.my_add(1,2)
+
+skipif config local-mixed-22.2-23.1
+statement error pgcode 42501 user tester does not have EXECUTE privilege on function my_add
+SELECT * FROM (VALUES (1), (2)) AS v(i) WHERE i = test.my_add(1,2)
+
+statement ok
+SET ROLE root
+
+# Re-grant execut privilege to the public role.
+statement ok
+GRANT EXECUTE ON FUNCTION test.my_add TO public
+
+statement ok
+SET ROLE tester
+
+statement ok
+SELECT test.my_add(1,2)
