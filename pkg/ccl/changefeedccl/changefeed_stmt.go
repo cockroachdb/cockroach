@@ -904,6 +904,15 @@ func validateSink(
 	if err != nil {
 		return err
 	}
+	u, err := url.Parse(details.SinkURI)
+	if err != nil {
+		return err
+	}
+
+	if u.Scheme == changefeedbase.SinkSchemeCloudStorageHTTP || u.Scheme == changefeedbase.SinkSchemeCloudStorageHTTPS {
+		p.BufferClientNotice(ctx, pgnotice.Newf(`%s sinks will emit using cloud storage semantics. For a webhook sink, prepend webhook- to the sink URI.`))
+	}
+
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
 		nilOracle, p.User(), jobID, sli)
