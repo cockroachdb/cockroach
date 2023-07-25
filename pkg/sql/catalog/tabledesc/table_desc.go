@@ -69,6 +69,20 @@ func (desc *wrapper) HasConcurrentSchemaChanges() bool {
 		(len(desc.Mutations) > 0 && len(desc.MutationJobs) > 0)
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (desc *wrapper) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	if len(desc.MutationJobs) > 0 {
+		for _, mutationJob := range desc.MutationJobs {
+			ret = append(ret, mutationJob.JobID)
+		}
+	}
+	return ret
+}
+
 // SkipNamespace implements the descriptor interface.
 func (desc *wrapper) SkipNamespace() bool {
 	return false
