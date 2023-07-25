@@ -14,6 +14,7 @@
 package main
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferunlockcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
@@ -70,6 +71,7 @@ func main() {
 		nilness.Analyzer,
 		errwrap.Analyzer,
 		loopvarcapture.Analyzer,
+		deferunlockcheck.Analyzer,
 	)
 
 	// Standard go vet analyzers:

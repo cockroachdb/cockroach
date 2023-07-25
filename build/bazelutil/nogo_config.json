@@ -28,6 +28,12 @@
             "_test\\.go$": "tests"
         }
     },
+    "deferunlockcheck": {
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code",
+            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+        }
+    },
     "errcheck": {
         "exclude_files": {
             "pkg/.*\\.eg\\.go$": "generated code",
