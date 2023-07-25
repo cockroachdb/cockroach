@@ -25,6 +25,7 @@ SELECT * FROM system.namespace
 1    29  protected_ts_meta                31
 1    29  protected_ts_records             32
 1    29  rangelog                         13
+1    29  region_liveness                  9
 1    29  replication_constraint_stats     25
 1    29  replication_critical_localities  26
 1    29  replication_stats                27
@@ -92,6 +93,7 @@ SELECT * FROM system.namespace
 1    29  protected_ts_meta                31
 1    29  protected_ts_records             32
 1    29  rangelog                         13
+1    29  region_liveness                  9
 1    29  replication_constraint_stats     25
 1    29  replication_critical_localities  26
 1    29  replication_stats                27

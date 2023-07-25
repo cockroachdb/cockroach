@@ -300,6 +300,7 @@ public       privileges                       table     node   NULL
 public       protected_ts_meta                table     node   NULL
 public       protected_ts_records             table     node   NULL
 public       rangelog                         table     node   NULL
+public       region_liveness                  table     node   NULL
 public       replication_constraint_stats     table     node   NULL
 public       replication_critical_localities  table     node   NULL
 public       replication_stats                table     node   NULL
@@ -357,6 +358,7 @@ public       privileges                       table     node   NULL      ·
 public       protected_ts_meta                table     node   NULL      ·
 public       protected_ts_records             table     node   NULL      ·
 public       rangelog                         table     node   NULL      ·
+public       region_liveness                  table     node   NULL      ·
 public       replication_constraint_stats     table     node   NULL      ·
 public       replication_critical_localities  table     node   NULL      ·
 public       replication_stats                table     node   NULL      ·
