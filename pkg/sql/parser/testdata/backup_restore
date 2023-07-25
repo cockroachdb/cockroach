@@ -112,12 +112,12 @@ SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = '*****' -- identifie
 SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = 'secret' -- passwords exposed
 
 parse
-SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz'
+SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz', skip size
 ----
-SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz' -- normalized!
-SHOW BACKUP FROM ('latest') IN ('bar') WITH incremental_location = ('baz') -- fully parenthesized
-SHOW BACKUP FROM '_' IN '_' WITH incremental_location = '_' -- literals removed
-SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz' -- identifiers removed
+SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz', skip size -- normalized!
+SHOW BACKUP FROM ('latest') IN ('bar') WITH incremental_location = ('baz'), skip size -- fully parenthesized
+SHOW BACKUP FROM '_' IN '_' WITH incremental_location = '_', skip size -- literals removed
+SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz', skip size -- identifiers removed
 
 parse
 SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
