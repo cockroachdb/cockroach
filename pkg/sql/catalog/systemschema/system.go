@@ -992,6 +992,15 @@ CREATE TABLE system.span_stats_tenant_boundaries (
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id),
 	FAMILY "primary" (tenant_id, boundaries)
 );`
+
+	// RegionLivenessTableSchema stores the liveness for a region
+	RegionLivenessTableSchema = `CREATE TABLE system.public.region_liveness (
+    crdb_region BYTES NOT NULL,
+    unavailable_at TIMESTAMP NULL,
+    CONSTRAINT region_liveness_pkey PRIMARY KEY (crdb_region ASC),
+	  FAMILY "primary" (crdb_region, unavailable_at)
+) ;
+`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1221,6 +1230,7 @@ func MakeSystemTables() []SystemTable {
 		SystemTenantTasksTable,
 		StatementActivityTable,
 		TransactionActivityTable,
+		RegionLivenessTable,
 	}
 }
 
@@ -4047,6 +4057,37 @@ var (
 				ID:             1,
 				Unique:         true,
 				KeyColumnNames: []string{"tenant_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	RegionLivenessTable = makeSystemTable(
+		RegionLivenessTableSchema,
+		systemTable(
+			catconstants.RegionalLiveness,
+			keys.RegionLivenessTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "crdb_region", ID: 1, Type: types.Bytes},
+				{Name: "unavailable_at", ID: 2, Type: types.Timestamp, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"crdb_region", "unavailable_at"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+					DefaultColumnID: 2,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "region_liveness_pkey",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"crdb_region"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
 					catenumpb.IndexColumn_ASC,
 				},

@@ -64,4 +64,4 @@ testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_
 query TT
 SELECT user_name, description FROM [SHOW CHANGEFEED JOBS]
 ----
-testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_scan = 'only')
+testuser  CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_scan = 'only')

@@ -21,6 +21,7 @@ upsert /Table/10{6-7}                      range default
 state offset=47
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
@@ -57,6 +58,7 @@ upsert /Table/10{6/3-7}                    num_replicas=7
 state offset=47
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
@@ -95,6 +97,7 @@ upsert /Table/10{6/3-7}                    ttl_seconds=3600 num_replicas=7
 state offset=47
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
@@ -123,6 +126,7 @@ ALTER TABLE db.t CONFIGURE ZONE USING num_replicas = 9
 state offset=47
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
@@ -164,6 +168,7 @@ delete /Table/10{6/3-7}
 state offset=46
 ----
 ...
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)

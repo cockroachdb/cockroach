@@ -2441,6 +2441,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		"namespace",
 		"table_statistics",
 		"web_sessions",
+		"region_liveness",
 	}
 
 	rbrTables := []string{
