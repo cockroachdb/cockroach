@@ -591,7 +591,10 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 					filepath.Join(workspace, "pkg", "ui", "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "src", "js", "node_modules"),
+					filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "node_modules"),
 					filepath.Join(uiDirs.clusterUI, "node_modules"),
+					filepath.Join(uiDirs.e2eTests, "node_modules"),
+					filepath.Join(uiDirs.eslintPlugin, "node_modules"),
 				)
 			}
 
