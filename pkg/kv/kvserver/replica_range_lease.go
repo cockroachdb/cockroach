@@ -1536,25 +1536,67 @@ func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
 	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
 }
 
-// LeaseViolatesPreferences checks if current replica owns the lease and if it
-// violates the lease preferences defined in the span config. If there is an
-// error or no preferences defined then it will return false and consider that
-// to be in-conformance.
+// leasePreferencesStatus represents the state of satisfying lease preferences.
+type leasePreferencesStatus int
+
+const (
+	// leasePreferencesUnknown indicates the preferences status cannot be
+	// determined.
+	leasePreferencesUnknown leasePreferencesStatus = iota
+	// leasePreferencesViolating indicates the leaseholder does not
+	// satisfy any lease preference applied.
+	leasePreferencesViolating
+	// leasePreferencesLessPreferred indicates the leaseholder satisfies _some_
+	// preference, however not the most preferred.
+	leasePreferencesLessPreferred
+	// leasePreferencesOK indicates the lease satisfies the first
+	// preference, or no lease preferences are applied.
+	leasePreferencesOK
+)
+
+// LeaseViolatesPreferences checks if this replica owns the lease and if it
+// violates the lease preferences defined in the span config. If no preferences
+// are defined then it will return false and consider it to be in conformance.
 func (r *Replica) LeaseViolatesPreferences(ctx context.Context) bool {
-	storeDesc, err := r.store.Descriptor(ctx, true /* useCached */)
-	if err != nil {
-		log.Infof(ctx, "Unable to load the descriptor %v: cannot check if lease violates preference", err)
-		return false
+	storeID := r.store.StoreID()
+	now := r.Clock().NowAsClockTimestamp()
+	r.mu.RLock()
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
+	preferences := r.mu.conf.LeasePreferences
+	r.mu.RUnlock()
+
+	storeAttrs := r.store.Attrs()
+	nodeAttrs := r.store.nodeDesc.Attrs
+	nodeLocality := r.store.nodeDesc.Locality
+	preferenceStatus := makeLeasePreferenceStatus(
+		leaseStatus, storeID, storeAttrs, nodeAttrs, nodeLocality, preferences)
+
+	return preferenceStatus == leasePreferencesViolating
+}
+
+func makeLeasePreferenceStatus(
+	leaseStatus kvserverpb.LeaseStatus,
+	storeID roachpb.StoreID,
+	storeAttrs, nodeAttrs roachpb.Attributes,
+	nodeLocality roachpb.Locality,
+	preferences []roachpb.LeasePreference,
+) leasePreferencesStatus {
+	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
+		// We can't determine if the lease preferences are being conformed to or
+		// not, as the store either doesn't own the lease, or doesn't own a valid
+		// lease.
+		return leasePreferencesUnknown
 	}
-	conf := r.SpanConfig()
-	if len(conf.LeasePreferences) == 0 {
-		return false
+	if len(preferences) == 0 {
+		return leasePreferencesOK
 	}
-	for _, preference := range conf.LeasePreferences {
-		if constraint.ConjunctionsCheck(*storeDesc, preference.Constraints) {
-			return false
+	for i, preference := range preferences {
+		if constraint.CheckConjunction(storeAttrs, nodeAttrs, nodeLocality, preference.Constraints) {
+			if i > 0 {
+				return leasePreferencesLessPreferred
+			}
+			return leasePreferencesOK
 		}
 	}
-	// We have at lease one preference set up, but we don't satisfy any.
-	return true
+	return leasePreferencesViolating
 }
