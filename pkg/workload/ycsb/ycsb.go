@@ -135,7 +135,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
 		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data.`)
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family.`)
-		g.flags.BoolVar(&g.rmwInTxn, `read-modify-write-in-txn`, true, `Run workload F's read-modify-write operation in an explicit transaction.`)
+		g.flags.BoolVar(&g.rmwInTxn, `read-modify-write-in-txn`, false, `Run workload F's read-modify-write operation in an explicit transaction.`)
 		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write operation, if run in an explicit transactions.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations.`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
