@@ -255,6 +255,18 @@ for {
 }
 ```
 
+#### Use test helpers
+
+Every test hook receives as parameter a `*mixedversion.Helper` instance. This helper struct contains convenience functions that make it easy to perform certain operations while automatically implementing some of the best practices described here. For a full list of helpers, check out the [`helper.go`](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachtestutil/mixedversion/helper.go) file in the framework's source tree.
+
+##### Aside: background functions
+
+One particularly important helper functionality to highlight relates to the management of functions that need to run in the background during a test. Typically, roachtests are expected to use a [monitor](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/monitor.go) for that purpose; not only does the monitor protect from panics inadvertently crashing the test, it also preempts their execution (via context cancelation) if a node dies unexpectedly.
+
+However, if a mixedversion test needs to perform a task in the background, they **must not use the roachtest monitor**. The reason for this is that mixedversion tests are [randomized](#embrace-randomness); as such, user-created monitors would not be able to predict when a death is expected since it does not know, by design, when a node restarts.
+
+To run functions in the background, use the API provided by the mixedversion framework. Long running tasks that run throughout the test can be defined with `(*mixedversion.Test).BackgroundFunc`. If a test hook needs to perform a task in the background, the `*mixedversion.Helper` instance has a `Background` function that can be used for that purpose. As usual, check the documentation for the public API for more details on usage and behaviour of these functions.
+
 #### Log progress
 
 Logging events in the test as it runs can make debugging failures a lot easier. All hooks passed to the `mixedversion` API receive a `*logger.Logger` instance as parameter. **Functions should use that logger instead of the test logger** (`t.L()`). Doing so has two main advantages:
@@ -398,6 +410,6 @@ $ COCKROACH_RANDOM_SEED=7357315251706229449 roachtest run --versions-binary-over
 
 ### Final Notes
 
-* This is a high level document and does not include API documentation. The `mixedversion` package includes a lot of documentation in the form of source code comments, and that should be the source of truth when it comes to finding out what functionality is available and how to use it.
+* This is a high level document and does not include API documentation. The `mixedversion` package includes a lot of documentation in the form of source code comments, and that should be the source of truth when it comes to finding out what functionality is available and how to use it. Most of the public API is in the [`mixedversion.go`](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go) and [`helper.go`](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachtestutil/mixedversion/helper.go) files.
 * For a simple application of the `mixedversion` framework, check out the `acceptance/version-upgrade` roachtest. For a more complex example, see `backup-restore/mixed-version`.
 * For any other questions, please reach out to `#test-eng`!
