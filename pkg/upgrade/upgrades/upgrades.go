@@ -317,6 +317,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		stmtDiagForPlanGistMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"create system.region_liveness table",
+		toCV(clusterversion.V23_2_RegionaLivenessTable),
+		upgrade.NoPrecondition,
+		createRegionLivenessTables,
+	),
 }
 
 var (
