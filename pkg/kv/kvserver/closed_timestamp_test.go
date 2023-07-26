@@ -1170,8 +1170,12 @@ func pickRandomTarget(
 	tc serverutils.TestClusterInterface, lh roachpb.ReplicationTarget, desc roachpb.RangeDescriptor,
 ) (t roachpb.ReplicationTarget) {
 	for {
-		if t = tc.Target(rand.Intn(len(desc.InternalReplicas))); t != lh {
+		n := len(desc.InternalReplicas)
+		if t = tc.Target(rand.Intn(n)); t != lh {
 			return t
+		}
+		if n <= 1 {
+			panic(fmt.Sprintf("the only target in %v is the leaseholder %v", desc, lh))
 		}
 	}
 }
