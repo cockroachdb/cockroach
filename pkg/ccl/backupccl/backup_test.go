@@ -335,12 +335,9 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
-
-	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "west"},
 					// NB: This has the same value as an az in the east region
@@ -350,7 +347,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			1: {
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					// NB: This has the same value as an az in the west region
@@ -360,7 +356,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			2: {
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					{Key: "az", Value: "az2"},
@@ -370,8 +365,15 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		},
 	}
 
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
 	defer cleanupFn()
+
+	systemDB := sqlutils.MakeSQLRunner(tc.StorageClusterConn())
+	systemDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true")
+	systemDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled = true")
+	if tc.StartedDefaultTestTenant() {
+		systemDB.Exec(t, "ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range,can_admin_split", serverutils.TestTenantID().ToUint64())
+	}
 
 	// dirOf converts backup URIs based on localFoo to the temporary
 	// file it represents on disk.
