@@ -1818,8 +1818,8 @@ func (r opResult) planAndMaybeWrapFilter(
 	filter execinfrapb.Expression,
 	factory coldata.ColumnFactory,
 ) error {
-	op, err := planFilterExpr(
-		ctx, flowCtx, r.Root, r.ColumnTypes, filter, args.StreamingMemAccount, factory, args.ExprHelper, &r.Releasables,
+	err := r.planFilterExpr(
+		ctx, flowCtx, filter, args.StreamingMemAccount, factory, args.ExprHelper,
 	)
 	if err != nil {
 		// Filter expression planning failed. Fall back to planning the filter
@@ -1837,7 +1837,6 @@ func (r opResult) planAndMaybeWrapFilter(
 			processorID, factory, err,
 		)
 	}
-	r.Root = op
 	return nil
 }
 
@@ -1963,12 +1962,7 @@ func (r *postProcessResult) planPostProcessSpec(
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
-		r.Op = colexecbase.NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
-		newTypes := make([]*types.T, len(renderedCols))
-		for i, j := range renderedCols {
-			newTypes[i] = r.ColumnTypes[j]
-		}
-		r.ColumnTypes = newTypes
+		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, renderedCols)
 	}
 	if post.Offset != 0 {
 		r.Op = colexec.NewOffsetOp(r.Op, post.Offset)
@@ -2030,42 +2024,41 @@ func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*
 }
 
 // planFilterExpr creates all operators to implement filter expression.
-func planFilterExpr(
+func (r opResult) planFilterExpr(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexecop.Operator,
-	columnTypes []*types.T,
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
 	helper *colexecargs.ExprHelper,
-	releasables *[]execreleasable.Releasable,
-) (colexecop.Operator, error) {
-	expr, err := helper.ProcessExpr(ctx, filter, flowCtx.EvalCtx, columnTypes)
+) error {
+	expr, err := helper.ProcessExpr(ctx, filter, flowCtx.EvalCtx, r.ColumnTypes)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
-		return colexecutils.NewZeroOp(input), nil
+		r.Root = colexecutils.NewZeroOp(r.Root)
+		return nil
 	}
-	op, _, filterColumnTypes, err := planSelectionOperators(
-		ctx, flowCtx.EvalCtx, expr, columnTypes, input, acc, factory, releasables,
+	var filterColumnTypes []*types.T
+	r.Root, _, filterColumnTypes, err = planSelectionOperators(
+		ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Root, acc, factory, &r.Releasables,
 	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
+		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
 	}
-	if len(filterColumnTypes) > len(columnTypes) {
+	if len(filterColumnTypes) > len(r.ColumnTypes) {
 		// Additional columns were appended to store projections while
 		// evaluating the filter. Project them away.
 		var outputColumns []uint32
-		for i := range columnTypes {
+		for i := range r.ColumnTypes {
 			outputColumns = append(outputColumns, uint32(i))
 		}
-		op = colexecbase.NewSimpleProjectOp(op, len(filterColumnTypes), outputColumns)
+		r.Root, r.ColumnTypes = addProjection(r.Root, filterColumnTypes, outputColumns)
 	}
-	return op, nil
+	return nil
 }
 
 // addProjection adds a simple projection on top of op according to projection

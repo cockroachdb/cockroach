@@ -136,3 +136,45 @@ INSERT INTO t64676 VALUES
 
 statement ok
 SELECT i + d FROM t64676
+
+# Regression test for type schema corruption when planning filter expressions
+# (#107615).
+statement ok
+CREATE TABLE t107615 AS
+	SELECT
+		g::INT2 AS _int2,
+		g::INT4 AS _int4,
+		g::INT8 AS _int8,
+		g::FLOAT8 AS _float8,
+		'2001-01-01'::DATE + g AS _date,
+		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+		g * '1 day'::INTERVAL AS _interval,
+		g % 2 = 1 AS _bool,
+		g::DECIMAL AS _decimal,
+		g::STRING AS _string,
+		g::STRING::BYTES AS _bytes,
+		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid
+	FROM
+		generate_series(1, 5) AS g;
+SET testing_optimizer_random_seed = 4478711114964600496;
+SELECT
+	1.2345678901234564e+23:::FLOAT8,
+	_string,
+	_int2,
+	tableoid,
+	_int2,
+	'1942-08-15 21:13:20+00':::TIMESTAMPTZ,
+	'\xc3a0':::BYTES,
+	true,
+	_timestamp,
+	_date,
+	e'\x01':::STRING,
+    _uuid,
+	'{"test": "json"}':::JSONB,
+	_int4,
+	_interval
+FROM
+	t107615
+WHERE
+	(_bool OR (NOT _bool));
