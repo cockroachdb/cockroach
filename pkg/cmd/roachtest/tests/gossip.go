@@ -433,9 +433,9 @@ SELECT count(replicas)
 	err := c.RunE(ctx, c.Node(1),
 		` ./cockroach start --insecure --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
-			`--listen-addr=:$[{pgport:1}+10000] --http-port=$[{pgport:1}+1] `+
+			`--listen-addr=:$[{pgport:1}+1000] --http-port=$[{pgport:1}+1] `+
 			`--join={pghost:1}:{pgport:1} `+
-			`--advertise-addr={pghost:1}:$[{pgport:1}+10000] `+
+			`--advertise-addr={pghost:1}:$[{pgport:1}+1000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 	if err != nil {
 		t.Fatal(err)
@@ -473,7 +473,7 @@ SELECT count(replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
-		url.Host = fmt.Sprintf("%s:%d", host, v+10000)
+		url.Host = fmt.Sprintf("%s:%d", host, v+1000)
 		db, err := gosql.Open("postgres", url.String())
 		if err != nil {
 			t.Fatal(err)

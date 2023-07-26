@@ -818,11 +818,12 @@ func ClosestPoint(a, b geo.Geometry) (geo.Geometry, error) {
 	}
 	closestPoint, err := geo.MakeGeometryFromPointCoords(
 		shortestLineT.(*geom.LineString).Coord(0).X(),
-		shortestLineT.(*geom.LineString).Coord(0).Y())
+		shortestLineT.(*geom.LineString).Coord(0).Y(),
+	)
 	if err != nil {
 		return geo.Geometry{}, err
 	}
-	return closestPoint, nil
+	return closestPoint.CloneWithSRID(a.SRID())
 }
 
 func verifyDensifyFrac(f float64) error {

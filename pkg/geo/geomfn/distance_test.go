@@ -984,9 +984,9 @@ func TestClosestPoint(t *testing.T) {
 			"POINT(1.5 1.5)",
 		},
 		{"Closest point between MULTIPOLYGON and MULTIPOINT",
-			"MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))",
-			"MULTIPOINT((20 10),(10 10))",
-			"POINT(4 4)",
+			"SRID=4326;MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))",
+			"SRID=4326;MULTIPOINT((20 10),(10 10))",
+			"SRID=4326;POINT(4 4)",
 		},
 	}
 
