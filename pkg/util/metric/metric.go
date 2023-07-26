@@ -246,6 +246,9 @@ type HistogramOptions struct {
 	// Buckets are only relevant to Prometheus histograms, and represent
 	// the pre-defined histogram bucket boundaries to be used.
 	Buckets []float64
+	// BucketConfig is only relevant to Prometheus histograms, and represents
+	// the pre-defined histogram bucket configuration used to generate buckets.
+	BucketConfig staticBucketConfig
 	// Mode defines the type of histogram to be used. See individual
 	// comments on each HistogramMode value for details.
 	Mode HistogramMode
@@ -259,16 +262,24 @@ func NewHistogram(opt HistogramOptions) IHistogram {
 			return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
 		}
 	} else {
-		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets)
+		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets,
+			opt.BucketConfig)
 	}
 }
 
 // NewHistogram is a prometheus-backed histogram. Depending on the value of
 // opts.Buckets, this is suitable for recording any kind of quantity. Common
 // sensible choices are {IO,Network}LatencyBuckets.
-func newHistogram(meta Metadata, duration time.Duration, buckets []float64) *Histogram {
+func newHistogram(
+	meta Metadata, duration time.Duration, buckets []float64, bucketConfig staticBucketConfig,
+) *Histogram {
 	// TODO(obs-inf): prometheus supports labeled histograms but they require more
 	// plumbing and don't fit into the PrometheusObservable interface any more.
+
+	// If no buckets are provided, generate buckets from bucket configuration
+	if buckets == nil && bucketConfig.count != 0 {
+		buckets = bucketConfig.GetBucketsFromBucketConfig()
+	}
 	opts := prometheus.HistogramOpts{
 		Buckets: buckets,
 	}
