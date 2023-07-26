@@ -66,7 +66,7 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0).TenantOrServer()
+	s := tc.Server(0).ApplicationLayer()
 	tenantSettings := s.ClusterSettings()
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, 100*time.Millisecond)
 	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)

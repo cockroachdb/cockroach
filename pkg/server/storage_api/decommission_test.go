@@ -134,9 +134,9 @@ func TestDecommissionPreCheckEvaluation(t *testing.T) {
 			"range_max_bytes = 500000000, range_min_bytes = 100",
 	}
 	runQueries(alterQueries...)
-	tblAID, err := firstSvr.TestingQueryTableID(ctx, username.RootUserName(), "test", "tblA")
+	tblAID, err := firstSvr.QueryTableID(ctx, username.RootUserName(), "test", "tblA")
 	require.NoError(t, err)
-	tblBID, err := firstSvr.TestingQueryTableID(ctx, username.RootUserName(), "test", "tblB")
+	tblBID, err := firstSvr.QueryTableID(ctx, username.RootUserName(), "test", "tblB")
 	require.NoError(t, err)
 	startKeyTblA := firstSvr.Codec().TablePrefix(uint32(tblAID))
 	startKeyTblB := firstSvr.Codec().TablePrefix(uint32(tblBID))
@@ -241,7 +241,7 @@ func TestDecommissionPreCheckOddToEven(t *testing.T) {
 			"range_max_bytes = 500000000, range_min_bytes = 100",
 	}
 	runQueries(alterQueries...)
-	tblAID, err := firstSvr.TestingQueryTableID(ctx, username.RootUserName(), "test", "tblA")
+	tblAID, err := firstSvr.QueryTableID(ctx, username.RootUserName(), "test", "tblA")
 	require.NoError(t, err)
 	startKeyTblA := firstSvr.Codec().TablePrefix(uint32(tblAID))
 

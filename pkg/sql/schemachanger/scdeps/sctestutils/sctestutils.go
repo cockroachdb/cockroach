@@ -47,7 +47,7 @@ import (
 // scbuild.Dependencies object built using the test server interface and which
 // it passes to the callback.
 func WithBuilderDependenciesFromTestServer(
-	s serverutils.TestTenantInterface, nodeID roachpb.NodeID, fn func(scbuild.Dependencies),
+	s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, fn func(scbuild.Dependencies),
 ) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)

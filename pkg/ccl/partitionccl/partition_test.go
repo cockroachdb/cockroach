@@ -1340,7 +1340,7 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, sv, true)
 
 	// Write a table with some partitions into the database,

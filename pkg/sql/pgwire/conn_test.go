@@ -2037,7 +2037,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	}
 
 	getConnectionCount := func() int {
-		return int(testServer.TenantOrServer().SQLServer().(*sql.Server).GetConnectionCount())
+		return int(testServer.ApplicationLayer().SQLServer().(*sql.Server).GetConnectionCount())
 	}
 
 	requireConnectionCount := func(t *testing.T, expectedCount int) {

@@ -28,7 +28,7 @@ import (
 
 func setup(
 	t *testing.T, ctx context.Context,
-) (*testcluster.TestCluster, serverutils.TestTenantInterface, rangedesc.IteratorFactory) {
+) (*testcluster.TestCluster, serverutils.ApplicationLayerInterface, rangedesc.IteratorFactory) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,

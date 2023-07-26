@@ -4345,7 +4345,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	}
 
 	// TODO(samiskin): tenant tests skipped because of forceTableGC not working
-	// with a TestTenantInterface
+	// with a ApplicationLayerInterface
 	cdcTestWithSystem(t, testFn, feedTestNoTenants)
 }
 

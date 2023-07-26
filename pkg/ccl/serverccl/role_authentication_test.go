@@ -36,7 +36,7 @@ func TestVerifyPassword(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.TenantOrServer()
+	ts := s.ApplicationLayer()
 
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the

@@ -100,7 +100,7 @@ type TenantStreamingClusters struct {
 	SrcSysServer    serverutils.TestServerInterface
 	SrcSysSQL       *sqlutils.SQLRunner
 	SrcTenantSQL    *sqlutils.SQLRunner
-	SrcTenantServer serverutils.TestTenantInterface
+	SrcTenantServer serverutils.ApplicationLayerInterface
 	SrcURL          url.URL
 	SrcCleanup      func()
 

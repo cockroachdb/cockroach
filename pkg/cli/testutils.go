@@ -51,7 +51,7 @@ func TestingReset() {
 // TestCLI wraps a test server and is used by tests to make assertions about the output of CLI commands.
 type TestCLI struct {
 	*server.TestServer
-	tenant      serverutils.TestTenantInterface
+	tenant      serverutils.ApplicationLayerInterface
 	certsDir    string
 	cleanupFunc func() error
 	prevStderr  *os.File

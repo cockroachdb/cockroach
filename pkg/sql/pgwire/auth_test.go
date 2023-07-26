@@ -229,10 +229,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+		pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
-		s.TenantOrServer().PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+		s.ApplicationLayer().PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -651,9 +651,9 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+	pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
-	pgPreServer := s.TenantOrServer().PGPreServer().(*pgwire.PreServeConnHandler)
+	pgPreServer := s.ApplicationLayer().PGPreServer().(*pgwire.PreServeConnHandler)
 
 	testCases := []struct {
 		specialAddr string

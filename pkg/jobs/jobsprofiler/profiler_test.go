@@ -89,7 +89,7 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 				`SELECT id FROM crdb_internal.system_jobs WHERE job_type = $1`, tc.typ.String()).Scan(&jobID)
 			require.NoError(t, err)
 
-			execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+			execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 			testutils.SucceedsSoon(t, func() error {
 				var count int
 				err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -215,7 +215,7 @@ func TestTraceRecordingOnResumerCompletion(t *testing.T) {
 	// trace recordings.
 	testutils.SucceedsSoon(t, func() error {
 		recordings := make([][]byte, 0)
-		execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+		execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 		edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobspb.JobID(jobID))
 		if err != nil {
 			return err

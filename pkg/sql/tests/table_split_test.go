@@ -30,7 +30,7 @@ func TestSplitAtTableBoundary(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
-	s := tc.TenantOrServer(0)
+	s := tc.ApplicationLayer(0)
 
 	runner := sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, s.SQLAddr(), "system", false, tc.Stopper()))
 	runner.Exec(t, `CREATE DATABASE test`)

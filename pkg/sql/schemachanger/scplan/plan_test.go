@@ -76,7 +76,7 @@ func TestPlanDataDriven(t *testing.T) {
 				return ""
 			case "ops", "deps":
 				var plan scplan.Plan
-				sctestutils.WithBuilderDependenciesFromTestServer(s.TenantOrServer(), s.NodeID(), func(deps scbuild.Dependencies) {
+				sctestutils.WithBuilderDependenciesFromTestServer(s.ApplicationLayer(), s.NodeID(), func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
 					var state scpb.CurrentState
@@ -95,7 +95,7 @@ func TestPlanDataDriven(t *testing.T) {
 				}
 				return marshalDeps(t, &plan)
 			case "unimplemented":
-				sctestutils.WithBuilderDependenciesFromTestServer(s.TenantOrServer(), s.NodeID(), func(deps scbuild.Dependencies) {
+				sctestutils.WithBuilderDependenciesFromTestServer(s.ApplicationLayer(), s.NodeID(), func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
 					require.Len(t, stmts, 1)
@@ -255,7 +255,7 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 		SQLMemoryPoolSize: 10 << 20, /* 10MiB */
 	})
 	defer s.Stopper().Stop(context.Background())
-	tt, nodeID := s.TenantOrServer(), s.NodeID()
+	tt, nodeID := s.ApplicationLayer(), s.NodeID()
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t, `use defaultdb;`)

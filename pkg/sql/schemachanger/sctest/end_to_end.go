@@ -153,7 +153,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					}),
 					sctestdeps.WithStatements(stmtSqls...),
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
-					sctestdeps.WithIDGenerator(s.TenantOrServer()),
+					sctestdeps.WithIDGenerator(s.ApplicationLayer()),
 					sctestdeps.WithReferenceProviderFactory(refFactory),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)

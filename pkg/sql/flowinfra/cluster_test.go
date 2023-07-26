@@ -54,7 +54,7 @@ func runTestClusterFlow(
 	t *testing.T,
 	codec keys.SQLCodec,
 	kvDB *kv.DB,
-	servers []serverutils.TestTenantInterface,
+	servers []serverutils.ApplicationLayerInterface,
 	conns []*gosql.DB,
 	clients []execinfrapb.DistSQLClient,
 ) {
@@ -266,7 +266,7 @@ func TestClusterFlow(t *testing.T) {
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(context.Background())
 
-	servers := make([]serverutils.TestTenantInterface, numNodes)
+	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
 	conns := make([]*gosql.DB, numNodes)
 	clients := make([]execinfrapb.DistSQLClient, numNodes)
 	for i := 0; i < numNodes; i++ {
@@ -300,7 +300,7 @@ func TestTenantClusterFlow(t *testing.T) {
 			AOSTClause: "AS OF SYSTEM TIME '-1us'",
 		},
 	}
-	pods := make([]serverutils.TestTenantInterface, numPods)
+	pods := make([]serverutils.ApplicationLayerInterface, numPods)
 	podConns := make([]*gosql.DB, numPods)
 	clients := make([]execinfrapb.DistSQLClient, numPods)
 	tenantID := serverutils.TestTenantID()

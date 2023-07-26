@@ -319,7 +319,7 @@ func TestJobInfoUpgradeRegressionTests(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
-	tenantOrServer := s.TenantOrServer()
+	tenantOrServer := s.ApplicationLayer()
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 

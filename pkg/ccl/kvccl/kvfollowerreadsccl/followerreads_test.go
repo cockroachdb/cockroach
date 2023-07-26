@@ -915,7 +915,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
 		recCh := make(chan tracingpb.Recording, 1)
 
-		var tenants [numNodes]serverutils.TestTenantInterface
+		var tenants [numNodes]serverutils.ApplicationLayerInterface
 		for i := 0; i < numNodes; i++ {
 			knobs := base.TestingKnobs{}
 			if i == 3 { // n4

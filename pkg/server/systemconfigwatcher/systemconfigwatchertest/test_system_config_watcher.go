@@ -81,7 +81,7 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 
 func runTest(
 	t *testing.T,
-	s serverutils.TestTenantInterface,
+	s serverutils.ApplicationLayerInterface,
 	sqlDB *gosql.DB,
 	extraRows func(t *testing.T) []roachpb.KeyValue,
 ) {

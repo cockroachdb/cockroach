@@ -1813,7 +1813,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	const numAccounts = 1000
 	tc, outerDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
-	srv := tc.TenantOrServer(0)
+	srv := tc.ApplicationLayer(0)
 	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
 	clusterID := srv.RPCContext().LogicalClusterID.Get()
 	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
@@ -1896,7 +1896,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		sqlDB.Exec(t, `BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 		restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
-		restoreTableID, err := tc.TenantOrServer(0).ExecutorConfig().(sql.ExecutorConfig).DescIDGenerator.GenerateUniqueDescID(ctx)
+		restoreTableID, err := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -5441,7 +5441,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	origDB.Exec(t, `BACKUP DATABASE d TO $1`, backupLoc)
 
 	getTableDescriptorFromTestCluster := func(tc *testcluster.TestCluster, database string, table string) catalog.TableDescriptor {
-		srv := tc.TenantOrServer(0)
+		srv := tc.ApplicationLayer(0)
 		return desctestutils.TestingGetPublicTableDescriptor(srv.DB(), srv.Codec(), database, table)
 	}
 
@@ -5844,7 +5844,7 @@ func TestBatchedInsertStats(t *testing.T) {
 	}}
 	server, db, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
-	s := server.TenantOrServer()
+	s := server.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -6393,7 +6393,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 
 	jobsTableKey.Lock()
-	jobsTableKey.key = tc.TenantOrServer(0).Codec().TablePrefix(uint32(systemschema.JobsTable.GetID()))
+	jobsTableKey.key = tc.ApplicationLayer(0).Codec().TablePrefix(uint32(systemschema.JobsTable.GetID()))
 	jobsTableKey.Unlock()
 
 	runner.Exec(t, `SET CLUSTER SETTING jobs.metrics.interval.poll = '30s'`)
@@ -7513,7 +7513,7 @@ func TestClientDisconnect(t *testing.T) {
 			// Make credentials for the new connection.
 			sqlDB.Exec(t, `CREATE USER testuser`)
 			sqlDB.Exec(t, `GRANT admin TO testuser`)
-			pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+			pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).ServingSQLAddr(),
 				"TestClientDisconnect-testuser", url.User("testuser"))
 			defer cleanup()
 
@@ -8620,7 +8620,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
@@ -8733,7 +8733,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	)
 	defer cleanupFn()
 	kvDB := tc.Server(0).DB()
-	codec := tc.TenantOrServer(0).ExecutorConfig().(sql.ExecutorConfig).Codec
+	codec := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).Codec
 
 	locationToDir := func(location string) string {
 		return strings.Replace(location, localFoo, filepath.Join(rawDir, "foo"), 1)
@@ -10225,7 +10225,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 
 	// List all the BACKUP-CHECKPOINTS in the progress directory and see
 	// if there are as many as we'd expect if none got overwritten.
-	execCfg := tc.TenantOrServer(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
@@ -10454,7 +10454,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)

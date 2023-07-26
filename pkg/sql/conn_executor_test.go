@@ -786,7 +786,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	conn, err := sqlDB.Conn(context.Background())
 	require.NoError(t, err)
@@ -845,7 +845,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
 	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
