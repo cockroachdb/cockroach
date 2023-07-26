@@ -280,7 +280,7 @@ var rebalanceToMaxDiskUtilizationThreshold = settings.RegisterFloatSetting(
 )
 
 // ScorerOptions defines the interface for the two heuristics that trigger
-// replica rebalancing: range count convergence and QPS convergence.
+// replica rebalancing: range count convergence and load convergence.
 type ScorerOptions interface {
 	// maybeJitterStoreStats returns a `StoreList` that's identical to the
 	// parameter `sl`, but may have jittered stats on the stores.
@@ -294,7 +294,7 @@ type ScorerOptions interface {
 	deterministicForTesting() bool
 	// shouldRebalanceBasedOnThresholds returns whether the specified store is a
 	// candidate for having a replica removed from it given the candidate store
-	// list based on either range count or QPS.
+	// list based on either range count or load.
 	//
 	// CRDB's rebalancing logic first checks whether any existing replica is in
 	// violation of constraints or is on stores that have an almost-full disk. If
@@ -328,7 +328,7 @@ type ScorerOptions interface {
 	// deal with computing a converges score for existing stores that might
 	// relinquish a replica). removalConvergesScore assigns a negative convergence
 	// score to the existing store (or multiple replicas, if there are multiple
-	// with the same QPS) that would converge the range's existing stores' QPS the
+	// with the same load) that would converge the range's existing stores' load the
 	// most.
 	removalMaximallyConvergesScore(removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor) int
 	// getIOOverloadOptions returns the scorer options for store IO overload. It
@@ -507,7 +507,7 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 // LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on
 // queries-per-second. This means that the resulting rebalancing decisions will
-// further the goal of converging QPS across stores in the cluster.
+// further the goal of converging load across stores in the cluster.
 type LoadScorerOptions struct {
 	IOOverloadOptions IOOverloadOptions
 	DiskOptions       DiskCapacityOptions
@@ -524,7 +524,7 @@ type LoadScorerOptions struct {
 	// between stores required before recommending an action to rebalance.
 	MinRequiredRebalanceLoadDiff load.Load
 
-	// QPS-based rebalancing assumes that:
+	// load-based rebalancing assumes that:
 	// 1. Every replica of a range currently receives the same level of traffic.
 	// 2. Transferring this replica to another store would also transfer all of
 	// this replica's load onto that receiving store.
@@ -634,11 +634,11 @@ func (o *LoadScorerOptions) balanceScore(
 }
 
 // rebalanceFromConvergesScore returns a score of -1 if the existing store in
-// eqClass needs to be rebalanced away in order to minimize the QPS delta
+// eqClass needs to be rebalanced away in order to minimize the load delta
 // between the stores in the equivalence class `eqClass`.
 func (o *LoadScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
 	_, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
-	// If there are any rebalance opportunities that minimize the QPS delta in
+	// If there are any rebalance opportunities that minimize the load delta in
 	// this equivalence class, we return a score of -1 to make the existing store
 	// more likely to be picked for removal.
 	if declineReason == shouldRebalance {
@@ -648,7 +648,7 @@ func (o *LoadScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass
 }
 
 // rebalanceToConvergesScore returns a score of 1 if `candidate` needs to be
-// rebalanced to in order to minimize the QPS delta between the stores in the
+// rebalanced to in order to minimize the load delta between the stores in the
 // equivalence class `eqClass`
 func (o *LoadScorerOptions) rebalanceToConvergesScore(
 	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
@@ -661,21 +661,21 @@ func (o *LoadScorerOptions) rebalanceToConvergesScore(
 }
 
 // removalMaximallyConvergesScore returns a score of -1 `existing` is the
-// hottest store (based on QPS) among the stores inside
+// hottest store (based on load) among the stores inside
 // `removalCandidateStores`.
 func (o *LoadScorerOptions) removalMaximallyConvergesScore(
 	removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor,
 ) int {
-	maxQPS := float64(-1)
+	maxLoad := float64(-1)
 	for _, store := range removalCandStoreList.Stores {
-		if store.Capacity.QueriesPerSecond > maxQPS {
-			maxQPS = store.Capacity.QueriesPerSecond
+		if store.Capacity.QueriesPerSecond > maxLoad {
+			maxLoad = store.Capacity.QueriesPerSecond
 		}
 	}
 	// NB: Note that if there are multiple stores inside `removalCandStoreList`
-	// with the same (or similar) maxQPS, we will return a
+	// with the same (or similar) maxLoad, we will return a
 	// removalMaximallyConvergesScore of -1 for all of them.
-	if scoresAlmostEqual(maxQPS, existing.Capacity.QueriesPerSecond) {
+	if scoresAlmostEqual(maxLoad, existing.Capacity.QueriesPerSecond) {
 		return -1
 	}
 	return 0
@@ -1194,7 +1194,7 @@ func rankedCandidateListForAllocation(
 //
 // This is determined based on factors like (in order of precedence) constraints
 // conformance, disk fullness, the diversity score of the range without the
-// given replica, as well as load-based factors like range count or QPS of the
+// given replica, as well as load-based factors like range count or load of the
 // host store.
 //
 // Stores that are marked as not valid, are in violation of a required criteria.
@@ -1348,25 +1348,28 @@ const (
 	existingNotOverfull
 	// deltaNotSignificant indicates that the delta between the existing store and
 	// the best candidate store is not high enough to justify a lease transfer or
-	// replica rebalance. This delta is computed _ignoring_ the QPS of the
+	// replica rebalance. This delta is computed _ignoring_ the load of the
 	// lease/replica in question.
 	deltaNotSignificant
 	// missingStatsForExistingStore indicates that we're missing the store
 	// descriptor of the existing store, which means we don't have access to the
-	// QPS levels of the existing store. Nothing we can do in this case except
+	// load levels of the existing store. Nothing we can do in this case except
 	// bail early.
 	missingStatsForExistingStore
 )
 
 // bestStoreToMinimizeLoadDelta computes a rebalance (or lease transfer) target
 // for the existing store such that executing the rebalance (or lease transfer)
-// decision would minimize the QPS range between the existing store and the
+// decision would minimize the load range between the existing store and the
 // coldest store in the equivalence class.
+// TODO(kvoli): If we decide to keep relying on this function heavily, as the
+// core of load-based target selection, refactor this function to use less
+// ad-hoc state. The current logic is subtle and easy to break with many
+// variables flying around.
 func bestStoreToMinimizeLoadDelta(
-	replLoadValue load.Load,
 	existing roachpb.StoreID,
 	candidates []roachpb.StoreID,
-	storeDescMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
+	domainSL storepool.StoreList,
 	options *LoadScorerOptions,
 ) (bestCandidate roachpb.StoreID, reason declineReason) {
 	// This function is only intended to be called with the purpose one load
@@ -1378,14 +1381,15 @@ func bestStoreToMinimizeLoadDelta(
 			len(options.LoadDims)))
 	}
 	dimension := options.LoadDims[0]
+	domainMap := domainSL.ToMap()
 
 	storeLoadMap := make(map[roachpb.StoreID]load.Load, len(candidates)+1)
 	for _, store := range candidates {
-		if desc, ok := storeDescMap[store]; ok {
+		if desc, ok := domainMap[store]; ok {
 			storeLoadMap[store] = desc.Capacity.Load()
 		}
 	}
-	desc, ok := storeDescMap[existing]
+	desc, ok := domainMap[existing]
 	if !ok {
 		return 0, missingStatsForExistingStore
 	}
@@ -1394,12 +1398,6 @@ func bestStoreToMinimizeLoadDelta(
 	// domain defines the domain over which this function tries to minimize the
 	// load delta.
 	domain := append(candidates, existing)
-	storeDescs := make([]roachpb.StoreDescriptor, 0, len(domain))
-	for _, desc := range storeDescMap {
-		storeDescs = append(storeDescs, *desc)
-	}
-	domainStoreList := storepool.MakeStoreList(storeDescs)
-
 	bestCandidate = getCandidateWithMinLoad(storeLoadMap, candidates, dimension)
 	if bestCandidate == 0 {
 		return 0, noBetterCandidate
@@ -1411,15 +1409,18 @@ func bestStoreToMinimizeLoadDelta(
 		return 0, noBetterCandidate
 	}
 
-	// NB: The store's load and the replica's QPS aren't captured at the same
-	// time, so they may be mutually inconsistent. Thus, it is possible for
-	// the store's load captured here to be lower than the replica's load. So we
+	// NB: The store's load and the replica's load aren't captured at the same
+	// time, so they may be mutually inconsistent. Thus, it is possible for the
+	// store's load captured here to be lower than the replica's load. So we
 	// defensively use the `math.Max` here.
-	existingLoadIgnoringRepl := load.Max(load.Sub(existingLoad, replLoadValue), load.Vector{})
+	existingLoadIgnoringRepl := load.Max(
+		load.Sub(existingLoad, options.RebalanceImpact),
+		load.Vector{},
+	)
 
-	// Only proceed if the QPS difference between `existing` and
+	// Only proceed if the load difference between `existing` and
 	// `bestCandidate` (not accounting for the replica under consideration) is
-	// higher than `minQPSDifferenceForTransfers`.
+	// higher than `MinRequiredRebalanceLoadDiff`.
 	diffIgnoringRepl := load.Sub(existingLoadIgnoringRepl, bestCandLoad)
 
 	if load.Greater(options.MinRequiredRebalanceLoadDiff, diffIgnoringRepl, dimension) {
@@ -1429,7 +1430,7 @@ func bestStoreToMinimizeLoadDelta(
 	// Only proceed with rebalancing iff `existingStore` is overfull relative to
 	// the equivalence class.
 	overfullThreshold := OverfullLoadThresholds(
-		domainStoreList.LoadMeans(),
+		domainSL.LoadMeans(),
 		options.LoadThreshold,
 		options.MinLoadThreshold,
 	)
@@ -1440,31 +1441,47 @@ func bestStoreToMinimizeLoadDelta(
 		return 0, existingNotOverfull
 	}
 
-	// converge values
 	currentLoadDelta := getLoadDelta(storeLoadMap, domain, dimension)
-	// Simulate the coldest candidate's QPS after it receives a lease/replica for
+	// Simulate the coldest candidate's load after it receives a lease/replica for
 	// the range.
-	storeLoadMap[bestCandidate] = load.Add(storeLoadMap[bestCandidate], replLoadValue)
-	// Simulate the hottest existing store's QPS after it sheds the lease/replica
+	storeLoadMap[bestCandidate] = load.Add(storeLoadMap[bestCandidate], options.RebalanceImpact)
+	// Simulate the hottest existing store's load after it sheds the lease/replica
 	// away.
 	storeLoadMap[existing] = existingLoadIgnoringRepl
 
-	// NB: We proceed with a lease transfer / rebalance even if `currentQPSDelta`
+	// NB: We proceed with a lease transfer / rebalance even if `currentLoadDelta`
 	// is exactly equal to `newLoadDelta`. Consider the following example:
-	// perReplicaQPS: 10qps
-	// existingQPS: 100qps
-	// candidates: [100qps, 0qps, 0qps]
+	//
+	//   replLoadValue: 10 existingLoad: 100
+	//   domain: [100, 100, 0, 0]
+	//
+	// After transferring the replLoadValue from existingLoad to one of the
+	// stores in the domain with 0 load, the domain will be [100,90,10,0]. An
+	// improvement of -0 load delta.
 	//
 	// In such (perhaps unrealistic) scenarios, rebalancing from the existing
 	// store to the coldest store is not going to reduce the delta between all
 	// these stores, but it is still a desirable action to take.
+	//
+	// A more expected case is where there is a unique minimum or the existing
+	// store is the unique maximum. In such cases, it is guaranteed that moving
+	// replLoadValue from the existing store, to the minimum store will result in
+	// a smaller load delta. Consider the following example (the resulting state
+	// from the example above):
+	//
+	//    replLoadValue: 10 existingLoad: 90
+	//    domain: [100,90,10,0]
+	//
+	// After transferring the replLoadValue from existingLoad to the store with 0
+	// load, the domain will be [100,90,10,10] and delta=90; an improvement of
+	// -10 load delta.
 	newLoadDelta := getLoadDelta(storeLoadMap, domain, dimension)
 	if currentLoadDelta < newLoadDelta {
 		panic(
 			fmt.Sprintf(
 				"programming error: projected load delta %f higher than current delta %f;"+
 					" existing: %s, coldest candidate: %s, replica/lease: %s, dimension %s",
-				newLoadDelta, currentLoadDelta, existingLoad, bestCandLoad, replLoadValue,
+				newLoadDelta, currentLoadDelta, existingLoad, bestCandLoad, options.RebalanceImpact,
 				dimension.String(),
 			),
 		)
@@ -1486,10 +1503,9 @@ func (o *LoadScorerOptions) getRebalanceTargetToMinimizeDelta(
 		candidates = append(candidates, store.StoreID)
 	}
 	return bestStoreToMinimizeLoadDelta(
-		o.RebalanceImpact,
 		eqClass.existing.StoreID,
 		candidates,
-		domainStoreList.ToMap(),
+		domainStoreList,
 		o,
 	)
 }
