@@ -95,9 +95,10 @@ type registration struct {
 	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
-	id   int64
-	keys interval.Range
-	buf  chan *sharedEvent
+	id            int64
+	keys          interval.Range
+	buf           chan *sharedEvent
+	blockWhenFull bool // if true, block when buf is full (for tests)
 
 	mu struct {
 		sync.Locker
@@ -125,6 +126,7 @@ func newRegistration(
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	bufferSz int,
+	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
@@ -140,6 +142,7 @@ func newRegistration(
 		done:                   done,
 		unreg:                  unregisterFn,
 		buf:                    make(chan *sharedEvent, bufferSz),
+		blockWhenFull:          blockWhenFull,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
@@ -167,6 +170,22 @@ func (r *registration) publish(
 	case r.buf <- e:
 		r.mu.caughtUp = false
 	default:
+		// If we're asked to block (in tests), do a blocking send after releasing
+		// the mutex -- otherwise, the output loop won't be able to consume from the
+		// channel. We optimistically attempt the non-blocking send above first,
+		// since we're already holding the mutex.
+		if r.blockWhenFull {
+			r.mu.Unlock()
+			select {
+			case r.buf <- e:
+				r.mu.Lock()
+				r.mu.caughtUp = false
+			case <-ctx.Done():
+				r.mu.Lock()
+				alloc.Release(ctx)
+			}
+			return
+		}
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
