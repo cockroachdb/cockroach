@@ -2779,7 +2779,9 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 a CockroachDB HLC in decimal form.
 
 Note that uses of this function disable server-side optimizations and
-may increase either contention or retry errors, or both.`,
+may increase either contention or retry errors, or both.
+
+Returns an error if run in a transaction with an isolation level weaker than SERIALIZABLE.`,
 			Volatility: volatility.Volatile,
 		},
 	),

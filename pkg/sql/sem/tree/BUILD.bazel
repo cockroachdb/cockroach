@@ -125,6 +125,7 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgrepl/lsn",
@@ -204,6 +205,7 @@ go_test(
         "pretty_test.go",
         "table_name_test.go",
         "time_test.go",
+        "txn_test.go",
         "type_check_internal_test.go",
         "type_check_test.go",
         "type_name_test.go",
@@ -218,6 +220,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/internal/rsg",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
