@@ -94,11 +94,13 @@ CREATE TABLE d.t (a STRING)
 	for _, statement := range statements {
 		errCh := make(chan error)
 		go func(statement string) {
-			dbConn := serverutils.OpenDBConn(
-				t, s.AdvSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper(),
-			)
+			dbConn, err := s.ApplicationLayer().SQLConnE("")
+			if err != nil {
+				errCh <- err
+				return
+			}
 			defer dbConn.Close()
-			_, err := dbConn.Exec(statement)
+			_, err = dbConn.Exec(statement)
 			errCh <- err
 		}(statement)
 		// Block this goroutine until the worker is at the end of its query

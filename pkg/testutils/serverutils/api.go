@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"net/http"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -95,6 +96,17 @@ type ApplicationLayerInterface interface {
 
 	// RPCAddr returns the server's RPC address.
 	RPCAddr() string
+
+	// SQLConn returns a handle to the server's SQL interface.
+	// The connection is closed automatically when the server is stopped.
+	// Beware that each call returns a separate, new connection object.
+	//
+	// For the second argument use catalogkeys.DefaultDatabaseName or
+	// catconstants.SystemDatabaseName when in doubt.
+	SQLConn(t testing.TB, dbName string) *gosql.DB
+
+	// SQLConnE is like SQLConn but it allows the test to check the error.
+	SQLConnE(dbName string) (*gosql.DB, error)
 
 	// DB returns a handle to the cluster's KV interface.
 	DB() *kv.DB
