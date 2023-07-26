@@ -11,6 +11,7 @@
 package gen
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"time"
@@ -193,32 +194,53 @@ const (
 	Skewed
 )
 
-// BasicRanges implements the RangeGen interface.
-type BasicRanges struct {
+// BaseRanges provide fundamental range functionality and are embedded in
+// specialized range structs. These structs implement the RangeGen interface
+// which is then utilized to generate allocator simulation. Key structs that
+// embed BaseRanges are: BasicRanges.
+type BaseRanges struct {
 	Ranges            int
-	PlacementType     PlacementType
 	KeySpace          int
 	ReplicationFactor int
 	Bytes             int64
 }
 
-// Generate returns an updated simulator state, where the cluster is loaded
-// with ranges based on the parameters of basic ranges.
+// getRangesInfo generates and distributes ranges across stores based on
+// PlacementType while using other BaseRanges fields for range configuration.
+func (b BaseRanges) getRangesInfo(pType PlacementType, numOfStores int) state.RangesInfo {
+	switch pType {
+	case Uniform:
+		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case Skewed:
+		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	default:
+		panic(fmt.Sprintf("unexpected range placement type %v", pType))
+	}
+}
+
+// loadRangeInfo loads the given state with the specified rangesInfo.
+func (b BaseRanges) loadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
+	for _, rangeInfo := range rangesInfo {
+		rangeInfo.Size = b.Bytes
+	}
+	state.LoadRangeInfo(s, rangesInfo...)
+}
+
+// BasicRanges implements the RangeGen interface, supporting basic range info
+// distribution, including uniform and skewed distributions.
+type BasicRanges struct {
+	BaseRanges
+	PlacementType PlacementType
+}
+
+// Generate returns an updated simulator state, where the cluster is loaded with
+// ranges generated based on the parameters specified in the fields of
+// BasicRanges.
 func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
-	stores := len(s.Stores())
-	var rangesInfo state.RangesInfo
-	switch br.PlacementType {
-	case Uniform:
-		rangesInfo = state.RangesInfoEvenDistribution(stores, br.Ranges, br.KeySpace, br.ReplicationFactor, br.Bytes)
-	case Skewed:
-		rangesInfo = state.RangesInfoSkewedDistribution(stores, br.Ranges, br.KeySpace, br.ReplicationFactor, br.Bytes)
-	}
-	for _, rangeInfo := range rangesInfo {
-		rangeInfo.Size = br.Bytes
-	}
-	state.LoadRangeInfo(s, rangesInfo...)
+	rangesInfo := br.getRangesInfo(br.PlacementType, len(s.Stores()))
+	br.loadRangeInfo(s, rangesInfo)
 	return s
 }
 
