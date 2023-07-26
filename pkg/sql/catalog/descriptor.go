@@ -246,6 +246,10 @@ type Descriptor interface {
 	// in progress, either legacy or declarative.
 	HasConcurrentSchemaChanges() bool
 
+	// ConcurrentSchemaChangeJobIDs returns all in-progress schema change
+	// jobs, either legacy or declarative.
+	ConcurrentSchemaChangeJobIDs() []catpb.JobID
+
 	// SkipNamespace is true when a descriptor should not have a namespace record.
 	SkipNamespace() bool
 
