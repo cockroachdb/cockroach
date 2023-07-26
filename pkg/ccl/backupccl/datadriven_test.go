@@ -230,7 +230,7 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 	if db, ok := d.sqlDBs[key]; ok {
 		return db
 	}
-	addr := d.firstNode[name].ServingSQLAddr()
+	addr := d.firstNode[name].ApplicationLayer().ServingSQLAddr()
 	pgURL, cleanup := sqlutils.PGUrl(t, addr, "TestBackupRestoreDataDriven", url.User(user))
 	d.cleanupFns = append(d.cleanupFns, cleanup)
 

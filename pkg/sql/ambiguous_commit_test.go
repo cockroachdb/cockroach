@@ -170,7 +170,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "t")
-		tableStartKey.Store(tc.TenantOrServer(0).Codec().TablePrefix(tableID))
+		tableStartKey.Store(tc.ApplicationLayer(0).Codec().TablePrefix(tableID))
 
 		// Wait for new table to split & replication.
 		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().(roachpb.Key)); err != nil {

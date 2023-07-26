@@ -331,7 +331,7 @@ func TestUsageQuantization(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ts := s.TenantOrServer()
+	ts := s.ApplicationLayer()
 
 	// Flush the SQL stat pool.
 	ts.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)

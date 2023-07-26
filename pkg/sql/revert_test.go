@@ -45,7 +45,7 @@ func TestTableRollback(t *testing.T) {
 
 	s, sqlDB, kv := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 	codec, sv := tt.Codec(), &tt.ClusterSettings().SV
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 	sql.SecondaryTenantSplitAtEnabled.Override(ctx, sv, true)
@@ -122,7 +122,7 @@ func TestTableRollbackMultiTable(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 	codec, kvDB := tt.Codec(), tt.DB()
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 
@@ -189,7 +189,7 @@ func TestRevertSpansFanout(t *testing.T) {
 		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
 	})
 	defer tc.Stopper().Stop(context.Background())
-	s := tc.TenantOrServer(0)
+	s := tc.ApplicationLayer(0)
 	sqlDB := tc.Conns[0]
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
