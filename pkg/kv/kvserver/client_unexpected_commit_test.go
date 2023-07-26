@@ -68,12 +68,7 @@ func getJamKey(
 // succeeds prior to the original transaction's retries, an ambiguous error
 // should be raised.
 //
-// NB: This case encounters a known issue described in #103817 and seen in #67765,
-// where it currently is surfaced as an assertion failure that will result in a
-// node crash.
-//
-// TODO(sarkesian): Validate the ambiguous result error once the initial fix as
-// outlined in #103817 has been resolved.
+// NB: This case deals with a known issue described in #103817 and seen in #67765.
 func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -94,7 +89,8 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	txn1Ready := make(chan struct{})
 	txn2Ready := make(chan struct{})
 	leaseMoveReady := make(chan struct{})
-	recoverReady := make(chan struct{})
+	txn1Done := make(chan struct{})
+	receivedETRetry := make(chan struct{})
 	recoverComplete := make(chan struct{})
 	networkManipReady := make(chan struct{})
 	networkManipComplete := make(chan struct{})
@@ -144,8 +140,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	//  <transfer b's lease to n1>
 	//  txn1: reattempt failed write b (n1) and attempt to finalize transaction
 	//
-	// TODO(sarkesian): We currently see these operations, though raising
-	//  amgibuous errors will require updating this schedule of operations.
+	// We currently see these operations:
 	//  txn1->n1: Get(a)
 	//  txn1->n2: Get(b)
 	//  txn1->n1: Put(a), EndTxn(parallel commit)
@@ -153,6 +148,8 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	//  txn2->n1: Get(a)
 	//  	 _->n1: PushTxn(txn2->txn1)
 	//  <transfer b's lease to n1>
+	//  -- NB: When ambiguous errors get propagated, txn1 will end here.
+	//         When ambiguous errors are not propagated, txn1 continues with:
 	//  txn1->n1: Put(b) -- retry sees new lease start timestamp
 	//  txn1->n1: Refresh(a)
 	//  txn1->n1: Refresh(b)
@@ -204,7 +201,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 					// Ensure that txn1's post-refresh EndTxn occurs after recovery.
 					if txnName == "txn1" && ba.IsSingleEndTxnRequest() {
-						close(recoverReady)
+						close(receivedETRetry)
 						<-recoverComplete
 						t.Logf("%sEndTxn op unpaused", tags.String())
 					}
@@ -214,7 +211,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 						// Once the RecoverTxn request is issued, as part of txn2's PushTxn
 						// request, the lease can be moved.
 						close(leaseMoveReady)
-						<-recoverReady
+
+						// The RecoverTxn operation must be evaluated after txn1's Refreshes,
+						// or after txn1 completes with error.
+						select {
+						case <-receivedETRetry:
+						case <-txn1Done:
+						}
 						t.Logf("%sRecoverTxn op unpaused", tags.String())
 					}
 
@@ -436,18 +439,20 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	close(networkManipComplete)
 
 	// Await concurrent operations and validate results.
-	wg.Wait()
 	err := <-txn1ResultCh
+	t.Logf("txn1 completed with err: %+v", err)
+	close(txn1Done)
+	wg.Wait()
 
-	// TODO(sarkesian): While we expect an AmbiguousResultError once the immediate
-	//  changes outlined in #103817 are implemented, right now this is essentially
-	//  validating the existence of the bug. This needs to be fixed, and we should
-	//  expect no assertion failures here.
+	// NB: While ideally we would hope to see a successful commit
+	// without error, with the near-term solution outlined in #103817 we expect
+	// an AmbiguousResultError in this case.
+	aErr := (*kvpb.AmbiguousResultError)(nil)
 	tErr := (*kvpb.TransactionStatusError)(nil)
-	require.Truef(t, errors.HasAssertionFailure(err),
-		"expected AssertionFailedError due to sanity check on transaction already committed")
-	require.ErrorAsf(t, err, &tErr,
-		"expected TransactionStatusError due to being already committed")
-	require.Equalf(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, tErr.Reason,
-		"expected TransactionStatusError due to being already committed")
+	require.ErrorAsf(t, err, &aErr,
+		"expected ambiguous result error due to RPC error")
+	require.Falsef(t, errors.As(err, &tErr),
+		"did not expect TransactionStatusError due to being already committed")
+	require.Falsef(t, errors.HasAssertionFailure(err),
+		"expected no AssertionFailedError due to sanity check on transaction already committed")
 }

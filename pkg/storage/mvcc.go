@@ -1677,6 +1677,7 @@ func replayTransactionalWrite(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	ambiguousReplayProtection bool,
 ) error {
 	var writtenValue optionalValue
 	var err error
@@ -1761,6 +1762,22 @@ func replayTransactionalWrite(
 		return errors.AssertionFailedf("transaction %s with sequence %d has a different value %+v after recomputing from what was written: %+v",
 			txn.ID, txn.Sequence, value.RawBytes, writtenValue.RawBytes)
 	}
+
+	// If ambiguous replay protection is enabled, a replay that changes the
+	// timestamp should fail, causing the ambiguous error to be propagated.
+	if ambiguousReplayProtection && !txn.WriteTimestamp.Equal(meta.Txn.WriteTimestamp) {
+		// TODO(sarkesian): Add description to error.
+		err := errors.AssertionFailedf("transaction %s with sequence %d failed to change write timestamp "+
+			"from %s to %s due to ambiguous replay protection",
+			txn.ID, txn.Sequence, meta.Txn.WriteTimestamp, txn.WriteTimestamp)
+		errWithIssue := errors.WithIssueLink(err,
+			errors.IssueLink{
+				IssueURL: "https://github.com/cockroachdb/cockroach/issues/103817",
+				Detail:   "Detailed description TBD.",
+			})
+		return errWithIssue
+	}
+
 	return nil
 }
 
@@ -1931,7 +1948,12 @@ func mvccPutInternal(
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return false, replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, txn, valueFn)
+				replayErr := replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, txn, valueFn, true /* ambiguousReplayProtection */)
+				// TODO(sarkesian): ensure this gets logged for testing.
+				if replayErr != nil {
+					log.Warningf(ctx, "replay failed: %+v", replayErr)
+				}
+				return false, replayErr
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
