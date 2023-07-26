@@ -302,6 +302,12 @@ type ApplicationLayerInterface interface {
 		ctx context.Context, span roachpb.Span,
 	) (*serverpb.TableStatsResponse, error)
 
+	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+	//
+	// An error will be returned if the same table name exists in multiple schemas
+	// inside the specified database.
+	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.
