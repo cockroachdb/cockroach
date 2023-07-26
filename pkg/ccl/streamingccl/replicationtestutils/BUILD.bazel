@@ -43,6 +43,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_apd_v3//:apd",

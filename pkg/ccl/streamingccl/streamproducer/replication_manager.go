@@ -65,6 +65,12 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 	return completeReplicationStream(ctx, r.evalCtx, r.txn, streamID, successfulIngestion)
 }
 
+func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (*streampb.ReplicationStreamSpec, error) {
+	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
+}
+
 func newReplicationStreamManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
 ) (eval.ReplicationStreamManager, error) {
