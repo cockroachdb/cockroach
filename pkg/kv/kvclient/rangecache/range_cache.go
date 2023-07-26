@@ -585,6 +585,12 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 	if !et.Valid() {
 		panic("trying to evict an invalid token")
 	}
+	// We have new descriptors and at least one of them overlaps with and is newer
+	// than our descriptor.
+	if len(newDescs) > 0 && et.compareDescriptorsLocked(newDescs...) < 0 {
+		log.Eventf(ctx, "not evicting range descriptor since no usable replacements")
+		return
+	}
 
 	// Evict unless the cache has something newer. Regardless of what the cache
 	// has, we'll still attempt to insert newDescs (if any).
@@ -606,6 +612,45 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 		log.Eventf(ctx, "evicting cached range descriptor")
 	}
 	et.clear()
+}
+
+// See CompareDescriptors
+func (et *EvictionToken) compareDescriptorsLocked(newDescs ...roachpb.RangeInfo) int {
+	// There can be multiple descriptors in RangeKeyMismatchError. See
+	// Store.SendWithWriteBytes for when this happens.  We want to return true in
+	// case any individual descriptor would replace the descriptor we used.
+	comparison := -1
+	for _, r := range newDescs {
+		if _, err := et.Desc().RSpan().Intersect(r.Desc.RSpan()); err == nil {
+			// Allow replacement by a descriptor with the same generation, it may have
+			// different lease information. We don't know which is best, so we just
+			// use the latest info we get.
+			if r.Desc.Generation == et.Desc().Generation {
+				// We found at least one key where the generation increased.
+				comparison = 0
+			} else if r.Desc.Generation > et.Desc().Generation {
+				return 1
+			}
+		}
+	}
+	return comparison
+}
+
+// CompareDescriptors compares the descriptor in this EvictionToken to the
+// descriptors passed in and returns a value whether the new descriptors are
+// replacements for the existing descriptor. Specifically a return of negative
+// number means that the new descriptors are not a replacement, 0 means the
+// descriptors are equivalent and a positive number means that the new
+// descriptors do overlap and replace the existing descriptor. This comparison
+// is used to handle a RangeKeyMismatch error where the remote server sends a
+// descriptor back that may or may not have more up-to-date information than we
+// currently have. If the server has more up-to-date, we want to replace our
+// descriptor and retry the request while if it is older we assume the server
+// has stale information.
+func (et *EvictionToken) CompareDescriptors(newDescs ...roachpb.RangeInfo) int {
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+	return et.compareDescriptorsLocked(newDescs...)
 }
 
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
