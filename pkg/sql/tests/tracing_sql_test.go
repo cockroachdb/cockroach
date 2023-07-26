@@ -31,7 +31,7 @@ func TestSetTraceSpansVerbosityBuiltin(t *testing.T) {
 	si, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer si.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
-	tr := si.TenantOrServer().Tracer()
+	tr := si.ApplicationLayer().Tracer()
 
 	// Try to toggle the verbosity of a trace that doesn't exist, returns false.
 	// NB: Technically this could return true in the unlikely scenario that there

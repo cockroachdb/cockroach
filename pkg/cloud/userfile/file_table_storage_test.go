@@ -43,7 +43,7 @@ func TestPutUserFileTable(t *testing.T) {
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 	testSettings := s.ClusterSettings()
 
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
@@ -104,7 +104,7 @@ func TestUserScoping(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
 	db := s.InternalDB().(isql.DB)

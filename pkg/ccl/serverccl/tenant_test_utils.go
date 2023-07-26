@@ -41,7 +41,7 @@ type serverIdx int
 const RandomServer serverIdx = -1
 
 type testTenant struct {
-	tenant                   serverutils.TestTenantInterface
+	tenant                   serverutils.ApplicationLayerInterface
 	tenantConn               *gosql.DB
 	tenantDB                 *sqlutils.SQLRunner
 	tenantStatus             serverpb.SQLStatusServer
@@ -69,7 +69,7 @@ func (h *testTenant) TenantContentionRegistry() *contention.Registry {
 	return h.tenantContentionRegistry
 }
 
-func (h *testTenant) GetTenant() serverutils.TestTenantInterface {
+func (h *testTenant) GetTenant() serverutils.ApplicationLayerInterface {
 	return h.tenant
 }
 
@@ -79,7 +79,7 @@ func (h *testTenant) GetTenantDB() *gosql.DB {
 
 // TestTenant exposes an interface for testing an individual tenant
 type TestTenant interface {
-	GetTenant() serverutils.TestTenantInterface
+	GetTenant() serverutils.ApplicationLayerInterface
 	GetTenantDB() *gosql.DB
 	GetTenantConn() *sqlutils.SQLRunner
 	TenantSQLStats() *persistedsqlstats.PersistedSQLStats

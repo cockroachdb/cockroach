@@ -97,7 +97,7 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			db = sqlDB
 			defer s.Stopper().Stop(ctx)
 
-			st := s.TenantOrServer().ClusterSettings()
+			st := s.ApplicationLayer().ClusterSettings()
 			// Ensure multi-region abstractions and zone configs are enabled in secondary tenants.
 			sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &st.SV, true)
 			sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &st.SV, true)

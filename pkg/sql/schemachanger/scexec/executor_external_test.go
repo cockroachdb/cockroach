@@ -50,7 +50,7 @@ import (
 )
 
 type testInfra struct {
-	s        serverutils.TestTenantInterface
+	s        serverutils.ApplicationLayerInterface
 	nodeID   roachpb.NodeID
 	settings *cluster.Settings
 	lm       *lease.Manager
@@ -88,7 +88,7 @@ func (ti testInfra) newExecDeps(txn descs.Txn) scexec.Dependencies {
 
 func setupTestInfra(t testing.TB) (_ *testInfra, cleanup func(context.Context)) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 	return &testInfra{
 		s:        tt,
 		nodeID:   s.NodeID(),

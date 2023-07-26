@@ -67,7 +67,7 @@ func TestQueryCounts(t *testing.T) {
 	}
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.

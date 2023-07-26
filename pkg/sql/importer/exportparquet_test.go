@@ -195,7 +195,7 @@ func TestRandomParquetExports(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	var tableName string
-	idb := srv.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).InternalDB
+	idb := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
 		var (
@@ -292,7 +292,7 @@ func TestBasicParquetTypes(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	// Instantiating an internal executor to easily get datums from the table.
-	ie := srv.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
+	ie := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)

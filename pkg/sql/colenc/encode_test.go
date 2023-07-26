@@ -62,7 +62,7 @@ func TestEncoderEqualityDatums(t *testing.T) {
 
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 
 	compDec, err := tree.ParseDDecimal("-0")
 	require.NoError(t, err)
@@ -262,7 +262,7 @@ func TestEncoderEqualityRand(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		tableName := fmt.Sprintf("t%d", i)
@@ -288,7 +288,7 @@ func TestEncoderEqualityString(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 
 	for i, tc := range []struct {
 		tableDef string
@@ -349,7 +349,7 @@ func TestErrors(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
 	desc := desctestutils.TestingGetTableDescriptor(
@@ -372,7 +372,7 @@ func TestColFamDropPKNot(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING, FAMILY (s), FAMILY (i))")
 	r.Exec(t, `INSERT INTO t VALUES (123,'asdf')`)
@@ -394,7 +394,7 @@ func TestColFamilies(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, c1 INT NOT NULL, c2 INT NOT NULL, FAMILY cf1 (id, c1), FAMILY cf2(c2))")
 	desc := desctestutils.TestingGetTableDescriptor(
@@ -416,7 +416,7 @@ func TestColIDToRowIndexNull(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
 	r.Exec(t, `ALTER TABLE t DROP COLUMN s`)
@@ -444,7 +444,7 @@ func TestMissingNotNullCol(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING NOT NULL)")
 	desc := desctestutils.TestingGetTableDescriptor(
@@ -468,7 +468,7 @@ func TestMemoryQuota(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY,s string)")
@@ -518,7 +518,7 @@ func TestCheckRowSize(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_err = '2KiB'`)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
