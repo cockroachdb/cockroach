@@ -136,7 +136,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 		WallTime: intentTs.Nanoseconds(),
 	}
 	txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0)
-	require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, intentHlc, hlc.ClockTimestamp{}, value, &txn))
+	require.NoError(t, storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))
 	require.NoError(t, eng.Flush())
 
 	// Prepare test fixtures for GC run.
@@ -197,7 +197,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 		txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0)
 		for _, suffix := range objectKeys {
 			key := []byte{prefix, suffix}
-			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, intentHlc, hlc.ClockTimestamp{}, value, &txn))
+			require.NoError(t, storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))
 		}
 		require.NoError(t, eng.Flush())
 	}

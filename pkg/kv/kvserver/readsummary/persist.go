@@ -44,5 +44,5 @@ func Set(
 	sum *rspb.ReadSummary,
 ) error {
 	key := keys.RangePriorReadSummaryKey(rangeID)
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, sum)
+	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, sum, storage.MVCCWriteOptions{Stats: ms})
 }

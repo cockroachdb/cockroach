@@ -31,9 +31,15 @@ func Delete(
 	h := cArgs.Header
 	reply := resp.(*kvpb.DeleteResponse)
 
+	opts := storage.MVCCWriteOptions{
+		Txn:            h.Txn,
+		LocalTimestamp: cArgs.Now,
+		Stats:          cArgs.Stats,
+	}
+
 	var err error
 	reply.FoundKey, err = storage.MVCCDelete(
-		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn,
+		ctx, readWriter, args.Key, h.Timestamp, opts,
 	)
 	if err != nil {
 		return result.Result{}, err

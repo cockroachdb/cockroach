@@ -397,12 +397,10 @@ func TestPebbleEncryption2(t *testing.T) {
 		err = storage.MVCCPut(
 			context.Background(),
 			db,
-			nil, /* ms */
 			roachpb.Key(key),
 			hlc.Timestamp{},
-			hlc.ClockTimestamp{},
 			roachpb.MakeValueFromBytes([]byte(val)),
-			nil, /* txn */
+			storage.MVCCWriteOptions{},
 		)
 		require.NoError(t, err)
 		require.NoError(t, db.Flush())

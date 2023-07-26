@@ -60,12 +60,10 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 	if err := storage.MVCCPutProto(
 		ctx,
 		batch,
-		nil,
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
 		&ident,
+		storage.MVCCWriteOptions{},
 	); err != nil {
 		batch.Close()
 		return err

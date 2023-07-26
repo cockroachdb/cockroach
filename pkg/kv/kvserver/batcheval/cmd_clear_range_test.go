@@ -152,8 +152,8 @@ func TestCmdClearRange(t *testing.T) {
 				// Write some random point keys within the cleared span, above the range tombstones.
 				for i := 0; i < tc.keyCount; i++ {
 					key := roachpb.Key(fmt.Sprintf("%04d", i))
-					require.NoError(t, storage.MVCCPut(ctx, eng, nil, key,
-						hlc.Timestamp{WallTime: int64(4+i%2) * 1e9}, hlc.ClockTimestamp{}, value, nil))
+					require.NoError(t, storage.MVCCPut(ctx, eng, key,
+						hlc.Timestamp{WallTime: int64(4+i%2) * 1e9}, value, storage.MVCCWriteOptions{}))
 				}
 
 				// Calculate the range stats.

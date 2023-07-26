@@ -36,13 +36,19 @@ func InitPut(
 		args.FailOnTombstones = false
 	}
 
+	opts := storage.MVCCWriteOptions{
+		Txn:            h.Txn,
+		LocalTimestamp: cArgs.Now,
+		Stats:          cArgs.Stats,
+	}
+
 	var err error
 	if args.Blind {
 		err = storage.MVCCBlindInitPut(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, args.Value, args.FailOnTombstones, h.Txn)
+			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
 	} else {
 		err = storage.MVCCInitPut(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, args.Value, args.FailOnTombstones, h.Txn)
+			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
