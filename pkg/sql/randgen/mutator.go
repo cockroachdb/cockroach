@@ -735,116 +735,131 @@ func postgresCreateTableMutator(
 ) (mutated []tree.Statement, changed bool) {
 	for _, stmt := range stmts {
 		mutated = append(mutated, stmt)
-		switch stmt := stmt.(type) {
-		case *tree.CreateTable:
-			// Get all the column types first.
-			colTypes := make(map[string]*types.T)
-			for _, def := range stmt.Defs {
-				switch def := def.(type) {
-				case *tree.ColumnTableDef:
-					colTypes[string(def.Name)] = tree.MustBeStaticallyKnownType(def.Type)
-				}
-			}
+		mutatedStmt, ok := stmt.(*tree.CreateTable)
+		if !ok {
+			continue
+		}
 
-			var newdefs tree.TableDefs
-			for _, def := range stmt.Defs {
-				switch def := def.(type) {
-				case *tree.IndexTableDef:
-					// Postgres doesn't support indexes in CREATE TABLE, so split them out
-					// to their own statement.
-					var newCols tree.IndexElemList
-					for _, col := range def.Columns {
-						isBox2d := false
-						// NB: col.Column is empty for expression-based indexes.
-						if col.Expr == nil {
-							// Postgres doesn't support box2d as a btree index key.
-							colTypeFamily := colTypes[string(col.Column)].Family()
-							if colTypeFamily == types.Box2DFamily {
-								isBox2d = true
-							}
-						}
-						if isBox2d {
-							changed = true
-						} else {
-							newCols = append(newCols, col)
+		// Get all the column types first.
+		colTypes := make(map[string]*types.T)
+		for _, def := range mutatedStmt.Defs {
+			def, ok := def.(*tree.ColumnTableDef)
+			if !ok {
+				continue
+			}
+			colDefType := tree.MustBeStaticallyKnownType(def.Type)
+			colTypes[string(def.Name)] = colDefType
+		}
+
+		// - Exclude `INDEX` and `UNIQUE` table defs and hoist them into separate
+		// `CREATE INDEX` and `CREATE UNIQUE INDEX` statements because Postgres does
+		// not support them in `CREATE TABLE` stmt.
+		// - Erase `COLLATE locale` from column defs because Postgres only support
+		// double-quoted locale.
+		var newdefs tree.TableDefs
+		for _, def := range mutatedStmt.Defs {
+			switch def := def.(type) {
+			case *tree.IndexTableDef:
+				var newCols tree.IndexElemList
+				for _, col := range def.Columns {
+					isBox2d := false
+					// NB: col.Column is empty for expression-based indexes.
+					if col.Expr == nil {
+						// Postgres doesn't support box2d as a btree index key.
+						colTypeFamily := colTypes[string(col.Column)].Family()
+						if colTypeFamily == types.Box2DFamily {
+							isBox2d = true
 						}
 					}
-					if len(newCols) == 0 {
-						// Break without adding this index at all.
-						break
-					}
-					def.Columns = newCols
-					// TODO(rafi): Postgres supports inverted indexes with a different
-					// syntax than Cockroach. Maybe we could add it later.
-					// The syntax is `CREATE INDEX name ON table USING gin(column)`.
-					if !def.Inverted {
-						mutated = append(mutated, &tree.CreateIndex{
-							Name:     def.Name,
-							Table:    stmt.Table,
-							Inverted: def.Inverted,
-							Columns:  newCols,
-							Storing:  def.Storing,
-							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
-						})
+					if isBox2d {
 						changed = true
+					} else {
+						newCols = append(newCols, col)
 					}
-				case *tree.UniqueConstraintTableDef:
-					var newCols tree.IndexElemList
-					for _, col := range def.Columns {
-						isBox2d := false
-						// NB: col.Column is empty for expression-based indexes.
-						if col.Expr == nil {
-							// Postgres doesn't support box2d as a btree index key.
-							colTypeFamily := colTypes[string(col.Column)].Family()
-							if colTypeFamily == types.Box2DFamily {
-								isBox2d = true
-							}
-						}
-						if isBox2d {
-							changed = true
-						} else {
-							newCols = append(newCols, col)
-						}
-					}
-					if len(newCols) == 0 {
-						// Break without adding this index at all.
-						break
-					}
-					def.Columns = newCols
-					if def.PrimaryKey {
-						for i, col := range def.Columns {
-							// Postgres doesn't support descending PKs.
-							if col.Direction != tree.DefaultDirection {
-								def.Columns[i].Direction = tree.DefaultDirection
-								changed = true
-							}
-						}
-						if def.Name != "" {
-							// Unset Name here because constraint names cannot be shared among
-							// tables, so multiple PK constraints named "primary" is an error.
-							def.Name = ""
-							changed = true
-						}
-						newdefs = append(newdefs, def)
-						break
-					}
+				}
+				if len(newCols) == 0 {
+					// Break without adding this index at all.
+					break
+				}
+				def.Columns = newCols
+				// Hoist this IndexTableDef into a separate CreateIndex.
+				changed = true
+				// TODO(rafi): Postgres supports inverted indexes with a different
+				// syntax than Cockroach. Maybe we could add it later.
+				// The syntax is `CREATE INDEX name ON table USING gin(column)`.
+				if !def.Inverted {
 					mutated = append(mutated, &tree.CreateIndex{
 						Name:     def.Name,
-						Table:    stmt.Table,
-						Unique:   true,
+						Table:    mutatedStmt.Table,
 						Inverted: def.Inverted,
 						Columns:  newCols,
 						Storing:  def.Storing,
 						// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 					})
-					changed = true
-				default:
-					newdefs = append(newdefs, def)
 				}
+			case *tree.UniqueConstraintTableDef:
+				var newCols tree.IndexElemList
+				for _, col := range def.Columns {
+					isBox2d := false
+					// NB: col.Column is empty for expression-based indexes.
+					if col.Expr == nil {
+						// Postgres doesn't support box2d as a btree index key.
+						colTypeFamily := colTypes[string(col.Column)].Family()
+						if colTypeFamily == types.Box2DFamily {
+							isBox2d = true
+						}
+					}
+					if isBox2d {
+						changed = true
+					} else {
+						newCols = append(newCols, col)
+					}
+				}
+				if len(newCols) == 0 {
+					// Break without adding this index at all.
+					break
+				}
+				def.Columns = newCols
+				if def.PrimaryKey {
+					for i, col := range def.Columns {
+						// Postgres doesn't support descending PKs.
+						if col.Direction != tree.DefaultDirection {
+							def.Columns[i].Direction = tree.DefaultDirection
+							changed = true
+						}
+					}
+					if def.Name != "" {
+						// Unset Name here because constraint names cannot be shared among
+						// tables, so multiple PK constraints named "primary" is an error.
+						def.Name = ""
+						changed = true
+					}
+					newdefs = append(newdefs, def)
+					break
+				}
+				mutated = append(mutated, &tree.CreateIndex{
+					Name:     def.Name,
+					Table:    mutatedStmt.Table,
+					Unique:   true,
+					Inverted: def.Inverted,
+					Columns:  newCols,
+					Storing:  def.Storing,
+					// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
+				})
+				changed = true
+			case *tree.ColumnTableDef:
+				if def.Type.(*types.T).Family() == types.CollatedStringFamily {
+					def.Type = types.String
+					changed = true
+				}
+				newdefs = append(newdefs, def)
+			default:
+				newdefs = append(newdefs, def)
 			}
-			stmt.Defs = newdefs
 		}
+		mutatedStmt.Defs = newdefs
 	}
+
 	return mutated, changed
 }
 
