@@ -787,10 +787,9 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	url := c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */)
 	fullCmd := fmt.Sprintf(`COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
 		startSQLTimeout, binary, url, createScheduleCmd)
-	// Instead of using `c.ExecSQL()`, use the more flexible c.newSession(), which allows us to
+	// Instead of using `c.ExecSQL()`, use `c.runCmdOnSingleNode()`, which allows us to
 	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT.
 	// 2) run the command against the first node in the cluster target.
-	//sess := c.newSession(l, node, fullCmd, withDebugName("init-backup-schedule"))
 	res, err := c.runCmdOnSingleNode(ctx, l, node, fullCmd, defaultCmdOpts("init-backup-schedule"))
 	if err != nil || res.Err != nil {
 		out := ""
