@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql 
+spawn $argv sql --no-line-editor
 eexpect root@
 
 send "drop table if exists t;\r"
@@ -122,7 +122,7 @@ end_test
 send_eof
 eexpect eof
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 
 ## The following test can be re-enabled after fixing this issue:
