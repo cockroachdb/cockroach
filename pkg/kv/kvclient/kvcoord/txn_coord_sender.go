@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -34,12 +33,6 @@ const (
 	// OpTxnCoordSender represents a txn coordinator send operation.
 	OpTxnCoordSender = "txn coordinator send"
 )
-
-// DisableCommitSanityCheck allows opting out of a fatal assertion error that was observed in the wild
-// and for which a root cause is not yet available.
-//
-// See: https://github.com/cockroachdb/cockroach/pull/73512.
-var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMIT_SANITY_CHECK", false)
 
 // txnState represents states relating to whether an EndTxn request needs
 // to be sent.
@@ -969,13 +962,14 @@ func (tc *TxnCoordSender) updateStateLocked(
 // encounter such errors. Marking a transaction as explicitly-committed can also
 // encounter these errors, but those errors don't make it to the TxnCoordSender.
 //
-// Returns the passed-in error or fatals (depending on DisableCommitSanityCheck
-// env var), wrapping the input error in case of an assertion violation.
+// Wraps the error in case of an assertion violation, otherwise returns as-is.
 //
-// The assertion is known to have failed in the wild, see:
-// https://github.com/cockroachdb/cockroach/issues/67765
+// This checks for the occurence of a known issue involving ambiguous write
+// errors that occur alongside commits, which may race with transaction
+// recovery requests started by contending operations.
+// https://github.com/cockroachdb/cockroach/issues/103817
 func sanityCheckErrWithTxn(
-	ctx context.Context, pErrWithTxn *kvpb.Error, ba *kvpb.BatchRequest, knobs *ClientTestingKnobs,
+	ctx context.Context, pErrWithTxn *kvpb.Error, ba *kvpb.BatchRequest, _ *ClientTestingKnobs,
 ) error {
 	txn := pErrWithTxn.GetTxn()
 	if txn.Status != roachpb.COMMITTED {
@@ -988,24 +982,20 @@ func sanityCheckErrWithTxn(
 		return nil
 	}
 
-	// Finding out about our transaction being committed indicates a serious bug.
-	// Requests are not supposed to be sent on transactions after they are
-	// committed.
+	// Finding out about our transaction being committed indicates a serious but
+	// known bug. Requests are not supposed to be sent on transactions after they
+	// are committed.
 	err := errors.Wrapf(pErrWithTxn.GoError(),
 		"transaction unexpectedly committed, ba: %s. txn: %s",
 		ba, pErrWithTxn.GetTxn(),
 	)
 	err = errors.WithAssertionFailure(
 		errors.WithIssueLink(err, errors.IssueLink{
-			IssueURL: "https://github.com/cockroachdb/cockroach/issues/67765",
+			IssueURL: "https://github.com/cockroachdb/cockroach/issues/103817",
 			Detail: "you have encountered a known bug in CockroachDB, please consider " +
-				"reporting on the Github issue or reach out via Support. " +
-				"This assertion can be disabled by setting the environment variable " +
-				"COCKROACH_DISABLE_COMMIT_SANITY_CHECK=true",
+				"reporting on the Github issue or reach out via Support.",
 		}))
-	if !DisableCommitSanityCheck && !knobs.DisableCommitSanityCheck {
-		log.Fatalf(ctx, "%s", err)
-	}
+	log.Warningf(ctx, "%v", err)
 	return err
 }
 
