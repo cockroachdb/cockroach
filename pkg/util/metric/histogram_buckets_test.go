@@ -35,11 +35,11 @@ func TestHistogramBuckets(t *testing.T) {
 		return buf.String()
 	}
 
-	for category, config := range staticBucketConfigs {
-		exp := getBuckets(config)
-		buf := verifyAndPrint(t, exp, category)
+	for _, config := range StaticBucketConfigs {
+		exp := config.GetBucketsFromBucketConfig()
+		buf := verifyAndPrint(t, exp, config.category)
 
-		echotest.Require(t, buf, datapathutils.TestDataPath(t, category))
+		echotest.Require(t, buf, datapathutils.TestDataPath(t, config.category))
 	}
 
 }

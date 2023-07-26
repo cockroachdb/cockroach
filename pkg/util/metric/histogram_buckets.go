@@ -10,113 +10,132 @@
 
 package metric
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/prometheus/client_golang/prometheus"
-)
+import "github.com/prometheus/client_golang/prometheus"
 
+// staticBucketConfig describes the buckets we want to generate for a specific
+// category of metrics.
 type staticBucketConfig struct {
+	category     string
 	min          float64
 	max          float64
 	count        int
-	histType     histType
+	units        unitType
 	distribution distribution
 }
 
+// distribution describes the population distribution that best describes the
+// metric for which we record histogram data
 type distribution int
 
-// Distributions
 const (
 	Uniform distribution = iota
 	Exponential
-	// Normal
-	// LogNormal
+	// TODO(ericharmeling): add more distributions
 )
 
-type histType int
+// unitType describes the unit type of the metric for which we record
+// histogram data
+type unitType int
 
 const (
-	LATENCY histType = iota
+	LATENCY unitType = iota
 	SIZE
 	COUNT
 )
 
-// precisionTestEnabledEnv enables precision testing buckets for histograms.
-const precisionTestEnabledEnv = "COCKROACH_HISTOGRAM_PRECISION_TESTING"
-const precisionTestBucketCount = 200
+// histType describes the category of the metric for which we record
+// histogram data
+type histType int
 
-var staticBucketConfigs = map[string]staticBucketConfig{
-	"IOLatencyBuckets": {
-		min:          10e3,
-		max:          10e9,
+const (
+	IOLatencyBuckets histType = iota
+	BatchProcessLatencyBuckets
+	LongRunning60mLatencyBuckets
+	DataSize16MBBuckets
+	MemoryUsage64MBBuckets
+	ReplicaCPUTimeBuckets
+	ReplicaBatchRequestCountBuckets
+	Count1KBuckets
+	Percent100Buckets
+)
+
+var StaticBucketConfigs = map[histType]staticBucketConfig{
+	IOLatencyBuckets: {
+		category:     "IOLatencyBuckets",
+		min:          10e3, // 10µs
+		max:          10e9, // 10s
 		count:        60,
-		histType:     LATENCY,
+		units:        LATENCY,
 		distribution: Exponential,
 	},
-	"BatchProcessLatencyBuckets": {
-		min:          500e6,
-		max:          300e9,
+	BatchProcessLatencyBuckets: {
+		category:     "BatchProcessLatencyBuckets",
+		min:          500e6, // 500ms
+		max:          300e9, // 5m
 		count:        60,
-		histType:     LATENCY,
+		units:        LATENCY,
 		distribution: Exponential,
 	},
-	"LongRunning60mLatencyBuckets": {
-		min:          500e6,
-		max:          3600e9,
+	LongRunning60mLatencyBuckets: {
+		category:     "LongRunning60mLatencyBuckets",
+		min:          500e6,  // 500ms
+		max:          3600e9, // 1h
 		count:        60,
-		histType:     LATENCY,
+		units:        LATENCY,
 		distribution: Exponential,
 	},
-	"Count1KBuckets": {
-		min:          1,
-		max:          1024,
-		count:        11,
-		histType:     COUNT,
-		distribution: Exponential,
-	},
-	"Percent100Buckets": {
-		min:          0,
-		max:          100,
-		count:        10,
-		histType:     COUNT,
-		distribution: Uniform,
-	},
-	"DataSize16MBBuckets": {
-		min:          1e3,
-		max:          16384e3,
+	DataSize16MBBuckets: {
+		category:     "DataSize16MBBuckets",
+		min:          1e3,     // 1kB
+		max:          16384e3, // 16MB
 		count:        15,
-		histType:     SIZE,
+		units:        SIZE,
 		distribution: Exponential,
 	},
-	"MemoryUsage64MBBuckets": {
-		min:          1,
-		max:          64e6,
+	MemoryUsage64MBBuckets: {
+		category:     "MemoryUsage64MBBuckets",
+		min:          1,    // 1B
+		max:          64e6, // 64MB
 		count:        15,
-		histType:     SIZE,
+		units:        SIZE,
 		distribution: Exponential,
 	},
-	"ReplicaCPUTimeBuckets": {
-		min:          50e4,
-		max:          5e9,
+	ReplicaCPUTimeBuckets: {
+		category:     "ReplicaCPUTimeBuckets",
+		min:          50e4, // 500µs
+		max:          5e9,  // 5s
 		count:        20,
-		histType:     LATENCY,
+		units:        LATENCY,
 		distribution: Exponential,
 	},
-	"ReplicaBatchRequestCountBuckets": {
+	ReplicaBatchRequestCountBuckets: {
+		category:     "ReplicaBatchRequestCountBuckets",
 		min:          1,
 		max:          16e3,
 		count:        20,
-		histType:     COUNT,
+		units:        COUNT,
 		distribution: Exponential,
+	},
+	Count1KBuckets: {
+		category:     "Count1KBuckets",
+		min:          1,
+		max:          1024,
+		count:        11,
+		units:        COUNT,
+		distribution: Exponential,
+	},
+	Percent100Buckets: {
+		category:     "Percent100Buckets",
+		min:          0,
+		max:          100,
+		count:        10,
+		units:        COUNT,
+		distribution: Uniform,
 	},
 }
 
-func getBuckets(config staticBucketConfig) []float64 {
+func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 	var buckets []float64
-	if envutil.EnvOrDefaultBool(precisionTestEnabledEnv, false) {
-		config.distribution = Uniform
-		config.count = precisionTestBucketCount
-	}
 	if config.distribution == Uniform {
 		width := (config.max - config.min) / float64(config.count)
 		buckets = prometheus.LinearBuckets(config.min, width, config.count)
@@ -126,13 +145,3 @@ func getBuckets(config staticBucketConfig) []float64 {
 	}
 	return buckets
 }
-
-var IOLatencyBuckets = getBuckets(staticBucketConfigs["IOLatencyBuckets"])
-var BatchProcessLatencyBuckets = getBuckets(staticBucketConfigs["BatchProcessLatencyBuckets"])
-var LongRunning60mLatencyBuckets = getBuckets(staticBucketConfigs["LongRunning60mLatencyBuckets"])
-var Count1KBuckets = getBuckets(staticBucketConfigs["Count1KBuckets"])
-var Percent100Buckets = getBuckets(staticBucketConfigs["Percent100Buckets"])
-var DataSize16MBBuckets = getBuckets(staticBucketConfigs["DataSize16MBBuckets"])
-var MemoryUsage64MBBuckets = getBuckets(staticBucketConfigs["MemoryUsage64MBBuckets"])
-var ReplicaCPUTimeBuckets = getBuckets(staticBucketConfigs["ReplicaCPUTimeBuckets"])
-var ReplicaBatchRequestCountBuckets = getBuckets(staticBucketConfigs["ReplicaBatchRequestCountBuckets"])
