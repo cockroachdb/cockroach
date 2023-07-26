@@ -552,6 +552,34 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 	et.clear()
 }
 
+// AreOverlappingDescriptorsNewer compares the descriptor in this EvictionToken to the
+// descriptors passed in and returns a value whether the new descriptors are
+// replacements for the existing descriptor. Specifically a return of negative
+// number means that the new descriptors are not a replacement, 0 means the
+// descriptors are equivalent and a positive number means that the new
+// descriptors do overlap and replace the existing descriptor. This comparison
+// is used to handle a RangeKeyMismatch error where the remote server sends a
+// descriptor back that may or may not have more up-to-date information than we
+// currently have. If the server has more up-to-date, we want to replace our
+// descriptor and retry the request while if it is older we assume the server
+// has stale information.
+func (et *EvictionToken) AreOverlappingDescriptorsNewer(newDescs ...roachpb.RangeInfo) bool {
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+	// There can be multiple descriptors in RangeKeyMismatchError. See
+	// Store.SendWithWriteBytes for when this happens.  We want to return true if
+	// any descriptor intersects with our descriptor and is newer.
+	for _, r := range newDescs {
+		if _, err := et.Desc().RSpan().Intersect(r.Desc.RSpan()); err == nil {
+			if r.Desc.Generation > et.Desc().Generation {
+				// The spans overlap and the new descriptor has a strictly higher generation.
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
 // lease) for the range containing the given key. This is done by first trying
 // the cache, and then querying the two-level lookup table of range descriptors

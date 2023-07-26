@@ -4091,9 +4091,11 @@ func TestEvictMetaRange(t *testing.T) {
 				// 2) The SuggestedRange is not supplied and we have to an additional
 				//    lookup in meta1 to determine the correct meta2 range.
 
-				// Simulate a split.
+				// Simulate a split. This bumps the generation of the range descriptor.
 				testMeta2RangeDescriptor1.EndKey = splitKey
+				testMeta2RangeDescriptor1.Generation += 1
 				testMeta2RangeDescriptor2.StartKey = splitKey
+				testMeta2RangeDescriptor2.Generation += 1
 				isStale = false
 
 				reply := ba.CreateReply()
@@ -5495,6 +5497,196 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Test a scenario where the first replica chosen on the list is not yet aware
+// of a split and therefore returns a RangeKeyMismatchError. The client should
+// find the additional replicas that are up-to-date before terminating. This
+// happens when a follower is closest to the leader, but is lagging.
+func TestDistSenderLaggingReplicaPostSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{
+		{NodeID: 1, Address: util.UnresolvedAddr{}},
+		{NodeID: 2, Address: util.UnresolvedAddr{}},
+		{NodeID: 3, Address: util.UnresolvedAddr{}},
+	}}
+
+	var unsplitDesc = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 2,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
+		},
+	}
+	// Simulate a split at some key. Bump the generation to ensure that it is
+	// newer.
+	splitKey := keys.SystemPrefix
+	reqKey := splitKey.Next()
+	var rhsDescNew = unsplitDesc
+	rhsDescNew.Generation = 3
+	rhsDescNew.StartKey = roachpb.RKey(splitKey)
+
+	var rhsDescOld = unsplitDesc
+	rhsDescOld.Generation = 1
+	rhsDescOld.StartKey = roachpb.RKey(splitKey)
+
+	// The tests are structured to test the following descriptors which simulate
+	// either a split or a merge depending on whether it is going from unsplit to
+	// New or Old to unsplit.
+	//
+	// |------------- unsplitDesc(2) ---------|
+	// |---lhsDescOld(1)---|---rhsDescOld(1)--|
+	// |---lhsDescNew(3)---|---rhsDescNew(3)--|
+	//
+	// The main variables are what descriptor is in the cache vs what descriptor
+	// is returned by the server. Additionally, lastStoreSuccess controls whether
+	// it is the second or the third store that returns the RangeMismatchError.
+	testCases := []struct {
+		name             string
+		meta2Desc        *roachpb.RangeDescriptor
+		serverDesc       *roachpb.RangeDescriptor
+		lastStoreSuccess bool
+	}{
+		{
+			// Ignore the original error and try the next replica.
+			name:             "older desc success",
+			meta2Desc:        &rhsDescNew,
+			serverDesc:       &unsplitDesc,
+			lastStoreSuccess: true,
+		},
+		{
+			// Restart the loop when we see the new replica.
+			name:             "newer desc success",
+			meta2Desc:        &rhsDescOld,
+			serverDesc:       &unsplitDesc,
+			lastStoreSuccess: true,
+		},
+		{
+			// Use the same descriptor that is sent.
+			name:             "no change",
+			meta2Desc:        &rhsDescNew,
+			serverDesc:       &rhsDescNew,
+			lastStoreSuccess: true,
+		},
+		// The next tests cover cases where the last store is the one with the
+		// error. It doesn't make sense for meta2 to have a persistently old
+		// version as that version will loop forever.
+		{
+			// Ignore the original error and keep trying other replicas.
+			name:             "older desc fail",
+			meta2Desc:        &rhsDescNew,
+			serverDesc:       &unsplitDesc,
+			lastStoreSuccess: false,
+		},
+		{
+			// This is treated the same as no old descriptor.
+			name:             "no change fail",
+			meta2Desc:        &rhsDescNew,
+			serverDesc:       &rhsDescNew,
+			lastStoreSuccess: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Store 1 is not the leaseholder, but has the updated desc. Store 2 has the
+			// old desc. We want to make sure that Store 3 is not skipped in the loop.
+			var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+				br := &kvpb.BatchResponse{}
+				// Store 1 always returns RangeNotFoundError, it is not really necessary
+				// but is useful to requestsToLeaseholderCount the number of iterations through the stores by
+				// making sure we restart at the first store.
+				switch ba.Replica.StoreID {
+				case 1:
+					br.Error = kvpb.NewError(&kvpb.RangeNotFoundError{})
+				case 2:
+					// If the last store is sending success, then send the range key
+					// mismatch here. Otherwise, send a RangeNotFound so it will go to the
+					// next store.
+					if tc.lastStoreSuccess {
+						if tc.serverDesc != nil && tc.serverDesc.Generation != ba.ClientRangeInfo.DescriptorGeneration {
+							br.Error = kvpb.NewError(kvpb.NewRangeKeyMismatchError(ctx, reqKey, reqKey, tc.serverDesc, nil))
+						} else {
+							br.Error = kvpb.NewError(&kvpb.RangeNotFoundError{})
+						}
+					} else {
+						br.Error = kvpb.NewError(&kvpb.RangeNotFoundError{})
+					}
+				case 3:
+					if tc.lastStoreSuccess {
+						br = ba.CreateReply()
+					} else {
+						// Have the last store return an error. This tests the case
+						// where we don't have any successful results and need to return
+						// some error even if we don't keep it. If they send our current
+						// descriptor, then it can't be a range mismatch, instead just
+						// return a range not found error.
+						if tc.serverDesc != nil && tc.serverDesc.Generation != ba.ClientRangeInfo.DescriptorGeneration {
+							br.Error = kvpb.NewError(kvpb.NewRangeKeyMismatchError(ctx, reqKey, reqKey, tc.serverDesc, nil))
+						} else {
+							br.Error = kvpb.NewError(&kvpb.RangeNotFoundError{})
+						}
+					}
+				default:
+					require.Fail(t, "Invalid store in request %v", ba)
+				}
+				return br, nil
+			}
+
+			cfg := DistSenderConfig{
+				Stopper:          stopper,
+				AmbientCtx:       log.MakeTestingAmbientCtxWithNewTracer(),
+				Clock:            clock,
+				NodeDescs:        ns,
+				TransportFactory: adaptSimpleTransport(transportFn),
+				RPCRetryOptions: &retry.Options{
+					MaxRetries: 1,
+				},
+				RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+					[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+				) {
+					return []roachpb.RangeDescriptor{*tc.meta2Desc}, nil, nil
+				}),
+				TestingKnobs: ClientTestingKnobs{
+					DontReorderReplicas: true,
+				},
+				Settings: cluster.MakeTestingClusterSettings(),
+			}
+
+			ds := NewDistSender(cfg)
+			ba := &kvpb.BatchRequest{}
+			ba.Add(kvpb.NewGet(reqKey))
+
+			// Send once, this will hit the range mismatch error, but should succeed.
+			{
+				_, err := ds.Send(ctx, ba)
+				if tc.lastStoreSuccess {
+					require.NoError(t, err.GoError())
+				} else {
+					require.Error(t, err.GoError())
+				}
+			}
+
+			// Send one more time to make sure we succeed immediately.
+			{
+				_, err := ds.Send(ctx, ba)
+				if tc.lastStoreSuccess {
+					require.NoError(t, err.GoError())
+				} else {
+					require.Error(t, err.GoError())
+				}
+			}
+		})
 	}
 }
 

@@ -2543,6 +2543,13 @@ func (ds *DistSender) sendToReplicas(
 			case *kvpb.StoreNotFoundError, *kvpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
+			case *kvpb.RangeKeyMismatchError:
+				// If the error has strictly more up-to-date information than what we
+				// currently know about this range, then stop looping, update our cache
+				// and retry, otherwise we keep trying additional stores.
+				if routing.AreOverlappingDescriptorsNewer(tErr.Ranges...) {
+					return br, nil
+				}
 			case *kvpb.RangeNotFoundError:
 				// The store we routed to doesn't have this replica. This can happen when
 				// our descriptor is outright outdated, but it can also be caused by a
