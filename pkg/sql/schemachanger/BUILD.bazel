@@ -57,7 +57,6 @@ go_test(
         "//pkg/sql/sqltestutils",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/ctxgroup",
