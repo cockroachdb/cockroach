@@ -906,6 +906,13 @@ func (t *TestTenant) TracerI() interface{} {
 	return t.Tracer()
 }
 
+// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) ForceTableGC(
+	ctx context.Context, database, table string, timestamp hlc.Timestamp,
+) error {
+	return internalForceTableGC(ctx, t, database, table, timestamp)
+}
+
 // SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
 func (t *TestTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
@@ -1856,30 +1863,25 @@ func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
-// ForceTableGC is part of the serverutils.TestServerInterface.
+// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
 func (ts *TestServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	tableIDQuery := `
- SELECT tables.id FROM system.namespace tables
-   JOIN system.namespace dbs ON dbs.id = tables."parentID"
-   WHERE dbs.name = $1 AND tables.name = $2
- `
-	row, err := ts.sqlServer.internalExecutor.QueryRowEx(
-		ctx, "resolve-table-id", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
-		tableIDQuery, database, table)
+	return internalForceTableGC(ctx, ts.SystemLayer(), database, table, timestamp)
+}
+
+func internalForceTableGC(
+	ctx context.Context,
+	app serverutils.ApplicationLayerInterface,
+	database, table string,
+	timestamp hlc.Timestamp,
+) error {
+	tableID, err := app.QueryTableID(ctx, username.RootUserName(), database, table)
 	if err != nil {
 		return err
 	}
-	if row == nil {
-		return errors.Errorf("table not found")
-	}
-	if len(row) != 1 {
-		return errors.AssertionFailedf("expected 1 column from internal query")
-	}
-	tableID := uint32(*row[0].(*tree.DInt))
-	tblKey := keys.SystemSQLCodec.TablePrefix(tableID)
+
+	tblKey := app.Codec().TablePrefix(uint32(tableID))
 	gcr := kvpb.GCRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key:    tblKey,
@@ -1887,7 +1889,7 @@ func (ts *TestServer) ForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	_, pErr := kv.SendWrapped(ctx, ts.distSender, &gcr)
+	_, pErr := kv.SendWrapped(ctx, app.DistSenderI().(kv.Sender), &gcr)
 	return pErr.GoError()
 }
 
