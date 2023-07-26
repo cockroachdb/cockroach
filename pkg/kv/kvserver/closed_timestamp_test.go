@@ -1215,6 +1215,8 @@ func setupClusterForClosedTSTesting(
 	clusterArgs base.TestClusterArgs,
 	dbName, tableName string,
 ) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
+	require.Equal(t, base.ReplicationManual, clusterArgs.ReplicationMode)
+
 	const numNodes = 3
 	if sideTransportInterval == 0 {
 		sideTransportInterval = targetDuration / 4
