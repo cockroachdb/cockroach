@@ -47,6 +47,29 @@ func roachtestPrefix(p string) string {
 	return "ROACHTEST_" + p
 }
 
+// generateHelpCommand creates a HelpCommand for createPostRequest
+func generateHelpCommand(
+	clusterName string, start time.Time, end time.Time,
+) func(renderer *issues.Renderer) {
+	return func(renderer *issues.Renderer) {
+		issues.HelpCommandAsLink(
+			"roachtest README",
+			"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
+		)(renderer)
+		issues.HelpCommandAsLink(
+			"How To Investigate (internal)",
+			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
+		)(renderer)
+		// An empty clusterName corresponds to a cluster creation failure
+		if clusterName != "" {
+			issues.HelpCommandAsLink(
+				"Grafana",
+				fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
+			)(renderer)
+		}
+	}
+}
+
 // postIssueCondition encapsulates a condition that causes issue
 // posting to be skipped. The `reason` field contains a textual
 // description as to why issue posting was skipped.
@@ -111,6 +134,7 @@ func (g *githubIssues) createPostRequest(
 
 	issueOwner := spec.Owner
 	issueName := testName
+	issueClusterName := ""
 
 	messagePrefix := ""
 	// Overrides to shield eng teams from potential flakes
@@ -178,6 +202,7 @@ func (g *githubIssues) createPostRequest(
 			// N.B. when Arch is specified, it cannot differ from cluster's arch.
 			// Hence, we only emit when arch was unspecified.
 			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
+			issueClusterName = g.cluster.name
 		}
 	}
 
@@ -190,16 +215,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
-		HelpCommand: func(renderer *issues.Renderer) {
-			issues.HelpCommandAsLink(
-				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
-			)(renderer)
-			issues.HelpCommandAsLink(
-				"How To Investigate (internal)",
-				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
-			)(renderer)
-		},
+		HelpCommand:     generateHelpCommand(issueClusterName, start, end),
 	}, nil
 }
 
