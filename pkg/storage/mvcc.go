@@ -1610,6 +1610,7 @@ func replayTransactionalWrite(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	replayWriteTimestampProtection bool,
 ) error {
 	var writtenValue optionalValue
 	var err error
@@ -1695,6 +1696,14 @@ func replayTransactionalWrite(
 			txn.ID, txn.Sequence, value.RawBytes, writtenValue.RawBytes)
 	}
 
+	// If ambiguous replay protection is enabled, a replay that changes the
+	// timestamp should fail, as this would break idempotency (see #103817).
+	if replayWriteTimestampProtection && !txn.WriteTimestamp.Equal(meta.Txn.WriteTimestamp) {
+		return errors.Errorf("transaction %s with sequence %d prevented from changing "+
+			"write timestamp from %s to %s due to ambiguous replay protection",
+			txn.ID, txn.Sequence, meta.Txn.WriteTimestamp, txn.WriteTimestamp)
+	}
+
 	return nil
 }
 
@@ -1764,6 +1773,9 @@ func mvccPutInternal(
 	}
 	if !value.Timestamp.IsEmpty() {
 		return false, errors.Errorf("cannot have timestamp set in value")
+	}
+	if err := opts.validate(); err != nil {
+		return false, err
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
@@ -1860,7 +1872,7 @@ func mvccPutInternal(
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return false, replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, opts.Txn, valueFn)
+				return false, replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, opts.Txn, valueFn, opts.ReplayWriteTimestampProtection)
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
@@ -3851,9 +3863,17 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 // MVCCWriteOptions bundles options for the MVCCPut and MVCCDelete families of functions.
 type MVCCWriteOptions struct {
 	// See the comment on mvccPutInternal for details on these parameters.
-	Txn            *roachpb.Transaction
-	LocalTimestamp hlc.ClockTimestamp
-	Stats          *enginepb.MVCCStats
+	Txn                            *roachpb.Transaction
+	LocalTimestamp                 hlc.ClockTimestamp
+	Stats                          *enginepb.MVCCStats
+	ReplayWriteTimestampProtection bool
+}
+
+func (opts *MVCCWriteOptions) validate() error {
+	if opts.ReplayWriteTimestampProtection && opts.Txn == nil {
+		return errors.Errorf("cannot enable replay protection without a transaction")
+	}
+	return nil
 }
 
 // MVCCScanOptions bundles options for the MVCCScan family of functions.
