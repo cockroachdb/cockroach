@@ -109,16 +109,21 @@ func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
 type TestServerInterface interface {
-	ApplicationLayerInterface
-	StorageLayerInterface
 	TenantControlInterface
 	Start(context.Context) error
 
-	// TenantOrServer returns the default test tenant, if it was started
-	// or this server if not.
-	//
-	// TODO(knz): Rename to ApplicationLayer()
-	TenantOrServer() ApplicationLayerInterface
+	// ApplicationLayer returns the interface to the application layer that is
+	// exercised by the test. Depending on how the test server is started
+	// and (optionally) randomization, this can be either the SQL layer
+	// of a secondary tenant or that of the system tenant.
+	ApplicationLayer() ApplicationLayerInterface
+
+	// SystemLayer returns the interface to the application layer
+	// of the system tenant.
+	SystemLayer() ApplicationLayerInterface
+
+	// StorageLayer returns the interface to the storage layer.
+	StorageLayer() StorageLayerInterface
 }
 
 // TenantControlInterface defines the API of a test server that can
