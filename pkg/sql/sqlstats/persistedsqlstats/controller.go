@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Controller implements the SQL Stats subsystem control plane. This exposes
@@ -27,8 +28,9 @@ import (
 // subsystem.
 type Controller struct {
 	*sslocal.Controller
-	db isql.DB
-	st *cluster.Settings
+	db        isql.DB
+	st        *cluster.Settings
+	clusterID func() uuid.UUID
 }
 
 // NewController returns a new instance of sqlstats.Controller.
@@ -39,6 +41,7 @@ func NewController(
 		Controller: sslocal.NewController(sqlStats.SQLStats, status),
 		db:         db,
 		st:         sqlStats.cfg.Settings,
+		clusterID:  sqlStats.cfg.ClusterID,
 	}
 }
 
@@ -46,7 +49,7 @@ func NewController(
 // interface.
 func (s *Controller) CreateSQLStatsCompactionSchedule(ctx context.Context) error {
 	return s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, s.st)
+		_, err := CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, s.st, s.clusterID())
 		return err
 	})
 }
