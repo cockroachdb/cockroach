@@ -66,14 +66,20 @@ func (t *TestURL) WithPath(path string) *TestURL {
 	return t
 }
 
-// TestTenantInterface defines SQL-only tenant functionality that tests need; it
-// is implemented by server.Test{Tenant,Server}. Tests written against this
-// interface are effectively agnostic to the type of tenant (host or secondary)
-// they're dealing with.
-type TestTenantInterface interface {
+// ApplicationLayerInterface defines accessors to the application
+// layer of a test server. Tests written against this interface are
+// effectively agnostic to whether they use a secondary tenant or not.
+// This interface is implemented by server.Test{Tenant,Server}.
+type ApplicationLayerInterface interface {
 	// SQLInstanceID is the ephemeral ID assigned to a running instance of the
 	// SQLServer. Each tenant can have zero or more running SQLServer instances.
 	SQLInstanceID() base.SQLInstanceID
+
+	// ServingRPCAddr returns the server's advertised address.
+	ServingRPCAddr() string
+
+	// ServingSQLAddr returns the server's advertised SQL address.
+	ServingSQLAddr() string
 
 	// SQLAddr returns the tenant's SQL address. Note that for "shared-process
 	// tenants" (i.e. tenants created with TestServer.StartSharedProcessTenant),
@@ -120,6 +126,19 @@ type TestTenantInterface interface {
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
+	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
+	// server's executor. The argument must be a physicalplan.SpanResolver
+	// instance.
+	//
+	// This method exists because we cannot pass the fake span resolver with the
+	// server or cluster params: the fake span resolver needs the node IDs and
+	// addresses of the servers in a cluster, which are not available before we
+	// start the servers.
+	//
+	// It is the caller's responsibility to make sure no queries are being run
+	// with DistSQL at the same time.
+	SetDistSQLSpanResolver(spanResolver interface{})
+
 	// DistSenderI returns the *kvcoord.DistSender as an interface{}.
 	DistSenderI() interface{}
 
@@ -129,6 +148,9 @@ type TestTenantInterface interface {
 	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
 	// also implements isql.Executor if the test cannot depend on sql).
 	InternalExecutor() interface{}
+
+	// LeaseManager returns the *sql.LeaseManager as an interface{}.
+	LeaseManager() interface{}
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
@@ -253,6 +275,12 @@ type TestTenantInterface interface {
 	// MigrationServer returns the tenant's migration server, which is used in
 	// upgrade testing.
 	MigrationServer() interface{}
+
+	// CollectionFactory returns a *descs.CollectionFactory.
+	CollectionFactory() interface{}
+
+	// SystemTableIDResolver returns a catalog.SystemTableIDResolver.
+	SystemTableIDResolver() interface{}
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
