@@ -2293,6 +2293,8 @@ func (ds *DistSender) sendToReplicas(
 				return nil, err
 			}
 
+			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+
 			// For most connection errors, we cannot tell whether or not the request
 			// may have succeeded on the remote server (exceptions are captured in the
 			// grpcutil.RequestDidNotStart function). We'll retry the request in order
@@ -2310,10 +2312,6 @@ func (ds *DistSender) sendToReplicas(
 			// ambiguity.
 			// 2) SQL recognizes AmbiguousResultErrors and gives them a special code
 			// (StatementCompletionUnknown).
-			// TODO(andrei): The use of this code is inconsistent because a) the
-			// DistSender tries to only return the code for commits, but it'll happily
-			// forward along AmbiguousResultErrors coming from the replica and b) we
-			// probably should be returning that code for non-commit statements too.
 			//
 			// We retry requests in order to avoid returning errors (in particular,
 			// AmbiguousResultError). Retrying the batch will either:
@@ -2342,8 +2340,13 @@ func (ds *DistSender) sendToReplicas(
 			//
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
+
+				// If this partial batch does not contain the EndTxn request, we need
+				// to ensure the ambiguous error is propagated to handle #103817.
+				if _, ok := ba.GetArg(kvpb.EndTxn); !ok {
+					return nil, kvpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
+				}
 			}
-			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 
 			// If the error wasn't just a context cancellation and the down replica
 			// is cached as the lease holder, evict it. The only other eviction
