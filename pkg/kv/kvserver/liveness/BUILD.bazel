@@ -51,6 +51,7 @@ go_test(
     embed = [":liveness"],
     deps = [
         "//pkg/base",
+        "//pkg/gossip",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/liveness/livenesspb",
@@ -69,6 +70,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

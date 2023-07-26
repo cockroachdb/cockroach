@@ -494,7 +494,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientCtx:              cfg.AmbientCtx,
 		Stopper:                 stopper,
 		Clock:                   clock,
-		DB:                      db,
+		Storage:                 liveness.NewKVStorage(db),
 		Gossip:                  g,
 		LivenessThreshold:       nlActive,
 		RenewalDuration:         nlRenewal,

@@ -859,8 +859,7 @@ func (s *Store) updateLivenessMap() {
 		// will continually probe the connection. The check can also have false
 		// positives if the node goes down after populating the map, but that
 		// matters even less.
-		entry.IsLive = !s.TestingKnobs().DisableLivenessMapConnHealth &&
-			(s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
+		entry.IsLive = s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil
 		nextMap[nodeID] = entry
 	}
 	s.livenessMap.Store(nextMap)

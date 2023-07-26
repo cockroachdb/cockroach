@@ -355,63 +355,26 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	manualClock := hlc.NewHybridManualClock()
-	expected := manualClock.UnixNano()
-	tc := testcluster.StartTestCluster(t, 3,
+	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						WallClock: manualClock,
-					},
-				},
-			},
 		})
 	defer tc.Stopper().Stop(ctx)
 
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, tc)
-	pauseNodeLivenessHeartbeatLoops(tc)
 
 	// Verify that last update time has been set for all nodes.
-	verifyUptimes := func() error {
+	verifyUptimes := func() {
 		for i := range tc.Servers {
 			s := tc.GetFirstStoreFromServer(t, i)
 			uptm, err := s.ReadLastUpTimestamp(context.Background())
-			if err != nil {
-				return errors.Wrapf(err, "error reading last up time from store %d", i)
-			}
-			if a, e := uptm.WallTime, expected; a < e {
-				return errors.Errorf("store %d last uptime = %d; wanted %d", i, a, e)
-			}
-		}
-		return nil
-	}
-
-	if err := verifyUptimes(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Advance clock past the liveness threshold and force a manual heartbeat on
-	// all node liveness objects, which should update the last up time for each
-	// store.
-	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingGetLivenessThreshold().Nanoseconds() + 1)
-	expected = manualClock.UnixNano()
-	for _, s := range tc.Servers {
-		nl := s.NodeLiveness().(*liveness.NodeLiveness)
-		l, ok := nl.Self()
-		assert.True(t, ok)
-		if err := nl.Heartbeat(context.Background(), l); err != nil {
-			t.Fatal(err)
+			require.NoError(t, err)
+			require.NotZero(t, uptm)
 		}
 	}
-	// NB: since the heartbeat callback is invoked synchronously in
-	// `Heartbeat()` which this goroutine invoked, we don't need to wrap this in
-	// a retry.
-	if err := verifyUptimes(); err != nil {
-		t.Fatal(err)
-	}
+
+	verifyUptimes()
 }
 
 // TestNodeLivenessEpochIncrement verifies that incrementing the epoch

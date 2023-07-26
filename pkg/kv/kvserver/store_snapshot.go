@@ -990,10 +990,10 @@ func (s *Store) getLocalityComparison(
 	secLocality := s.cfg.StorePool.GetNodeLocality(toNodeID)
 	comparisonResult, regionErr, zoneErr := firstLocality.CompareWithLocality(secLocality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
 	}
 	return comparisonResult
 }

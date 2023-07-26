@@ -2042,6 +2042,7 @@ func shouldCampaignOnWake(
 	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	requiresExpirationLease bool,
+	now hlc.Timestamp,
 ) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
@@ -2081,7 +2082,12 @@ func shouldCampaignOnWake(
 	if !ok {
 		return false
 	}
-	return !livenessEntry.IsLive
+	// NB: we intentionally do not look at the IsLiveMapEntry.IsLive field, which
+	// accounts for whether the leader is reachable from this node (see
+	// Store.updateLivenessMap). We only care whether the leader is currently live
+	// according to node liveness because this determines whether it will be able
+	// to hold an epoch-based lease.
+	return !livenessEntry.Liveness.IsLive(now)
 }
 
 // maybeCampaignOnWakeLocked is called when the replica wakes from a quiesced
@@ -2108,10 +2114,12 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		return
 	}
 
-	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
+	now := r.store.Clock().NowAsClockTimestamp()
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpirationLeaseRLocked()) {
+	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(),
+		r.requiresExpirationLeaseRLocked(), now.ToTimestamp()) {
 		r.campaignLocked(ctx)
 	}
 }
@@ -2144,13 +2152,17 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 func (r *Replica) maybeForgetLeaderOnVoteRequestLocked() {
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	if shouldForgetLeaderOnVoteRequest(raftStatus, livenessMap, r.descRLocked()) {
+	now := r.store.Clock().Now()
+	if shouldForgetLeaderOnVoteRequest(raftStatus, livenessMap, r.descRLocked(), now) {
 		r.forgetLeaderLocked(r.AnnotateCtx(context.TODO()))
 	}
 }
 
 func shouldForgetLeaderOnVoteRequest(
-	raftStatus raft.BasicStatus, livenessMap livenesspb.IsLiveMap, desc *roachpb.RangeDescriptor,
+	raftStatus raft.BasicStatus,
+	livenessMap livenesspb.IsLiveMap,
+	desc *roachpb.RangeDescriptor,
+	now hlc.Timestamp,
 ) bool {
 	// If we're not a follower with a leader, there's noone to forget.
 	if raftStatus.RaftState != raft.StateFollower || raftStatus.Lead == raft.None {
@@ -2171,7 +2183,13 @@ func shouldForgetLeaderOnVoteRequest(
 	}
 
 	// Forget the leader if it's no longer live.
-	return !livenessEntry.IsLive
+	//
+	// NB: we intentionally do not look at the IsLiveMapEntry.IsLive field, which
+	// accounts for whether the leader is reachable from this node (see
+	// Store.updateLivenessMap). We only care whether the leader is currently live
+	// according to node liveness because this determines whether it will be able
+	// to hold an epoch-based lease.
+	return !livenessEntry.Liveness.IsLive(now)
 }
 
 // shouldCampaignOnLeaseRequestRedirect returns whether a replica that is
