@@ -872,6 +872,15 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (desc *immutable) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	return ret
+}
+
 // SkipNamespace implements the descriptor interface.
 func (desc *immutable) SkipNamespace() bool {
 	return false

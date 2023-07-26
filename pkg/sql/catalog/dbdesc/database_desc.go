@@ -466,6 +466,15 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (desc *immutable) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
+	if desc.DeclarativeSchemaChangerState != nil &&
+		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID {
+		ret = append(ret, desc.DeclarativeSchemaChangerState.JobID)
+	}
+	return ret
+}
+
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
