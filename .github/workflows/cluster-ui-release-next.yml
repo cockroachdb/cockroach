@@ -6,7 +6,6 @@ on:
       - master
     paths:
       - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
-      - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
       - 'pkg/ui/workspaces/cluster-ui/package.json'
 
 jobs:
