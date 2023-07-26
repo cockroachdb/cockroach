@@ -1116,7 +1116,9 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -1245,8 +1247,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
-	cargs := aggressiveResolvedTimestampClusterArgs
-	cargs.ReplicationMode = base.ReplicationManual
+	cargs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	manualClock := hlc.NewHybridManualClock()
 	cargs.ServerArgs = base.TestServerArgs{
 		Settings: st,
@@ -1430,8 +1431,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 
 	var timeoutSimulated bool
 
-	cargs := aggressiveResolvedTimestampClusterArgs
-	cargs.ReplicationMode = base.ReplicationManual
+	cargs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	manualClock := hlc.NewHybridManualClock()
 	cargs.ServerArgs = base.TestServerArgs{
 		Knobs: base.TestingKnobs{
