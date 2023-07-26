@@ -1387,20 +1387,8 @@ func (ts *TestServer) HostSQLAddr() string {
 }
 
 // ServingSQLAddr returns the server's SQL address. Should be used by clients.
-// If a test tenant is started, return the first test tenant's address.
 func (ts *TestServer) ServingSQLAddr() string {
-	if len(ts.testTenants) == 0 {
-		return ts.cfg.SQLAdvertiseAddr
-	}
-	if len(ts.testTenants) != 1 {
-		// If the number of test tenants is not equal to 1, it's not clear what
-		// to return here. This isn't currently possible, but panic here to
-		// alert anyone down the road who changes the number of default test
-		// tenants to the fact that they'll need to reconsider this function
-		// along with their change.
-		panic(fmt.Sprintf("invalid number of test SQL servers %d", len(ts.testTenants)))
-	}
-	return ts.testTenants[0].SQLAddr()
+	return ts.cfg.SQLAdvertiseAddr
 }
 
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
