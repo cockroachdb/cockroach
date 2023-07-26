@@ -306,7 +306,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
 				ctx, eng, nil, key, endKey, ts, localTS, nil, nil, false, 0, nil))
 		} else {
-			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, ts, localTS, value, nil))
+			require.NoError(t, storage.MVCCPut(ctx, eng, key, ts, value, storage.MVCCWriteOptions{LocalTimestamp: localTS}))
 		}
 
 		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
