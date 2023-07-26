@@ -82,7 +82,7 @@ func TestRangesResponse(t *testing.T) {
 		rpcStopper := stop.NewStopper()
 		defer rpcStopper.Stop(ctx)
 
-		conn, err := ts.RPCContext().GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+		conn, err := ts.RPCContext().GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +119,7 @@ func TestTenantRangesResponse(t *testing.T) {
 		rpcStopper := stop.NewStopper()
 		defer rpcStopper.Stop(ctx)
 
-		conn, err := ts.RPCContext().GRPCDialNode(ts.ServingRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+		conn, err := ts.RPCContext().GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

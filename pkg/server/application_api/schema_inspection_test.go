@@ -312,7 +312,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
+				t, s.AdvSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
 			defer cleanupGoDB()
 			pgURL.Path = tc.dbName
 			db, err := gosql.Open("postgres", pgURL.String())

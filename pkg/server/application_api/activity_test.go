@@ -112,7 +112,7 @@ func TestListActivitySecurity(t *testing.T) {
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
 	rpcContext := srvtestutils.NewRPCTestContext(ctx, ts, rootConfig)
-	url := ts.ServingRPCAddr()
+	url := ts.AdvRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {

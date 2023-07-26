@@ -60,7 +60,7 @@ func (h *Handle) SetSQLDBForUser(tenantID roachpb.TenantID, user string) func() 
 		return resetToRootUser
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(h.t, h.tc.Server(0).ServingSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(h.t, h.tc.Server(0).AdvSQLAddr(),
 		"TestBackupRestoreDataDriven", url.User(user))
 	userSQLDB, err := gosql.Open("postgres", pgURL.String())
 	require.NoError(h.t, err)

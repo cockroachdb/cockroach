@@ -971,7 +971,7 @@ func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 
 	th.sqlDB.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, th.server.ApplicationLayer().ServingSQLAddr(),
+		t, th.server.ApplicationLayer().AdvSQLAddr(),
 		"TestCreateSchedule-testuser", url.User("testuser"),
 	)
 	defer cleanupFunc()

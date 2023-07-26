@@ -326,7 +326,7 @@ func TestConnMessageTooBig(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestBigClientMessage",
 		url.User(username.RootUser),
 	)
@@ -922,7 +922,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+			t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 		)
 		defer cleanupFunc()
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -997,7 +997,7 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
@@ -1213,7 +1213,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 		require.Equal(t, `16384`, size)
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	q := pgURL.Query()
 
@@ -1297,7 +1297,7 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 
 	// We're going to open a client connection and do the minimum so that the
 	// server gets to the authentication phase, where it will block.
-	conn, err := net.Dial("tcp", s.ServingSQLAddr())
+	conn, err := net.Dial("tcp", s.AdvSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1725,7 +1725,7 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			pgURL, cleanupFunc := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
+				t, s.AdvSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
 			)
 			defer cleanupFunc()
 
@@ -1754,7 +1754,7 @@ func TestSetSessionArguments(t *testing.T) {
 	defer db.Close()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 
@@ -1836,7 +1836,7 @@ func TestRoleDefaultSettings(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User("testuser"),
+		t, s.AdvSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User("testuser"),
 	)
 	defer cleanupFunc()
 
@@ -1955,7 +1955,7 @@ func TestRoleDefaultSettings(t *testing.T) {
 			pgURLCopy := pgURL
 			if tc.userOverride != "" {
 				newPGURL, cleanupFunc := sqlutils.PGUrl(
-					t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User(tc.userOverride),
+					t, s.AdvSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User(tc.userOverride),
 				)
 				defer cleanupFunc()
 				pgURLCopy = newPGURL
@@ -2003,7 +2003,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	openConnWithUser := func(user string) (*pgx.Conn, func(), error) {
 		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
 			t,
-			testServer.ServingSQLAddr(),
+			testServer.AdvSQLAddr(),
 			t.Name(),
 			url.UserPassword(user, user),
 			user == rootUser,
@@ -2211,7 +2211,7 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	before := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	values := pgURL.Query()
 	values.Add("options", "c sadsad=") // invalid client-provided session param

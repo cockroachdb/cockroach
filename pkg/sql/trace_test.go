@@ -324,7 +324,7 @@ func TestTrace(t *testing.T) {
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
 							pgURL, cleanup := sqlutils.PGUrl(
-								t, cluster.Server(i).ServingSQLAddr(), "TestTrace", url.User(username.RootUser))
+								t, cluster.Server(i).AdvSQLAddr(), "TestTrace", url.User(username.RootUser))
 							defer cleanup()
 							q := pgURL.Query()
 							// This makes it easier to test with the `tracing` sesssion var.

@@ -423,7 +423,7 @@ func TestJobStatusResponse(t *testing.T) {
 	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
 	rpcContext := srvtestutils.NewRPCTestContext(context.Background(), ts.(*server.TestServer), rootConfig)
 
-	url := ts.ServingRPCAddr()
+	url := ts.AdvRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {

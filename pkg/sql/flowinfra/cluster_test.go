@@ -273,7 +273,7 @@ func TestClusterFlow(t *testing.T) {
 		s := tc.Server(i)
 		servers[i] = s
 		conns[i] = tc.ServerConn(i)
-		conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
+		conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -775,7 +775,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					ctx := context.Background()
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
-						conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
+						conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
 						if err != nil {
 							b.Fatal(err)
 						}

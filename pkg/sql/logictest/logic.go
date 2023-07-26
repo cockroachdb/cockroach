@@ -1197,7 +1197,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int) *gosql.DB {
 		pgURL.Host = net.JoinHostPort("127.0.0.1", port)
 		pgURL.User = url.User(pgUser)
 	} else {
-		addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
+		addr := t.cluster.Server(nodeIdx).AdvSQLAddr()
 		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
 			addr = t.tenantAddrs[nodeIdx]
 		}

@@ -438,9 +438,9 @@ func TestListenerFileCreation(t *testing.T) {
 
 	li := listenerInfo{
 		listenRPC:    s.RPCAddr(),
-		advertiseRPC: s.ServingRPCAddr(),
+		advertiseRPC: s.AdvRPCAddr(),
 		listenSQL:    s.SQLAddr(),
-		advertiseSQL: s.ServingSQLAddr(),
+		advertiseSQL: s.AdvSQLAddr(),
 		listenHTTP:   s.HTTPAddr(),
 	}
 	expectedFiles := li.Iter()
@@ -1064,7 +1064,7 @@ func TestSQLDecommissioned(t *testing.T) {
 		require.True(t, ok, "expected gRPC status error, got %T: %s", err, err)
 		require.Equal(t, codes.PermissionDenied, s.Code())
 
-		sqlClient, err := serverutils.OpenDBConnE(decomSrv.ServingSQLAddr(), "", true, tc.Stopper())
+		sqlClient, err := serverutils.OpenDBConnE(decomSrv.AdvSQLAddr(), "", true, tc.Stopper())
 		require.NoError(t, err)
 
 		var result int

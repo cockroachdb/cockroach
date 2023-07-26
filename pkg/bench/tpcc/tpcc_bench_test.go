@@ -147,7 +147,7 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 	}
 
 	pgURL, cleanup, err := sqlutils.PGUrlE(
-		s.ServingSQLAddr(), b.TempDir(), url.User("root"),
+		s.AdvSQLAddr(), b.TempDir(), url.User("root"),
 	)
 	require.NoError(b, err)
 	pgURL.Path = databaseName

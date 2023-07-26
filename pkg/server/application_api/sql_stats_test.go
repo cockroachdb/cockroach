@@ -59,7 +59,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	thirdServer := testCluster.Server(2)
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
@@ -194,7 +194,7 @@ func TestStatusAPITransactions(t *testing.T) {
 
 	thirdServer := testCluster.Server(2)
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 

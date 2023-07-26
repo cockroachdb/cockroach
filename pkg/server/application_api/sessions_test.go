@@ -95,7 +95,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
 	rpcContext := srvtestutils.NewRPCTestContext(ctx, ts, rootConfig)
-	url := ts.ServingRPCAddr()
+	url := ts.AdvRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
@@ -231,7 +231,7 @@ func TestListClosedSessions(t *testing.T) {
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(username, "hunter2"),
-			Host:   server.ServingSQLAddr(),
+			Host:   server.AdvSQLAddr(),
 		}
 		db, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(t, err)
