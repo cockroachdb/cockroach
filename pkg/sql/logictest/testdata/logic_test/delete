@@ -565,3 +565,14 @@ false
 query I
 SELECT a FROM t99630a@idx WHERE a > 0
 ----
+
+# Regression test for #107634. Do not allow aggregate functions in ORDER BY.
+subtest regression_107634
+
+statement ok
+CREATE TABLE t107634 (a INT)
+
+statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in DELETE
+DELETE FROM t107634 ORDER BY sum(a) LIMIT 1;
+
+subtest end
