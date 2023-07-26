@@ -269,6 +269,9 @@ func makeUIWatchCmd(d *dev) *cobra.Command {
 		// secureFlag is the name of the boolean long (GNU-style) flag that makes
 		// webpack's dev server use HTTPS.
 		secureFlag = "secure"
+		// clusterUiDestinationsFlag is the name of the long (GNU-style) flag that
+		// tells webpack where to copy emitted files during watch mode.
+		clusterUiDestinationsFlag = "cluster-ui-dst"
 	)
 
 	watchCmd := &cobra.Command{
@@ -334,23 +337,26 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 			port := fmt.Sprint(portNumber)
-			dbTarget, err := cmd.Flags().GetString(dbTargetFlag)
-			if err != nil {
-				log.Fatalf("unexpected error: %v", err)
-				return err
-			}
+			dbTarget := mustGetFlagString(cmd, dbTargetFlag)
 			_, err = url.Parse(dbTarget)
 			if err != nil {
 				log.Fatalf("invalid format for --%s argument: %v", dbTargetFlag, err)
 				return err
 			}
 			secure := mustGetFlagBool(cmd, secureFlag)
+			clusterUiDestinations := mustGetFlagStringArray(cmd, clusterUiDestinationsFlag)
 
-			// Start the cluster-ui watch task
+			// Start the cluster-ui watch tasks
 			nbExec := d.exec.AsNonBlocking()
 			argv := []string{
 				"--dir", dirs.clusterUI, "run", "build:watch",
 			}
+
+			// Add additional webpack args to copy cluster-ui output to external directories.
+			for _, dst := range clusterUiDestinations {
+				argv = append(argv, "--env.copy-to="+dst)
+			}
+
 			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
 			if err != nil {
 				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
@@ -401,6 +407,11 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().String(dbTargetFlag, "http://localhost:8080", "url to proxy DB requests to")
 	watchCmd.Flags().Bool(secureFlag, false, "serve via HTTPS")
 	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
+	watchCmd.Flags().StringArray(
+		clusterUiDestinationsFlag,
+		[]string{},
+		"directory to copy emitted cluster-ui files to. Can be set multiple times.",
+	)
 
 	return watchCmd
 }
