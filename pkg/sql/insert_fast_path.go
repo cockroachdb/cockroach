@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -188,10 +189,20 @@ func (r *insertFastPathRun) addFKChecks(
 		if r.traceKV {
 			log.VEventf(ctx, 2, "FKScan %s", span)
 		}
+		lockStrength := row.GetKeyLockingStrength(descpb.ToScanLockingStrength(c.Locking.Strength))
+		lockWaitPolicy := row.GetWaitPolicy(descpb.ToScanLockingWaitPolicy(c.Locking.WaitPolicy))
+		if r.fkBatch.Header.WaitPolicy != lockWaitPolicy {
+			return errors.AssertionFailedf(
+				"FK check lock wait policy %s did not match %s",
+				lockWaitPolicy, r.fkBatch.Header.WaitPolicy,
+			)
+		}
 		reqIdx := len(r.fkBatch.Requests)
 		r.fkBatch.Requests = append(r.fkBatch.Requests, kvpb.RequestUnion{})
 		r.fkBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeaderFromSpan(span),
+			KeyLocking:    lockStrength,
+			// TODO(michae2): Once #100193 is finished, also include c.Locking.Durability.
 		})
 		r.fkSpanInfo = append(r.fkSpanInfo, insertFastPathFKSpanInfo{
 			check:  c,
@@ -248,6 +259,8 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 			}
 		}
 		maxSpans := len(n.run.fkChecks) * len(n.input)
+		// Any FK checks using locking should have lock wait policy BLOCK.
+		n.run.fkBatch.Header.WaitPolicy = lock.WaitPolicy_Block
 		n.run.fkBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
 		n.run.fkSpanInfo = make([]insertFastPathFKSpanInfo, 0, maxSpans)
 		if len(n.input) > 1 {

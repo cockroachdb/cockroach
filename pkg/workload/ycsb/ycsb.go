@@ -93,6 +93,7 @@ type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
+	isoLevel    string
 	timeString  bool
 	insertHash  bool
 	zeroPadding int
@@ -125,8 +126,10 @@ var ycsbMeta = workload.Meta{
 		g := &ycsb{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ycsb`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`workload`: {RuntimeOnly: true},
+			`isolation-level`: {RuntimeOnly: true},
+			`workload`:        {RuntimeOnly: true},
 		}
+		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
 		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
@@ -376,6 +379,9 @@ func (g *ycsb) Ops(
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
 	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	if err := workload.SetDefaultIsolationLevel(urls, g.isoLevel); err != nil {
 		return workload.QueryLoad{}, err
 	}
 

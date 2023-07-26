@@ -14,6 +14,7 @@ package memo
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -168,6 +169,12 @@ type Memo struct {
 	hoistUncorrelatedEqualitySubqueries        bool
 	useImprovedComputedColumnFiltersDerivation bool
 	useImprovedJoinElimination                 bool
+	implicitFKLockingForSerializable           bool
+
+	// txnIsoLevel is the isolation level under which the plan was created. This
+	// affects the planning of some locking operations, so it must be included in
+	// memo staleness calculation.
+	txnIsoLevel isolation.Level
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -230,6 +237,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		hoistUncorrelatedEqualitySubqueries:        evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries,
 		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
 		useImprovedJoinElimination:                 evalCtx.SessionData().OptimizerUseImprovedJoinElimination,
+		implicitFKLockingForSerializable:           evalCtx.SessionData().ImplicitFKLockingForSerializable,
+		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -375,7 +384,9 @@ func (m *Memo) IsStale(
 		m.alwaysUseHistograms != evalCtx.SessionData().OptimizerAlwaysUseHistograms ||
 		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries ||
 		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation ||
-		m.useImprovedJoinElimination != evalCtx.SessionData().OptimizerUseImprovedJoinElimination {
+		m.useImprovedJoinElimination != evalCtx.SessionData().OptimizerUseImprovedJoinElimination ||
+		m.implicitFKLockingForSerializable != evalCtx.SessionData().ImplicitFKLockingForSerializable ||
+		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
 

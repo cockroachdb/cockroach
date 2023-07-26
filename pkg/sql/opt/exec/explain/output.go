@@ -16,9 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -402,6 +405,16 @@ func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 		"regions",
 		strings.Join(regions, ", "),
 	)
+}
+
+// AddTxnInfo adds top-level fields for information about the query's
+// transaction.
+func (ob *OutputBuilder) AddTxnInfo(
+	txnIsoLevel isolation.Level, txnPriority roachpb.UserPriority, txnQoSLevel sessiondatapb.QoSLevel,
+) {
+	ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
+	ob.AddTopLevelField("priority", txnPriority.String())
+	ob.AddTopLevelField("quality of service", txnQoSLevel.String())
 }
 
 // AddWarning adds the provided string to the list of warnings. Warnings will be

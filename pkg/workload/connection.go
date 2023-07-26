@@ -107,3 +107,33 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 	}
 	return dbName, nil
 }
+
+// SetDefaultIsolationLevel configures the provided URLs with the specified
+// default transaction isolation level, if any.
+func SetDefaultIsolationLevel(urls []string, isoLevel string) error {
+	if isoLevel == "" {
+		return nil
+	}
+	// As a convenience, replace underscores with spaces. This allows users of the
+	// workload tool to pass --isolation-level=read_committed instead of needing
+	// to pass --isolation-level="read committed".
+	isoLevel = strings.ReplaceAll(isoLevel, "_", " ")
+	// NOTE: validation of the isolation level value is done by the server during
+	// connection establishment.
+	return setUrlParam(urls, "default_transaction_isolation", isoLevel)
+}
+
+// setUrlParam sets the given parameter to the given value in the provided URLs.
+func setUrlParam(urls []string, param, value string) error {
+	for i := range urls {
+		parsed, err := url.Parse(urls[i])
+		if err != nil {
+			return err
+		}
+		q := parsed.Query()
+		q.Set(param, value)
+		parsed.RawQuery = q.Encode()
+		urls[i] = parsed.String()
+	}
+	return nil
+}

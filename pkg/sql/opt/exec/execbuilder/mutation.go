@@ -200,6 +200,11 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			return execPlan{}, false, nil
 		}
 
+		locking, err := b.buildLocking(lookupJoin.Locking)
+		if err != nil {
+			return execPlan{}, false, err
+		}
+
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
 		for i, keyCol := range lookupJoin.KeyCols {
@@ -220,6 +225,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		out.ReferencedTable = md.Table(lookupJoin.Table)
 		out.ReferencedIndex = out.ReferencedTable.Index(lookupJoin.Index)
 		out.MatchMethod = fk.MatchMethod()
+		out.Locking = locking
 		out.MkErr = func(values tree.Datums) error {
 			if len(values) != len(out.InsertCols) {
 				return errors.AssertionFailedf("invalid FK violation values")

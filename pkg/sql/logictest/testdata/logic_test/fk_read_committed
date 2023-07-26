@@ -1,0 +1,46 @@
+# LogicTest: !local-mixed-22.2-23.1
+
+# Some foreign key checks are prohibited under weaker isolation levels until we
+# improve locking. See #80683, #100156, #100193.
+
+statement ok
+CREATE TABLE jars (j INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j))
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+INSERT INTO jars VALUES (1), (2)
+
+# Foreign key checks of the parent require durable shared locking under weaker
+# isolation levels, and are not yet supported.
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO cookies VALUES (1, 1)
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+INSERT INTO cookies VALUES (1, 1)
+
+statement ok
+COMMIT
+
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
+UPDATE cookies SET j = 2 WHERE c = 1
+
+# Foreign key checks of the child do not require locking.
+query error violates foreign key constraint
+UPDATE jars SET j = j + 4
+
+query error violates foreign key constraint
+DELETE FROM jars WHERE j = 1
+
+statement ok
+DELETE FROM cookies WHERE c = 1
+
+statement ok
+DELETE FROM jars WHERE j = 1

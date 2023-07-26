@@ -280,7 +280,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
-		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
+		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
@@ -804,6 +804,7 @@ func spansToRequests(
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
 				gets[curGet].req.KeyLocking = keyLocking
+				// TODO(michae2): Once #100193 is finished, also include locking durability.
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -813,6 +814,7 @@ func spansToRequests(
 			scans[curScan].req.SetSpan(spans[i])
 			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
+			// TODO(michae2): Once #100193 is finished, also include locking durability.
 			scans[curScan].union.ReverseScan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}
@@ -827,6 +829,7 @@ func spansToRequests(
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
 				gets[curGet].req.KeyLocking = keyLocking
+				// TODO(michae2): Once #100193 is finished, also include locking durability.
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -836,6 +839,7 @@ func spansToRequests(
 			scans[curScan].req.SetSpan(spans[i])
 			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
+			// TODO(michae2): Once #100193 is finished, also include locking durability.
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}
