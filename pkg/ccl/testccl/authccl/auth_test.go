@@ -432,7 +432,7 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	ts := s.(*server.TestServer).TenantOrServer()
+	ts := s.(*server.TestServer).ApplicationLayer()
 	pgServer := ts.PGServer().(*pgwire.Server)
 	pgPreServer := ts.PGPreServer().(*pgwire.PreServeConnHandler)
 	pgServer.TestingEnableAuthLogging()

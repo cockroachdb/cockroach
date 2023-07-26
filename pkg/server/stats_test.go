@@ -61,7 +61,7 @@ func TestTelemetrySQLStatsIndependence(t *testing.T) {
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -113,7 +113,7 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -187,7 +187,7 @@ func TestSQLStatCollection(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-	sqlServer := srv.TenantOrServer().SQLServer().(*sql.Server)
+	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
 	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
@@ -317,7 +317,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 			})
 			defer testCluster.Stopper().Stop(ctx)
 
-			gateway := testCluster.Server(1 /* idx */).TenantOrServer()
+			gateway := testCluster.Server(1 /* idx */).ApplicationLayer()
 			status := gateway.StatusServer().(serverpb.SQLStatusServer)
 
 			sqlDB := serverutils.OpenDBConn(

@@ -69,7 +69,7 @@ func setMaxSpans(ctx context.Context, tCtx *testContext, value int64) {
 	// setting via SQL, but then we'd need to wait until it's propagated to the
 	// tenant (if we're running with secondary tenants). To avoid that we'll
 	// simply override the setting instead.
-	protectedts.MaxSpans.Override(ctx, &tCtx.tc.TenantOrServer(0).ClusterSettings().SV, value)
+	protectedts.MaxSpans.Override(ctx, &tCtx.tc.ApplicationLayer(0).ClusterSettings().SV, value)
 }
 
 var testCases = []testCase{
@@ -496,7 +496,7 @@ func (test testCase) run(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 
-	s := tc.Server(0).TenantOrServer()
+	s := tc.Server(0).ApplicationLayer()
 	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
 	tCtx := testContext{
 		pts:                    ptm,
@@ -761,7 +761,7 @@ func TestErrorsFromSQL(t *testing.T) {
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	pts := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{})
 	db := s.InternalDB().(isql.DB)

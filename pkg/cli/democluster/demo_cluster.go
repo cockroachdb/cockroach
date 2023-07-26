@@ -80,7 +80,7 @@ type transientCluster struct {
 	stopper       *stop.Stopper
 	firstServer   *server.TestServer
 	servers       []serverEntry
-	tenantServers []serverutils.TestTenantInterface
+	tenantServers []serverutils.ApplicationLayerInterface
 	defaultDB     string
 
 	adminPassword string
@@ -401,7 +401,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		if c.demoCtx.Multitenant {
 			c.infoLog(ctx, "starting tenant nodes")
 
-			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
+			c.tenantServers = make([]serverutils.ApplicationLayerInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
 				createTenant := i == 0
 
@@ -409,7 +409,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
 
-				var ts serverutils.TestTenantInterface
+				var ts serverutils.ApplicationLayerInterface
 				if c.demoCtx.DisableServerController {
 					tenantStopper := stop.NewStopper()
 					args := base.TestTenantArgs{

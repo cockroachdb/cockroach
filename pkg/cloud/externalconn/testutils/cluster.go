@@ -80,7 +80,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t, userToDB: make(map[string]*sqlutils.SQLRunner)}
 	if tenID == roachpb.SystemTenantID {
-		tenantState.TestTenantInterface = testServer
+		tenantState.ApplicationLayerInterface = testServer
 		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "System",
 			url.User(username.RootUser))
 		userSQLDB, err := gosql.Open("postgres", pgURL.String())
@@ -96,7 +96,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 			TenantID: tenID,
 		}
 		var err error
-		tenantState.TestTenantInterface, err = testServer.StartTenant(ctx, tenantArgs)
+		tenantState.ApplicationLayerInterface, err = testServer.StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
 		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "Tenant", url.User(username.RootUser))

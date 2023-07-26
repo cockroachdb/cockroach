@@ -1019,7 +1019,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	env := jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now())
 	var zeroDuration time.Duration
 	var execSchedules func() error
-	var tenantServer serverutils.TestTenantInterface
+	var tenantServer serverutils.ApplicationLayerInterface
 	var tenantDB *gosql.DB
 	tenantServer, tenantDB = serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),

@@ -68,7 +68,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 			},
 		},
 	)
-	s := tc.TenantOrServer(0)
+	s := tc.ApplicationLayer(0)
 	tenantSettings := s.ClusterSettings()
 	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
 	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
@@ -674,7 +674,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	if tc.StartedDefaultTestTenant() {
-		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tc.Server(0).TenantOrServer().ClusterSettings().SV, true)
+		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tc.Server(0).ApplicationLayer().ClusterSettings().SV, true)
 		systemSqlDB := serverutils.OpenDBConn(t, tc.Server(0).SQLAddr(), "system", false, tc.Stopper())
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)

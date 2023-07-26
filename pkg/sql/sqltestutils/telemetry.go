@@ -136,7 +136,7 @@ type telemetryTest struct {
 	cluster        serverutils.TestClusterInterface
 	server         serverutils.TestServerInterface
 	serverDB       *gosql.DB
-	tenant         serverutils.TestTenantInterface
+	tenant         serverutils.ApplicationLayerInterface
 	tenantDB       *gosql.DB
 	tempDirCleanup func()
 	allowlist      featureAllowlist

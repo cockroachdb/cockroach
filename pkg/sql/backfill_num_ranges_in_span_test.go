@@ -107,7 +107,7 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 			EndKey: mkEndKey(prefix, sp[1]),
 		}
 	}
-	dsp := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).DistSQLPlanner
+	dsp := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).DistSQLPlanner
 	spanString := func(sp span) string {
 		return sp[0] + "-" + sp[1]
 	}

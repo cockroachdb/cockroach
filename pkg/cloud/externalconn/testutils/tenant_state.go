@@ -22,7 +22,7 @@ import (
 // Tenant captures per-tenant span config state and encapsulates convenient
 // span config testing primitives. It's safe for concurrent use.
 type Tenant struct {
-	serverutils.TestTenantInterface
+	serverutils.ApplicationLayerInterface
 
 	t          *testing.T
 	userToDB   map[string]*sqlutils.SQLRunner
