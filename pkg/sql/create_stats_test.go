@@ -63,7 +63,7 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 	r.Exec(t, `INSERT INTO t SELECT k, 2*k, 3*k FROM generate_series(0, $1) AS g(k)`, numRows-1)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestStatsWithLowTTL",
 		url.User(username.RootUser),
 	)

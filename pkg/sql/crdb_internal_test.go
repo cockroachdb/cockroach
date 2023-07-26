@@ -1293,7 +1293,7 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(),
 					fmt.Sprintf("TestExecutionInsights-%s-%s", table, testCase.option),
 					url.User("testuser"),
 				)
@@ -1519,7 +1519,7 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(user, "test"),
-			Host:   s.ServingSQLAddr(),
+			Host:   s.AdvSQLAddr(),
 		}
 		db2, err := gosql.Open("postgres", pgURL.String())
 		assert.NoError(t, err)

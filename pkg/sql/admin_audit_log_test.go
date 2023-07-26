@@ -106,7 +106,7 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 
 	db.Exec(t, `CREATE USER testuser`)
 	pgURL, testuserCleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestImportPrivileges-testuser",
+		t, s.AdvSQLAddr(), "TestImportPrivileges-testuser",
 		url.User("testuser"),
 	)
 
@@ -233,7 +233,7 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 
 	db.Exec(t, `CREATE USER testuser`)
 	pgURL, testuserCleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestImportPrivileges-testuser",
+		t, s.AdvSQLAddr(), "TestImportPrivileges-testuser",
 		url.User("testuser"),
 	)
 

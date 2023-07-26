@@ -45,7 +45,7 @@ func TestServer(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)

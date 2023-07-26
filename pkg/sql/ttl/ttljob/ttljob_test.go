@@ -132,7 +132,7 @@ func newRowLevelTTLTestJobTestHelper(
 	} else {
 		db := serverutils.OpenDBConn(
 			t,
-			ts.ServingSQLAddr(),
+			ts.AdvSQLAddr(),
 			"",    /* useDatabase */
 			false, /* insecure */
 			ts.Stopper(),

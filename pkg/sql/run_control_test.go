@@ -821,7 +821,7 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(username),
-		Host:     server.ServingSQLAddr(),
+		Host:     server.AdvSQLAddr(),
 		RawQuery: "sslmode=disable",
 	}
 	db, err := gosql.Open("postgres", pgURL.String())
