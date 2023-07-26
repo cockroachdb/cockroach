@@ -50,7 +50,7 @@ func TestSessionMigration(t *testing.T) {
 
 		openConnFunc := func() *pgx.Conn {
 			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-				tc.Server(0).ServingSQLAddr(),
+				tc.Server(0).AdvSQLAddr(),
 				"StartServer", /* prefix */
 				url.User(username.RootUser),
 			)
@@ -79,7 +79,7 @@ func TestSessionMigration(t *testing.T) {
 
 		openUserConnFunc := func(user string) *pgx.Conn {
 			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-				tc.Server(0).ServingSQLAddr(),
+				tc.Server(0).AdvSQLAddr(),
 				"StartServer", /* prefix */
 				url.User(user),
 			)

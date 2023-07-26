@@ -440,7 +440,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	}
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, nonTenant.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, nonTenant.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	sqlDB, err = gosql.Open("postgres", pgURL.String())
 	require.NoError(t, err)

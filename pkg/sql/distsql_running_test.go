@@ -648,7 +648,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, tc.Server(0).ServingSQLAddr(), username.RootUser)
+	p, err := pgtest.NewPGTest(ctx, tc.Server(0).AdvSQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// We disable multiple active portals here as it only supports local-only plan.

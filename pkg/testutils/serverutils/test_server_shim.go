@@ -341,7 +341,7 @@ func StartServer(
 	}
 
 	goDB := OpenDBConn(
-		t, s.ApplicationLayer().ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+		t, s.ApplicationLayer().AdvSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 
 	// Now that we have started the server on the bootstrap version, let us run
 	// the migrations up to the overridden BinaryVersion.

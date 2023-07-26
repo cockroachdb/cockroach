@@ -152,7 +152,7 @@ func TestProxyProtocol(t *testing.T) {
 	var validateFn func(h *proxyproto.Header) error
 	withProxyProtocol := func(p bool) (server *Server, addr, httpAddr string) {
 		options := &ProxyOptions{
-			RoutingRule:          ts.ServingSQLAddr(),
+			RoutingRule:          ts.AdvSQLAddr(),
 			SkipVerify:           true,
 			RequireProxyProtocol: p,
 		}
@@ -286,7 +286,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
 		tds.AddPod(tenID, &tenant.Pod{
 			TenantID:       tenID.ToUint64(),
-			Addr:           ts.ServingSQLAddr(),
+			Addr:           ts.AdvSQLAddr(),
 			State:          tenant.RUNNING,
 			StateTimestamp: timeutil.Now(),
 		})
@@ -459,7 +459,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
 		tds.AddPod(tenID, &tenant.Pod{
 			TenantID:       tenID.ToUint64(),
-			Addr:           ts.ServingSQLAddr(),
+			Addr:           ts.AdvSQLAddr(),
 			State:          tenant.RUNNING,
 			StateTimestamp: timeutil.Now(),
 		})
@@ -700,7 +700,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	s, addr, _ := newSecureProxyServer(
-		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.ServingSQLAddr(), SkipVerify: true},
+		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.AdvSQLAddr(), SkipVerify: true},
 	)
 	_, port, err := net.SplitHostPort(addr)
 	require.NoError(t, err)
@@ -906,7 +906,7 @@ func TestProxyTLSClose(t *testing.T) {
 	})()
 
 	s, addr, _ := newSecureProxyServer(
-		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.ServingSQLAddr(), SkipVerify: true},
+		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.AdvSQLAddr(), SkipVerify: true},
 	)
 
 	url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
@@ -974,7 +974,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		delete(params, "authToken")
 		params["user"] = "testuser"
 
-		return originalBackendDial(ctx, msg, ts.ServingSQLAddr(), proxyOutgoingTLSConfig)
+		return originalBackendDial(ctx, msg, ts.AdvSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	s, proxyAddr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
@@ -1006,7 +1006,7 @@ func TestInsecureProxy(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	s, addr, _ := newProxyServer(
-		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.ServingSQLAddr(), SkipVerify: true},
+		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.AdvSQLAddr(), SkipVerify: true},
 	)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
@@ -1200,7 +1200,7 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
-		Addr:           ts.ServingSQLAddr(),
+		Addr:           ts.AdvSQLAddr(),
 		State:          tenant.RUNNING,
 		StateTimestamp: timeutil.Now(),
 	})
@@ -1210,7 +1210,7 @@ func TestDenylistUpdate(t *testing.T) {
 	defer testutils.TestingHook(&BackendDial, func(
 		ctx context.Context, msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
-		return originalBackendDial(ctx, msg, ts.ServingSQLAddr(), proxyOutgoingTLSConfig)
+		return originalBackendDial(ctx, msg, ts.AdvSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	opts := &ProxyOptions{

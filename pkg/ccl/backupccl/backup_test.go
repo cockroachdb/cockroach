@@ -7512,7 +7512,7 @@ func TestClientDisconnect(t *testing.T) {
 			// Make credentials for the new connection.
 			sqlDB.Exec(t, `CREATE USER testuser`)
 			sqlDB.Exec(t, `GRANT admin TO testuser`)
-			pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).ServingSQLAddr(),
+			pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).AdvSQLAddr(),
 				"TestClientDisconnect-testuser", url.User("testuser"))
 			defer cleanup()
 

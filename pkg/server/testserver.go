@@ -108,8 +108,8 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.SSLCertsDir = certnames.EmbeddedCertsDir
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port. May be overridden later (as in
-	// makeTestConfigFromParams). Call TestServer.ServingRPCAddr() and
-	// .ServingSQLAddr() for the full address (including bound port).
+	// makeTestConfigFromParams). Call TestServer.AdvRPCAddr() and
+	// .AdvSQLAddr() for the full address (including bound port).
 	baseCfg.Addr = util.TestAddr.String()
 	baseCfg.AdvertiseAddr = util.TestAddr.String()
 	baseCfg.SQLAddr = util.TestAddr.String()
@@ -613,11 +613,11 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	} else {
 		// We restrict the creation of multiple default tenants because if
 		// we allow for more than one to be created, it's not clear what we
-		// should return in ServingSQLAddr() as the default SQL address. Panic
+		// should return in AdvSQLAddr() as the default SQL address. Panic
 		// here to prevent more than one from being added. If you're hitting
 		// this panic it's likely that you're trying to expose multiple default
 		// test tenants, in which case, you should evaluate what to do about
-		// returning a default SQL address in ServingSQLAddr().
+		// returning a default SQL address in AdvSQLAddr().
 		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.testTenants))
 	}
 	return nil
@@ -626,7 +626,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.ServingRPCAddr() after Start() for client connections.
+// TestServer.AdvRPCAddr() after Start() for client connections.
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(ctx context.Context) error {
@@ -695,13 +695,13 @@ func (t *TestTenant) SQLInstanceID() base.SQLInstanceID {
 	return t.sql.SQLInstanceID()
 }
 
-// ServingRPCAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) ServingRPCAddr() string {
+// AdvRPCAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) AdvRPCAddr() string {
 	return t.Cfg.AdvertiseAddr
 }
 
-// ServingSQLAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) ServingSQLAddr() string {
+// AdvSQLAddr is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) AdvSQLAddr() string {
 	return t.Cfg.SQLAdvertiseAddr
 }
 
@@ -1226,7 +1226,7 @@ func (ts *TestServer) StartTenant(
 
 	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
-	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
+	sqlCfg.TenantKVAddrs = []string{ts.AdvRPCAddr()}
 	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	if params.MemoryPoolSize != 0 {
 		sqlCfg.MemoryPoolSize = params.MemoryPoolSize
@@ -1440,13 +1440,13 @@ func (ts *TestServer) Engines() []storage.Engine {
 	return ts.engines
 }
 
-// ServingRPCAddr returns the server's RPC address. Should be used by clients.
-func (ts *TestServer) ServingRPCAddr() string {
+// AdvRPCAddr returns the server's RPC address. Should be used by clients.
+func (ts *TestServer) AdvRPCAddr() string {
 	return ts.cfg.AdvertiseAddr
 }
 
-// ServingSQLAddr returns the server's SQL address. Should be used by clients.
-func (ts *TestServer) ServingSQLAddr() string {
+// AdvSQLAddr returns the server's SQL address. Should be used by clients.
+func (ts *TestServer) AdvSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
 }
 
@@ -1456,13 +1456,13 @@ func (ts *TestServer) HTTPAddr() string {
 }
 
 // RPCAddr returns the server's listening RPC address.
-// Note: use ServingRPCAddr() instead unless there is a specific reason not to.
+// Note: use AdvRPCAddr() instead unless there is a specific reason not to.
 func (ts *TestServer) RPCAddr() string {
 	return ts.cfg.Addr
 }
 
 // SQLAddr returns the server's listening SQL address.
-// Note: use ServingSQLAddr() instead unless there is a specific reason not to.
+// Note: use AdvSQLAddr() instead unless there is a specific reason not to.
 func (ts *TestServer) SQLAddr() string {
 	return ts.cfg.SQLAddr
 }
