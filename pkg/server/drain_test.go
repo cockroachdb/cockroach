@@ -298,7 +298,7 @@ func getAdminClientForServer(
 	s serverutils.TestServerInterface,
 ) (c serverpb.AdminClient, closer func(), err error) {
 	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(s.ServingRPCAddr(), grpc.WithInsecure())
+	conn, err := grpc.Dial(s.AdvRPCAddr(), grpc.WithInsecure())
 	if err != nil {
 		return nil, nil, err
 	}

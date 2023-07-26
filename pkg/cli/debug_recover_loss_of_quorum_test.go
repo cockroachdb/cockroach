@@ -133,7 +133,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 		"collect-info",
 		"--insecure",
 		"--host",
-		tc.Server(2).ServingRPCAddr(),
+		tc.Server(2).AdvRPCAddr(),
 		replicaInfoFileName,
 	})
 
@@ -259,7 +259,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// would not be able to upreplicate properly. So we need to decommission old nodes
 	// first before proceeding.
 	grpcConn, err := tcAfter.Server(0).RPCContext().GRPCDialNode(
-		tcAfter.Server(0).ServingRPCAddr(), tcAfter.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
+		tcAfter.Server(0).AdvRPCAddr(), tcAfter.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
 	require.NoError(t, err, "Failed to create test cluster after recovery")
 	adminClient := serverpb.NewAdminClient(grpcConn)
 
@@ -353,7 +353,7 @@ func TestStageVersionCheck(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	tc.StopServer(3)
 
-	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).ServingRPCAddr(),
+	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).AdvRPCAddr(),
 		tc.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
 	require.NoError(t, err, "Failed to create test cluster after recovery")
 	adminClient := serverpb.NewAdminClient(grpcConn)
@@ -509,7 +509,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"make-plan",
 			"--confirm=y",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			"--plan=" + planFile,
 		})
 	require.NoError(t, err, "failed to run make-plan")
@@ -528,7 +528,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		[]string{
 			"debug", "recover", "apply-plan",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			"--confirm=y", planFile,
 		})
 	require.NoError(t, err, "failed to run apply plan")
@@ -543,7 +543,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		[]string{
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")
@@ -593,7 +593,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		[]string{
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
-			"--host=" + tc.Server(0).ServingRPCAddr(),
+			"--host=" + tc.Server(0).AdvRPCAddr(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")

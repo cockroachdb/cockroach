@@ -359,7 +359,7 @@ func Example_sql_lex() {
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard,
 		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
-			username.RootUser, c.ServingSQLAddr()))
+			username.RootUser, c.AdvSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
 			fmt.Printf("error closing connection: %v\n", err)

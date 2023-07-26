@@ -469,7 +469,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 		Spans:  []roachpb.Span{span},
 	}
 
-	url := ts.ServingRPCAddr()
+	url := ts.AdvRPCAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {

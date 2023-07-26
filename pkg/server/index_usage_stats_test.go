@@ -84,7 +84,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	}
 
 	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, firstServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer firstServerConnCleanup()
 
 	firstServerSQLConn, err := gosql.Open("postgres", firstPgURL.String())
@@ -143,7 +143,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	secondLocalStatsReader := secondServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	secondPgURL, secondServerConnCleanup := sqlutils.PGUrl(
-		t, secondServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, secondServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer secondServerConnCleanup()
 
 	secondServerSQLConn, err := gosql.Open("postgres", secondPgURL.String())
@@ -175,7 +175,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	fourthLocalStatsReader := fourthServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	fourthPgURL, fourthServerConnCleanup := sqlutils.PGUrl(
-		t, fourthServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, fourthServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer fourthServerConnCleanup()
 
 	fourthServerSQLConn, err := gosql.Open("postgres", fourthPgURL.String())

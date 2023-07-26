@@ -207,7 +207,7 @@ func TestClusterConnectivity(t *testing.T) {
 					ctx := context.Background()
 					serv := tc.Server(bootstrapNode)
 
-					target := serv.ServingRPCAddr()
+					target := serv.AdvRPCAddr()
 					dialOpts, err := tc.Server(bootstrapNode).RPCContext().GRPCDialOptions(ctx, target, rpc.SystemClass)
 					if err != nil {
 						return err
@@ -337,7 +337,7 @@ func TestJoinVersionGate(t *testing.T) {
 
 	oldVersionServerArgs := commonArg
 	oldVersionServerArgs.Knobs = knobs
-	oldVersionServerArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
+	oldVersionServerArgs.JoinAddr = tc.Servers[0].AdvRPCAddr()
 
 	serv, err := tc.AddServer(oldVersionServerArgs)
 	if err != nil {

@@ -473,7 +473,7 @@ func TestExportPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().ServingSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(),
 		"TestExportPrivileges-testuser", url.User("testuser"))
 	defer cleanup()
 	startTestUser := func() *gosql.DB {
@@ -721,7 +721,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new result buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).ServingSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).AdvSQLAddr())
 		defer cleanup()
 
 		atomic.StoreInt64(&trapRead, 1)
@@ -767,7 +767,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '524288'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new results buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).ServingSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).AdvSQLAddr())
 		defer cleanup()
 
 		// Reads are trapped but not blocked, so node 1 should immediately return a

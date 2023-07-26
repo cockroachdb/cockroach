@@ -66,7 +66,7 @@ func TestRunExplainCombinations(t *testing.T) {
 		ExecCtx: &clisqlexec.Context{CliCtx: cliCtx},
 	}
 	c.LoadDefaults(os.Stdout, os.Stderr)
-	pgURL, cleanupFn := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	ctx := context.Background()

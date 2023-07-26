@@ -219,7 +219,7 @@ func TestStopServer(t *testing.T) {
 
 		ClientOnly: true,
 	})
-	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID(),
+	conn, err := rpcContext.GRPCDialNode(server1.AdvRPCAddr(), server1.NodeID(),
 		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
