@@ -7705,7 +7705,7 @@ func genClusterLocksGenerator(
 				tree.MakeDBool(tree.DBool(granted)),          /* granted */
 				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
 				durationDatum,                                /* duration */
-				tree.NewDString(kvTxnIsolationLevelToTree(curLock.LockHolder.IsoLevel).String()), /* isolation_level */
+				tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(curLock.LockHolder.IsoLevel).String()), /* isolation_level */
 			}, nil
 
 		}, nil, nil

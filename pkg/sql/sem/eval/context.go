@@ -540,6 +540,15 @@ func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
 	if ec.Txn == nil {
 		return nil, ErrNilTxnInClusterContext
 	}
+
+	// CommitTimestamp panics for isolation levels that can operate across
+	// multiple timestamps. Prevent this with a gate at the SQL level and return
+	// a pgerror until we decide how this will officially behave. See #103245.
+	if ec.TxnIsoLevel.ToleratesWriteSkew() {
+		treeIso := tree.IsolationLevelFromKVTxnIsolationLevel(ec.TxnIsoLevel)
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "unsupported in %s isolation", treeIso.String())
+	}
+
 	ts := ec.Txn.CommitTimestamp()
 	if ts.IsEmpty() {
 		return nil, errors.AssertionFailedf("zero cluster timestamp in txn")
