@@ -56,7 +56,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var aggressiveResolvedTimestampClusterArgs = base.TestClusterArgs{
+var aggressiveResolvedTimestampManuallyReplicatedClusterArgs = base.TestClusterArgs{
+	ReplicationMode: base.ReplicationManual,
 	ServerArgs: base.TestServerArgs{
 		RaftConfig: base.RaftConfig{
 			// With expiration-based leases, we may be unable to maintain leases under
@@ -81,10 +82,9 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "withNonVoters", func(t *testing.T, withNonVoters bool) {
 		ctx := context.Background()
 		dbName, tableName := "cttest", "kv"
-		clusterArgs := aggressiveResolvedTimestampClusterArgs
-		// Disable the replicateQueue so that it doesn't interfere with replica
-		// membership ranges.
-		clusterArgs.ReplicationMode = base.ReplicationManual
+		// NB: replicate queue is disabled here, so won't interfere with our manual
+		// changes.
+		clusterArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, dbName, tableName)
 		defer tc.Stopper().Stop(ctx)
 
@@ -152,8 +152,7 @@ func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
 
 	ctx := context.Background()
 	dbName, tableName := "cttest", "kv"
-	clusterArgs := aggressiveResolvedTimestampClusterArgs
-	clusterArgs.ReplicationMode = base.ReplicationManual
+	clusterArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	knobs, ltk := makeReplicationTestKnobs()
 	clusterArgs.ServerArgs.Knobs = knobs
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, dbName, tableName)
@@ -192,7 +191,9 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -270,7 +271,9 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	ctx := context.Background()
-	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
@@ -377,7 +380,9 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	repls := replsForRange(ctx, t, tc, desc)
 	// Disable the automatic merging.
 	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
@@ -457,7 +462,9 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	ctx := context.Background()
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -490,7 +497,10 @@ func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	// TODO(during PR)
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -537,7 +547,9 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
@@ -579,7 +591,10 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "tsFromServer", func(t *testing.T, tsFromServer bool) {
 		ctx := context.Background()
-		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+		// TODO(during PR)
+		cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
+		cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
+		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 		defer tc.Stopper().Stop(ctx)
 		repls := replsForRange(ctx, t, tc, desc)
 

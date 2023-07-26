@@ -221,12 +221,11 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := aggressiveResolvedTimestampClusterArgs
-	// We want to manually add a non-voter to a range in this test, so disable
-	// the replicateQueue to prevent it from disrupting the test.
-	clusterArgs.ReplicationMode = base.ReplicationManual
+	clusterArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	// NB: setupClusterForClosedTSTesting sets a low closed timestamp target
 	// duration.
+	// NB: the replicate queue is disabled in this test, so we can manually add a
+	// non-voter to a range without being disrupted.
 	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	tc.AddNonVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1))
