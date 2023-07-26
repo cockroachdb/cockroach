@@ -617,6 +617,12 @@ UPDATE abcde SET b=1 ORDER BY c
 ----
 error (42601): UPDATE statement requires LIMIT when ORDER BY is used
 
+# Aggregate functions are not allowed in ORDER BY.
+build
+UPDATE abcde SET b=1 ORDER BY sum(c) LIMIT 1
+----
+error (42803): sum(): aggregate functions are not allowed in ORDER BY in UPDATE
+
 # ------------------------------------------------------------------------------
 # Test RETURNING.
 # ------------------------------------------------------------------------------

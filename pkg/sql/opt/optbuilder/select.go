@@ -1106,7 +1106,8 @@ func (b *Builder) buildSelectStmtWithoutParens(
 			col := projectionsScope.addColumn(scopeColName(""), expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
-		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)
+		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, exprKindOrderBy,
+			tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)
 		b.buildOrderBy(outScope, projectionsScope, orderByScope)
 		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
@@ -1151,7 +1152,8 @@ func (b *Builder) buildSelectClause(
 	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
 	// exist) will be added here.
 	havingExpr := b.analyzeHaving(sel.Having, fromScope)
-	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope, tree.RejectGenerators)
+	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope,
+		exprKindOrderBy, tree.RejectGenerators)
 	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
 
 	var having opt.ScalarExpr
