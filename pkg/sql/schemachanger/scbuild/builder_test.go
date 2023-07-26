@@ -56,17 +56,17 @@ func TestBuildDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		for _, depsType := range []struct {
 			name                string
-			dependenciesWrapper func(*testing.T, serverutils.TestTenantInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies))
+			dependenciesWrapper func(*testing.T, serverutils.ApplicationLayerInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies))
 		}{
 			{
 				name: "sql_dependencies",
-				dependenciesWrapper: func(t *testing.T, s serverutils.TestTenantInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				dependenciesWrapper: func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
 					sctestutils.WithBuilderDependenciesFromTestServer(s, nodeID, fn)
 				},
 			},
 			{
 				name: "test_dependencies",
-				dependenciesWrapper: func(t *testing.T, s serverutils.TestTenantInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				dependenciesWrapper: func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
 					// Create test dependencies and execute the schema changer.
 					// The schema changer test dependencies do not hold any reference to the
 					// test cluster, here the SQLRunner is only used to populate the mocked
@@ -115,7 +115,7 @@ func TestBuildDataDriven(t *testing.T) {
 			t.Run(depsType.name, func(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 				defer s.Stopper().Stop(ctx)
-				tt := s.TenantOrServer()
+				tt := s.ApplicationLayer()
 				sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -131,10 +131,10 @@ func run(
 	t *testing.T,
 	depsTypeName string,
 	d *datadriven.TestData,
-	s serverutils.TestTenantInterface,
+	s serverutils.ApplicationLayerInterface,
 	nodeID roachpb.NodeID,
 	tdb *sqlutils.SQLRunner,
-	withDependencies func(*testing.T, serverutils.TestTenantInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
+	withDependencies func(*testing.T, serverutils.ApplicationLayerInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
 ) string {
 	sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 	switch d.Cmd {
@@ -316,7 +316,7 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5*1024*1024 /* 5MiB */))
 	memAcc := monitor.MakeBoundAccount()
-	sctestutils.WithBuilderDependenciesFromTestServer(s.TenantOrServer(), s.NodeID(), func(dependencies scbuild.Dependencies) {
+	sctestutils.WithBuilderDependenciesFromTestServer(s.ApplicationLayer(), s.NodeID(), func(dependencies scbuild.Dependencies) {
 		stmt, err := parser.ParseOne(`DROP DATABASE defaultdb CASCADE`)
 		require.NoError(t, err)
 		_, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, &memAcc)

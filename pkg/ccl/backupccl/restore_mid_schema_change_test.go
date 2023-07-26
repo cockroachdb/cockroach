@@ -139,7 +139,7 @@ func validateTable(
 	tableName string,
 	isSchemaOnly bool,
 ) {
-	srv := tc.TenantOrServer(0)
+	srv := tc.ApplicationLayer(0)
 	desc := desctestutils.TestingGetPublicTableDescriptor(srv.DB(), srv.Codec(), dbName, tableName)
 	// There should be no mutations on these table descriptors at this point.
 	require.Equal(t, 0, len(desc.TableDesc().Mutations))
