@@ -2766,9 +2766,18 @@ message Header {
   // sender.
   repeated string profile_labels = 31 [(gogoproto.customname) = "ProfileLabels"];
 
+  // AmbiguousReplayProtection, if set, prevents a retried write operation
+  // from being considered an idempotent replay of a successful prior attempt
+  // (of the same operation) if the request's write timestamp is different from
+  // the prior attempt's. This protection is required when there has been an
+  // ambiguous write (i.e. RPC error) on a batch that contained a commit,
+  // as the transaction may have already been considered implicitly committed,
+  // and/or been explicitly committed by a RecoverTxn request. See #103817.
+  bool ambiguous_replay_protection = 32;
+
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 32
+  // Next ID: 33
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
