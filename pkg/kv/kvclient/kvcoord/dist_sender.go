@@ -2248,25 +2248,16 @@ func (ds *DistSender) sendPartialBatch(
 		// Error handling: If the error indicates that our range
 		// descriptor is out of date, evict it from the cache and try
 		// again. Errors that apply only to a single replica were
-		// handled in send().
-		//
-		// TODO(bdarnell): Don't retry endlessly. If we fail twice in a
-		// row and the range descriptor hasn't changed, return the error
-		// to our caller.
+		// handled in sendToReplicas().
 		switch tErr := pErr.GetDetail().(type) {
 		case *kvpb.RangeKeyMismatchError:
 			// Range descriptor might be out of date - evict it. This is likely the
 			// result of a range split. If we have new range descriptors, insert them
 			// instead.
-			for _, ri := range tErr.Ranges {
-				// Sanity check that we got the different descriptors. Getting the same
-				// descriptor and putting it in the cache would be bad, as we'd go through
-				// an infinite loops of retries.
-				if routingTok.Desc().RSpan().Equal(ri.Desc.RSpan()) {
-					return response{pErr: kvpb.NewError(errors.AssertionFailedf(
-						"mismatched range suggestion not different from original desc. desc: %s. suggested: %s. err: %s",
-						routingTok.Desc(), ri.Desc, pErr))}
-				}
+			if !areOverlappingDescriptorsNewer(routingTok.Desc(), tErr.Ranges...) {
+				return response{pErr: kvpb.NewError(errors.AssertionFailedf(
+					"mismatched range suggestion not newer from original desc. desc: %s. suggested: %s. err: %s",
+					routingTok.Desc(), tErr.Ranges, pErr))}
 			}
 			routingTok.EvictAndReplace(ctx, tErr.Ranges...)
 			// On addressing errors (likely a split), we need to re-invoke
@@ -2884,6 +2875,15 @@ func (ds *DistSender) sendToReplicas(
 			case *kvpb.StoreNotFoundError, *kvpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
+			case *kvpb.RangeKeyMismatchError:
+				// If the server has more up-to-date, we want to replace our
+				// descriptor and retry the request while if it is older we
+				// assume the server has stale information and keep our
+				// information. If the server information is stale, then keep
+				// trying other replicas.
+				if areOverlappingDescriptorsNewer(routing.Desc(), tErr.Ranges...) {
+					return br, nil
+				}
 			case *kvpb.RangeNotFoundError:
 				// The store we routed to doesn't have this replica. This can happen when
 				// our descriptor is outright outdated, but it can also be caused by a
@@ -3111,6 +3111,27 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+// areOverlappingDescriptorsNewer compares a set of newDescs to an existing
+// descriptor and returns true if they overlap and at least one newDescs is
+// newer than the existing descriptor.
+//
+// One usage of this is when we receive a RangeKeyMistmatchError from a server.
+// There can be multiple descriptors in one RangeKeyMismatchError. See
+// Store.SendWithWriteBytes for why this happens.
+func areOverlappingDescriptorsNewer(
+	desc *roachpb.RangeDescriptor, newDescs ...roachpb.RangeInfo,
+) bool {
+	for _, r := range newDescs {
+		if _, err := desc.RSpan().Intersect(r.Desc.RSpan()); err == nil {
+			if r.Desc.Generation > desc.Generation {
+				// The spans overlap and the new descriptor has a strictly higher generation.
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // getLocalityComparison takes two nodeIDs as input and returns the locality
