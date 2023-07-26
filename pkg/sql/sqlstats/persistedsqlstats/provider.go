@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Config is a configuration struct for the persisted SQL stats subsystem.
@@ -40,6 +41,7 @@ type Config struct {
 	Settings                *cluster.Settings
 	InternalExecutorMonitor *mon.BytesMonitor
 	DB                      isql.DB
+	ClusterID               func() uuid.UUID
 	SQLIDContainer          *base.SQLIDContainer
 	JobRegistry             *jobs.Registry
 
@@ -100,6 +102,7 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 
 	p.jobMonitor = jobMonitor{
 		st:           cfg.Settings,
+		clusterID:    cfg.ClusterID,
 		db:           cfg.DB,
 		scanInterval: defaultScanInterval,
 		jitterFn:     p.jitterInterval,
