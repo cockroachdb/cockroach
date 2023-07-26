@@ -314,13 +314,7 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
-	systemDB := serverutils.OpenDBConn(
-		t,
-		tsrv.AdvSQLAddr(),
-		"",    /* useDatabase */
-		false, /* insecure */
-		tsrv.Stopper(),
-	)
+	systemDB := s.SystemLayer().SQLConn(t, "")
 
 	// Populate data directly.
 	tsdb := tsrv.TsDB()

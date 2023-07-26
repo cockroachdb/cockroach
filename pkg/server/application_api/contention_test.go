@@ -53,7 +53,7 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
 
-	contentionCountBefore := testCluster.Server(1).SQLServer().(*sql.Server).
+	contentionCountBefore := testCluster.Server(1).ApplicationLayer().SQLServer().(*sql.Server).
 		Metrics.EngineMetrics.SQLContendedTxns.Count()
 
 	sqlutils.CreateTable(
@@ -133,7 +133,7 @@ SET TRACING=off;
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
 
-	contentionCountNow := testCluster.Server(1).SQLServer().(*sql.Server).
+	contentionCountNow := testCluster.Server(1).ApplicationLayer().SQLServer().(*sql.Server).
 		Metrics.EngineMetrics.SQLContendedTxns.Count()
 
 	require.Greaterf(t, contentionCountNow, contentionCountBefore,
@@ -159,8 +159,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	conn2 :=
-		serverutils.OpenDBConn(t, s.AdvSQLAddr(), "", false /* insecure */, s.Stopper())
+	conn2 := s.ApplicationLayer().SQLConn(t, "")
 	defer func() {
 		require.NoError(t, conn2.Close())
 	}()
@@ -216,7 +215,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 	sqlConn1.CheckQueryResults(t, "SELECT * FROM test",
 		[][]string{{"1000"}})
 
-	txnIDCache := s.SQLServer().(*sql.Server).GetTxnIDCache()
+	txnIDCache := s.ApplicationLayer().SQLServer().(*sql.Server).GetTxnIDCache()
 
 	// Since contention event store's resolver only retries once in the case of
 	// missing txn fingerprint ID for a given txnID, we ensure that the txnIDCache
@@ -245,7 +244,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 	})
 
 	testutils.SucceedsWithin(t, func() error {
-		err := s.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.FlushEventsForTest(ctx)
+		err := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.FlushEventsForTest(ctx)
 		require.NoError(t, err)
 
 		notEmpty := sqlConn1.QueryStr(t, `
@@ -358,7 +357,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 				// Check we have proper permission control in SQL CLI. We use internal
 				// executor here since we can easily override the username without opening
 				// new SQL sessions.
-				row, err := s.InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
+				row, err := s.ApplicationLayer().InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
 					ctx,
 					"test-contending-key-redaction",
 					nil, /* txn */

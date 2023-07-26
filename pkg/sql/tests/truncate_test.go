@@ -398,7 +398,7 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 			defer tc.Stopper().Stop(ctx)
 			s := tc.ApplicationLayer(0)
 			tenantSettings := s.ClusterSettings()
-			conn := serverutils.OpenDBConn(t, s.SQLAddr(), "defaultdb", false, tc.Stopper())
+			conn := s.SQLConn(t, "defaultdb")
 			// Ensure that if we're running with the test tenant, it can split
 			// the table below.
 			sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)

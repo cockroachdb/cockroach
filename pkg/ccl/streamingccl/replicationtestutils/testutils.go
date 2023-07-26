@@ -150,11 +150,7 @@ func (c *TenantStreamingClusters) init() {
 func (c *TenantStreamingClusters) StartDestTenant(ctx context.Context) func() error {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START SERVICE SHARED`, c.Args.DestTenantName)
 
-	destTenantConn, err := serverutils.OpenDBConnE(
-		c.DestCluster.Server(0).SQLAddr(), "cluster:"+string(c.Args.DestTenantName)+"/",
-		false, /* insecure */
-		c.DestCluster.Server(0).Stopper())
-	require.NoError(c.T, err)
+	destTenantConn := c.DestCluster.Server(0).SystemLayer().SQLConn(c.T, "cluster:"+string(c.Args.DestTenantName)+"/defaultdb")
 
 	c.DestTenantConn = destTenantConn
 	c.DestTenantSQL = sqlutils.MakeSQLRunner(destTenantConn)
