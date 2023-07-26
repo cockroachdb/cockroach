@@ -74,11 +74,11 @@ func makeMemMetricHistogram(
 	metadata metric.Metadata, histogramWindow time.Duration,
 ) metric.IHistogram {
 	return metric.NewHistogram(metric.HistogramOptions{
-		Metadata: metadata,
-		Duration: histogramWindow,
-		MaxVal:   log10int64times1000,
-		SigFigs:  3,
-		Buckets:  metric.MemoryUsage64MBBuckets,
+		Metadata:     metadata,
+		Duration:     histogramWindow,
+		MaxVal:       log10int64times1000,
+		SigFigs:      3,
+		BucketConfig: metric.StaticBucketConfigs["MemoryUsage64MBBuckets"],
 	})
 }
 
