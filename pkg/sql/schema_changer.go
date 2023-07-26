@@ -1568,8 +1568,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							sc.execCfg.JobsKnobs(),
 							scheduledJobs,
 							scTable.GetPrivileges().Owner(),
-							scTable.GetID(),
-							modify.RowLevelTTL(),
+							scTable,
 						)
 						if err != nil {
 							return err

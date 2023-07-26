@@ -233,17 +233,17 @@ CREATE TABLE tbl_schedules (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl_schedules'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_schedules'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 1
 
 let $schedule_id
-SELECT id FROM [SHOW SCHEDULES] WHERE label = 'row-level-ttl-$table_id'
+SELECT id FROM [SHOW SCHEDULES] WHERE label = 'row-level-ttl: $label_suffix'
 
 statement error cannot drop a row level TTL schedule\nHINT: use ALTER TABLE test\.public\.tbl_schedules RESET \(ttl\) instead
 DROP SCHEDULE $schedule_id
@@ -321,12 +321,12 @@ CREATE TABLE tbl_reset_ttl (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl_reset_ttl'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_reset_ttl'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 1
 
@@ -351,10 +351,90 @@ SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 0
 
+subtest end
+
+# Ensure that SHOW SCHEDULES's label column is updated to reflect the new table
+# name.
+subtest rename_table
+
+statement ok
+CREATE TABLE tbl_rename (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
+
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_rename'
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+1
+
+statement ok
+ALTER TABLE tbl_rename RENAME TO tbl_renamed
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+0
+
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_renamed'
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+1
+
+subtest end
+
+subtest rename_table_legacy_label
+
+statement ok
+CREATE TABLE tbl_rename_legacy_label (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
+
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_rename_legacy_label'
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+1
+
+# Simulate a "legacy" label to ensure that it will be appropriately updated
+# when the table is renamed.
+statement ok
+UPDATE system.scheduled_jobs SET schedule_name = 'row-level-ttl-1234' WHERE schedule_name = 'row-level-ttl: $label_suffix';
+
+statement ok
+ALTER TABLE tbl_rename_legacy_label RENAME TO tbl_renamed2
+
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_renamed2'
+
+# Legacy label no longer exists.
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-1234'
+----
+0
+
+# Renamed and new formatted label is showing up as expected.
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+1
 subtest end
 
 subtest drop_table
@@ -365,12 +445,13 @@ CREATE TABLE tbl_drop_table (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl_drop_table'
+
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_drop_table'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 1
 
@@ -379,7 +460,7 @@ DROP TABLE tbl_drop_table
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 0
 
@@ -395,15 +476,15 @@ statement ok
 CREATE TABLE drop_me.tbl () WITH (ttl_expire_after = '10 minutes');
 CREATE TABLE drop_me.tbl2 () WITH (ttl_expire_after = '10 minutes')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl'
 
-let $table_id2
-SELECT oid FROM pg_class WHERE relname = 'tbl2'
+let $label_suffix2
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl2'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label IN ('row-level-ttl-$table_id', 'row-level-ttl-$table_id2')
+WHERE label IN ('row-level-ttl: $label_suffix', 'row-level-ttl: $label_suffix2')
 ----
 2
 
@@ -412,7 +493,7 @@ DROP SCHEMA drop_me CASCADE
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 0
 
@@ -431,15 +512,15 @@ statement ok
 CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes');
 CREATE TABLE tbl2 () WITH (ttl_expire_after = '10 minutes')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl'
 
-let $table_id2
-SELECT oid FROM pg_class WHERE relname = 'tbl2'
+let $label_suffix2
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl2'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label IN ('row-level-ttl-$table_id', 'row-level-ttl-$table_id2')
+WHERE label IN ('row-level-ttl: $label_suffix', 'row-level-ttl: $label_suffix2')
 ----
 2
 
@@ -449,7 +530,7 @@ DROP DATABASE drop_me CASCADE
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 0
 
@@ -494,18 +575,18 @@ CREATE TABLE public.tbl_ttl_on_noop (
   CONSTRAINT tbl_ttl_on_noop_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl_ttl_on_noop'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_ttl_on_noop'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 ACTIVE  @hourly  root
 
 let $schedule_id
 SELECT id FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
@@ -533,12 +614,12 @@ CREATE TABLE public.tbl_ttl_job_cron (
   CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@daily')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl_ttl_job_cron'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_ttl_job_cron'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 ACTIVE  @daily  root
 
@@ -557,7 +638,7 @@ CREATE TABLE public.tbl_ttl_job_cron (
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 ACTIVE  @weekly  root
 
@@ -575,7 +656,7 @@ CREATE TABLE public.tbl_ttl_job_cron (
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 ACTIVE  @hourly  root
 
@@ -1037,12 +1118,12 @@ CREATE TABLE public.create_table_no_ttl_set_ttl_expire_after (
   CONSTRAINT create_table_no_ttl_set_ttl_expire_after_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'create_table_no_ttl_set_ttl_expire_after'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'create_table_no_ttl_set_ttl_expire_after'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 ACTIVE  @hourly  root
 
@@ -1051,7 +1132,7 @@ ALTER TABLE create_table_no_ttl_set_ttl_expire_after RESET (ttl)
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 
 subtest end
@@ -1078,12 +1159,12 @@ CREATE TABLE public.create_table_no_ttl_set_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'create_table_no_ttl_set_ttl_expiration_expression'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'create_table_no_ttl_set_ttl_expiration_expression'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 ACTIVE  @hourly  root
 
@@ -1092,7 +1173,7 @@ ALTER TABLE create_table_no_ttl_set_ttl_expiration_expression RESET (ttl)
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 ----
 
 subtest end
@@ -1102,12 +1183,12 @@ subtest special_table_name
 statement ok
 CREATE TABLE "Table-Name" (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 hours')
 
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'Table-Name'
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'Table-Name'
 
 let $schedule_id
 SELECT id FROM [SHOW SCHEDULES]
-WHERE label = 'row-level-ttl-$table_id'
+WHERE label = 'row-level-ttl: $label_suffix'
 
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]

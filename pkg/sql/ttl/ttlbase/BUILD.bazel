@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/tabledesc",
     ],
 )
 

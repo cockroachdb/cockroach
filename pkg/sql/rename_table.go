@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -229,6 +230,21 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Run the namespace update batch.
 	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	metadataUpdater := descmetadata.NewMetadataUpdater(
+		ctx,
+		p.InternalSQLTxn(),
+		p.Descriptors(),
+		&p.ExecCfg().Settings.SV,
+		p.SessionData(),
+	)
+
+	// If this table has row level ttl enabled, update the schedule_name of all
+	// row-level-ttl jobs with the name table name. If row level TTL is not
+	// enabled, UpdateTTLScheduleName will no-op for us.
+	if err := metadataUpdater.UpdateTTLScheduleLabel(ctx, tableDesc); err != nil {
 		return err
 	}
 

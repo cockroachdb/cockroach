@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -1181,6 +1182,12 @@ func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID
 // DeleteSchedule implements scexec.DescriptorMetadataUpdater
 func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 	s.LogSideEffectf("delete job schedule #%d", id)
+	return nil
+}
+
+// UpdateTTLScheduleLabel implements scexec.DescriptorMetadataUpdater
+func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error {
+	s.LogSideEffectf("update ttl schedule label #%d", tbl.ID)
 	return nil
 }
 
