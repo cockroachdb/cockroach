@@ -129,6 +129,7 @@ func computeZetaFromScratch(n uint64, theta float64) (float64, error) {
 // according to the Zipf distribution.
 func (z *ZipfGenerator) Uint64() uint64 {
 	z.zipfGenMu.mu.Lock()
+	defer z.zipfGenMu.mu.Unlock()
 	u := z.zipfGenMu.r.Float64()
 	uz := u * z.zipfGenMu.zetaN
 	var result uint64
@@ -143,7 +144,6 @@ func (z *ZipfGenerator) Uint64() uint64 {
 	if z.verbose {
 		fmt.Printf("Uint64[%d, %d] -> %d\n", z.iMin, z.zipfGenMu.iMax, result)
 	}
-	z.zipfGenMu.mu.Unlock()
 	return result
 }
 
@@ -151,16 +151,15 @@ func (z *ZipfGenerator) Uint64() uint64 {
 // that depend on it. It throws an error if the recomputation failed.
 func (z *ZipfGenerator) IncrementIMax(count uint64) error {
 	z.zipfGenMu.mu.Lock()
+	defer z.zipfGenMu.mu.Unlock()
 	zetaN, err := computeZetaIncrementally(
 		z.zipfGenMu.iMax+1-z.iMin, z.zipfGenMu.iMax+count+1-z.iMin, z.theta, z.zipfGenMu.zetaN)
 	if err != nil {
-		z.zipfGenMu.mu.Unlock()
 		return errors.Wrap(err, "Could not incrementally compute zeta")
 	}
 	z.zipfGenMu.iMax += count
 	eta := (1 - math.Pow(2.0/float64(z.zipfGenMu.iMax+1-z.iMin), 1.0-z.theta)) / (1.0 - z.zeta2/zetaN)
 	z.zipfGenMu.eta = eta
 	z.zipfGenMu.zetaN = zetaN
-	z.zipfGenMu.mu.Unlock()
 	return nil
 }
