@@ -300,7 +300,11 @@ func (cws *cachedWriteSimulator) multiKey(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
 	key, value := []byte("multikey"), cws.value(size)
 	var eachMS enginepb.MVCCStats
-	if err := storage.MVCCPut(ctx, eng, &eachMS, key, ts, hlc.ClockTimestamp{}, value, txn); err != nil {
+	opts := storage.MVCCWriteOptions{
+		Txn:   txn,
+		Stats: &eachMS,
+	}
+	if err := storage.MVCCPut(ctx, eng, key, ts, value, opts); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numOps; i++ {
@@ -329,7 +333,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 		for i := 0; i < qps; i++ {
 			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
 
-			if err := storage.MVCCPut(ctx, eng, ms, key, now, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if err := storage.MVCCPut(ctx, eng, key, now, value, storage.MVCCWriteOptions{Stats: ms}); err != nil {
 				t.Fatal(err)
 			}
 			if len(firstSl) < cacheFirstLen {
@@ -524,9 +528,9 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 			if rng.Float32() > 0.5 {
 				value.SetBytes(make([]byte, 20))
 			}
-			require.NoError(t, storage.MVCCPut(ctx, rw, &ms, key,
-				hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(i)}, hlc.ClockTimestamp{},
-				value, nil))
+			require.NoError(t, storage.MVCCPut(ctx, rw, key,
+				hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(i)},
+				value, storage.MVCCWriteOptions{Stats: &ms}))
 		}
 		return ms, hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(valCount)}
 	}
@@ -537,7 +541,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	}
 	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		for _, key := range keys {
-			require.NoError(t, storage.MVCCPut(ctx, rw, ms, key, delTime, hlc.ClockTimestamp{}, roachpb.Value{}, nil))
+			require.NoError(t, storage.MVCCPut(ctx, rw, key, delTime, roachpb.Value{}, storage.MVCCWriteOptions{Stats: ms}))
 		}
 	}
 
@@ -1127,7 +1131,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
-			if err := storage.MVCCPutProto(ctx, tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn); err != nil {
+			if err := storage.MVCCPutProto(ctx, tc.engine, key, hlc.Timestamp{}, txn, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1331,7 +1335,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	ts := tc.Clock().Now()
 	for _, lpv := range lastProcessedVals {
-		if err := storage.MVCCPutProto(ctx, tc.engine, nil, lpv.key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &ts); err != nil {
+		if err := storage.MVCCPutProto(ctx, tc.engine, lpv.key, hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}

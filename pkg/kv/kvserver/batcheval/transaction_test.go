@@ -85,7 +85,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	type evalFn func(storage.ReadWriter, EvalContext, *enginepb.MVCCStats) error
 	addIntent := func(b storage.ReadWriter, _ EvalContext, ms *enginepb.MVCCStats) error {
 		val := roachpb.MakeValueFromString("val")
-		return storage.MVCCPut(ctx, b, ms, intentKey, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn)
+		return storage.MVCCPut(ctx, b, intentKey, txn.ReadTimestamp, val, storage.MVCCWriteOptions{Txn: &txn, Stats: ms})
 	}
 	addPrevAbortSpanEntry := func(b storage.ReadWriter, rec EvalContext, ms *enginepb.MVCCStats) error {
 		return UpdateAbortSpan(ctx, rec, b, ms, prevTxn.TxnMeta, true /* poison */)
