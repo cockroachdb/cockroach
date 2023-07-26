@@ -417,6 +417,22 @@ func statusPublicFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element)
 	return status == scpb.Status_PUBLIC
 }
 
+func containsDescIDFilter(
+	descID catid.DescID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		return screl.ContainsDescID(e, descID)
+	}
+}
+
+func hasTableID(
+	tableID catid.DescID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		return screl.GetDescID(e) == tableID
+	}
+}
+
 func hasIndexIDAttrFilter(
 	indexID catid.IndexID,
 ) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
