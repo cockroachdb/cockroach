@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -485,6 +486,18 @@ func (ts *TestServer) TsDB() *ts.DB {
 	return nil
 }
 
+// SQLConn is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SQLConn(test testing.TB, dbName string) *gosql.DB {
+	return serverutils.OpenDBConn(
+		test, ts.AdvSQLAddr(), dbName, ts.cfg.Insecure, ts.Stopper())
+}
+
+// SQLConnE is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SQLConnE(dbName string) (*gosql.DB, error) {
+	return serverutils.OpenDBConnE(
+		ts.AdvSQLAddr(), dbName, ts.cfg.Insecure, ts.Stopper())
+}
+
 // DB returns the client.DB instance used by the TestServer.
 func (ts *TestServer) DB() *kv.DB {
 	if ts != nil {
@@ -718,6 +731,18 @@ func (t *TestTenant) HTTPAddr() string {
 // RPCAddr is part of the serverutils.ApplicationLayerInterface.
 func (t *TestTenant) RPCAddr() string {
 	return t.Cfg.Addr
+}
+
+// SQLConn is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SQLConn(test testing.TB, dbName string) *gosql.DB {
+	return serverutils.OpenDBConn(
+		test, t.AdvSQLAddr(), dbName, t.Cfg.Insecure, t.Stopper())
+}
+
+// SQLConnE is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SQLConnE(dbName string) (*gosql.DB, error) {
+	return serverutils.OpenDBConnE(
+		t.AdvSQLAddr(), dbName, t.Cfg.Insecure, t.Stopper())
 }
 
 // DB is part of the serverutils.ApplicationLayerInterface.
@@ -1029,8 +1054,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 		drain:          sqlServerWrapper.drainServer,
 	}
 
-	sqlDB, err := serverutils.OpenDBConnE(
-		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper)
+	sqlDB, err := ts.SQLConnE("cluster:" + string(args.TenantName) + "/" + args.UseDatabase)
 	if err != nil {
 		return nil, nil, err
 	}

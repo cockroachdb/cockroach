@@ -1273,7 +1273,7 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		// the session expiry should be ignored.
 		// Open a DB connection on the server and not the tenant to test that the session
 		// expiry is ignored outside of the multi-tenant environment.
-		dbConn := serverutils.OpenDBConn(t, s.AdvSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper())
+		dbConn := s.SystemLayer().SQLConn(t, "")
 		defer dbConn.Close()
 		// Set up a dummy database and table to write into for the test.
 		if _, err := dbConn.Exec(`CREATE DATABASE t1;
@@ -1563,7 +1563,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	params := base.TestServerArgs{}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	dbConn := serverutils.OpenDBConn(t, s.AdvSQLAddr(), "", false /* insecure */, s.Stopper())
+	dbConn := s.ApplicationLayer().SQLConn(t, "")
 	defer dbConn.Close()
 
 	waitChannel := make(chan struct{})

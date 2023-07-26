@@ -104,8 +104,8 @@ func TestEndToEndGC(t *testing.T) {
 				})
 				defer s.Stopper().Stop(ctx)
 
-				statusServer := s.StatusServer().(serverpb.StatusServer)
-				systemSqlDb := serverutils.OpenDBConn(t, s.SQLAddr(), "system", false, s.Stopper())
+				statusServer := s.SystemLayer().StatusServer().(serverpb.StatusServer)
+				systemSqlDb := s.SystemLayer().SQLConn(t, "system")
 
 				execOrFatal := func(t *testing.T, db *gosql.DB, stmt string, args ...interface{}) {
 					t.Helper()

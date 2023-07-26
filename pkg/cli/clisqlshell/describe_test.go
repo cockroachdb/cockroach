@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -39,8 +38,7 @@ func TestDescribe(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	db := serverutils.OpenDBConn(
-		t, c.TestServer.AdvSQLAddr(), "defaultdb", false /* insecure */, c.TestServer.Stopper())
+	db := c.TestServer.SQLConn(t, "defaultdb")
 
 	var commonArgs []string
 

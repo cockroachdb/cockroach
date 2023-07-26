@@ -63,7 +63,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	firstServer := testCluster.Server(0)
 
 	// Enable zone configs for secondary tenants.
-	systemSqlDb := serverutils.OpenDBConn(t, firstServer.SQLAddr(), "system", false, firstServer.Stopper())
+	systemSqlDb := firstServer.SystemLayer().SQLConn(t, "system")
 	_, err := systemSqlDb.Exec("ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
 	require.NoError(t, err)
 

@@ -621,8 +621,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 		return err
 	}
 
-	dbConn, err := serverutils.OpenDBConnE(
-		server.ApplicationLayer().AdvSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+	dbConn, err := server.ApplicationLayer().SQLConnE(serverArgs.UseDatabase)
 	if err != nil {
 		return err
 	}
@@ -631,8 +630,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	// connection.
 	var storageDbConn *gosql.DB
 	if idx == 0 {
-		storageDbConn, err = serverutils.OpenDBConnE(
-			server.SystemLayer().AdvSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+		storageDbConn, err = server.SystemLayer().SQLConnE("")
 		if err != nil {
 			return err
 		}
@@ -1737,8 +1735,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 			return err
 		}
 
-		dbConn, err := serverutils.OpenDBConnE(srv.ApplicationLayer().AdvSQLAddr(),
-			serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
+		dbConn, err := srv.ApplicationLayer().SQLConnE(serverArgs.UseDatabase)
 		if err != nil {
 			return err
 		}
