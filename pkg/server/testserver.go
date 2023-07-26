@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1031,14 +1032,15 @@ func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roach
 	ts.node.tenantInfoWatcher.TestingRestart()
 
 	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
+
 	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
 	if err != nil {
 		return err
 	}
 
 	for {
-		_, infoCh, found := infoWatcher.GetInfo(tenantID)
-		if found {
+		info, infoCh, found := infoWatcher.GetInfo(tenantID)
+		if found && info.ServiceMode != mtinfopb.ServiceModeNone {
 			log.Infof(ctx, "cached record found for tenant %v", tenantID)
 			return nil
 		}
@@ -1086,6 +1088,14 @@ func (ts *TestServer) StartTenant(
 			if err != nil {
 				return nil, err
 			}
+		}
+		// Mark it for external execution. This is needed before we can spawn a server.
+		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-set-tenant-service-mode", nil, /* txn */
+			"ALTER TENANT [$1] START SERVICE EXTERNAL",
+			params.TenantID.ToUint64(),
+		); err != nil {
+			return nil, err
 		}
 	} else if !params.SkipTenantCheck {
 		requestedID := uint64(0)

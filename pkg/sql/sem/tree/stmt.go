@@ -554,7 +554,7 @@ func (*AlterSequence) StatementType() StatementType { return TypeDDL }
 func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
 
 // StatementReturnType implements the Statement interface.
-func (*AlterRole) StatementReturnType() StatementReturnType { return Ack }
+func (*AlterRole) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
 func (*AlterRole) StatementType() StatementType { return TypeDCL }
@@ -565,7 +565,7 @@ func (*AlterRole) StatementTag() string { return "ALTER ROLE" }
 func (*AlterRole) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
-func (*AlterRoleSet) StatementReturnType() StatementReturnType { return Ack }
+func (*AlterRoleSet) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
 func (*AlterRoleSet) StatementType() StatementType { return TypeDCL }
@@ -932,7 +932,7 @@ func (*CreateType) StatementTag() string { return "CREATE TYPE" }
 func (*CreateType) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
-func (*CreateRole) StatementReturnType() StatementReturnType { return Ack }
+func (*CreateRole) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
 func (*CreateRole) StatementType() StatementType { return TypeDCL }
@@ -1063,7 +1063,7 @@ func (*DropSequence) StatementType() StatementType { return TypeDDL }
 func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
 
 // StatementReturnType implements the Statement interface.
-func (*DropRole) StatementReturnType() StatementReturnType { return Ack }
+func (*DropRole) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
 func (*DropRole) StatementType() StatementType { return TypeDCL }
