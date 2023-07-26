@@ -27,25 +27,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,195 +98,6 @@ func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) 
 		t.Log(DefaultTestTenantMessage)
 	}
 	return enabled
-}
-
-// TestServerInterface defines test server functionality that tests need; it is
-// implemented by server.TestServer.
-type TestServerInterface interface {
-	StorageLayerInterface
-	ApplicationLayerInterface
-	TenantControlInterface
-
-	Start(context.Context) error
-
-	// ApplicationLayer returns the interface to the application layer that is
-	// exercised by the test. Depending on how the test server is started
-	// and (optionally) randomization, this can be either the SQL layer
-	// of a secondary tenant or that of the system tenant.
-	ApplicationLayer() ApplicationLayerInterface
-
-	// SystemLayer returns the interface to the application layer
-	// of the system tenant.
-	SystemLayer() ApplicationLayerInterface
-
-	// StorageLayer returns the interface to the storage layer.
-	StorageLayer() StorageLayerInterface
-
-	// BinaryVersionOverride returns the value of an override if set using
-	// TestingKnobs.
-	BinaryVersionOverride() roachpb.Version
-}
-
-// TenantControlInterface defines the API of a test server that can
-// start the SQL and HTTP service for secondary tenants (virtual
-// clusters).
-type TenantControlInterface interface {
-	// StartSharedProcessTenant starts the service for a secondary tenant
-	// using the special configuration we define for shared-process deployments.
-	//
-	// args.TenantName must be specified. If a tenant with that name already
-	// exists, its ID is checked against args.TenantID (if set), and, if it
-	// matches, new tenant metadata is not created in the system.tenants table.
-	//
-	// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
-	// servers.
-	//
-	// TODO(knz): fold with StartTenant below.
-	StartSharedProcessTenant(
-		ctx context.Context, args base.TestSharedProcessTenantArgs,
-	) (ApplicationLayerInterface, *gosql.DB, error)
-
-	// StartTenant starts the service for a secondary tenant using the special
-	// configuration we define for separate-process deployments. This incidentally
-	// is also the configuration we use in CC Serverless.
-	//
-	// TODO(knz): Rename this to StartApplicationService. Take the
-	// deployment mode as parameter instead of using a separate method.
-	StartTenant(ctx context.Context, params base.TestTenantArgs) (ApplicationLayerInterface, error)
-
-	// DisableStartTenant prevents calls to StartTenant(). If an attempt
-	// is made, the server will return the specified error.
-	DisableStartTenant(reason error)
-
-	// WaitForTenantReadiness waits until the tenant record is known
-	// to the in-RAM caches. Trying to start a tenant server before
-	// this is called can run into a "missing record" error even
-	// if the tenant record exists in KV.
-	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
-
-	// TestTenants returns the test tenants associated with the server.
-	//
-	// TODO(knz): rename to TestApplicationServices.
-	TestTenants() []ApplicationLayerInterface
-
-	// StartedDefaultTestTenant returns true if the server has started
-	// the service for the default test tenant.
-	StartedDefaultTestTenant() bool
-}
-
-// StorageLayerInterface defines accessors to the storage layer of a
-// test server. See ApplicationLayerInterface for the relevant
-// application-level APIs.
-type StorageLayerInterface interface {
-	// Node returns the server.Node as an interface{}.
-	Node() interface{}
-
-	// NodeID returns the ID of this node within its cluster.
-	NodeID() roachpb.NodeID
-
-	// StorageClusterID returns the storage cluster ID as understood by
-	// this node in the cluster.
-	StorageClusterID() uuid.UUID
-
-	// GossipI returns the gossip used by the TestServer.
-	// The real return type is *gossip.Gossip.
-	GossipI() interface{}
-
-	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
-	SQLLivenessProvider() interface{}
-
-	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
-	// interface{}.
-	NodeLiveness() interface{}
-
-	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
-	HeartbeatNodeLiveness() error
-
-	// NodeDialer exposes the NodeDialer instance used by the TestServer as an
-	// interface{}.
-	NodeDialer() interface{}
-
-	// WriteSummaries records summaries of time-series data, which is required for
-	// any tests that query server stats.
-	WriteSummaries() error
-
-	// GetFirstStoreID is a utility function returning the StoreID of the first
-	// store on this node.
-	GetFirstStoreID() roachpb.StoreID
-
-	// GetStores returns the collection of stores from this TestServer's node.
-	// The return value is of type *kvserver.Stores.
-	GetStores() interface{}
-
-	// Decommission idempotently sets the decommissioning flag for specified nodes.
-	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
-
-	// DecommissioningNodeMap returns a map of nodeIDs that are known to the
-	// server to be decommissioning.
-	DecommissioningNodeMap() map[roachpb.NodeID]interface{}
-
-	// SplitRange splits the range containing splitKey.
-	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
-
-	// MergeRanges merges the range containing leftKey with the following adjacent
-	// range.
-	MergeRanges(leftKey roachpb.Key) (merged roachpb.RangeDescriptor, err error)
-
-	// ExpectedInitialRangeCount returns the expected number of ranges that should
-	// be on the server after initial (asynchronous) splits have been completed,
-	// assuming no additional information is added outside of the normal bootstrap
-	// process.
-	ExpectedInitialRangeCount() (int, error)
-
-	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
-	//
-	// An error will be returned if the same table name exists in multiple schemas
-	// inside the specified database.
-	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
-
-	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
-	// interface{}. The UpdateChecker periodically phones home to check for new
-	// updates that are available.
-	UpdateChecker() interface{}
-
-	// ScratchRange splits off a range suitable to be used as KV scratch space.
-	// (it doesn't overlap system spans or SQL tables).
-	//
-	// Calling this multiple times is undefined (but see
-	// TestCluster.ScratchRange() which is idempotent).
-	ScratchRange() (roachpb.Key, error)
-
-	// Engines returns the TestServer's engines.
-	Engines() []storage.Engine
-
-	// MetricsRecorder periodically records node-level and store-level metrics.
-	MetricsRecorder() *status.MetricsRecorder
-
-	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
-	// the server.
-	SpanConfigKVSubscriber() interface{}
-
-	// KVFlowController returns the embedded kvflowcontrol.Controller for the
-	// server.
-	KVFlowController() interface{}
-
-	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
-	KVFlowHandles() interface{}
-
-	// KvProber returns a *kvprober.Prober, which is useful when asserting the
-	//correctness of the prober from integration tests.
-	KvProber() *kvprober.Prober
-
-	// TenantCapabilitiesReader retrieves a reference to the
-	// capabilities reader.
-	TenantCapabilitiesReader() tenantcapabilities.Reader
-}
-
-// TestServerFactory encompasses the actual implementation of the shim
-// service.
-type TestServerFactory interface {
-	// New instantiates a test server.
-	New(params base.TestServerArgs) (interface{}, error)
 }
 
 var srvFactoryImpl TestServerFactory

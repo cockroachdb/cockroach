@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "serverutils",
     srcs = [
+        "api.go",
         "test_cluster_shim.go",
         "test_cluster_utils.go",
         "test_server_shim.go",
