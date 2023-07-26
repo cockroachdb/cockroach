@@ -132,6 +132,8 @@ const (
 	exprKindOffset
 	exprKindOn
 	exprKindOrderBy
+	exprKindOrderByDelete
+	exprKindOrderByUpdate
 	exprKindReturning
 	exprKindSelect
 	exprKindStoreID
@@ -153,6 +155,8 @@ var exprKindName = [...]string{
 	exprKindOffset:            "OFFSET",
 	exprKindOn:                "ON",
 	exprKindOrderBy:           "ORDER BY",
+	exprKindOrderByDelete:     "ORDER BY in DELETE",
+	exprKindOrderByUpdate:     "ORDER BY in UPDATE",
 	exprKindReturning:         "RETURNING",
 	exprKindSelect:            "SELECT",
 	exprKindStoreID:           "RELOCATE STORE ID",
