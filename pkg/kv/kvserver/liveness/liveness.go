@@ -1396,7 +1396,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	nl.mu.RLock()
 	cb := nl.mu.onSelfLive
 	nl.mu.RUnlock()
-	if cb != nil {
+	if nl.gossip.NodeID.Get() == update.newLiveness.NodeID && cb != nil {
 		cb(ctx)
 	}
 	return Record{Liveness: update.newLiveness, raw: v.TagAndDataBytes()}, nil
