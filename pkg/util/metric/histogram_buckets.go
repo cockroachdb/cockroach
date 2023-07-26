@@ -45,7 +45,7 @@ const (
 const precisionTestEnabledEnv = "COCKROACH_HISTOGRAM_PRECISION_TESTING"
 const precisionTestBucketCount = 200
 
-var staticBucketConfigs = map[string]staticBucketConfig{
+var StaticBucketConfigs = map[string]staticBucketConfig{
 	"IOLatencyBuckets": {
 		min:          10e3,
 		max:          10e9,
@@ -111,7 +111,7 @@ var staticBucketConfigs = map[string]staticBucketConfig{
 	},
 }
 
-func getBuckets(config staticBucketConfig) []float64 {
+func GetBucketsFromBucketConfig(config staticBucketConfig) []float64 {
 	var buckets []float64
 	if envutil.EnvOrDefaultBool(precisionTestEnabledEnv, false) {
 		config.distribution = Uniform
@@ -126,13 +126,3 @@ func getBuckets(config staticBucketConfig) []float64 {
 	}
 	return buckets
 }
-
-var IOLatencyBuckets = getBuckets(staticBucketConfigs["IOLatencyBuckets"])
-var BatchProcessLatencyBuckets = getBuckets(staticBucketConfigs["BatchProcessLatencyBuckets"])
-var LongRunning60mLatencyBuckets = getBuckets(staticBucketConfigs["LongRunning60mLatencyBuckets"])
-var Count1KBuckets = getBuckets(staticBucketConfigs["Count1KBuckets"])
-var Percent100Buckets = getBuckets(staticBucketConfigs["Percent100Buckets"])
-var DataSize16MBBuckets = getBuckets(staticBucketConfigs["DataSize16MBBuckets"])
-var MemoryUsage64MBBuckets = getBuckets(staticBucketConfigs["MemoryUsage64MBBuckets"])
-var ReplicaCPUTimeBuckets = getBuckets(staticBucketConfigs["ReplicaCPUTimeBuckets"])
-var ReplicaBatchRequestCountBuckets = getBuckets(staticBucketConfigs["ReplicaBatchRequestCountBuckets"])

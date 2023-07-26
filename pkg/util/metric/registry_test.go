@@ -77,10 +77,10 @@ func TestRegistry(t *testing.T) {
 	r.AddMetric(topCounter)
 
 	r.AddMetric(NewHistogram(HistogramOptions{
-		Mode:     HistogramModePrometheus,
-		Metadata: Metadata{Name: "top.histogram"},
-		Duration: time.Minute,
-		Buckets:  Count1KBuckets,
+		Mode:         HistogramModePrometheus,
+		Metadata:     Metadata{Name: "top.histogram"},
+		Duration:     time.Minute,
+		BucketConfig: StaticBucketConfigs["Count1KBuckets"],
 	}))
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
@@ -109,10 +109,10 @@ func TestRegistry(t *testing.T) {
 		StructGauge64: NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
 		StructCounter: NewCounter(Metadata{Name: "struct.counter"}),
 		StructHistogram: NewHistogram(HistogramOptions{
-			Mode:     HistogramModePrometheus,
-			Metadata: Metadata{Name: "struct.histogram"},
-			Duration: time.Minute,
-			Buckets:  Count1KBuckets,
+			Mode:         HistogramModePrometheus,
+			Metadata:     Metadata{Name: "struct.histogram"},
+			Duration:     time.Minute,
+			BucketConfig: StaticBucketConfigs["Count1KBuckets"],
 		}),
 		NestedStructGauge: NestedStruct{
 			NestedStructGauge: NewGauge(Metadata{Name: "nested.struct.gauge"}),
@@ -133,10 +133,10 @@ func TestRegistry(t *testing.T) {
 		privateStructGauge64: NewGaugeFloat64(Metadata{Name: "private.struct.gauge64"}),
 		privateStructCounter: NewCounter(Metadata{Name: "private.struct.counter"}),
 		privateStructHistogram: NewHistogram(HistogramOptions{
-			Mode:     HistogramModePrometheus,
-			Metadata: Metadata{Name: "private.struct.histogram"},
-			Duration: time.Minute,
-			Buckets:  Count1KBuckets,
+			Mode:         HistogramModePrometheus,
+			Metadata:     Metadata{Name: "private.struct.histogram"},
+			Duration:     time.Minute,
+			BucketConfig: StaticBucketConfigs["Count1KBuckets"],
 		}),
 		privateNestedStructGauge: NestedStruct{
 			NestedStructGauge: NewGauge(Metadata{Name: "private.nested.struct.gauge"}),
