@@ -100,9 +100,9 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-			AfterWaitingForConcurrentSchemaChanges: func(stmts []string, wasBlocked bool) {
+			WhileWaitingForConcurrentSchemaChanges: func(stmts []string) {
 				for _, stmt := range stmts {
-					if wasBlocked && strings.Contains(stmt, "ADD COLUMN") {
+					if strings.Contains(stmt, "ADD COLUMN") {
 						addColumnBlockedCounter.Add(1)
 						return
 					}
@@ -160,6 +160,14 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 		}
 		wg.Done()
 	}()
+
+	// The ADD COLUMN schema change must block.
+	testutils.SucceedsSoon(t, func() error {
+		if addColumnBlockedCounter.Load() == 0 {
+			return errors.New("waiting for concurrent schema change to block")
+		}
+		return nil
+	})
 
 	// Unblock the create index job.
 	continueNotif <- struct{}{}
