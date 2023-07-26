@@ -758,6 +758,11 @@ func (t *TestTenant) DistSenderI() interface{} {
 	return t.sql.execCfg.DistSender
 }
 
+// InternalDB is part of the serverutils.TestTenantInterface.
+func (t *TestTenant) InternalDB() interface{} {
+	return t.sql.internalDB
+}
+
 // InternalExecutor is part of the serverutils.TestTenantInterface.
 func (t *TestTenant) InternalExecutor() interface{} {
 	return t.sql.internalExecutor
@@ -952,11 +957,6 @@ func (ts *TestServer) StartSharedProcessTenant(
 		}
 	}
 
-	// Wait for the rangefeed to catch up.
-	if err := ts.WaitForTenantReadiness(ctx, tenantID); err != nil {
-		return nil, nil, err
-	}
-
 	if justCreated {
 		// Also mark it for shared-process execution.
 		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
@@ -970,6 +970,11 @@ func (ts *TestServer) StartSharedProcessTenant(
 		if err != nil {
 			return nil, nil, err
 		}
+	}
+
+	// Wait for the rangefeed to catch up.
+	if err := ts.WaitForTenantReadiness(ctx, tenantID); err != nil {
+		return nil, nil, err
 	}
 
 	// Instantiate the tenant server.
@@ -1020,6 +1025,11 @@ func (t *TestTenant) HTTPAuthServer() interface{} {
 
 // WaitForTenantReadiness is part of TestServerInterface.
 func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
+	// Restarting the watcher forces a new initial scan which is
+	// faster than waiting out the closed timestamp interval
+	// required to see new updates.
+	ts.node.tenantInfoWatcher.TestingRestart()
+
 	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
 	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
 	if err != nil {
@@ -1220,10 +1230,9 @@ func (ts *TestServer) StartTenant(
 				return nil, err
 			}
 		} else {
-			// Restart the capabilities watcher. Restarting the
-			// watcher forces a new initial scan which is faster
-			// than waiting out the closed timestamp interval
-			// required to see new updates.
+			// Restart the capabilities watcher. Restarting the watcher
+			// forces a new initial scan which is faster than waiting out
+			// the closed timestamp interval required to see new updates.
 			ts.tenantCapabilitiesWatcher.TestingRestart()
 			if err := testutils.SucceedsSoonError(func() error {
 				capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
@@ -1477,7 +1486,7 @@ func (ts *TestServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
 
-// InternalDB is part of the serverutils.TestServerInterface.
+// InternalDB is part of the serverutils.TestTenantInterface.
 func (ts *TestServer) InternalDB() interface{} {
 	return ts.sqlServer.internalDB
 }

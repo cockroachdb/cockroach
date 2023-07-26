@@ -391,7 +391,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",
-        "//pkg/sql/tests",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

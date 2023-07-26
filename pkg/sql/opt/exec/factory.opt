@@ -764,7 +764,7 @@ define AlterRangeRelocate {
 # CreateFunction implements CREATE FUNCTION.
 define CreateFunction {
     Schema cat.Schema
-    Cf *tree.CreateFunction
+    Cr *tree.CreateRoutine
     Deps opt.SchemaDeps
     TypeDeps opt.SchemaTypeDeps
 }

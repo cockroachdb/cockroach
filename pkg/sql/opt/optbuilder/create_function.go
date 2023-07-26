@@ -30,17 +30,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (outScope *scope) {
+func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	if cf.FuncName.ExplicitCatalog {
-		if string(cf.FuncName.CatalogName) != b.evalCtx.SessionData().Database {
+	if cf.Name.ExplicitCatalog {
+		if string(cf.Name.CatalogName) != b.evalCtx.SessionData().Database {
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
 	}
 
-	sch, resName := b.resolveSchemaForCreateFunction(&cf.FuncName)
+	if cf.IsProcedure {
+		panic(unimplemented.New("CREATE PROCEDURE", "procedures not supported"))
+	}
+
+	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
-	cf.FuncName.ObjectNamePrefix = resName
+	cf.Name.ObjectNamePrefix = resName
 
 	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in UDF and
 	// we will need to lift this hack when we plan to allow it.
@@ -86,7 +90,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		panic(unimplemented.New("CREATE FUNCTION sql_body", "CREATE FUNCTION...sql_body unimplemented"))
 	}
 
-	if err := tree.ValidateFuncOptions(cf.Options); err != nil {
+	if err := tree.ValidateRoutineOptions(cf.Options); err != nil {
 		panic(err)
 	}
 
@@ -95,13 +99,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	funcBodyFound := false
 	languageFound := false
 	var funcBodyStr string
-	var language tree.FunctionLanguage
+	var language tree.RoutineLanguage
 	for _, option := range cf.Options {
 		switch opt := option.(type) {
-		case tree.FunctionBodyStr:
+		case tree.RoutineBodyStr:
 			funcBodyFound = true
 			funcBodyStr = string(opt)
-		case tree.FunctionLanguage:
+		case tree.RoutineLanguage:
 			languageFound = true
 			language = opt
 			// Check the language here, before attempting to parse the function body.
@@ -146,10 +150,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			panic(err)
 		}
 		if types.IsRecordType(typ) {
-			if language == tree.FunctionLangSQL {
+			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
 					"SQL functions cannot have arguments of type record"))
-			} else if language == tree.FunctionLangPLpgSQL {
+			} else if language == tree.RoutineLangPLpgSQL {
 				panic(unimplemented.NewWithIssueDetail(105713,
 					"PL/pgSQL functions with RECORD input arguments",
 					"PL/pgSQL functions with RECORD input arguments are not yet supported",
@@ -177,20 +181,20 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typeDeps.Add(int(id))
 	})
 
-	targetVolatility := tree.GetFuncVolatility(cf.Options)
+	targetVolatility := tree.GetRoutineVolatility(cf.Options)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
 
 	// Validate each statement and collect the dependencies.
 	var stmtScope *scope
 	switch language {
-	case tree.FunctionLangSQL:
+	case tree.RoutineLangSQL:
 		// Parse the function body.
 		stmts, err := parser.Parse(funcBodyStr)
 		if err != nil {
 			panic(err)
 		}
 		for i, stmt := range stmts {
-			// Add statement ast into CreateFunction node for logging purpose, and set
+			// Add statement ast into CreateRoutine node for logging purpose, and set
 			// the annotations for this statement so names can be resolved.
 			cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
 			ann := tree.MakeAnnotations(stmt.NumAnnotations)
@@ -212,7 +216,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
 			afterBuildStmt()
 		}
-	case tree.FunctionLangPLpgSQL:
+	case tree.RoutineLangPLpgSQL:
 		if cf.ReturnType.IsSet {
 			panic(unimplemented.NewWithIssueDetail(105240,
 				"set-returning PL/pgSQL functions",
@@ -247,7 +251,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		}
 	}
 
-	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
+	if targetVolatility == tree.RoutineImmutable && len(deps) > 0 {
 		panic(
 			pgerror.Newf(
 				pgcode.InvalidParameterValue,
@@ -258,8 +262,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 
 	// Override the function body so that references are fully qualified.
 	for i, option := range cf.Options {
-		if _, ok := option.(tree.FunctionBodyStr); ok {
-			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.CloseAndGetString())
+		if _, ok := option.(tree.RoutineBodyStr); ok {
+			cf.Options[i] = tree.RoutineBodyStr(fmtCtx.CloseAndGetString())
 			break
 		}
 	}
@@ -373,17 +377,17 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 }
 
 func checkStmtVolatility(
-	expectedVolatility tree.FunctionVolatility, stmtScope *scope, stmt fmt.Stringer,
+	expectedVolatility tree.RoutineVolatility, stmtScope *scope, stmt fmt.Stringer,
 ) {
 	switch expectedVolatility {
-	case tree.FunctionImmutable:
+	case tree.RoutineImmutable:
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in immutable function: %s", stmt.String()))
 		}
 		if stmtScope.expr.Relational().VolatilitySet.HasStable() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "stable statement not allowed in immutable function: %s", stmt.String()))
 		}
-	case tree.FunctionStable:
+	case tree.RoutineStable:
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
 		}

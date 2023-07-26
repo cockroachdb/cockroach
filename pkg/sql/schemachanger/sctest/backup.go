@@ -70,6 +70,10 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	// and at least as expensive to run.
 	skip.UnderShort(t)
 
+	if strings.Contains(path, "alter_table_add_primary_key_drop_rowid") {
+		skip.WithIssue(t, 107552, "flaky test")
+	}
+
 	factory = factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, factory, cs)

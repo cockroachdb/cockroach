@@ -20,31 +20,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ErrConflictingFunctionOption indicates that there are conflicting or
+// ErrConflictingRoutineOption indicates that there are conflicting or
 // redundant function options from user input to either create or alter a
 // function.
-var ErrConflictingFunctionOption = pgerror.New(pgcode.Syntax, "conflicting or redundant options")
+var ErrConflictingRoutineOption = pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 
-// FunctionName represent a function name in a UDF relevant statement, either
+// RoutineName represent a function name in a UDF relevant statement, either
 // DDL or DML statement. Similar to TableName, it is constructed for incoming
 // SQL queries from an UnresolvedObjectName.
-type FunctionName struct {
+type RoutineName struct {
 	objName
 }
 
-// MakeFunctionNameFromPrefix returns a FunctionName with the given prefix and
+// MakeRoutineNameFromPrefix returns a RoutineName with the given prefix and
 // function name.
-func MakeFunctionNameFromPrefix(prefix ObjectNamePrefix, object Name) FunctionName {
-	return FunctionName{objName{
+func MakeRoutineNameFromPrefix(prefix ObjectNamePrefix, object Name) RoutineName {
+	return RoutineName{objName{
 		ObjectName:       object,
 		ObjectNamePrefix: prefix,
 	}}
 }
 
-// MakeQualifiedFunctionName constructs a FunctionName with the given db and
+// MakeQualifiedRoutineName constructs a RoutineName with the given db and
 // schema name as prefix.
-func MakeQualifiedFunctionName(db string, sc string, fn string) FunctionName {
-	return MakeFunctionNameFromPrefix(
+func MakeQualifiedRoutineName(db string, sc string, fn string) RoutineName {
+	return MakeRoutineNameFromPrefix(
 		ObjectNamePrefix{
 			CatalogName:     Name(db),
 			ExplicitCatalog: true,
@@ -55,7 +55,7 @@ func MakeQualifiedFunctionName(db string, sc string, fn string) FunctionName {
 }
 
 // Format implements the NodeFormatter interface.
-func (f *FunctionName) Format(ctx *FmtCtx) {
+func (f *RoutineName) Format(ctx *FmtCtx) {
 	f.ObjectNamePrefix.Format(ctx)
 	if f.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
@@ -63,11 +63,11 @@ func (f *FunctionName) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&f.ObjectName)
 }
 
-func (f *FunctionName) String() string { return AsString(f) }
+func (f *RoutineName) String() string { return AsString(f) }
 
 // FQString renders the function name in full, not omitting the prefix
 // schema and catalog names. Suitable for logging, etc.
-func (f *FunctionName) FQString() string {
+func (f *RoutineName) FQString() string {
 	ctx := NewFmtCtx(FmtSimple)
 	ctx.FormatNode(&f.CatalogName)
 	ctx.WriteByte('.')
@@ -77,16 +77,16 @@ func (f *FunctionName) FQString() string {
 	return ctx.CloseAndGetString()
 }
 
-func (f *FunctionName) objectName() {}
+func (f *RoutineName) objectName() {}
 
-// CreateFunction represents a CREATE FUNCTION statement.
-type CreateFunction struct {
+// CreateRoutine represents a CREATE FUNCTION or CREATE PROCEDURE statement.
+type CreateRoutine struct {
 	IsProcedure bool
 	Replace     bool
-	FuncName    FunctionName
-	Params      FuncParams
-	ReturnType  FuncReturnType
-	Options     FunctionOptions
+	Name        RoutineName
+	Params      RoutineParams
+	ReturnType  RoutineReturnType
+	Options     RoutineOptions
 	RoutineBody *RoutineBody
 	// BodyStatements is not assigned during initial parsing of user input. It's
 	// assigned during opt builder for logging purpose at the moment. It stores
@@ -100,26 +100,32 @@ type CreateFunction struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateFunction) Format(ctx *FmtCtx) {
+func (node *CreateRoutine) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 	if node.Replace {
 		ctx.WriteString("OR REPLACE ")
 	}
-	ctx.WriteString("FUNCTION ")
-	ctx.FormatNode(&node.FuncName)
+	if node.IsProcedure {
+		ctx.WriteString("PROCEDURE ")
+	} else {
+		ctx.WriteString("FUNCTION ")
+	}
+	ctx.FormatNode(&node.Name)
 	ctx.WriteString("(")
 	ctx.FormatNode(node.Params)
 	ctx.WriteString(")\n\t")
-	ctx.WriteString("RETURNS ")
-	if node.ReturnType.IsSet {
-		ctx.WriteString("SETOF ")
+	if !node.IsProcedure {
+		ctx.WriteString("RETURNS ")
+		if node.ReturnType.IsSet {
+			ctx.WriteString("SETOF ")
+		}
+		ctx.FormatTypeReference(node.ReturnType.Type)
+		ctx.WriteString("\n\t")
 	}
-	ctx.FormatTypeReference(node.ReturnType.Type)
-	ctx.WriteString("\n\t")
-	var funcBody FunctionBodyStr
+	var funcBody RoutineBodyStr
 	for _, option := range node.Options {
 		switch t := option.(type) {
-		case FunctionBodyStr:
+		case RoutineBodyStr:
 			funcBody = t
 			continue
 		}
@@ -171,133 +177,132 @@ func (node *RoutineReturn) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ReturnVal)
 }
 
-// FunctionOptions represent a list of function options.
-type FunctionOptions []FunctionOption
+// RoutineOptions represent a list of routine options.
+type RoutineOptions []RoutineOption
 
-// FunctionOption is an interface representing UDF properties.
-type FunctionOption interface {
-	functionOption()
+// RoutineOption is an interface representing UDF properties.
+type RoutineOption interface {
+	routineOption()
 	NodeFormatter
 }
 
-func (FunctionNullInputBehavior) functionOption() {}
-func (FunctionVolatility) functionOption()        {}
-func (FunctionLeakproof) functionOption()         {}
-func (FunctionBodyStr) functionOption()           {}
-func (FunctionLanguage) functionOption()          {}
+func (RoutineNullInputBehavior) routineOption() {}
+func (RoutineVolatility) routineOption()        {}
+func (RoutineLeakproof) routineOption()         {}
+func (RoutineBodyStr) routineOption()           {}
+func (RoutineLanguage) routineOption()          {}
 
-// FunctionNullInputBehavior represent the UDF property on null parameters.
-type FunctionNullInputBehavior int
+// RoutineNullInputBehavior represent the UDF property on null parameters.
+type RoutineNullInputBehavior int
 
 const (
-	// FunctionCalledOnNullInput indicates that the function will be given the
+	// RoutineCalledOnNullInput indicates that the routine will be given the
 	// chance to execute when presented with NULL input. This is the default if
 	// no null input behavior is specified.
-	FunctionCalledOnNullInput FunctionNullInputBehavior = iota
-	// FunctionReturnsNullOnNullInput indicates that the function will result in
+	RoutineCalledOnNullInput RoutineNullInputBehavior = iota
+	// RoutineReturnsNullOnNullInput indicates that the routine will result in
 	// NULL given any NULL parameter.
-	FunctionReturnsNullOnNullInput
-	// FunctionStrict is the same as FunctionReturnsNullOnNullInput
-	FunctionStrict
+	RoutineReturnsNullOnNullInput
+	// RoutineStrict is the same as RoutineReturnsNullOnNullInput
+	RoutineStrict
 )
 
 // Format implements the NodeFormatter interface.
-func (node FunctionNullInputBehavior) Format(ctx *FmtCtx) {
+func (node RoutineNullInputBehavior) Format(ctx *FmtCtx) {
 	switch node {
-	case FunctionCalledOnNullInput:
+	case RoutineCalledOnNullInput:
 		ctx.WriteString("CALLED ON NULL INPUT")
-	case FunctionReturnsNullOnNullInput:
+	case RoutineReturnsNullOnNullInput:
 		ctx.WriteString("RETURNS NULL ON NULL INPUT")
-	case FunctionStrict:
+	case RoutineStrict:
 		ctx.WriteString("STRICT")
 	default:
-		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown routine option"))
 	}
 }
 
-// FunctionVolatility represent UDF volatility property.
-type FunctionVolatility int
+// RoutineVolatility represent UDF volatility property.
+type RoutineVolatility int
 
 const (
-	// FunctionVolatile represents volatility.Volatile. This is the default
+	// RoutineVolatile represents volatility.Volatile. This is the default
 	// volatility if none is provided.
-	FunctionVolatile FunctionVolatility = iota
-	// FunctionImmutable represents volatility.Immutable.
-	FunctionImmutable
-	// FunctionStable represents volatility.Stable.
-	FunctionStable
+	RoutineVolatile RoutineVolatility = iota
+	// RoutineImmutable represents volatility.Immutable.
+	RoutineImmutable
+	// RoutineStable represents volatility.Stable.
+	RoutineStable
 )
 
 // Format implements the NodeFormatter interface.
-func (node FunctionVolatility) Format(ctx *FmtCtx) {
+func (node RoutineVolatility) Format(ctx *FmtCtx) {
 	switch node {
-	case FunctionVolatile:
+	case RoutineVolatile:
 		ctx.WriteString("VOLATILE")
-	case FunctionImmutable:
+	case RoutineImmutable:
 		ctx.WriteString("IMMUTABLE")
-	case FunctionStable:
+	case RoutineStable:
 		ctx.WriteString("STABLE")
 	default:
-		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+		panic(pgerror.New(pgcode.InvalidParameterValue, "unknown routine option"))
 	}
 }
 
-// FunctionLeakproof indicates whether if a UDF is leakproof or not. The default
-// is NOT LEAKPROOF if no leakproof option is provided. LEAKPROOF can only be
-// used with the IMMUTABLE volatility because we currently conflated LEAKPROOF
-// as a volatility equal to IMMUTABLE+LEAKPROOF. Postgres allows
+// RoutineLeakproof indicates whether a function is leakproof or not. The
+// default is NOT LEAKPROOF if no leakproof option is provided. LEAKPROOF can
+// only be used with the IMMUTABLE volatility because we currently conflated
+// LEAKPROOF as a volatility equal to IMMUTABLE+LEAKPROOF. Postgres allows
 // STABLE+LEAKPROOF functions.
-type FunctionLeakproof bool
+type RoutineLeakproof bool
 
 // Format implements the NodeFormatter interface.
-func (node FunctionLeakproof) Format(ctx *FmtCtx) {
+func (node RoutineLeakproof) Format(ctx *FmtCtx) {
 	if !node {
 		ctx.WriteString("NOT ")
 	}
 	ctx.WriteString("LEAKPROOF")
 }
 
-// FunctionLanguage indicates the language of the statements in the UDF function
-// body.
-type FunctionLanguage string
+// RoutineLanguage indicates the language of the statements in the routine body.
+type RoutineLanguage string
 
 const (
-	// FunctionLangUnknown represents an unknown language.
-	FunctionLangUnknown FunctionLanguage = "unknown"
-	// FunctionLangSQL represents SQL language.
-	FunctionLangSQL FunctionLanguage = "SQL"
-	// FunctionLangPLpgSQL represents the PL/pgSQL procedural language.
-	FunctionLangPLpgSQL FunctionLanguage = "plpgsql"
-	// FunctionLangC represents the C language.
-	FunctionLangC FunctionLanguage = "C"
+	// RoutineLangUnknown represents an unknown language.
+	RoutineLangUnknown RoutineLanguage = "unknown"
+	// RoutineLangSQL represents SQL language.
+	RoutineLangSQL RoutineLanguage = "SQL"
+	// RoutineLangPLpgSQL represents the PL/pgSQL procedural language.
+	RoutineLangPLpgSQL RoutineLanguage = "plpgsql"
+	// RoutineLangC represents the C language.
+	RoutineLangC RoutineLanguage = "C"
 )
 
 // Format implements the NodeFormatter interface.
-func (node FunctionLanguage) Format(ctx *FmtCtx) {
+func (node RoutineLanguage) Format(ctx *FmtCtx) {
 	ctx.WriteString("LANGUAGE ")
 	ctx.WriteString(string(node))
 }
 
-// AsFunctionLanguage converts a string to a FunctionLanguage if applicable.
+// AsRoutineLanguage converts a string to a RoutineLanguage if applicable.
 // No error is returned if string does not represent a valid UDF language;
 // unknown languages result in an error later.
-func AsFunctionLanguage(lang string) (FunctionLanguage, error) {
+func AsRoutineLanguage(lang string) (RoutineLanguage, error) {
 	switch strings.ToLower(lang) {
 	case "sql":
-		return FunctionLangSQL, nil
+		return RoutineLangSQL, nil
 	case "plpgsql":
-		return FunctionLangPLpgSQL, nil
+		return RoutineLangPLpgSQL, nil
 	case "c":
-		return FunctionLangC, nil
+		return RoutineLangC, nil
 	}
-	return FunctionLanguage(lang), nil
+	return RoutineLanguage(lang), nil
 }
 
-// FunctionBodyStr is a string containing all statements in a UDF body.
-type FunctionBodyStr string
+// RoutineBodyStr is a string containing all statements in a UDF body.
+type RoutineBodyStr string
 
 // Format implements the NodeFormatter interface.
-func (node FunctionBodyStr) Format(ctx *FmtCtx) {
+func (node RoutineBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
 	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
 		ctx.WriteString("$funcbody$")
@@ -316,11 +321,11 @@ func (node FunctionBodyStr) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncParams represents a list of FuncParam.
-type FuncParams []FuncParam
+// RoutineParams represents a list of RoutineParam.
+type RoutineParams []RoutineParam
 
 // Format implements the NodeFormatter interface.
-func (node FuncParams) Format(ctx *FmtCtx) {
+func (node RoutineParams) Format(ctx *FmtCtx) {
 	for i := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -329,27 +334,27 @@ func (node FuncParams) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncParam represents a parameter in a UDF signature.
-type FuncParam struct {
+// RoutineParam represents a parameter in a UDF signature.
+type RoutineParam struct {
 	Name       Name
 	Type       ResolvableTypeReference
-	Class      FuncParamClass
+	Class      RoutineParamClass
 	DefaultVal Expr
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FuncParam) Format(ctx *FmtCtx) {
+func (node *RoutineParam) Format(ctx *FmtCtx) {
 	switch node.Class {
-	case FunctionParamIn:
+	case RoutineParamIn:
 		ctx.WriteString("IN")
-	case FunctionParamOut:
+	case RoutineParamOut:
 		ctx.WriteString("OUT")
-	case FunctionParamInOut:
+	case RoutineParamInOut:
 		ctx.WriteString("INOUT")
-	case FunctionParamVariadic:
+	case RoutineParamVariadic:
 		ctx.WriteString("VARIADIC")
 	default:
-		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
+		panic(pgerror.New(pgcode.InvalidParameterValue, "unknown routine option"))
 	}
 	ctx.WriteString(" ")
 	if node.Name != "" {
@@ -363,22 +368,22 @@ func (node *FuncParam) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncParamClass indicates what type of argument an arg is.
-type FuncParamClass int
+// RoutineParamClass indicates what type of argument an arg is.
+type RoutineParamClass int
 
 const (
-	// FunctionParamIn args can only be used as input.
-	FunctionParamIn FuncParamClass = iota
-	// FunctionParamOut args can only be used as output.
-	FunctionParamOut
-	// FunctionParamInOut args can be used as both input and output.
-	FunctionParamInOut
-	// FunctionParamVariadic args are variadic.
-	FunctionParamVariadic
+	// RoutineParamIn args can only be used as input.
+	RoutineParamIn RoutineParamClass = iota
+	// RoutineParamOut args can only be used as output.
+	RoutineParamOut
+	// RoutineParamInOut args can be used as both input and output.
+	RoutineParamInOut
+	// RoutineParamVariadic args are variadic.
+	RoutineParamVariadic
 )
 
-// FuncReturnType represent the return type of UDF.
-type FuncReturnType struct {
+// RoutineReturnType represent the return type of UDF.
+type RoutineReturnType struct {
 	Type  ResolvableTypeReference
 	IsSet bool
 }
@@ -418,8 +423,8 @@ func (node FuncObjs) Format(ctx *FmtCtx) {
 
 // FuncObj represents a function object DROP FUNCTION tries to drop.
 type FuncObj struct {
-	FuncName FunctionName
-	Params   FuncParams
+	FuncName RoutineName
+	Params   RoutineParams
 }
 
 // Format implements the NodeFormatter interface.
@@ -454,7 +459,7 @@ func (node FuncObj) ParamTypes(ctx context.Context, res TypeReferenceResolver) (
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.
 type AlterFunctionOptions struct {
 	Function FuncObj
-	Options  FunctionOptions
+	Options  RoutineOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -578,36 +583,36 @@ func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {
 	return StoredComputedColumnExpr
 }
 
-// ValidateFuncOptions checks whether there are conflicting or redundant
-// function options in the given slice.
-func ValidateFuncOptions(options FunctionOptions) error {
+// ValidateRoutineOptions checks whether there are conflicting or redundant
+// routine options in the given slice.
+func ValidateRoutineOptions(options RoutineOptions) error {
 	var hasLang, hasBody, hasLeakProof, hasVolatility, hasNullInputBehavior bool
-	conflictingErr := func(opt FunctionOption) error {
-		return errors.Wrapf(ErrConflictingFunctionOption, "%s", AsString(opt))
+	conflictingErr := func(opt RoutineOption) error {
+		return errors.Wrapf(ErrConflictingRoutineOption, "%s", AsString(opt))
 	}
 	for _, option := range options {
 		switch option.(type) {
-		case FunctionLanguage:
+		case RoutineLanguage:
 			if hasLang {
 				return conflictingErr(option)
 			}
 			hasLang = true
-		case FunctionBodyStr:
+		case RoutineBodyStr:
 			if hasBody {
 				return conflictingErr(option)
 			}
 			hasBody = true
-		case FunctionLeakproof:
+		case RoutineLeakproof:
 			if hasLeakProof {
 				return conflictingErr(option)
 			}
 			hasLeakProof = true
-		case FunctionVolatility:
+		case RoutineVolatility:
 			if hasVolatility {
 				return conflictingErr(option)
 			}
 			hasVolatility = true
-		case FunctionNullInputBehavior:
+		case RoutineNullInputBehavior:
 			if hasNullInputBehavior {
 				return conflictingErr(option)
 			}
@@ -620,15 +625,15 @@ func ValidateFuncOptions(options FunctionOptions) error {
 	return nil
 }
 
-// GetFuncVolatility tries to find a function volatility from the given list of
-// function options. If there is no volatility found, FunctionVolatile is
+// GetRoutineVolatility tries to find a function volatility from the given list of
+// function options. If there is no volatility found, RoutineVolatile is
 // returned as the default.
-func GetFuncVolatility(options FunctionOptions) FunctionVolatility {
+func GetRoutineVolatility(options RoutineOptions) RoutineVolatility {
 	for _, option := range options {
 		switch t := option.(type) {
-		case FunctionVolatility:
+		case RoutineVolatility:
 			return t
 		}
 	}
-	return FunctionVolatile
+	return RoutineVolatile
 }

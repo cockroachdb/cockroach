@@ -75,7 +75,7 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 	// referenced by other objects. This is needed when want to allow function
 	// references. Need to think about in what condition a function can be altered
 	// or not.
-	if err := tree.ValidateFuncOptions(n.n.Options); err != nil {
+	if err := tree.ValidateRoutineOptions(n.n.Options); err != nil {
 		return err
 	}
 
@@ -110,17 +110,17 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 }
 
 func maybeValidateNewFuncVolatility(
-	params runParams, fnDesc catalog.FunctionDescriptor, option tree.FunctionOption,
+	params runParams, fnDesc catalog.FunctionDescriptor, option tree.RoutineOption,
 ) error {
 	switch t := option.(type) {
-	case tree.FunctionVolatility:
+	case tree.RoutineVolatility:
 		f := NewReferenceProviderFactory(params.p)
 		ast, err := fnDesc.ToCreateExpr()
 		if err != nil {
 			return err
 		}
 		for i, o := range ast.Options {
-			if _, ok := o.(tree.FunctionVolatility); ok {
+			if _, ok := o.(tree.RoutineVolatility); ok {
 				ast.Options[i] = t
 			}
 		}

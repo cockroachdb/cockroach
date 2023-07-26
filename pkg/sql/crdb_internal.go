@@ -3326,7 +3326,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 				return err
 			}
 			treeNode, err := fnDesc.ToCreateExpr()
-			treeNode.FuncName.ObjectNamePrefix = tree.ObjectNamePrefix{
+			treeNode.Name.ObjectNamePrefix = tree.ObjectNamePrefix{
 				ExplicitSchema: true,
 				SchemaName:     tree.Name(fnIDToScName[fnDesc.GetID()]),
 			}
@@ -3334,7 +3334,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 				return err
 			}
 			for i := range treeNode.Options {
-				if body, ok := treeNode.Options[i].(tree.FunctionBodyStr); ok {
+				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
 					typeReplacedBody, err := formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), string(body))
 					if err != nil {
 						return err
@@ -3349,7 +3349,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 					}
 					p := &treeNode.Options[i]
 					// Add two new lines just for better formatting.
-					*p = "\n" + tree.FunctionBodyStr(strings.Join(stmtStrs, "\n")) + "\n"
+					*p = "\n" + tree.RoutineBodyStr(strings.Join(stmtStrs, "\n")) + "\n"
 				}
 			}
 

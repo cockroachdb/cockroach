@@ -51,13 +51,13 @@ func (tc *Catalog) ResolveFunction(
 // ResolveFunctionByOID part of the tree.FunctionReferenceResolver interface.
 func (tc *Catalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
 }
 
 // CreateFunction handles the CREATE FUNCTION statement.
-func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
-	name := c.FuncName.String()
+func (tc *Catalog) CreateFunction(c *tree.CreateRoutine) {
+	name := c.Name.String()
 	if _, ok := tree.FunDefs[name]; ok {
 		panic(fmt.Errorf("built-in function with name %q already exists", name))
 	}
@@ -121,8 +121,8 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 }
 
 func collectFuncOptions(
-	o tree.FunctionOptions,
-) (body string, v volatility.V, calledOnNullInput bool, language tree.FunctionLanguage) {
+	o tree.RoutineOptions,
+) (body string, v volatility.V, calledOnNullInput bool, language tree.RoutineLanguage) {
 	// The default volatility is VOLATILE.
 	v = volatility.Volatile
 
@@ -133,32 +133,32 @@ func collectFuncOptions(
 	// CalledOnNullInput=true in function overloads.
 	calledOnNullInput = true
 
-	language = tree.FunctionLangUnknown
+	language = tree.RoutineLangUnknown
 
 	for _, option := range o {
 		switch t := option.(type) {
-		case tree.FunctionBodyStr:
+		case tree.RoutineBodyStr:
 			body = strings.Trim(string(t), "\n")
 
-		case tree.FunctionVolatility:
+		case tree.RoutineVolatility:
 			switch t {
-			case tree.FunctionImmutable:
+			case tree.RoutineImmutable:
 				v = volatility.Immutable
-			case tree.FunctionStable:
+			case tree.RoutineStable:
 				v = volatility.Stable
 			}
 
-		case tree.FunctionLeakproof:
+		case tree.RoutineLeakproof:
 			leakproof = bool(t)
 
-		case tree.FunctionNullInputBehavior:
+		case tree.RoutineNullInputBehavior:
 			switch t {
-			case tree.FunctionReturnsNullOnNullInput, tree.FunctionStrict:
+			case tree.RoutineReturnsNullOnNullInput, tree.RoutineStrict:
 				calledOnNullInput = false
 			}
 
-		case tree.FunctionLanguage:
-			if t != tree.FunctionLangSQL && t != tree.FunctionLangPLpgSQL {
+		case tree.RoutineLanguage:
+			if t != tree.RoutineLangSQL && t != tree.RoutineLangPLpgSQL {
 				panic(fmt.Errorf("LANGUAGE must be SQL or plpgsql"))
 			}
 			language = t

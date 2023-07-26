@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1339,9 +1338,10 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, sv, true)
 
 	// Write a table with some partitions into the database,
 	// and change its primary key.
@@ -1373,8 +1373,8 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 	}
 
 	// Get the zone config corresponding to the table.
-	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
-	kv, err := kvDB.Get(ctx, config.MakeZoneKey(keys.SystemSQLCodec, table.GetID()))
+	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "t")
+	kv, err := kvDB.Get(ctx, config.MakeZoneKey(codec, table.GetID()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1387,17 +1387,17 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 	// dropped copy of i2, new copy of i1, and new copy of i2.
 	// These have ID's 2, 3, 8 and 10 respectively.
 	expectedSpans := []roachpb.Key{
-		table.IndexSpan(keys.SystemSQLCodec, 2 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 3 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 8 /* indexID */).Key,
-		table.IndexSpan(keys.SystemSQLCodec, 10 /* indexID */).Key,
+		table.IndexSpan(codec, 2 /* indexID */).Key,
+		table.IndexSpan(codec, 3 /* indexID */).Key,
+		table.IndexSpan(codec, 8 /* indexID */).Key,
+		table.IndexSpan(codec, 10 /* indexID */).Key,
 	}
 	if len(zone.SubzoneSpans) != len(expectedSpans) {
 		t.Fatalf("expected subzones to have length %d", len(expectedSpans))
 	}
 
 	// Subzone spans have the table prefix omitted.
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.GetID()))
+	prefix := codec.TablePrefix(uint32(table.GetID()))
 	for i := range expectedSpans {
 		// Subzone spans have the table prefix omitted.
 		expected := bytes.TrimPrefix(expectedSpans[i], prefix)
