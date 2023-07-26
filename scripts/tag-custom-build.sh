@@ -76,3 +76,5 @@ Here is where the build run should show up in TeamCity for the tag:
 Tag name: $TAG
 Build ID: $ID
 EOF
+
+echo testing
