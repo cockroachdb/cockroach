@@ -3826,9 +3826,11 @@ func (t *logicTest) validateAfterTestCompletion() error {
 	// txn and second we reset vectorize mode in case it was switched to
 	// `experimental_always`.
 	_, _ = t.db.Exec("ROLLBACK")
-	_, err := t.db.Exec("RESET vectorize")
-	if err != nil {
+	if _, err := t.db.Exec("RESET vectorize"); err != nil {
 		t.Fatal(errors.Wrap(err, "could not reset vectorize mode"))
+	}
+	if _, err := t.db.Exec("RESET ROLE"); err != nil {
+		t.Fatal(errors.Wrap(err, "could not reset role"))
 	}
 
 	validate := func() (string, error) {
