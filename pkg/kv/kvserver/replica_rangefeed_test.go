@@ -1116,7 +1116,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
 
