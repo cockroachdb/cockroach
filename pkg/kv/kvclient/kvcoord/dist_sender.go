@@ -2547,6 +2547,13 @@ func (ds *DistSender) sendToReplicas(
 			case *kvpb.StoreNotFoundError, *kvpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
+			case *kvpb.RangeKeyMismatchError:
+				// If the server has strictly more up-to-date information than
+				// what we do, then stop looping and exit to have the caller
+				// update its cache and retry.
+				if areOverlappingDescriptorsNewer(routing.Desc(), tErr.Ranges...) {
+					return br, nil
+				}
 			case *kvpb.RangeNotFoundError:
 				// The store we routed to doesn't have this replica. This can happen when
 				// our descriptor is outright outdated, but it can also be caused by a
@@ -2662,6 +2669,34 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+// areOverlappingDescriptorsNewer compares the descriptor in this EvictionToken
+// to the descriptors passed in and returns a value whether the new descriptors
+// are replacements for the existing descriptor. Specifically a return of
+// negative number means that the new descriptors are not a replacement, 0 means
+// the descriptors are equivalent and a positive number means that the new
+// descriptors do overlap and replace the existing descriptor. This comparison
+// is used to handle a RangeKeyMismatch error where the remote server sends a
+// descriptor back that may or may not have more up-to-date information than we
+// currently have. If the server has more up-to-date, we want to replace our
+// descriptor and retry the request while if it is older we assume the server
+// has stale information.
+func areOverlappingDescriptorsNewer(
+	desc *roachpb.RangeDescriptor, newDescs ...roachpb.RangeInfo,
+) bool {
+	// There can be multiple descriptors in RangeKeyMismatchError. See
+	// Store.SendWithWriteBytes for when this happens.  We want to return true if
+	// any descriptor intersects with our descriptor and is newer.
+	for _, r := range newDescs {
+		if _, err := desc.RSpan().Intersect(r.Desc.RSpan()); err == nil {
+			if r.Desc.Generation > desc.Generation {
+				// The spans overlap and the new descriptor has a strictly higher generation.
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // getLocalityComparison takes two nodeIDs as input and returns the locality
