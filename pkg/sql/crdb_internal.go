@@ -5444,12 +5444,12 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		hasData := func(startID, endID descpb.ID) (found bool, _ error) {
 			startPrefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(startID))
 			endPrefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(endID - 1)).PrefixEnd()
-			var b kv.Batch
+			b := p.Txn().NewBatch()
 			b.Header.MaxSpanRequestKeys = 1
 			scanRequest := roachpb.NewScan(startPrefix, endPrefix, false).(*roachpb.ScanRequest)
 			scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
 			b.AddRawRequest(scanRequest)
-			err = p.execCfg.DB.Run(ctx, &b)
+			err = p.execCfg.DB.Run(ctx, b)
 			if err != nil {
 				return false, err
 			}
@@ -6507,7 +6507,7 @@ func genClusterLocksGenerator(
 		var resumeSpan *roachpb.Span
 
 		fetchLocks := func(key, endKey roachpb.Key) error {
-			b := kv.Batch{}
+			b := p.Txn().NewBatch()
 			queryLocksRequest := &roachpb.QueryLocksRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    key,
@@ -6524,7 +6524,7 @@ func genClusterLocksGenerator(
 			b.Header.MaxSpanRequestKeys = int64(rowinfra.ProductionKVBatchSize)
 			b.Header.TargetBytes = int64(rowinfra.GetDefaultBatchBytesLimit(p.extendedEvalCtx.TestingKnobs.ForceProductionValues))
 
-			err := p.txn.Run(ctx, &b)
+			err := p.txn.Run(ctx, b)
 			if err != nil {
 				return err
 			}

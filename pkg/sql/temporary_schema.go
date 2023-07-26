@@ -131,7 +131,7 @@ func (p *planner) CreateSchemaNamespaceEntry(
 		log.VEventf(ctx, 2, "CPut %s -> %d", schemaNameKey, schemaID)
 	}
 
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	b.CPut(schemaNameKey, schemaID, nil)
 
 	return p.txn.Run(ctx, b)

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -250,7 +249,7 @@ func (p *planner) createDescriptorWithID(
 		log.Fatalf(ctx, "%v", errors.AssertionFailedf("id key must be zero for descriptors skipping namespace"))
 	}
 
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	descID := descriptor.GetID()
 
 	if !descriptor.SkipNamespace() {

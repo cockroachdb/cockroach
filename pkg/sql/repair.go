@@ -716,7 +716,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 	requestHeader := roachpb.RequestHeader{
 		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
 	}
-	b := &kv.Batch{}
+	b := p.Txn().NewBatch()
 	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) &&
 		storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings) {
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
