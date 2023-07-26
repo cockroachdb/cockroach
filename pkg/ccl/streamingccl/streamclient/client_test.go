@@ -47,6 +47,13 @@ func (sc testStreamClient) Create(
 	}, nil
 }
 
+// CreateForSpanConfigs implements the Client interface.
+func (sc testStreamClient) StartAndPlanEphemeralSpanConfigsStream(
+	_ context.Context, _ roachpb.TenantName,
+) (Topology, error) {
+	panic("not implemented")
+}
+
 // Plan implements the Client interface.
 func (sc testStreamClient) Plan(_ context.Context, _ streampb.StreamID) (Topology, error) {
 	return Topology{
