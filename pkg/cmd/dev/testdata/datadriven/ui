@@ -82,6 +82,23 @@ pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch
 pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 12345
 
 exec
+dev ui watch --cluster-ui-dst /path/to/foo --cluster-ui-dst /path/to/bar
+----
+bazel info workspace --color=no
+pnpm --dir crdb-checkout/pkg/ui install
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
+bazel info bazel-bin --color=no
+bazel info workspace --color=no
+cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
+cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.js
+cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.d.ts
+cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
+rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
+cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch --env.copy-to=/path/to/foo --env.copy-to=/path/to/bar
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000
+
+exec
 dev ui lint
 ----
 bazel test //pkg/cmd/mirror/npm:list_unmirrored_dependencies --test_output errors

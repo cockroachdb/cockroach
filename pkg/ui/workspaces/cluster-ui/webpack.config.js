@@ -15,6 +15,8 @@ const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
 const MomentTimezoneDataPlugin = require("moment-timezone-data-webpack-plugin")
 const { ESBuildMinifyPlugin } = require("esbuild-loader");
 
+const { CopyEmittedFilesPlugin } = require("./build/webpack/copyEmittedFilesPlugin");
+
 const currentYear = new Date().getFullYear();
 
 // tslint:disable:object-literal-sort-keys
@@ -180,7 +182,21 @@ module.exports = (env, argv) => {
         // We have to tell the plugin where to store the pruned file
         // otherwise webpack can't find it.
         cacheDir: path.resolve(__dirname, "timezones"),
-      })
+      }),
+
+      // When requested with --env.copy-to=foo, copy all emitted files to
+      // arbitrary destination(s). Note that multiple destinations are supported
+      // but providing --env.copy-to multiple times at the command-line.
+      // This plugin does nothing in one-shot (i.e. non-watch) builds, or when
+      // no destinations are provided.
+      new CopyEmittedFilesPlugin({
+        destinations: (function() {
+          const copyTo = env["copy-to"] || [];
+          return typeof copyTo === "string"
+            ? [copyTo]
+            : copyTo;
+        })(),
+      }),
     ],
 
     // When importing a module whose path matches one of the following, just
