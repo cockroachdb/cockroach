@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -35,7 +36,7 @@ var ErrDuplicatedSchedules = errors.New("creating multiple sql stats compaction 
 // scheduled job subsystem so the compaction job can be run periodically. This
 // is done during the cluster startup upgrade.
 func CreateSQLStatsCompactionScheduleIfNotYetExist(
-	ctx context.Context, txn isql.Txn, st *cluster.Settings,
+	ctx context.Context, txn isql.Txn, st *cluster.Settings, clusterID uuid.UUID,
 ) (*jobs.ScheduledJob, error) {
 	scheduleExists, err := checkExistingCompactionSchedule(ctx, txn)
 	if err != nil {
@@ -48,7 +49,9 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 
 	compactionSchedule := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 
-	schedule := SQLStatsCleanupRecurrence.Get(&st.SV)
+	schedule := scheduledjobs.MaybeRewriteCronExpr(
+		clusterID, SQLStatsCleanupRecurrence.Get(&st.SV),
+	)
 	if err := compactionSchedule.SetSchedule(schedule); err != nil {
 		return nil, err
 	}
