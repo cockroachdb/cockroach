@@ -87,6 +87,8 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		clusterArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, dbName, tableName)
 		defer tc.Stopper().Stop(ctx)
+		// This test doesn't want the range 3x replicated. Move back to 1x.
+		desc = tc.RemoveVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 
 		if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 			t.Fatal(err)
@@ -157,6 +159,9 @@ func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
 	clusterArgs.ServerArgs.Knobs = knobs
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, clusterArgs, dbName, tableName)
 	defer tc.Stopper().Stop(ctx)
+	// This test actually doesn't want the range to be 3x replicated. Move it
+	// back down to one replica.
+	desc = tc.RemoveVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
@@ -192,7 +197,6 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 
 	ctx := context.Background()
 	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
@@ -272,7 +276,6 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 
 	ctx := context.Background()
 	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
 	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
@@ -381,7 +384,6 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 
 	ctx := context.Background()
 	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	repls := replsForRange(ctx, t, tc, desc)
 	// Disable the automatic merging.
@@ -463,7 +465,6 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
 	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
@@ -497,9 +498,7 @@ func TestClosedTimestampCanServeForWritingTransaction(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	// TODO(during PR)
 	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-	cArgs.ReplicationMode = base.ReplicationAuto
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
@@ -548,7 +547,6 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 
 	ctx := context.Background()
 	cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-	cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc)
@@ -591,9 +589,7 @@ func TestClosedTimestampCantServeForNonTransactionalBatch(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "tsFromServer", func(t *testing.T, tsFromServer bool) {
 		ctx := context.Background()
-		// TODO(during PR)
 		cArgs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
-		cArgs.ReplicationMode = base.ReplicationAuto // TODO(during PR)
 		tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 		defer tc.Stopper().Stop(ctx)
 		repls := replsForRange(ctx, t, tc, desc)
@@ -698,6 +694,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			kvserver.ExpirationLeasesOnly.Override(ctx, &cs.SV, false) // override metamorphism
 
 			clusterArgs := base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
 					Settings: cs,
 					RaftConfig: base.RaftConfig{
@@ -1199,13 +1196,14 @@ func aggressiveResolvedTimestampPushKnobs() *kvserver.StoreTestingKnobs {
 	}
 }
 
-// setupClusterForClosedTSTesting creates a test cluster that is prepared to
-// exercise follower reads. The returned test cluster has follower reads enabled
-// using the given targetDuration and testingCloseFraction. In addition to the
-// newly minted test cluster, this function returns a db handle to node 0, a
-// range descriptor for the range used by the table `{dbName}.{tableName}`. It
-// is the caller's responsibility to Stop the Stopper on the returned test
-// cluster when done.
+// setupClusterForClosedTSTesting creates a three node test cluster that is
+// prepared to exercise follower reads. The returned test cluster has follower
+// reads enabled using the given targetDuration and testingCloseFraction. In
+// addition to the newly minted test cluster, this function returns a db handle
+// to node 0, a range descriptor for the range used by the table
+// `{dbName}.{tableName}`. It is the caller's responsibility to Stop the Stopper
+// on the returned test cluster when done. The range represented by kvTableDesc
+// will be fully replicated; other ranges won't be by default.
 func setupClusterForClosedTSTesting(
 	ctx context.Context,
 	t *testing.T,
@@ -1227,10 +1225,8 @@ SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
 `, targetDuration, sideTransportInterval),
 		";")...)
 
-	// Disable replicate queues to avoid errant lease transfers.
-	//
-	// See: https://github.com/cockroachdb/cockroach/issues/101824.
-	tc.ToggleReplicateQueues(false)
+	desc = tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
+	require.EqualValues(t, 3, numNodes) // reminder to update the AddVotersOrFatal if numNodes ever changed
 
 	return tc, tc.ServerConn(0), desc
 }
