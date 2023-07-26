@@ -231,10 +231,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "import-with-detached",
-			query: fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s') WITH detached`, srv.URL),
+			query: fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s') WITH OPTIONS (detached)`, srv.URL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
-				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH detached`, srv.URL),
+				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH OPTIONS (detached)`, srv.URL),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -255,10 +255,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "backup-with-detached",
-			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "backup",
-				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -279,10 +279,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "restore-with-detached",
-			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "restore",
-				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -308,7 +308,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 		st.SetTime(stubTime)
 
-		if strings.Contains(tc.query, "WITH detached") {
+		if strings.Contains(tc.query, "WITH OPTIONS (detached)") {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID)
 		} else {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)

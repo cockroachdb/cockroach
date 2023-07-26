@@ -110,8 +110,9 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -192,8 +193,9 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.AsOf)
 	}
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 

@@ -31,7 +31,7 @@ func TestMarkRedactionCCLStatement(t *testing.T) {
 	}{
 		{
 			"IMPORT CSV 'file' WITH delimiter = 'foo'",
-			"IMPORT CSV ‹'file'› WITH delimiter = ‹'foo'›",
+			"IMPORT CSV ‹'file'› WITH OPTIONS (delimiter = ‹'foo'›)",
 		},
 	}
 
