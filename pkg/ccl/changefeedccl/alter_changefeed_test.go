@@ -662,7 +662,7 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 
 	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	registry := s.TenantOrServer().JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 

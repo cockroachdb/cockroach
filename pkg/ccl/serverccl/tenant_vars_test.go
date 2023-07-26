@@ -41,7 +41,7 @@ func TestTenantVars(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	testutils.RunTrueAndFalse(t, "shared-process", func(t *testing.T, sharedProcess bool) {
-		var tenant serverutils.TestTenantInterface
+		var tenant serverutils.ApplicationLayerInterface
 		if !sharedProcess {
 			tenant, _ = serverutils.StartTenant(t, srv, base.TestTenantArgs{
 				TenantID: roachpb.MustMakeTenantID(10 /* id */),

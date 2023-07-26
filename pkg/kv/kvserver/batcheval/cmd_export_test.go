@@ -454,7 +454,7 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 
 	defer tc.Stopper().Stop(context.Background())
 
-	s := tc.TenantOrServer(0)
+	s := tc.ApplicationLayer(0)
 	sqlDB := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)

@@ -44,7 +44,7 @@ func TestStatementReuses(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	tenantSettings := s.TenantOrServer().ClusterSettings()
+	tenantSettings := s.ApplicationLayer().ClusterSettings()
 	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
 	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
 	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
