@@ -45,7 +45,7 @@ func TestURIRequiresAdminOrPrivilege(t *testing.T) {
 
 	rootDB.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.ApplicationLayer(0).ServingSQLAddr(), "TestURIRequiresAdminRole-testuser",
+		t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestURIRequiresAdminRole-testuser",
 		url.User("testuser"),
 	)
 	defer cleanupFunc()

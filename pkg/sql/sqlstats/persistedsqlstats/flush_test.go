@@ -93,11 +93,11 @@ func TestSQLStatsFlush(t *testing.T) {
 	secondServer := testCluster.Server(1 /* idx */)
 
 	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, firstServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer firstServerConnCleanup()
 
 	secondPgURL, secondServerConnCleanup := sqlutils.PGUrl(
-		t, secondServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+		t, secondServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer secondServerConnCleanup()
 
 	pgFirstSQLConn, err := gosql.Open("postgres", firstPgURL.String())
@@ -327,7 +327,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, conn, _ := serverutils.StartServer(t, params)
 	observer :=
-		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+		serverutils.OpenDBConn(t, s.AdvSQLAddr(), "", false /* insecure */, s.Stopper())
 
 	defer s.Stopper().Stop(context.Background())
 

@@ -124,7 +124,7 @@ func TestDebugJobTrace(t *testing.T) {
 	<-recordedSpanCh
 
 	args := []string{strconv.Itoa(int(id))}
-	pgURL, cleanup := sqlutils.PGUrl(t, c.TestServer.ServingSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(t, c.TestServer.AdvSQLAddr(),
 		"TestDebugJobTrace", url.User(username.RootUser))
 	defer cleanup()
 

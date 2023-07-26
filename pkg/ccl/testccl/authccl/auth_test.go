@@ -288,13 +288,13 @@ func jwtRunTest(t *testing.T, insecure bool) {
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.ApplicationLayer().ServingSQLAddr(), t.Name(), url.User(user),
+						t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(user),
 						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
 					if td.Cmd == "connect" {
-						host, port, err = net.SplitHostPort(s.ApplicationLayer().ServingSQLAddr())
+						host, port, err = net.SplitHostPort(s.ApplicationLayer().AdvSQLAddr())
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -421,7 +421,7 @@ func TestClientAddrOverride(t *testing.T) {
 	ts := s.(*server.TestServer).ApplicationLayer()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, ts.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
+		t, ts.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
 	)
 	defer cleanupFunc()
 

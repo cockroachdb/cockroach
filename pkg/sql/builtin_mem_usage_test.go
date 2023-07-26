@@ -95,7 +95,7 @@ CREATE TABLE d.t (a STRING)
 		errCh := make(chan error)
 		go func(statement string) {
 			dbConn := serverutils.OpenDBConn(
-				t, s.ServingSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper(),
+				t, s.AdvSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper(),
 			)
 			defer dbConn.Close()
 			_, err := dbConn.Exec(statement)

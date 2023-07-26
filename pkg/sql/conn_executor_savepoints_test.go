@@ -65,7 +65,7 @@ func TestSavepoints(t *testing.T) {
 					sqlConn, ok = sqlConns[connName]
 					if !ok {
 						sqlConn = serverutils.OpenDBConn(
-							t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+							t, s.AdvSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 						sqlConns[connName] = sqlConn
 					}
 				}

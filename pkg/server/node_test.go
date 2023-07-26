@@ -221,8 +221,8 @@ func TestNodeJoin(t *testing.T) {
 	// Verify node1 sees node2 via gossip and vice versa.
 	node1Key := gossip.MakeNodeIDKey(s.Server(0).NodeID())
 	node2Key := gossip.MakeNodeIDKey(s.Server(1).NodeID())
-	server1Addr := s.Server(0).ServingRPCAddr()
-	server2Addr := s.Server(1).ServingRPCAddr()
+	server1Addr := s.Server(0).AdvRPCAddr()
+	server2Addr := s.Server(1).AdvRPCAddr()
 	testutils.SucceedsSoon(t, func() error {
 		var nodeDesc1 roachpb.NodeDescriptor
 		if err := s.Server(0).GossipI().(*gossip.Gossip).GetInfoProto(node2Key, &nodeDesc1); err != nil {

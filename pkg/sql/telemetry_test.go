@@ -54,7 +54,7 @@ func TestTelemetryRecordCockroachShell(t *testing.T) {
 
 	pgUrl, cleanupFn := sqlutils.PGUrl(
 		t,
-		cluster.Server(0).ServingSQLAddr(),
+		cluster.Server(0).AdvSQLAddr(),
 		"TestTelemetryRecordCockroachShell",
 		url.User("root"),
 	)

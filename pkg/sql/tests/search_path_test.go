@@ -34,7 +34,7 @@ func TestSearchPathEndToEnd(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ApplicationLayer().ServingSQLAddr(), t.Name(), url.User(username.RootUser),
+		t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 

@@ -838,7 +838,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 
 	// Set up an admin client.
 	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(decomSrv.ServingRPCAddr(), grpc.WithInsecure())
+	conn, err := grpc.Dial(decomSrv.AdvRPCAddr(), grpc.WithInsecure())
 	require.NoError(t, err)
 	defer func() {
 		_ = conn.Close() // nolint:grpcconnclose

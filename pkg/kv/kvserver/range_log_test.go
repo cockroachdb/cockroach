@@ -307,7 +307,7 @@ func TestLogRebalances(t *testing.T) {
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestLogRebalances", url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestLogRebalances", url.User(username.RootUser))
 	defer cleanupFn()
 
 	sqlDB, err := gosql.Open("postgres", pgURL.String())

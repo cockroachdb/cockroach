@@ -77,11 +77,11 @@ type ApplicationLayerInterface interface {
 	// SQLServer. Each tenant can have zero or more running SQLServer instances.
 	SQLInstanceID() base.SQLInstanceID
 
-	// ServingRPCAddr returns the server's advertised address.
-	ServingRPCAddr() string
+	// AdvRPCAddr returns the server's advertised address.
+	AdvRPCAddr() string
 
-	// ServingSQLAddr returns the server's advertised SQL address.
-	ServingSQLAddr() string
+	// AdvSQLAddr returns the server's advertised SQL address.
+	AdvSQLAddr() string
 
 	// SQLAddr returns the tenant's SQL address. Note that for "shared-process
 	// tenants" (i.e. tenants created with TestServer.StartSharedProcessTenant),
