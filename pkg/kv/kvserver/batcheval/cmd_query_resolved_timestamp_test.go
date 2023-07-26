@@ -44,16 +44,16 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		return hlc.Timestamp{WallTime: ts}
 	}
 	writeValue := func(k string, ts int64) {
-		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, nil)
+		_, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), makeTS(ts), storage.MVCCWriteOptions{})
 		require.NoError(t, err)
 	}
 	writeIntent := func(k string, ts int64) {
 		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 1)
-		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), makeTS(ts), hlc.ClockTimestamp{}, &txn)
+		_, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), makeTS(ts), storage.MVCCWriteOptions{Txn: &txn})
 		require.NoError(t, err)
 	}
 	writeInline := func(k string) {
-		_, err := storage.MVCCDelete(ctx, db, nil, roachpb.Key(k), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		_, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), hlc.Timestamp{}, storage.MVCCWriteOptions{})
 		require.NoError(t, err)
 	}
 

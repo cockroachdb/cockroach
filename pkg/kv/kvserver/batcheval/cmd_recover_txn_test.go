@@ -49,7 +49,7 @@ func TestRecoverTxn(t *testing.T) {
 		// Write the transaction record.
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		txnRecord := txn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+		if err := storage.MVCCPutProto(ctx, db, txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -225,7 +225,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			// request is evaluated.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			txnRecord := c.changedTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, db, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+			if err := storage.MVCCPutProto(ctx, db, txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 

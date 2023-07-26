@@ -169,13 +169,13 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 0
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 		if err := batch.Commit(true); err != nil {
@@ -305,7 +305,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 
 		for i, testKey := range testKeys {
-			err := storage.MVCCPut(ctx, batch, nil, testKey, ts, hlc.ClockTimestamp{}, values[i], &txn)
+			err := storage.MVCCPut(ctx, batch, testKey, ts, values[i], storage.MVCCWriteOptions{Txn: &txn})
 			require.NoError(t, err)
 		}
 		initialBytes := batch.Len()

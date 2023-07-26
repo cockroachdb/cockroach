@@ -51,6 +51,12 @@ func ConditionalPut(
 	args := cArgs.Args.(*kvpb.ConditionalPutRequest)
 	h := cArgs.Header
 
+	opts := storage.MVCCWriteOptions{
+		Txn:            h.Txn,
+		LocalTimestamp: cArgs.Now,
+		Stats:          cArgs.Stats,
+	}
+
 	var ts hlc.Timestamp
 	if !args.Inline {
 		ts = h.Timestamp
@@ -60,10 +66,10 @@ func ConditionalPut(
 	var err error
 	if args.Blind {
 		err = storage.MVCCBlindConditionalPut(
-			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, args.ExpBytes, handleMissing, h.Txn)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
 	} else {
 		err = storage.MVCCConditionalPut(
-			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, args.ExpBytes, handleMissing, h.Txn)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
