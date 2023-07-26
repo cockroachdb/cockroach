@@ -32,9 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,37 +41,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/bank"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	singleNode                  = 1
-	multiNode                   = 3
+	singleNode                  = backuptestutils.SingleNode
+	multiNode                   = backuptestutils.MultiNode
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
 	localFoo                    = "nodelocal://1/foo"
 )
 
-// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
-// bugs in time-bound iterators. We disable this in race builds, which can
-// be too slow.
-var smallEngineBlocks = !util.RaceEnabled && util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+// InitManualReplication calls tc.ToggleReplicateQueues(false).
+//
+// Note that the test harnesses that use this typically call
+// tc.WaitForFullReplication before calling this method,
+// so up-replication has usually already taken place.
+var InitManualReplication = backuptestutils.InitManualReplication
 
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
@@ -82,75 +77,10 @@ func backupRestoreTestSetupWithParams(
 	init func(tc *testcluster.TestCluster),
 	params base.TestClusterArgs,
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
-	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup", nil)
-
-	dir, dirCleanupFn := testutils.TempDir(t)
-	params.ServerArgs.ExternalIODir = dir
-	params.ServerArgs.UseDatabase = "data"
-	if params.ServerArgs.Knobs.JobsTestingKnobs == nil {
-		params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	}
-	if len(params.ServerArgsPerNode) > 0 {
-		for i := range params.ServerArgsPerNode {
-			param := params.ServerArgsPerNode[i]
-			param.ExternalIODir = dir + param.ExternalIODir
-			param.UseDatabase = "data"
-			params.ServerArgsPerNode[i] = param
-		}
-	}
-
-	if smallEngineBlocks {
-		if params.ServerArgs.Knobs.Store == nil {
-			params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{}
-		}
-		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
-	}
-
-	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
-		SkipJobBootstrap:        true,
-		SkipZoneConfigBootstrap: true,
-	}
-	params.ServerArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
-		SkipZoneConfigBootstrap: true,
-	}
-	tc = testcluster.StartTestCluster(t, clusterSize, params)
-	init(tc)
-
-	const payloadSize = 100
-	splits := 10
-	if numAccounts == 0 {
-		splits = 0
-	}
-	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
-
-	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	// Lower the initial buffering adder ingest size to allow concurrent import jobs to run without
-	// borking the memory monitor.
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
-
-	// Set the max buffer size to something low to prevent backup/restore tests
-	// from hitting OOM errors. If any test cares about this setting in
-	// particular, they will override it inline after setting up the test cluster.
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '16MiB'`)
-	sqlDB.Exec(t, `CREATE DATABASE data`)
-	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
-	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	if err := tc.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
-	}
-
-	cleanupFn := func() {
-		backuptestutils.CheckForInvalidDescriptors(t, tc.Conns[0])
-		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
-		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
-	}
-
-	return tc, sqlDB, dir, cleanupFn
+	return backuptestutils.StartBackupRestoreTestCluster(t, clusterSize,
+		backuptestutils.WithInitFunc(init),
+		backuptestutils.WithParams(params),
+		backuptestutils.WithBank(numAccounts))
 }
 
 func backupRestoreTestSetup(
@@ -170,75 +100,14 @@ func backupRestoreTestSetupEmpty(
 	tempDir string,
 	init func(*testcluster.TestCluster),
 	params base.TestClusterArgs,
-) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+) (*testcluster.TestCluster, *sqlutils.SQLRunner, func()) {
 	// TODO (msbutler): this should be disabled by callers of this function
 	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
-	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
-}
-
-func backupRestoreTestSetupEmptyWithParams(
-	t testing.TB,
-	clusterSize int,
-	dir string,
-	init func(tc *testcluster.TestCluster),
-	params base.TestClusterArgs,
-) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
-	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup-empty", nil)
-
-	params.ServerArgs.ExternalIODir = dir
-	if params.ServerArgs.Knobs.JobsTestingKnobs == nil {
-		params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	}
-	if len(params.ServerArgsPerNode) > 0 {
-		for i := range params.ServerArgsPerNode {
-			param := params.ServerArgsPerNode[i]
-			param.ExternalIODir = dir
-			params.ServerArgsPerNode[i] = param
-		}
-	}
-
-	if smallEngineBlocks {
-		if params.ServerArgs.Knobs.Store == nil {
-			params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{}
-		}
-		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
-	}
-
-	tc = testcluster.StartTestCluster(t, clusterSize, params)
-	init(tc)
-
-	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	cleanupFn := func() {
-		backuptestutils.CheckForInvalidDescriptors(t, tc.Conns[0])
-		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
-	}
-
-	return tc, sqlDB, cleanupFn
-}
-
-func createEmptyCluster(
-	t testing.TB, clusterSize int,
-) (sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
-	ctx := context.Background()
-
-	dir, dirCleanupFn := testutils.TempDir(t)
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		SmallEngineBlocks: smallEngineBlocks,
-	}
-	tc := testcluster.StartTestCluster(t, clusterSize, params)
-
-	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	cleanupFn := func() {
-		backuptestutils.CheckForInvalidDescriptors(t, tc.Conns[0])
-		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
-		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
-	}
-
-	return sqlDB, dir, cleanupFn
+	tc, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(t, clusterSize,
+		backuptestutils.WithTempDir(tempDir),
+		backuptestutils.WithInitFunc(init),
+		backuptestutils.WithParams(params))
+	return tc, sqlDB, cleanup
 }
 
 // getStatsQuery returns a SQL query that will return the properties of the
