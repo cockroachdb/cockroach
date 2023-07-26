@@ -393,6 +393,13 @@ func (m *RandomStreamClient) Create(
 	}, nil
 }
 
+// CreateForSpanConfigs implements the Client interface.
+func (m *RandomStreamClient) StartAndPlanEphemeralSpanConfigsStream(
+	ctx context.Context, tenant roachpb.TenantName,
+) (streampb.StreamID, Topology, error) {
+	panic("StartAndPlanEphemeralSpanConfigsStream not implemented")
+}
+
 // Heartbeat implements the Client interface.
 func (m *RandomStreamClient) Heartbeat(
 	ctx context.Context, _ streampb.StreamID, ts hlc.Timestamp,

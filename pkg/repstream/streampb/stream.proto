@@ -92,6 +92,10 @@ message ReplicationStreamSpec {
   repeated Partition partitions = 1 [(gogoproto.nullable) = false];
 
   roachpb.TenantID source_tenant_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
+
+  int64 span_config_stream_id = 3 [(gogoproto.customname) = "SpanConfigStreamID", (gogoproto
+    .casttype) = "StreamID"];
+
 }
 
 // StreamEvent describes a replication stream event
