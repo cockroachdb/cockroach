@@ -154,7 +154,7 @@ func partialDecommissionStep(target, from int, binaryVersion string) versionStep
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
-			"--wait=none", "--insecure", strconv.Itoa(target))
+			"--wait=none", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
 
@@ -165,7 +165,7 @@ func recommissionAllStep(from int, binaryVersion string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "recommission",
-			"--insecure", c.All().NodeIDsString())
+			"--insecure", c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
 
@@ -175,7 +175,7 @@ func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
-			"--wait=all", "--insecure", strconv.Itoa(target))
+			"--wait=all", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
 
