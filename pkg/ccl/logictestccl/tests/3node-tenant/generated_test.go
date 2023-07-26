@@ -1424,6 +1424,13 @@ func TestTenantLogic_raise(
 	runLogicTest(t, "raise")
 }
 
+func TestTenantLogic_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "read_committed")
+}
+
 func TestTenantLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -1639,13 +1646,6 @@ func TestTenantLogic_select_for_update(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_update")
-}
-
-func TestTenantLogic_select_for_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "select_for_update_read_committed")
 }
 
 func TestTenantLogic_select_index(

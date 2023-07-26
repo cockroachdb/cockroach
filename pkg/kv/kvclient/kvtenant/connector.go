@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -69,6 +70,10 @@ func init() {
 type Connector interface {
 	// Start starts the connector.
 	Start(context.Context) error
+
+	// TenantInfo retrieves current metadata about the tenant record and
+	// an update channel to track changes
+	TenantInfo() (tenantcapabilities.Entry, <-chan struct{})
 
 	// NodeDescStore provides information on each of the KV nodes in the cluster
 	// in the form of NodeDescriptors and StoreDescriptors. This obviates the

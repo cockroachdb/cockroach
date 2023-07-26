@@ -1402,6 +1402,13 @@ func TestLogic_raise(
 	runLogicTest(t, "raise")
 }
 
+func TestLogic_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "read_committed")
+}
+
 func TestLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -1617,13 +1624,6 @@ func TestLogic_select_for_update(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_update")
-}
-
-func TestLogic_select_for_update_read_committed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "select_for_update_read_committed")
 }
 
 func TestLogic_select_index(

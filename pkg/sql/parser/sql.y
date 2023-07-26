@@ -6844,7 +6844,7 @@ set_exprs_internal:
      It cannot be used by clients. */
   SET ROW '(' expr_list ')'
   {
-    $$.val = &tree.SetVar{Values: $4.exprs()}
+    $$.val = &tree.SetVar{Values: $4.exprs(), SetRow: true}
   }
 
 // %Help: SET SESSION - change a session variable
