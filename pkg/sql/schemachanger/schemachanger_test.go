@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -58,7 +57,6 @@ import (
 // schema changes operating on the same descriptors are performed serially.
 func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 106732, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,9 +97,9 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-			AfterWaitingForConcurrentSchemaChanges: func(stmts []string, wasBlocked bool) {
+			WhileWaitingForConcurrentSchemaChanges: func(stmts []string) {
 				for _, stmt := range stmts {
-					if wasBlocked && strings.Contains(stmt, "ALTER PRIMARY KEY") {
+					if strings.Contains(stmt, "ALTER PRIMARY KEY") {
 						alterPrimaryKeyBlockedCounter.Add(1)
 						return
 					}
@@ -160,6 +158,14 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 		}
 		wg.Done()
 	}()
+
+	// The ALTER PRIMARY KEY schema change must block.
+	testutils.SucceedsSoon(t, func() error {
+		if alterPrimaryKeyBlockedCounter.Load() == 0 {
+			return errors.New("waiting for concurrent schema change to block")
+		}
+		return nil
+	})
 
 	// Unblock the create index job.
 	continueNotif <- struct{}{}

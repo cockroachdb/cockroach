@@ -684,3 +684,32 @@ insert child
                 │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:7 = parent.p:8
+
+# Verify that we lock the parent when necessary.
+build set=enable_implicit_fk_locking_for_serializable=true
+INSERT INTO child VALUES (100, 1), (200, 1)
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child.p:2
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:5!null column2:6!null
+ │    ├── (100, 1)
+ │    └── (200, 1)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:7!null
+                ├── with-scan &1
+                │    ├── columns: p:7!null
+                │    └── mapping:
+                │         └──  column2:6 => p:7
+                ├── scan parent
+                │    ├── columns: parent.p:8!null
+                │    ├── flags: disabled not visible index feature
+                │    └── locking: for-share
+                └── filters
+                     └── p:7 = parent.p:8

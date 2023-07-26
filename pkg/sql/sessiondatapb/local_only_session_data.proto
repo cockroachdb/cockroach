@@ -409,6 +409,14 @@ message LocalOnlySessionData {
   // eliminate joins in more cases by remapping columns from the eliminated
   // input of the join to equivalent columns from the preserved input.
   bool optimizer_use_improved_join_elimination = 107;
+  // ImplicitFKLockingForSerializable is true if FOR SHARE locking may be used
+  // while checking the referenced table during an insert or update to a table
+  // with a foreign key under serializable isolation. (Under weaker isolation
+  // levels foreign key checks of the parent table always use FOR SHARE
+  // locking.)
+  bool implicit_fk_locking_for_serializable = 108 [
+    (gogoproto.customname) = "ImplicitFKLockingForSerializable"
+  ];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
