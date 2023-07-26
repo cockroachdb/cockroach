@@ -270,7 +270,7 @@ func maybeDropDependentFKConstraints(
 	// dropDependentFKConstraint is a helper function that drops a dependent
 	// FK constraint with ID `fkConstraintID`.
 	dropDependentFKConstraint := func(fkConstraintID catid.ConstraintID) {
-		b.BackReferences(tableID).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
+		b.BackReferences(tableID).Filter(containsDescIDFilter(tableID)).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
 			ForEach(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 			) {
@@ -278,7 +278,10 @@ func maybeDropDependentFKConstraints(
 			})
 	}
 
-	b.BackReferences(tableID).ForEach(func(
+	// Get foreign key back references referring to this table, previous we
+	// did not explicitly filter these out which could lead to us blocking
+	// the DROP INDEX or worse removing unrelated foreign keys.
+	b.BackReferences(tableID).Filter(containsDescIDFilter(tableID)).ForEach(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		switch t := e.(type) {
