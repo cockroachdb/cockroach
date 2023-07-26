@@ -12,11 +12,13 @@ package ttlbase
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 )
 
 // DefaultAOSTDuration is the default duration to use in the AS OF SYSTEM TIME
@@ -30,6 +32,12 @@ var startKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
 var endKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
 	catenumpb.IndexColumn_ASC:  "<",
 	catenumpb.IndexColumn_DESC: ">",
+}
+
+// BuildScheduleLabel returns a string value intended for use as the
+// schedule_name/label column for the scheduled job created by row level TTL.
+func BuildScheduleLabel(tbl *tabledesc.Mutable) string {
+	return fmt.Sprintf("row-level-ttl: %s [%d]", tbl.GetName(), tbl.ID)
 }
 
 func BuildSelectQuery(

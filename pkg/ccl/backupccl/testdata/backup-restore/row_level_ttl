@@ -20,7 +20,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0
 
@@ -43,7 +43,7 @@ CREATE TABLE public.t (
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 1
 
@@ -53,7 +53,7 @@ DROP DATABASE d
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0
 
@@ -76,7 +76,7 @@ CREATE TABLE public.t (
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 1
 
@@ -86,7 +86,7 @@ DROP DATABASE d
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0
 
@@ -113,7 +113,7 @@ CREATE TABLE public.t (
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 1
 
@@ -123,6 +123,6 @@ DROP TABLE d.public.t
 
 query-sql
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label LIKE 'row-level-ttl%'
 ----
 0

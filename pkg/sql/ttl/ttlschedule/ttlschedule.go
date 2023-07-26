@@ -136,6 +136,9 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 		return err
 	}
 
+	// TODO(chrisseto): Should opName be updated to match schedule_name? We'll
+	// have to query to resolve the table name or delegate to sj.ScheduleLabel,
+	// which may make debugging quite confusing if the label gets out of whack.
 	p, cleanup := cfg.PlanHookMaker(
 		ctx,
 		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),

@@ -7802,26 +7802,26 @@ ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 				"t",
 				"test",
 			)
+
 			rowLevelTTL := desc.GetRowLevelTTL()
 			if tc.expectSchedule {
 				require.NotNil(t, rowLevelTTL)
 				require.Greater(t, rowLevelTTL.ScheduleID, int64(0))
 
 				// Ensure there is only one schedule and that it belongs to the table.
+				var hasSchedule bool
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) = 1 FROM [SHOW SCHEDULES] WHERE id = $1`, rowLevelTTL.ScheduleID).Scan(&hasSchedule))
+				require.True(t, hasSchedule)
+
 				var numSchedules int
-				require.NoError(t, sqlDB.QueryRow(
-					`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE $1`,
-					fmt.Sprintf("row-level-ttl-%d", rowLevelTTL.ScheduleID),
-				).Scan(&numSchedules))
-				require.Equal(t, 0, numSchedules)
-				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE SOME ('row-level-ttl%', '%' || $1 || '%', '%' || $2 || '%')`, desc.TableDesc().ID, desc.TableDesc().Name).Scan(&numSchedules))
 				require.Equal(t, 1, numSchedules)
 			} else {
 				require.Nil(t, rowLevelTTL)
 
 				// Ensure there are no schedules.
 				var numSchedules int
-				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE ANY ('row-level-ttl%', '%' || $1 || '%', '%' || $2 || '%')`, desc.TableDesc().ID, desc.TableDesc().Name).Scan(&numSchedules))
 				require.Equal(t, 0, numSchedules)
 			}
 		})
