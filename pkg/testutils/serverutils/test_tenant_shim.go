@@ -123,9 +123,11 @@ type TestTenantInterface interface {
 	// DistSenderI returns the *kvcoord.DistSender as an interface{}.
 	DistSenderI() interface{}
 
-	// InternalExecutor returns a *sql.InternalExecutor as an
-	// interface{} (which also implements insql.InternalExecutor if the
-	// test cannot depend on sql).
+	// InternalDB returns an isql.DB as an interface{}.
+	InternalDB() interface{}
+
+	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
+	// also implements isql.Executor if the test cannot depend on sql).
 	InternalExecutor() interface{}
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.

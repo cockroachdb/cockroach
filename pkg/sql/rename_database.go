@@ -188,7 +188,7 @@ func getQualifiedDependentObjectName(
 		depTblName := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(t.GetName()))
 		return depTblName.String(), nil
 	case catalog.FunctionDescriptor:
-		depFnName := tree.MakeQualifiedFunctionName(dbName, scName, t.GetName())
+		depFnName := tree.MakeQualifiedRoutineName(dbName, scName, t.GetName())
 		return depFnName.String(), nil
 	default:
 		return "", errors.AssertionFailedf("expected only function or table descriptor, but got %s", t.DescriptorType())

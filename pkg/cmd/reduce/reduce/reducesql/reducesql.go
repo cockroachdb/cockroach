@@ -198,9 +198,9 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				if node.AsSource != nil {
 					walk(node.AsSource)
 				}
-			case *tree.CreateFunction:
+			case *tree.CreateRoutine:
 				for i := range node.Options {
-					if body, ok := node.Options[i].(tree.FunctionBodyStr); ok {
+					if body, ok := node.Options[i].(tree.RoutineBodyStr); ok {
 						stmts, err := parser.Parse(string(body))
 						if err != nil {
 							// Ignore parsing errors.
@@ -210,7 +210,7 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 						for _, ast := range funcAsts {
 							walk(ast)
 						}
-						node.Options[i] = tree.FunctionBodyStr(joinASTs(asts))
+						node.Options[i] = tree.RoutineBodyStr(joinASTs(asts))
 					}
 				}
 			case *tree.CTE:
@@ -810,7 +810,7 @@ var (
 	})
 	removeCreateFuncParams = walkSQL("remove CREATE FUNCTION parameters", func(xfi int, node interface{}) int {
 		switch node := node.(type) {
-		case *tree.CreateFunction:
+		case *tree.CreateRoutine:
 			n := len(node.Params)
 			if xfi < n {
 				node.Params = append(node.Params[:xfi], node.Params[xfi+1:]...)

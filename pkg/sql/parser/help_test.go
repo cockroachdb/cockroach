@@ -573,6 +573,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE FUNCTION ??`, `CREATE FUNCTION`},
 		{`ALTER FUNCTION ??`, `ALTER FUNCTION`},
 		{`DROP FUNCTION ??`, `DROP FUNCTION`},
+
+		{`CREATE PROCEDURE ??`, `CREATE PROCEDURE`},
 	}
 
 	// The following checks that the test definition above exercises all

@@ -383,7 +383,7 @@ func QualifyBuiltinFunctionDefinition(
 // GetBuiltinFuncDefinitionOrFail is similar to GetBuiltinFuncDefinition but
 // returns an error if function is not found.
 func GetBuiltinFuncDefinitionOrFail(
-	fName FunctionName, searchPath SearchPath,
+	fName RoutineName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	def, err := GetBuiltinFuncDefinition(fName, searchPath)
 	if err != nil {
@@ -420,7 +420,7 @@ func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, er
 // error is still checked and return from the function signature just in case
 // we change the iterating function in the future.
 func GetBuiltinFuncDefinition(
-	fName FunctionName, searchPath SearchPath,
+	fName RoutineName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	if fName.ExplicitSchema {
 		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()], nil

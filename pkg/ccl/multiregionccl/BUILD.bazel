@@ -82,7 +82,6 @@ go_test(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/sql/sqltestutils",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,6 +53,8 @@ type mockServer struct {
 	rangeLookupFn    func(context.Context, *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error)
 	gossipSubFn      func(*kvpb.GossipSubscriptionRequest, kvpb.Internal_GossipSubscriptionServer) error
 	tenantSettingsFn func(request *kvpb.TenantSettingsRequest, server kvpb.Internal_TenantSettingsServer) error
+
+	emulateOldVersionSettingServer bool
 }
 
 func (m *mockServer) RangeLookup(
@@ -70,18 +73,45 @@ func (m *mockServer) TenantSettings(
 	req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
 ) error {
 	if m.tenantSettingsFn == nil {
+		// First message - required by startup protocol.
 		if err := stream.Send(&kvpb.TenantSettingsEvent{
+			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 			Incremental: false,
 			Overrides:   nil,
 		}); err != nil {
 			return err
 		}
-		return stream.Send(&kvpb.TenantSettingsEvent{
+		if !m.emulateOldVersionSettingServer {
+			// Initial tenant metadata.
+			if err := stream.Send(&kvpb.TenantSettingsEvent{
+				EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
+				Name:      "foo",
+				// TODO(knz): remove cast after the dep cycle has been resolved.
+				DataState:   uint32(mtinfopb.DataStateReady),
+				ServiceMode: uint32(mtinfopb.ServiceModeExternal),
+
+				// Need to ensure this looks like a fake no-op setting override event.
+				Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
+				Incremental: true,
+			}); err != nil {
+				return err
+			}
+		}
+		// Finish startup.
+		if err := stream.Send(&kvpb.TenantSettingsEvent{
+			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 			Incremental: false,
 			Overrides:   nil,
-		})
+		}); err != nil {
+			return err
+		}
+
+		// Ensure the stream doesn't immediately finish, which can cause
+		// flakes in tests due to the retry loop in the client.
+		<-stream.Context().Done()
+		return nil
 	}
 	return m.tenantSettingsFn(req, stream)
 }
@@ -212,6 +242,7 @@ func newConnector(cfg ConnectorConfig, addrs []string) *connector {
 // kvcoord.NodeDescStore and as a config.SystemConfigProvider.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -370,6 +401,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 // kvcoord.RangeDescriptorDB.
 func TestConnectorRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -455,6 +487,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 // on one of them.
 func TestConnectorRetriesUnreachable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -542,6 +575,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 // immediately if it is not.
 func TestConnectorRetriesError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()

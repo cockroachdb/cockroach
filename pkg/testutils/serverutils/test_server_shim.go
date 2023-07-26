@@ -138,12 +138,8 @@ type TestServerInterface interface {
 	// Note: use ServingRPCAddr() instead unless specific reason not to.
 	RPCAddr() string
 
-	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
+	// LeaseManager returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
-
-	// InternalExecutorInternalExecutorFactory returns a
-	// insql.InternalDB as an interface{}.
-	InternalDB() interface{}
 
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.

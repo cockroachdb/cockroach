@@ -279,7 +279,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 // view or sequence represented by the provided ID and table kind.
 func (sr *schemaResolver) GetQualifiedFunctionNameByID(
 	ctx context.Context, id int64,
-) (*tree.FunctionName, error) {
+) (*tree.RoutineName, error) {
 	fn, err := sr.descCollection.ByIDWithLeased(sr.txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(id))
 	if err != nil {
 		return nil, err
@@ -289,7 +289,7 @@ func (sr *schemaResolver) GetQualifiedFunctionNameByID(
 
 func (sr *schemaResolver) getQualifiedFunctionName(
 	ctx context.Context, fnDesc catalog.FunctionDescriptor,
-) (*tree.FunctionName, error) {
+) (*tree.RoutineName, error) {
 	dbDesc, err := sr.descCollection.ByIDWithLeased(sr.txn).Get().Database(ctx, fnDesc.GetParentID())
 	if err != nil {
 		return nil, err
@@ -299,7 +299,7 @@ func (sr *schemaResolver) getQualifiedFunctionName(
 		return nil, err
 	}
 
-	fnName := tree.MakeQualifiedFunctionName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
+	fnName := tree.MakeQualifiedRoutineName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
 	return &fnName, nil
 }
 
@@ -484,7 +484,7 @@ func makeFunctionUndefinedError(
 	ctx context.Context,
 	name *tree.UnresolvedName,
 	path tree.SearchPath,
-	fn tree.FunctionName,
+	fn tree.RoutineName,
 	sr *schemaResolver,
 ) error {
 	var lowerName tree.UnresolvedName
@@ -519,7 +519,7 @@ func makeFunctionUndefinedError(
 }
 
 func maybeLookUpUDF(
-	ctx context.Context, sr *schemaResolver, path tree.SearchPath, fn tree.FunctionName,
+	ctx context.Context, sr *schemaResolver, path tree.SearchPath, fn tree.RoutineName,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	if sr.txn == nil {
 		return nil, nil
@@ -563,13 +563,13 @@ func maybeLookUpUDF(
 
 func (sr *schemaResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (name *tree.FunctionName, fn *tree.Overload, err error) {
+) (name *tree.RoutineName, fn *tree.Overload, err error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
 			return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
 		}
-		fnName := tree.MakeQualifiedFunctionName(sr.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
+		fnName := tree.MakeQualifiedRoutineName(sr.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
 		return &fnName, qol.Overload, nil
 	}
 

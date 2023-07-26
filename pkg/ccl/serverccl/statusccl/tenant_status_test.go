@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -60,7 +59,8 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	ctx := context.Background()
 
-	knobs := tests.CreateTestingKnobs()
+	var knobs base.TestingKnobs
+	knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	knobs.SpanConfig = &spanconfig.TestingKnobs{
 		// Some of these subtests expect multiple (uncoalesced) tenant ranges.
 		StoreDisableCoalesceAdjacent: true,
@@ -378,13 +378,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
-		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
-	}
-	serverParams.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: serverParams,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
+				}},
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
 	})
 	defer testCluster.Stopper().Stop(ctx)
 

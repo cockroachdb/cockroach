@@ -2077,13 +2077,13 @@ func (*ValuesClause) StatementType() StatementType { return TypeDML }
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 // StatementReturnType implements the Statement interface.
-func (*CreateFunction) StatementReturnType() StatementReturnType { return DDL }
+func (*CreateRoutine) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateFunction) StatementType() StatementType { return TypeDDL }
+func (*CreateRoutine) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CreateFunction) StatementTag() string { return "CREATE FUNCTION" }
+func (*CreateRoutine) StatementTag() string { return "CREATE FUNCTION" }
 
 // StatementReturnType implements the Statement interface.
 func (*RoutineReturn) StatementReturnType() StatementReturnType { return Rows }
@@ -2221,7 +2221,7 @@ func (n *CopyTo) String() string                              { return AsString(
 func (n *CreateChangefeed) String() string                    { return AsString(n) }
 func (n *CreateDatabase) String() string                      { return AsString(n) }
 func (n *CreateExtension) String() string                     { return AsString(n) }
-func (n *CreateFunction) String() string                      { return AsString(n) }
+func (n *CreateRoutine) String() string                       { return AsString(n) }
 func (n *CreateIndex) String() string                         { return AsString(n) }
 func (n *CreateRole) String() string                          { return AsString(n) }
 func (n *CreateTable) String() string                         { return AsString(n) }

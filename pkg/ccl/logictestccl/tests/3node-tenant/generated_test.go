@@ -1403,6 +1403,13 @@ func TestTenantLogic_privileges_table(
 	runLogicTest(t, "privileges_table")
 }
 
+func TestTenantLogic_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure")
+}
+
 func TestTenantLogic_propagate_input_ordering(
 	t *testing.T,
 ) {

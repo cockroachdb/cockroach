@@ -467,6 +467,7 @@ func newInternalPlanner(
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
+	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

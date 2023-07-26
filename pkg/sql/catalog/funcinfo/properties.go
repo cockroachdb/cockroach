@@ -47,16 +47,16 @@ func MakeVolatilityProperties(v catpb.Function_Volatility, l bool) VolatilityPro
 
 // Apply tries to find volatility relevant options and overwrite the current
 // properties with them.
-func (p *VolatilityProperties) Apply(options tree.FunctionOptions) error {
+func (p *VolatilityProperties) Apply(options tree.RoutineOptions) error {
 	for _, option := range options {
 		switch t := option.(type) {
-		case tree.FunctionVolatility:
+		case tree.RoutineVolatility:
 			v, err := VolatilityToProto(t)
 			if err != nil {
 				return errors.WithAssertionFailure(err)
 			}
 			p.Volatility = v
-		case tree.FunctionLeakproof:
+		case tree.RoutineLeakproof:
 			p.LeakProof = bool(t)
 		}
 	}
@@ -73,13 +73,13 @@ func (p *VolatilityProperties) Validate() error {
 
 // VolatilityToProto converts sql statement input volatility to protobuf
 // type.
-func VolatilityToProto(v tree.FunctionVolatility) (catpb.Function_Volatility, error) {
+func VolatilityToProto(v tree.RoutineVolatility) (catpb.Function_Volatility, error) {
 	switch v {
-	case tree.FunctionImmutable:
+	case tree.RoutineImmutable:
 		return catpb.Function_IMMUTABLE, nil
-	case tree.FunctionStable:
+	case tree.RoutineStable:
 		return catpb.Function_STABLE, nil
-	case tree.FunctionVolatile:
+	case tree.RoutineVolatile:
 		return catpb.Function_VOLATILE, nil
 	}
 
@@ -89,14 +89,14 @@ func VolatilityToProto(v tree.FunctionVolatility) (catpb.Function_Volatility, er
 // NullInputBehaviorToProto converts sql statement input null input
 // behavior to protobuf type.
 func NullInputBehaviorToProto(
-	v tree.FunctionNullInputBehavior,
+	v tree.RoutineNullInputBehavior,
 ) (catpb.Function_NullInputBehavior, error) {
 	switch v {
-	case tree.FunctionCalledOnNullInput:
+	case tree.RoutineCalledOnNullInput:
 		return catpb.Function_CALLED_ON_NULL_INPUT, nil
-	case tree.FunctionReturnsNullOnNullInput:
+	case tree.RoutineReturnsNullOnNullInput:
 		return catpb.Function_RETURNS_NULL_ON_NULL_INPUT, nil
-	case tree.FunctionStrict:
+	case tree.RoutineStrict:
 		return catpb.Function_STRICT, nil
 	}
 
@@ -104,13 +104,13 @@ func NullInputBehaviorToProto(
 }
 
 // FunctionLangToProto converts sql statement input language to protobuf type.
-func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, error) {
+func FunctionLangToProto(v tree.RoutineLanguage) (catpb.Function_Language, error) {
 	switch v {
-	case tree.FunctionLangSQL:
+	case tree.RoutineLangSQL:
 		return catpb.Function_SQL, nil
-	case tree.FunctionLangPLpgSQL:
+	case tree.RoutineLangPLpgSQL:
 		return catpb.Function_PLPGSQL, nil
-	case tree.FunctionLangC:
+	case tree.RoutineLangC:
 		return -1, unimplemented.NewWithIssue(102201, "C is not yet supported")
 	}
 
@@ -119,15 +119,15 @@ func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, erro
 
 // ParamClassToProto converts sql statement input argument class to protobuf
 // type.
-func ParamClassToProto(v tree.FuncParamClass) (catpb.Function_Param_Class, error) {
+func ParamClassToProto(v tree.RoutineParamClass) (catpb.Function_Param_Class, error) {
 	switch v {
-	case tree.FunctionParamIn:
+	case tree.RoutineParamIn:
 		return catpb.Function_Param_IN, nil
-	case tree.FunctionParamOut:
+	case tree.RoutineParamOut:
 		return catpb.Function_Param_OUT, nil
-	case tree.FunctionParamInOut:
+	case tree.RoutineParamInOut:
 		return catpb.Function_Param_IN_OUT, nil
-	case tree.FunctionParamVariadic:
+	case tree.RoutineParamVariadic:
 		return catpb.Function_Param_VARIADIC, nil
 	}
 

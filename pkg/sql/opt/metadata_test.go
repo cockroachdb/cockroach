@@ -108,7 +108,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("expected table privilege to be revoked")
 	}
 
-	udfName := tree.MakeQualifiedFunctionName("t", "public", "udf")
+	udfName := tree.MakeQualifiedRoutineName("t", "public", "udf")
 	md.AddUserDefinedFunction(
 		&tree.Overload{Oid: catid.FuncIDToOID(1111)},
 		udfName.ToUnresolvedObjectName(),

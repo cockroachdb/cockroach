@@ -1053,7 +1053,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateFunction(
-	schema cat.Schema, cf *tree.CreateFunction, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	schema cat.Schema, cf *tree.CreateRoutine, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create function")
 }

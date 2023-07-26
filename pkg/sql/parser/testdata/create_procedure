@@ -1,0 +1,210 @@
+parse
+CREATE PROCEDURE f() LANGUAGE SQL AS 'SELECT 1'
+----
+CREATE PROCEDURE f()
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE OR REPLACE PROCEDURE f(IN a INT=7) AS 'SELECT 1' LANGUAGE SQL
+----
+CREATE OR REPLACE PROCEDURE f(IN a INT8 DEFAULT 7)
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE OR REPLACE PROCEDURE f(IN a INT8 DEFAULT (7))
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE OR REPLACE PROCEDURE f(IN a INT8 DEFAULT _)
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE OR REPLACE PROCEDURE _(IN _ INT8 DEFAULT 7)
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE PROCEDURE f(a "some type") LANGUAGE SQL AS 'SELECT 1'
+----
+CREATE PROCEDURE f(IN a "some type")
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f(IN a "some type")
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f(IN a "some type")
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _(IN _ _)
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE PROCEDURE f(a INT DEFAULT 10) LANGUAGE SQL AS 'SELECT $1'
+----
+CREATE PROCEDURE f(IN a INT8 DEFAULT 10)
+	LANGUAGE SQL
+	AS $$SELECT $1$$ -- normalized!
+CREATE PROCEDURE f(IN a INT8 DEFAULT (10))
+	LANGUAGE SQL
+	AS $$SELECT $1$$ -- fully parenthesized
+CREATE PROCEDURE f(IN a INT8 DEFAULT _)
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _(IN _ INT8 DEFAULT 10)
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE PROCEDURE f() LANGUAGE SQL BEGIN ATOMIC SELECT 1; CREATE PROCEDURE g() BEGIN ATOMIC SELECT 2; END; END
+----
+CREATE PROCEDURE f()
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT 1; CREATE PROCEDURE g()
+	BEGIN ATOMIC SELECT 2; END; END -- normalized!
+CREATE PROCEDURE f()
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT (1); CREATE PROCEDURE g()
+	BEGIN ATOMIC SELECT (2); END; END -- fully parenthesized
+CREATE PROCEDURE f()
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT _; CREATE PROCEDURE g()
+	BEGIN ATOMIC SELECT _; END; END -- literals removed
+CREATE PROCEDURE _()
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT 1; CREATE PROCEDURE _()
+	BEGIN ATOMIC SELECT 2; END; END -- identifiers removed
+
+error
+CREATE PROCEDURE f(VARIADIC a INT) LANGUAGE SQL AS 'SELECT 1'
+----
+at or near "variadic": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE PROCEDURE f(VARIADIC a INT) LANGUAGE SQL AS 'SELECT 1'
+                   ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/88947/
+
+error
+CREATE PROCEDURE f() TRANSFORM AS 'SELECT 1' LANGUAGE SQL
+----
+----
+at or near "transform": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE PROCEDURE f() TRANSFORM AS 'SELECT 1' LANGUAGE SQL
+                     ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+CREATE PROCEDURE f() EXTERNAL SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
+----
+----
+at or near "definer": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE PROCEDURE f() EXTERNAL SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
+                                       ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+CREATE PROCEDURE f() SET a = 123 AS 'SELECT 1' LANGUAGE SQL
+----
+----
+at or near "set": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE PROCEDURE f() SET a = 123 AS 'SELECT 1' LANGUAGE SQL
+                     ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+# Return types are not allowed for procedures.
+error
+CREATE PROCEDURE f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+----
+at or near "int": syntax error
+DETAIL: source SQL:
+CREATE PROCEDURE f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+                             ^
+HINT: try \h CREATE PROCEDURE
+
+# Volatility options can be parsed, even though they are not allowed for
+# procedures.
+parse
+CREATE PROCEDURE f() VOLATILE LANGUAGE SQL AS 'SELECT 1'
+----
+CREATE PROCEDURE f()
+	VOLATILE
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	VOLATILE
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	VOLATILE
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	VOLATILE
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+# CALLED ON NULL INPUT can be parsed, even though it is not allowed for
+# procedures.
+parse
+CREATE PROCEDURE f() CALLED ON NULL INPUT LANGUAGE SQL AS 'SELECT 1'
+----
+CREATE PROCEDURE f()
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed

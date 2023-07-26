@@ -36,7 +36,7 @@ import (
 )
 
 type createFunctionNode struct {
-	cf *tree.CreateFunction
+	cf *tree.CreateRoutine
 
 	dbDesc   catalog.DatabaseDescriptor
 	scDesc   catalog.SchemaDescriptor
@@ -86,7 +86,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 				return err
 			}
 
-			fnName := tree.MakeQualifiedFunctionName(n.dbDesc.GetName(), n.scDesc.GetName(), n.cf.FuncName.String())
+			fnName := tree.MakeQualifiedRoutineName(n.dbDesc.GetName(), n.scDesc.GetName(), n.cf.Name.String())
 			event := eventpb.CreateFunction{
 				FunctionName: fnName.FQString(),
 				IsReplace:    !isNew,
@@ -128,7 +128,7 @@ func (n *createFunctionNode) createNewFunction(
 	err := params.p.createDescriptor(
 		params.ctx,
 		udfDesc,
-		tree.AsStringWithFQNames(&n.cf.FuncName, params.Ann()),
+		tree.AsStringWithFQNames(&n.cf.Name, params.Ann()),
 	)
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 
 	// Try to look up an existing function.
 	fuObj := tree.FuncObj{
-		FuncName: n.cf.FuncName,
+		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
 	existing, err := params.p.matchUDF(params.ctx, &fuObj, false /* required */)
@@ -263,7 +263,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 			return nil, false, pgerror.Newf(
 				pgcode.DuplicateFunction,
 				"function %q already exists with same argument types",
-				n.cf.FuncName.Object(),
+				n.cf.Name.Object(),
 			)
 		}
 		fnID := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
@@ -299,7 +299,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		funcDescID,
 		n.dbDesc.GetID(),
 		scDesc.GetID(),
-		string(n.cf.FuncName.ObjectName),
+		string(n.cf.Name.ObjectName),
 		pbParams,
 		returnType,
 		n.cf.ReturnType.IsSet,
@@ -354,7 +354,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
-				n.cf.FuncName.String(), updated.desc.GetName(), updated.desc.GetID(),
+				n.cf.Name.String(), updated.desc.GetName(), updated.desc.GetID(),
 			),
 		); err != nil {
 			return err
@@ -368,7 +368,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
-				n.cf.FuncName.String(), backRefMutable.GetName(), backRefMutable.GetID(),
+				n.cf.Name.String(), backRefMutable.GetName(), backRefMutable.GetID(),
 			),
 		); err != nil {
 			return err
@@ -399,34 +399,34 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 }
 
 func setFuncOptions(
-	params runParams, udfDesc *funcdesc.Mutable, options tree.FunctionOptions,
+	params runParams, udfDesc *funcdesc.Mutable, options tree.RoutineOptions,
 ) error {
 	var err error
 	var body string
 	var lang catpb.Function_Language
 	for _, option := range options {
 		switch t := option.(type) {
-		case tree.FunctionVolatility:
+		case tree.RoutineVolatility:
 			vol, err := funcinfo.VolatilityToProto(t)
 			if err != nil {
 				return err
 			}
 			udfDesc.SetVolatility(vol)
-		case tree.FunctionLeakproof:
+		case tree.RoutineLeakproof:
 			udfDesc.SetLeakProof(bool(t))
-		case tree.FunctionNullInputBehavior:
+		case tree.RoutineNullInputBehavior:
 			v, err := funcinfo.NullInputBehaviorToProto(t)
 			if err != nil {
 				return err
 			}
 			udfDesc.SetNullInputBehavior(v)
-		case tree.FunctionLanguage:
+		case tree.RoutineLanguage:
 			lang, err = funcinfo.FunctionLangToProto(t)
 			if err != nil {
 				return err
 			}
 			udfDesc.SetLang(lang)
-		case tree.FunctionBodyStr:
+		case tree.RoutineBodyStr:
 			// Handle the body after the loop, since we don't yet know what language
 			// it is.
 			body = string(t)
@@ -466,7 +466,7 @@ func resetFuncOption(udfDesc *funcdesc.Mutable) {
 }
 
 func makeFunctionParam(
-	ctx context.Context, param tree.FuncParam, typeResolver tree.TypeReferenceResolver,
+	ctx context.Context, param tree.RoutineParam, typeResolver tree.TypeReferenceResolver,
 ) (descpb.FunctionDescriptor_Parameter, error) {
 	pbParam := descpb.FunctionDescriptor_Parameter{
 		Name: string(param.Name),
@@ -500,7 +500,7 @@ func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {
 // validateVolatilityInOptions checks if the volatility values in the given list
 // of function options, if any, can be applied to the function descriptor.
 func validateVolatilityInOptions(
-	options tree.FunctionOptions, fnDesc catalog.FunctionDescriptor,
+	options tree.RoutineOptions, fnDesc catalog.FunctionDescriptor,
 ) error {
 	vp := funcinfo.MakeVolatilityProperties(fnDesc.GetVolatility(), fnDesc.GetLeakProof())
 	if err := vp.Apply(options); err != nil {
