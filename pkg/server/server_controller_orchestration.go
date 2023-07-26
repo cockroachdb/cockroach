@@ -96,6 +96,9 @@ func (c *serverController) startInitialSecondaryTenantServers(
 func (c *serverController) scanTenantsForRunnableServices(
 	ctx context.Context, ie isql.Executor,
 ) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// The list of tenants that should have a running server.
 	reqTenants, err := c.getExpectedRunningTenants(ctx, ie)
 	if err != nil {
@@ -107,9 +110,6 @@ func (c *serverController) scanTenantsForRunnableServices(
 	for _, name := range reqTenants {
 		nameLookup[name] = struct{}{}
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	// First check if there are any servers that shouldn't be running
 	// right now.
