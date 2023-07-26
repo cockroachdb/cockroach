@@ -87,15 +87,14 @@ var (
 // check_intent   k=<key> [none]
 // add_lock       t=<name> k=<key>
 //
-// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
-// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
+// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> v=<string> [raw] [cond=<string>]
+// del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key>
+// del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [idempotent] [noCoveredStats]
 // del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
-// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
-// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
-// merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
+// increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> [inc=<val>]
+// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> v=<string> [raw] [failOnTombstones]
+// put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
@@ -1104,9 +1103,10 @@ func cmdCPut(e *evalCtx) error {
 
 	return e.withWriter("cput", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
-			Txn:            txn,
-			LocalTimestamp: localTs,
-			Stats:          e.ms,
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 		}
 		if err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts); err != nil {
 			return err
@@ -1130,9 +1130,10 @@ func cmdInitPut(e *evalCtx) error {
 
 	return e.withWriter("initput", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
-			Txn:            txn,
-			LocalTimestamp: localTs,
-			Stats:          e.ms,
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 		}
 		if err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts); err != nil {
 			return err
@@ -1152,9 +1153,10 @@ func cmdDelete(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
-			Txn:            txn,
-			LocalTimestamp: localTs,
-			Stats:          e.ms,
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 		}
 		foundKey, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
@@ -1186,9 +1188,10 @@ func cmdDeleteRange(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
-			Txn:            txn,
-			LocalTimestamp: localTs,
-			Stats:          e.ms,
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 		}
 		deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
 			e.ctx, rw, key, endKey, int64(max), ts, opts, returnKeys)
@@ -1345,9 +1348,10 @@ func cmdIncrement(e *evalCtx) error {
 
 	return e.withWriter("increment", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
-			Txn:            txn,
-			LocalTimestamp: localTs,
-			Stats:          e.ms,
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 		}
 		curVal, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
 		if err != nil {
@@ -1386,9 +1390,10 @@ func cmdPut(e *evalCtx) error {
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
-			Txn:            txn,
-			LocalTimestamp: localTs,
-			Stats:          e.ms,
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 		}
 		if err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts); err != nil {
 			return err
@@ -2250,6 +2255,10 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 		return false, roachpb.PENDING
 	}
 	return true, e.getTxnStatus()
+}
+
+func (e *evalCtx) getAmbiguousReplay() bool {
+	return e.hasArg("ambiguousReplay")
 }
 
 func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {

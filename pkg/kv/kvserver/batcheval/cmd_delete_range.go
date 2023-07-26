@@ -223,6 +223,14 @@ func DeleteRange(
 	if !args.Inline {
 		timestamp = h.Timestamp
 	}
+
+	opts := storage.MVCCWriteOptions{
+		Txn:                            h.Txn,
+		LocalTimestamp:                 cArgs.Now,
+		Stats:                          cArgs.Stats,
+		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+	}
+
 	// NB: Even if args.ReturnKeys is false, we want to know which intents were
 	// written if we're evaluating the DeleteRange for a transaction so that we
 	// can update the Result's AcquiredLocks field.
@@ -230,8 +238,7 @@ func DeleteRange(
 	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
 		ctx, readWriter, args.Key, args.EndKey,
 		h.MaxSpanRequestKeys, timestamp,
-		storage.MVCCWriteOptions{Txn: h.Txn, LocalTimestamp: cArgs.Now, Stats: cArgs.Stats},
-		returnKeys)
+		opts, returnKeys)
 	if err != nil {
 		return result.Result{}, err
 	}

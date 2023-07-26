@@ -55,9 +55,10 @@ func Put(
 	}
 
 	opts := storage.MVCCWriteOptions{
-		Txn:            h.Txn,
-		LocalTimestamp: cArgs.Now,
-		Stats:          cArgs.Stats,
+		Txn:                            h.Txn,
+		LocalTimestamp:                 cArgs.Now,
+		Stats:                          cArgs.Stats,
+		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 	}
 
 	var err error
