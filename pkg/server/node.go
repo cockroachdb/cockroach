@@ -1353,23 +1353,23 @@ func (n *Node) getLocalityComparison(
 ) roachpb.LocalityComparisonType {
 	gossip := n.storeCfg.Gossip
 	if gossip == nil {
-		log.VEventf(ctx, 2, "gossip is not configured")
+		log.VEventf(ctx, 3, "gossip is not configured")
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
-		log.VEventf(ctx, 2,
-			"failed to perform look up for node descriptor %v", err)
+		log.VEventf(ctx, 3,
+			"failed to perform look up for node descriptor: %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
 	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region: %v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone: %v", zoneErr)
 	}
 
 	return comparisonResult
