@@ -47,6 +47,26 @@ func roachtestPrefix(p string) string {
 	return "ROACHTEST_" + p
 }
 
+// generateHelpCommand creates a HelpCommand for createPostRequest
+func generateHelpCommand(
+	clusterName string, start time.Time, end time.Time,
+) func(renderer *issues.Renderer) {
+	return func(renderer *issues.Renderer) {
+		issues.HelpCommandAsLink(
+			"roachtest README",
+			"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
+		)(renderer)
+		issues.HelpCommandAsLink(
+			"How To Investigate (internal)",
+			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
+		)(renderer)
+		issues.HelpCommandAsLink(
+			"Grafana",
+			fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
+		)(renderer)
+	}
+}
+
 // postIssueCondition encapsulates a condition that causes issue
 // posting to be skipped. The `reason` field contains a textual
 // description as to why issue posting was skipped.
@@ -197,16 +217,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
-		HelpCommand: func(renderer *issues.Renderer) {
-			issues.HelpCommandAsLink(
-				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
-			)(renderer)
-			issues.HelpCommandAsLink(
-				"How To Investigate (internal)",
-				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
-			)(renderer)
-		},
+		HelpCommand:     generateHelpCommand(clusterName, start, end),
 	}, nil
 }
 
