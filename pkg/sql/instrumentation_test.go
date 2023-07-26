@@ -33,7 +33,7 @@ func TestSampledStatsCollection(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).sqlStats
 
 	sqlutils.CreateTable(

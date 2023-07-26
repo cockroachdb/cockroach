@@ -79,7 +79,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 	if _, err := db.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatal(err)
 	}

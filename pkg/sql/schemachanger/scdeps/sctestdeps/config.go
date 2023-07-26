@@ -145,7 +145,7 @@ func WithMerger(merger scexec.Merger) Option {
 	})
 }
 
-func WithIDGenerator(s serverutils.TestTenantInterface) Option {
+func WithIDGenerator(s serverutils.ApplicationLayerInterface) Option {
 	return optionFunc(func(state *TestState) {
 		state.idGenerator = descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	})

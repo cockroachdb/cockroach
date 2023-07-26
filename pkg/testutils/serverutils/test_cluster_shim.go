@@ -221,6 +221,18 @@ type TestClusterInterface interface {
 	// default tenant for testing.
 	StartedDefaultTestTenant() bool
 
+	// ApplicationLayer calls .ApplicationLayer() on the ith server in
+	// the cluster.
+	ApplicationLayer(idx int) ApplicationLayerInterface
+
+	// SystemLayer calls .SystemLayer() on the ith server in the
+	// cluster.
+	SystemLayer(idx int) ApplicationLayerInterface
+
+	// StorageLayer calls .StorageLayer() on the ith server in the
+	// cluster.
+	StorageLayer(idx int) StorageLayerInterface
+
 	// StorageClusterConn returns a gosql.DB connection to the first server in a
 	// storage cluster. This is useful in environments where it's not clear
 	// whether ServerConn is returning a connection to the storage cluster or a
