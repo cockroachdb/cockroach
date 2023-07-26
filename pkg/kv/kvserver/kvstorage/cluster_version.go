@@ -35,12 +35,10 @@ func WriteClusterVersion(
 		if err := storage.MVCCPutProto(
 			ctx,
 			eng,
-			nil,
 			keys.DeprecatedStoreClusterVersionKey(),
 			hlc.Timestamp{},
-			hlc.ClockTimestamp{},
-			nil,
 			&cv,
+			storage.MVCCWriteOptions{},
 		); err != nil {
 			return err
 		}

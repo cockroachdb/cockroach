@@ -103,16 +103,14 @@ func (sl StateLoader) SetRaftTruncatedState(
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		nil, /* ms */
 		sl.RaftTruncatedStateKey(),
-		hlc.Timestamp{},      /* timestamp */
-		hlc.ClockTimestamp{}, /* localTimestamp */
+		hlc.Timestamp{}, /* timestamp */
 		truncState,
-		nil, /* txn */
+		storage.MVCCWriteOptions{}, /* txn */
 	)
 }
 
@@ -134,16 +132,14 @@ func (sl StateLoader) LoadHardState(
 func (sl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
-	// "Blind" because ms == nil and timestamp.IsEmpty().
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		nil, /* ms */
 		sl.RaftHardStateKey(),
-		hlc.Timestamp{},      /* timestamp */
-		hlc.ClockTimestamp{}, /* localTimestamp */
+		hlc.Timestamp{}, /* timestamp */
 		&hs,
-		nil, /* txn */
+		storage.MVCCWriteOptions{}, /* opts */
 	)
 }
 
@@ -191,12 +187,10 @@ func (sl StateLoader) SetRaftReplicaID(
 	return storage.MVCCBlindPutProto(
 		ctx,
 		writer,
-		nil, /* ms */
 		sl.RaftReplicaIDKey(),
-		hlc.Timestamp{},      /* timestamp */
-		hlc.ClockTimestamp{}, /* localTimestamp */
+		hlc.Timestamp{}, /* timestamp */
 		&rid,
-		nil, /* txn */
+		storage.MVCCWriteOptions{}, /* opts */
 	)
 }
 
