@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -135,13 +136,32 @@ var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
 // counts, while also avoiding starvation by excessive sharding.
 var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
 
-// defaultRaftEntryCacheSize is the default size in bytes for a store's Raft
-// entry cache. The Raft entry cache is shared by all Raft groups managed by the
-// store. It is used to cache uncommitted raft log entries such that once those
-// entries are committed, their application can avoid disk reads to retrieve
-// them from the persistent log.
-var defaultRaftEntryCacheSize = envutil.EnvOrDefaultBytes(
-	"COCKROACH_RAFT_ENTRY_CACHE_SIZE", 16<<20 /* 16 MiB */)
+// defaultRaftEntryCacheSize is the default size in bytes for the Raft entry
+// cache, divided evenly between stores. The Raft entry cache is shared by all
+// Raft groups managed by each store. It is used to cache uncommitted raft log
+// entries such that once those entries are committed, their application can
+// avoid disk reads to retrieve them from the persistent log.
+//
+// It defaults to 1/256 of system memory, with minimum 32 MB, e.g.:
+//
+// 8 GB RAM  = 32 MB  (~2 vCPUs)
+// 16 GB RAM = 64 MB  (~4 vCPUs)
+// 32 GB RAM = 128 MB (~8 vCPUs)
+// 64 GB RAM = 256 MB (~16 vCPUs)
+//
+// This is conservative, since the memory is not accounted for in memory budgets
+// nor via the --cache flag. However, it should be sufficient to achieve near
+// 100% cache hit rate for well-provisioned low-latency clusters with moderate
+// write volume. See: https://github.com/cockroachdb/cockroach/issues/98666
+var defaultRaftEntryCacheSize = func() int64 {
+	var cacheSize int64 = 32 << 20 // 32 MiB
+	if mem, _, err := status.GetTotalMemoryWithoutLogging(); err == nil {
+		if s := mem / 256; s > cacheSize {
+			cacheSize = s
+		}
+	}
+	return envutil.EnvOrDefaultBytes("COCKROACH_RAFT_ENTRY_CACHE_SIZE", cacheSize)
+}()
 
 // defaultRaftSchedulerPriorityShardSize specifies the default size of the Raft
 // scheduler priority shard, used for certain system ranges. This shard is
@@ -1272,6 +1292,9 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = uint64(defaultRaftEntryCacheSize)
+		if numStores > 1 { // guard against zero division
+			sc.RaftEntryCacheSize /= uint64(numStores)
+		}
 	}
 	if raftDisableLeaderFollowsLeaseholder {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true

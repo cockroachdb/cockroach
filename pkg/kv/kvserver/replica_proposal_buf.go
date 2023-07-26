@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
@@ -620,6 +621,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	return used, propErr
 }
 
+var logCampaignOnRejectLease = log.Every(10 * time.Second)
+
 // maybeRejectUnsafeProposalLocked conditionally rejects proposals that are
 // deemed unsafe, given the current state of the raft group. Requests that may
 // be deemed unsafe and rejected at this level are those whose safety has some
@@ -702,7 +705,12 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 				li.leader)
 			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
 			if b.p.shouldCampaignOnRedirect(raftGroup) {
-				log.VEventf(ctx, 2, "campaigning because Raft leader not live in node liveness map")
+				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
+				if logCampaignOnRejectLease.ShouldLog() {
+					log.Infof(ctx, format, li.leader)
+				} else {
+					log.VEventf(ctx, 2, format, li.leader)
+				}
 				b.p.campaignLocked(ctx)
 			}
 			return true
@@ -1317,7 +1325,6 @@ func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
-	// Pass true for mayCampaignOnWake because we're about to propose a command.
 	return (*Replica)(rp).withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
 		// if we were quiesced. However, we should make sure we are unquiesced.

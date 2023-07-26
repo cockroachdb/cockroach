@@ -1060,9 +1060,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		AmbientCtx:        log.AmbientContext{},
 		Stopper:           stopper,
 		Settings:          cfg.Settings,
-		Gossip:            cfg.Gossip,
 		Clock:             cfg.Clock,
-		DB:                cfg.DB,
 		LivenessThreshold: nlActive,
 		RenewalDuration:   nlRenewal,
 		Engines:           []storage.Engine{},
@@ -11337,137 +11335,125 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const storeID = roachpb.StoreID(1)
-
-	desc := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKeyMax,
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				ReplicaID: 1,
-				NodeID:    1,
-				StoreID:   1,
-			},
-			{
-				ReplicaID: 2,
-				NodeID:    2,
-				StoreID:   2,
-			},
-			{
-				ReplicaID: 3,
-				NodeID:    3,
-				StoreID:   3,
-			},
-		},
-		NextReplicaID: 4,
-	}
-	livenessMap := livenesspb.IsLiveMap{
-		1: livenesspb.IsLiveMapEntry{IsLive: true},
-		2: livenesspb.IsLiveMapEntry{IsLive: false},
-		4: livenesspb.IsLiveMapEntry{IsLive: false},
-	}
-
-	myLease := roachpb.Lease{
-		Replica: roachpb.ReplicaDescriptor{
-			StoreID: storeID,
-		},
-	}
-	otherLease := roachpb.Lease{
-		Replica: roachpb.ReplicaDescriptor{
-			StoreID: roachpb.StoreID(2),
-		},
-	}
-
-	followerWithoutLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      0,
-		},
-	}
-	followerWithLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      1,
-		},
-	}
-	candidate := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateCandidate,
-			Lead:      0,
-		},
-	}
-	leader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateLeader,
-			Lead:      1,
-		},
-	}
-	followerDeadLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      2,
-		},
-	}
-	candidateDeadLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateCandidate,
-			Lead:      2,
-		},
-	}
-	followerMissingLiveness := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      3,
-		},
-	}
-	followerMissingDesc := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      4,
-		},
-	}
-
-	tests := []struct {
+	type params struct {
 		leaseStatus             kvserverpb.LeaseStatus
+		storeID                 roachpb.StoreID
 		raftStatus              raft.BasicStatus
 		livenessMap             livenesspb.IsLiveMap
 		desc                    *roachpb.RangeDescriptor
 		requiresExpirationLease bool
-		exp                     bool
-	}{
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, false, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithLeader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithLeader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, candidate, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, candidate, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, leader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, leader, livenessMap, &desc, false, false},
-
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, false, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, false, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, true, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, true, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithLeader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithLeader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, candidate, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, candidate, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, leader, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, leader, livenessMap, &desc, false, false},
-
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerDeadLeader, livenessMap, &desc, false, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerDeadLeader, livenessMap, &desc, true, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerMissingLiveness, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerMissingDesc, livenessMap, &desc, false, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, candidateDeadLeader, livenessMap, &desc, false, false},
+		now                     hlc.Timestamp
 	}
 
-	for i, test := range tests {
-		v := shouldCampaignOnWake(test.leaseStatus, storeID, test.raftStatus, test.livenessMap, test.desc, test.requiresExpirationLease)
-		if v != test.exp {
-			t.Errorf("%d: expected %v but got %v", i, test.exp, v)
-		}
+	// Set up a base state that we can vary, representing this node n1 being a
+	// follower of n2, but n2 is dead and does not hold a valid lease. We should
+	// campaign in this state.
+	base := params{
+		storeID: 1,
+		desc: &roachpb.RangeDescriptor{
+			RangeID:  1,
+			StartKey: roachpb.RKeyMin,
+			EndKey:   roachpb.RKeyMax,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			NextReplicaID: 4,
+		},
+		leaseStatus: kvserverpb.LeaseStatus{
+			Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{StoreID: 2}},
+			State: kvserverpb.LeaseState_EXPIRED,
+		},
+		raftStatus: raft.BasicStatus{
+			SoftState: raft.SoftState{
+				RaftState: raft.StateFollower,
+				Lead:      2,
+			},
+		},
+		livenessMap: livenesspb.IsLiveMap{
+			1: livenesspb.IsLiveMapEntry{IsLive: true},
+			2: livenesspb.IsLiveMapEntry{IsLive: false},
+			3: livenesspb.IsLiveMapEntry{IsLive: false},
+		},
+	}
+
+	testcases := map[string]struct {
+		expect bool
+		modify func(*params)
+	}{
+		"dead leader without lease": {true, func(p *params) {}},
+		"valid remote lease": {false, func(p *params) {
+			p.leaseStatus.State = kvserverpb.LeaseState_VALID
+		}},
+		"valid local lease": {true, func(p *params) {
+			p.leaseStatus.State = kvserverpb.LeaseState_VALID
+			p.leaseStatus.Lease.Replica.StoreID = 1
+		}},
+		"pre-candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"leader": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.Lead = 1
+		}},
+		"unknown leader": {true, func(p *params) {
+			p.raftStatus.Lead = raft.None
+		}},
+		"requires expiration lease": {false, func(p *params) {
+			p.requiresExpirationLease = true
+		}},
+		"leader not in desc": {false, func(p *params) {
+			p.raftStatus.Lead = 4
+		}},
+		"leader not in liveness": {false, func(p *params) {
+			delete(p.livenessMap, 2)
+		}},
+		"leader is live": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is live according to expiration": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: false,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is dead according to expiration": {true, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			p := base
+			p.livenessMap = livenesspb.IsLiveMap{}
+			for k, v := range base.livenessMap {
+				p.livenessMap[k] = v
+			}
+			tc.modify(&p)
+			require.Equal(t, tc.expect, shouldCampaignOnWake(p.leaseStatus, p.storeID, p.raftStatus,
+				p.livenessMap, p.desc, p.requiresExpirationLease, p.now))
+		})
 	}
 }
 
@@ -11475,109 +11461,218 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	desc := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
-		EndKey:   roachpb.RKeyMax,
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				ReplicaID: 1,
-				NodeID:    1,
-				StoreID:   1,
-			},
-			{
-				ReplicaID: 2,
-				NodeID:    2,
-				StoreID:   2,
-			},
-			{
-				ReplicaID: 3,
-				NodeID:    3,
-				StoreID:   3,
-			},
-		},
-		NextReplicaID: 4,
+	type params struct {
+		raftStatus               raft.BasicStatus
+		livenessMap              livenesspb.IsLiveMap
+		desc                     *roachpb.RangeDescriptor
+		shouldUseExpirationLease bool
+		now                      hlc.Timestamp
 	}
 
-	now := hlc.Timestamp{WallTime: 100}
-	livenessMap := livenesspb.IsLiveMap{
-		1: livenesspb.IsLiveMapEntry{
-			IsLive:   true,
-			Liveness: livenesspb.Liveness{Epoch: 1, Expiration: now.Add(1, 0).ToLegacyTimestamp()},
+	// Set up a base state that we can vary, representing this node n1 being a
+	// follower of n2, but n2 is dead. We should campaign in this state.
+	base := params{
+		desc: &roachpb.RangeDescriptor{
+			RangeID:  1,
+			StartKey: roachpb.RKeyMin,
+			EndKey:   roachpb.RKeyMax,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			NextReplicaID: 4,
 		},
-		2: livenesspb.IsLiveMapEntry{
-			// NOTE: we purposefully set IsLive to true in disagreement with the
-			// Liveness expiration to ensure that we're only looking at node liveness
-			// in shouldCampaignOnLeaseRequestRedirect and not at whether this node is
-			// reachable from the local node.
-			IsLive:   true,
-			Liveness: livenesspb.Liveness{Epoch: 1, Expiration: now.Add(-1, 0).ToLegacyTimestamp()},
+		raftStatus: raft.BasicStatus{
+			SoftState: raft.SoftState{
+				RaftState: raft.StateFollower,
+				Lead:      2,
+			},
 		},
+		livenessMap: livenesspb.IsLiveMap{
+			1: livenesspb.IsLiveMapEntry{IsLive: true},
+			2: livenesspb.IsLiveMapEntry{IsLive: false},
+			3: livenesspb.IsLiveMapEntry{IsLive: false},
+		},
+		now: hlc.Timestamp{Logical: 10},
 	}
 
-	followerWithoutLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      0,
-		},
-	}
-	followerWithLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      1,
-		},
-	}
-	candidate := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateCandidate,
-			Lead:      0,
-		},
-	}
-	leader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateLeader,
-			Lead:      1,
-		},
-	}
-	followerDeadLeader := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      2,
-		},
-	}
-	followerMissingLiveness := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      3,
-		},
-	}
-	followerMissingDesc := raft.BasicStatus{
-		SoftState: raft.SoftState{
-			RaftState: raft.StateFollower,
-			Lead:      4,
-		},
-	}
-
-	tests := []struct {
-		name                    string
-		raftStatus              raft.BasicStatus
-		requiresExpirationLease bool
-		exp                     bool
+	testcases := map[string]struct {
+		expect bool
+		modify func(*params)
 	}{
-		{"candidate", candidate, false, false},
-		{"leader", leader, false, false},
-		{"follower without leader", followerWithoutLeader, false, true},
-		{"follower unknown leader", followerMissingDesc, false, false},
-		{"follower expiration-based lease", followerDeadLeader, true, false},
-		{"follower unknown liveness leader", followerMissingLiveness, false, false},
-		{"follower live leader", followerWithLeader, false, false},
-		{"follower dead leader", followerDeadLeader, false, true},
+		"dead leader": {true, func(p *params) {}},
+		"pre-candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"leader": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.Lead = 1
+		}},
+		"unknown leader": {true, func(p *params) {
+			p.raftStatus.Lead = raft.None
+		}},
+		"should use expiration lease": {false, func(p *params) {
+			p.shouldUseExpirationLease = true
+		}},
+		"leader not in desc": {false, func(p *params) {
+			p.raftStatus.Lead = 4
+		}},
+		"leader not in liveness": {false, func(p *params) {
+			delete(p.livenessMap, 2)
+		}},
+		"leader is live": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is live according to expiration": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: false,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is dead according to expiration": {true, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
+				},
+			}
+		}},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			v := shouldCampaignOnLeaseRequestRedirect(tc.raftStatus, livenessMap, &desc, tc.requiresExpirationLease, now)
-			require.Equal(t, tc.exp, v)
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			p := base
+			p.livenessMap = livenesspb.IsLiveMap{}
+			for k, v := range base.livenessMap {
+				p.livenessMap[k] = v
+			}
+			tc.modify(&p)
+			require.Equal(t, tc.expect, shouldCampaignOnLeaseRequestRedirect(
+				p.raftStatus, p.livenessMap, p.desc, p.shouldUseExpirationLease, p.now))
+		})
+	}
+}
+
+func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type params struct {
+		raftStatus  raft.BasicStatus
+		livenessMap livenesspb.IsLiveMap
+		desc        *roachpb.RangeDescriptor
+		now         hlc.Timestamp
+	}
+
+	// Set up a base state that we can vary, representing this node n1 being a
+	// follower of n2, but n2 is dead. We should forget the leader in this state.
+	base := params{
+		desc: &roachpb.RangeDescriptor{
+			RangeID:  1,
+			StartKey: roachpb.RKeyMin,
+			EndKey:   roachpb.RKeyMax,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			NextReplicaID: 4,
+		},
+		raftStatus: raft.BasicStatus{
+			SoftState: raft.SoftState{
+				RaftState: raft.StateFollower,
+				Lead:      2,
+			},
+		},
+		livenessMap: livenesspb.IsLiveMap{
+			1: livenesspb.IsLiveMapEntry{IsLive: true},
+			2: livenesspb.IsLiveMapEntry{IsLive: false},
+			3: livenesspb.IsLiveMapEntry{IsLive: false},
+		},
+		now: hlc.Timestamp{Logical: 10},
+	}
+
+	testcases := map[string]struct {
+		expect bool
+		modify func(*params)
+	}{
+		"dead leader": {true, func(p *params) {}},
+		"pre-candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"leader": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.Lead = 1
+		}},
+		"unknown leader": {false, func(p *params) {
+			p.raftStatus.Lead = raft.None
+		}},
+		"leader not in desc": {true, func(p *params) {
+			p.raftStatus.Lead = 4
+		}},
+		"leader not in liveness": {true, func(p *params) {
+			delete(p.livenessMap, 2)
+		}},
+		"leader is live": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is live according to expiration": {false, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: false,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+		"leader is dead according to expiration": {true, func(p *params) {
+			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
+				IsLive: true,
+				Liveness: livenesspb.Liveness{
+					NodeID:     2,
+					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
+				},
+			}
+		}},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			p := base
+			p.livenessMap = livenesspb.IsLiveMap{}
+			for k, v := range base.livenessMap {
+				p.livenessMap[k] = v
+			}
+			tc.modify(&p)
+			require.Equal(t, tc.expect, shouldForgetLeaderOnVoteRequest(
+				p.raftStatus, p.livenessMap, p.desc, p.now))
 		})
 	}
 }

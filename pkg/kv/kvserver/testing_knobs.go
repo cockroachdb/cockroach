@@ -225,6 +225,10 @@ type StoreTestingKnobs struct {
 	// leadership when it diverges from the range's leaseholder. This can
 	// also be set via COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER.
 	DisableLeaderFollowsLeaseholder bool
+	// If set, the above-raft lease transfer safety checks (that verify that
+	// we don't transfer leases to followers that need a snapshot, etc) are
+	// disabled. The proposal-time checks are not affected by this knob.
+	DisableAboveRaftLeaseTransferSafetyChecks bool
 	// DisableRefreshReasonNewLeader disables refreshing pending commands when a new
 	// leader is discovered.
 	DisableRefreshReasonNewLeader bool
@@ -251,10 +255,6 @@ type StoreTestingKnobs struct {
 	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft func(roachpb.StoreID) bool
-	// DisableLivenessMapConnHealth disables the ConnHealth check in
-	// updateIsLiveMap, which is useful in tests where we manipulate the node's
-	// liveness record but still keep the connection alive.
-	DisableLivenessMapConnHealth bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
 	// ReplicateQueueAcceptsUnsplit allows the replication queue to

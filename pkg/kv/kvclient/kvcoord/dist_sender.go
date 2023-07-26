@@ -2537,21 +2537,21 @@ func (ds *DistSender) getLocalityComparison(
 ) roachpb.LocalityComparisonType {
 	gatewayNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(fromNodeID)
 	if err != nil {
-		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %+v", err)
+		log.VEventf(ctx, 5, "failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 	destinationNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(toNodeID)
 	if err != nil {
-		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %+v", err)
+		log.VEventf(ctx, 5, "failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
 	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
 	}
 	return comparisonResult
 }

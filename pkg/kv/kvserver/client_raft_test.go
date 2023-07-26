@@ -1350,6 +1350,7 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
+	manualClock := hlc.NewHybridManualClock()
 	clusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -1361,12 +1362,8 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 				RaftEnableCheckQuorum: true,
 			},
 			Knobs: base.TestingKnobs{
-				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
-					// This test waits for an epoch-based lease to expire, so we're
-					// setting the liveness duration as low as possible while still
-					// keeping the test stable.
-					LivenessDuration: 3000 * time.Millisecond,
-					RenewalDuration:  1500 * time.Millisecond,
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// We eliminate clock offsets in order to eliminate the stasis period
@@ -1435,26 +1432,36 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	atomic.StoreInt32(&installPartition, 1)
 
 	// Wait until the lease expires.
-	log.Infof(ctx, "test: waiting for lease expiration")
+	log.Infof(ctx, "test: waiting for lease expiration on r%d", store0Repl.RangeID)
 	testutils.SucceedsSoon(t, func() error {
+		dur, _ := store0.GetStoreConfig().NodeLivenessDurations()
+		manualClock.Increment(dur.Nanoseconds())
 		leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
+		// If we failed to pin the lease, it likely won't ever expire due to the particular
+		// partition we've set up. Bail early instead of wasting 45s.
+		require.True(t, leaseStatus.Lease.OwnedBy(store0.StoreID()), "failed to pin lease")
+
+		// Lease is on s1, and it should be invalid now. The only reason there's a
+		// retry loop is that there could be a race where we bump the clock while a
+		// heartbeat is inflight (and which picks up the new expiration).
 		if leaseStatus.IsValid() {
-			return errors.New("lease still valid")
+			return errors.Errorf("lease still valid: %+v", leaseStatus)
 		}
 		return nil
 	})
 	log.Infof(ctx, "test: lease expired")
 
 	{
+		tBegin := timeutil.Now()
 		// Increment the initial value again, which requires range availability. To
 		// get there, the request will need to trigger a lease request on a follower
 		// replica, which will call a Raft election, acquire Raft leadership, then
 		// acquire the range lease.
+		log.Infof(ctx, "test: waiting for new lease...")
 		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
 		require.NoError(t, err)
-		log.Infof(ctx, "test: waiting for new lease...")
 		tc.WaitForValues(t, key, []int64{2, 2, 2, 0})
-		log.Infof(ctx, "test: waiting for new lease... done")
+		log.Infof(ctx, "test: waiting for new lease... done [%.2fs]", timeutil.Since(tBegin).Seconds())
 	}
 
 	// Store 0 no longer holds the lease.
@@ -6770,9 +6777,6 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
-				},
-				Store: &kvserver.StoreTestingKnobs{
-					DisableLivenessMapConnHealth: true, // to mark n1 as not live
 				},
 			},
 		},
