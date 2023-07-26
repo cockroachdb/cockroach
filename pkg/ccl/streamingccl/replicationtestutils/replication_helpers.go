@@ -11,7 +11,9 @@ package replicationtestutils
 import (
 	"bytes"
 	"context"
+	"math/rand"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -185,6 +188,8 @@ type ReplicationHelper struct {
 	SysSQL *sqlutils.SQLRunner
 	// PGUrl is the pgurl of this server.
 	PGUrl url.URL
+
+	rng *rand.Rand
 }
 
 // NewReplicationHelper starts test server with the required cluster settings for streming
@@ -211,10 +216,14 @@ SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 	// Sink to read data from.
 	sink, cleanupSink := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 
+	rng, seed := randutil.NewPseudoRand()
+	t.Logf("Replication helper seed %d", seed)
+
 	h := &ReplicationHelper{
 		SysServer: s,
 		SysSQL:    sqlutils.MakeSQLRunner(db),
 		PGUrl:     sink,
+		rng:       rng,
 	}
 
 	return h, func() {
@@ -261,4 +270,36 @@ func (rh *ReplicationHelper) StartReplicationStream(
 	err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec)
 	require.NoError(t, err)
 	return replicationProducerSpec
+}
+
+func (rh *ReplicationHelper) SetupSpanConfigsReplicationStream(
+	t *testing.T, sourceTenantName roachpb.TenantName,
+) streampb.ReplicationStreamSpec {
+	var rawSpec []byte
+	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.setup_span_configs_stream($1)`, sourceTenantName)
+	row.Scan(&rawSpec)
+	var spec streampb.ReplicationStreamSpec
+	err := protoutil.Unmarshal(rawSpec, &spec)
+	require.NoError(t, err)
+	return spec
+}
+
+func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {
+	if rh.rng.Float64() > 0.5 {
+		return &rh.PGUrl
+	}
+
+	t.Log("using inline certificates")
+	ret := rh.PGUrl
+	v := ret.Query()
+	for _, opt := range []string{"sslcert", "sslkey", "sslrootcert"} {
+		path := v.Get(opt)
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		v.Set(opt, string(content))
+
+	}
+	v.Set("sslinline", "true")
+	ret.RawQuery = v.Encode()
+	return &ret
 }

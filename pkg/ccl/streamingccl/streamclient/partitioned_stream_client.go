@@ -84,7 +84,6 @@ func (p *partitionedStreamClient) Create(
 ) (streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
 	defer sp.Finish()
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var rawReplicationProducerSpec []byte
@@ -99,6 +98,30 @@ func (p *partitionedStreamClient) Create(
 	}
 
 	return replicationProducerSpec, err
+}
+
+func (p *partitionedStreamClient) SetupSpanConfigsStream(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (streampb.StreamID, Topology, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.SetupSpanConfigsStream")
+	defer sp.Finish()
+	var spec streampb.ReplicationStreamSpec
+
+	{
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.setup_span_configs_stream($1)`, tenantName)
+		var rawSpec []byte
+		if err := row.Scan(&rawSpec); err != nil {
+			return 0, Topology{}, errors.Wrapf(err, "cannot setup span config replication stream for tenant %s", tenantName)
+		}
+		if err := protoutil.Unmarshal(rawSpec, &spec); err != nil {
+			return 0, Topology{}, err
+		}
+	}
+	topology, err := p.createTopology(spec)
+	return spec.SpanConfigStreamID, topology, err
 }
 
 // Dial implements Client interface.
@@ -161,7 +184,12 @@ func (p *partitionedStreamClient) Plan(
 			return Topology{}, err
 		}
 	}
+	return p.createTopology(spec)
+}
 
+func (p *partitionedStreamClient) createTopology(
+	spec streampb.ReplicationStreamSpec,
+) (Topology, error) {
 	topology := Topology{
 		SourceTenantID: spec.SourceTenantID,
 	}
