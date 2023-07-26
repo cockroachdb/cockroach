@@ -43,6 +43,7 @@ import (
 type Manager struct {
 	settings *cluster.Settings
 	knobs    *protectedts.TestingKnobs
+	metrics  *protectedts.ProtectedTSMetrics
 }
 
 // storage implements protectedts.Storage with a transaction.
@@ -50,6 +51,7 @@ type storage struct {
 	txn      isql.Txn
 	settings *cluster.Settings
 	knobs    *protectedts.TestingKnobs
+	metrics  *protectedts.ProtectedTSMetrics
 }
 
 func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
@@ -120,6 +122,8 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 		return protectedts.ErrExists
 	}
 
+	p.metrics.ProtectedRecords.Inc(1)
+
 	return nil
 }
 
@@ -166,6 +170,9 @@ func (p storage) Release(ctx context.Context, id uuid.UUID) error {
 	if numRows == 0 {
 		return protectedts.ErrNotExists
 	}
+
+	p.metrics.ProtectedRecords.Dec(1)
+
 	return nil
 }
 
@@ -245,6 +252,7 @@ func (p *Manager) WithTxn(txn isql.Txn) protectedts.Storage {
 		txn:      txn,
 		settings: p.settings,
 		knobs:    p.knobs,
+		metrics:  p.metrics,
 	}
 }
 
@@ -258,11 +266,11 @@ func useDeprecatedProtectedTSStorage(
 }
 
 // New creates a new Storage.
-func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) *Manager {
+func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs, metrics *protectedts.ProtectedTSMetrics) *Manager {
 	if knobs == nil {
 		knobs = &protectedts.TestingKnobs{}
 	}
-	return &Manager{settings: settings, knobs: knobs}
+	return &Manager{settings: settings, knobs: knobs, metrics: metrics}
 }
 
 // rowToRecord parses a row as returned from the variants of getRecords and

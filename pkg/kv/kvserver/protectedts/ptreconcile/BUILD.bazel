@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ptreconcile",
     srcs = [
-        "metrics.go",
         "reconciler.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile",
@@ -18,8 +17,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_prometheus_client_model//go",
+        "@com_github_cockroachdb_errors//:errors"
     ],
 )
 

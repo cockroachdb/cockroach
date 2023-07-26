@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package ptreconcile
+package protectedts
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -16,28 +16,31 @@ import (
 )
 
 // Metrics encapsulates the metrics exported by the Reconciler.
-type Metrics struct {
+type ProtectedTSMetrics struct {
 	ReconcilationRuns    *metric.Counter
 	RecordsProcessed     *metric.Counter
 	RecordsRemoved       *metric.Counter
 	ReconciliationErrors *metric.Counter
+	ProtectedRecords     *metric.Gauge
 }
 
-func makeMetrics() Metrics {
-	return Metrics{
+func MakeMetrics() metric.Struct {
+	return &ProtectedTSMetrics{
 		ReconcilationRuns:    metric.NewCounter(metaReconciliationRuns),
 		RecordsProcessed:     metric.NewCounter(metaRecordsProcessed),
 		RecordsRemoved:       metric.NewCounter(metaRecordsRemoved),
 		ReconciliationErrors: metric.NewCounter(metaReconciliationErrors),
+		ProtectedRecords:     metric.NewGauge(metaProtectedRecords),
 	}
 }
 
-var _ metric.Struct = (*Metrics)(nil)
+var _ metric.Struct = (*ProtectedTSMetrics)(nil)
 
 // MetricStruct makes Metrics a metric.Struct.
-func (m *Metrics) MetricStruct() {}
+func (m *ProtectedTSMetrics) MetricStruct() {}
 
 var (
+	// Protected TS Reconciliation Metrics
 	metaReconciliationRuns = metric.Metadata{
 		Name:        "kv.protectedts.reconciliation.num_runs",
 		Help:        "number of successful reconciliation runs on this node",
@@ -65,5 +68,13 @@ var (
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	// Protected TS Storage Metrics
+	metaProtectedRecords = metric.Metadata{
+		Name:        "kv.protectedts.storage.protected.records",
+		Help:        "number of records protected timestamp records",
+		Measurement: "Records",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
 )

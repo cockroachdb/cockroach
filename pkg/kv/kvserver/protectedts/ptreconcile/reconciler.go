@@ -54,19 +54,19 @@ type Reconciler struct {
 	settings    *cluster.Settings
 	db          isql.DB
 	pts         protectedts.Manager
-	metrics     Metrics
 	statusFuncs StatusFuncs
+	metrics     *protectedts.ProtectedTSMetrics
 }
 
 // New constructs a Reconciler.
 func New(
-	st *cluster.Settings, db isql.DB, storage protectedts.Manager, statusFuncs StatusFuncs,
+	st *cluster.Settings, db isql.DB, storage protectedts.Manager, statusFuncs StatusFuncs, metrics *protectedts.ProtectedTSMetrics,
 ) *Reconciler {
 	return &Reconciler{
 		settings:    st,
 		db:          db,
 		pts:         storage,
-		metrics:     makeMetrics(),
+		metrics:     metrics,
 		statusFuncs: statusFuncs,
 	}
 }
@@ -79,8 +79,8 @@ func (r *Reconciler) StartReconciler(ctx context.Context, stopper *stop.Stopper)
 }
 
 // Metrics returns the reconciler's metrics.
-func (r *Reconciler) Metrics() *Metrics {
-	return &r.metrics
+func (r *Reconciler) Metrics() *protectedts.ProtectedTSMetrics {
+	return r.metrics
 }
 
 func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {

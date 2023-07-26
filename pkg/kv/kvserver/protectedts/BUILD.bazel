@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "protectedts",
     srcs = [
+        "metrics.go",
         "protectedts.go",
         "settings.go",
         "testing_knobs.go",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 

@@ -41,7 +41,7 @@ type Provider struct {
 	protectedts.Manager
 	protectedts.Cache
 	protectedts.Reconciler
-	metric.Struct
+	metrics metric.Struct
 }
 
 // New creates a new protectedts.Provider.
@@ -49,8 +49,17 @@ func New(cfg Config) (protectedts.Provider, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	storage := ptstorage.New(cfg.Settings, cfg.Knobs)
-	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
+
+	metrics := protectedts.MakeMetrics()
+
+	var protectedTSMetrics *protectedts.ProtectedTSMetrics
+	var ok bool
+	if protectedTSMetrics, ok = metrics.(*protectedts.ProtectedTSMetrics); !ok {
+		return nil, errors.Newf("invalid metrics type: %T", metrics)
+	}
+
+	storage := ptstorage.New(cfg.Settings, cfg.Knobs, protectedTSMetrics)
+	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs, protectedTSMetrics)
 	cache := ptcache.New(ptcache.Config{
 		DB:       cfg.DB,
 		Storage:  storage,
@@ -61,7 +70,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 		Manager:    storage,
 		Cache:      cache,
 		Reconciler: reconciler,
-		Struct:     reconciler.Metrics(),
+		metrics:    metrics,
 	}, nil
 }
 
@@ -86,5 +95,5 @@ func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // Metrics implements the protectedts.Provider interface.
 func (p *Provider) Metrics() metric.Struct {
-	return p.Struct
+	return p.metrics
 }

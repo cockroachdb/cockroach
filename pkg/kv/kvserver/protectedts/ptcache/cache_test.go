@@ -89,7 +89,7 @@ func TestCacheBasic(t *testing.T) {
 	insqlDB := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
-	})
+	}, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 	p := withDatabase(m, insqlDB)
 
 	// Set the poll interval to be very short.
@@ -164,7 +164,7 @@ func TestRefresh(t *testing.T) {
 		})
 	defer s.Stopper().Stop(ctx)
 	db := s.InternalDB().(isql.DB)
-	m := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+	m := ptstorage.New(s.ClusterSettings(), ptsKnobs, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 	p := withDatabase(m, db)
 
 	// Set the poll interval to be very long.
@@ -313,7 +313,7 @@ func TestQueryRecord(t *testing.T) {
 	db := s.InternalDB().(isql.DB)
 	storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
-	})
+	}, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 	p := withDatabase(storage, db)
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -372,7 +372,7 @@ func TestIterate(t *testing.T) {
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
-	})
+	}, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 	p := withDatabase(m, db)
 
 	// Set the poll interval to be very long.
@@ -517,7 +517,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 				DisableProtectedTimestampForMultiTenant: true,
-			})
+			}, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 			p := withDatabase(storage, s.InternalDB().(isql.DB))
 			c := ptcache.New(ptcache.Config{
 				Settings: s.ClusterSettings(),
@@ -542,7 +542,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
-	})
+	}, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
