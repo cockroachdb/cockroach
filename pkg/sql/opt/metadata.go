@@ -540,9 +540,9 @@ func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
 }
 
-// AllUserDefinedFunctions returns all user defined functions used in this query.
-func (md *Metadata) AllUserDefinedFunctions() map[cat.StableID]*tree.Overload {
-	return md.udfDeps
+// HasUserDefinedFunctions returns true if the query references a UDF.
+func (md *Metadata) HasUserDefinedFunctions() bool {
+	return len(md.udfDeps) > 0
 }
 
 // AddUserDefinedFunction adds a user-defined function to the metadata for this
