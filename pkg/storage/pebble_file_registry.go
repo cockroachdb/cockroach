@@ -11,14 +11,18 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -26,7 +30,18 @@ import (
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
+	"github.com/cockroachdb/redact"
 )
+
+// DefaultNumOldFileRegistryFiles is the default number of old registry files
+// kept for debugging. Production callers should use this to initialize
+// PebbleFileRegistry.NumOldRegistryFiles. The value of two is meant to
+// slightly align the history with what we keep for the Pebble MANIFEST. We
+// keep one Pebble MANIFEST, which is also 128MB in size, however the entry
+// size per file in the MANIFEST is smaller (based on some unit test data it
+// is about half), so we keep double the history for the file registry.
+var DefaultNumOldFileRegistryFiles = envutil.EnvOrDefaultInt(
+	"COCKROACH_STORE_NUM_OLD_FILE_REGISTRY_FILES", 2)
 
 // CanRegistryElideFunc is a function that returns true for entries that can be
 // elided instead of being written to the registry.
@@ -61,6 +76,9 @@ type PebbleFileRegistry struct {
 	// Is the DB read only.
 	ReadOnly bool
 
+	// The number of old file registry files to keep for debugging purposes.
+	NumOldRegistryFiles int
+
 	// Implementation.
 
 	mu struct {
@@ -80,6 +98,9 @@ type PebbleFileRegistry struct {
 		// records-based registry file. If no file has been written yet,
 		// this may be the empty string.
 		registryFilename string
+
+		// Obsolete files, ordered from oldest to newest.
+		obsoleteRegistryFiles []string
 	}
 }
 
@@ -108,7 +129,7 @@ func CheckNoRegistryFile(fs vfs.FS, dbDir string) error {
 // Load loads the contents of the file registry from a file, if the file
 // exists, else it is a noop.  Load should be called exactly once if the
 // file registry will be used.
-func (r *PebbleFileRegistry) Load() error {
+func (r *PebbleFileRegistry) Load(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -119,8 +140,52 @@ func (r *PebbleFileRegistry) Load() error {
 		return err
 	}
 
+	// Find all old registry files, and remove some of them.
+	if r.mu.registryFilename != "" {
+		registryFileNum, err := r.parseRegistryFileName(r.mu.registryFilename)
+		if err != nil {
+			return err
+		}
+		files, err := r.FS.List(r.DBDir)
+		if err != nil {
+			return err
+		}
+		var obsoleteFiles []uint64
+		for _, f := range files {
+			f = r.FS.PathBase(f)
+			if !strings.HasPrefix(f, registryFilenameBase) {
+				continue
+			}
+			fileNum, err := r.parseRegistryFileName(f)
+			if err != nil {
+				return err
+			}
+			if fileNum > registryFileNum {
+				// Delete it immediately, since newer than current registry file, so
+				// must have crashed while creating it.
+				err := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
+				if err != nil {
+					log.Errorf(ctx, "unable to remove registry file %s", f)
+				}
+			}
+			if fileNum < registryFileNum {
+				obsoleteFiles = append(obsoleteFiles, fileNum)
+			}
+		}
+		sort.Slice(obsoleteFiles, func(i, j int) bool {
+			return obsoleteFiles[i] < obsoleteFiles[j]
+		})
+		r.mu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
+		for _, f := range obsoleteFiles {
+			r.mu.obsoleteRegistryFiles = append(r.mu.obsoleteRegistryFiles, makeRegistryFilename(f))
+		}
+		if err := r.tryRemoveOldRegistryFilesLocked(); err != nil {
+			return err
+		}
+	}
+
 	// Delete all unnecessary entries to reduce registry size.
-	if err := r.maybeElideEntries(); err != nil {
+	if err := r.maybeElideEntries(ctx); err != nil {
 		return err
 	}
 
@@ -209,7 +274,7 @@ func (r *PebbleFileRegistry) maybeLoadExistingRegistry() (bool, error) {
 	return true, nil
 }
 
-func (r *PebbleFileRegistry) maybeElideEntries() error {
+func (r *PebbleFileRegistry) maybeElideEntries(ctx context.Context) error {
 	if r.ReadOnly {
 		return nil
 	}
@@ -250,6 +315,7 @@ func (r *PebbleFileRegistry) maybeElideEntries() error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
+			log.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
 			batch.DeleteEntry(filename)
 		}
 	}
@@ -506,8 +572,9 @@ func (r *PebbleFileRegistry) createNewRegistryFile() error {
 		// function, after we update the internal state to point to the
 		// new filename (since we've already successfully installed it).
 		err = r.closeRegistry()
-		if err == nil && r.mu.registryFilename != "" {
-			rmErr := r.FS.Remove(r.FS.PathJoin(r.DBDir, r.mu.registryFilename))
+		if r.mu.registryFilename != "" {
+			r.mu.obsoleteRegistryFiles = append(r.mu.obsoleteRegistryFiles, r.mu.registryFilename)
+			rmErr := r.tryRemoveOldRegistryFilesLocked()
 			if rmErr != nil && !oserror.IsNotExist(rmErr) {
 				err = errors.CombineErrors(err, rmErr)
 			}
@@ -546,6 +613,32 @@ func (r *PebbleFileRegistry) List() map[string]*enginepb.FileEntry {
 		m[k] = v
 	}
 	return m
+}
+
+func (r *PebbleFileRegistry) parseRegistryFileName(f string) (uint64, error) {
+	fileNum, err := strconv.ParseUint(f[len(registryFilenameBase)+1:], 10, 64)
+	if err != nil {
+		return 0, errors.Errorf("could not parse number from file registry filename %s", f)
+	}
+	return fileNum, nil
+}
+
+func (r *PebbleFileRegistry) tryRemoveOldRegistryFilesLocked() error {
+	n := len(r.mu.obsoleteRegistryFiles)
+	if n <= r.NumOldRegistryFiles {
+		return nil
+	}
+	m := n - r.NumOldRegistryFiles
+	toDelete := r.mu.obsoleteRegistryFiles[:m]
+	r.mu.obsoleteRegistryFiles = r.mu.obsoleteRegistryFiles[m:]
+	var err error
+	for _, f := range toDelete {
+		rmErr := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
+		if rmErr != nil {
+			err = errors.CombineErrors(err, rmErr)
+		}
+	}
+	return err
 }
 
 // Close closes the record writer and record file used for the registry.

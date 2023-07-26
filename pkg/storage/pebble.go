@@ -885,12 +885,13 @@ func (p *Pebble) GetStoreID() (int32, error) {
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.
 func ResolveEncryptedEnvOptions(
-	cfg *base.StorageConfig, fs vfs.FS, readOnly bool,
+	ctx context.Context, cfg *base.StorageConfig, fs vfs.FS, readOnly bool,
 ) (*PebbleFileRegistry, *EncryptionEnv, error) {
 	var fileRegistry *PebbleFileRegistry
 	if cfg.UseFileRegistry {
-		fileRegistry = &PebbleFileRegistry{FS: fs, DBDir: cfg.Dir, ReadOnly: readOnly}
-		if err := fileRegistry.Load(); err != nil {
+		fileRegistry = &PebbleFileRegistry{FS: fs, DBDir: cfg.Dir, ReadOnly: readOnly,
+			NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
+		if err := fileRegistry.Load(ctx); err != nil {
 			return nil, nil, err
 		}
 	} else {
@@ -1019,7 +1020,8 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// For some purposes, we want to always use an unencrypted
 	// filesystem.
 	unencryptedFS := opts.FS
-	fileRegistry, encryptionEnv, err := ResolveEncryptedEnvOptions(&cfg.StorageConfig, opts.FS, opts.ReadOnly)
+	fileRegistry, encryptionEnv, err :=
+		ResolveEncryptedEnvOptions(ctx, &cfg.StorageConfig, opts.FS, opts.ReadOnly)
 	if err != nil {
 		return nil, err
 	}
