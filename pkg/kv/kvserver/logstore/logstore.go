@@ -380,6 +380,9 @@ func logAppend(
 		return prev, nil
 	}
 	var diff enginepb.MVCCStats
+	opts := storage.MVCCWriteOptions{
+		Stats: &diff,
+	}
 	value := valPool.Get().(*roachpb.Value)
 	value.RawBytes = value.RawBytes[:0]
 	defer valPool.Put(value)
@@ -393,9 +396,9 @@ func logAppend(
 		value.InitChecksum(key)
 		var err error
 		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
-			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
+			err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		} else {
-			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
+			err = storage.MVCCPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		}
 		if err != nil {
 			return RaftState{}, err
@@ -408,8 +411,8 @@ func logAppend(
 		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			_, err := storage.MVCCDelete(ctx, rw, &diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
-				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+			_, err := storage.MVCCDelete(ctx, rw, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
+				hlc.Timestamp{}, opts)
 			if err != nil {
 				return RaftState{}, err
 			}

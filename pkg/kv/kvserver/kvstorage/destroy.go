@@ -148,6 +148,6 @@ func DestroyReplica(
 
 	tombstone := kvserverpb.RangeTombstone{NextReplicaID: nextReplicaID}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)
+	return storage.MVCCBlindPutProto(ctx, writer, tombstoneKey,
+		hlc.Timestamp{}, &tombstone, storage.MVCCWriteOptions{})
 }

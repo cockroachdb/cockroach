@@ -174,17 +174,17 @@ func writeNodeRecoveryResults(
 	actions loqrecoverypb.DeferredRecoveryActions,
 ) error {
 	var fullErr error
-	err := storage.MVCCPutProto(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryStatusKey(),
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &result)
+	err := storage.MVCCPutProto(ctx, writer, keys.StoreLossOfQuorumRecoveryStatusKey(),
+		hlc.Timestamp{}, &result, storage.MVCCWriteOptions{})
 	fullErr = errors.Wrap(err, "failed to write loss of quorum recovery plan application status")
 	if !actions.Empty() {
-		err = storage.MVCCPutProto(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
-			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &actions)
+		err = storage.MVCCPutProto(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+			hlc.Timestamp{}, &actions, storage.MVCCWriteOptions{})
 		fullErr = errors.CombineErrors(fullErr,
 			errors.Wrap(err, "failed to write loss of quorum recovery cleanup action"))
 	} else {
-		_, err = storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
-			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		_, err = storage.MVCCDelete(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+			hlc.Timestamp{}, storage.MVCCWriteOptions{})
 		fullErr = errors.CombineErrors(fullErr,
 			errors.Wrap(err, "failed to clean loss of quorum recovery cleanup action"))
 	}
@@ -222,7 +222,7 @@ func ReadCleanupActionsInfo(
 // RemoveCleanupActionsInfo removes cleanup actions info if it is present in the
 // reader.
 func RemoveCleanupActionsInfo(ctx context.Context, writer storage.ReadWriter) error {
-	_, err := storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+	_, err := storage.MVCCDelete(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+		hlc.Timestamp{}, storage.MVCCWriteOptions{})
 	return err
 }

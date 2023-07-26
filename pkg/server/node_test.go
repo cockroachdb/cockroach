@@ -272,7 +272,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		StoreID:   1,
 	}
 	if err := storage.MVCCPutProto(
-		ctx, e, nil /* ms */, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &sIdent,
+		ctx, e, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -938,8 +938,8 @@ func TestDiskStatsMap(t *testing.T) {
 	engineIDs := []roachpb.StoreID{10, 5}
 	for i := range engines {
 		ident := roachpb.StoreIdent{StoreID: engineIDs[i]}
-		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i], nil, keys.StoreIdentKey(),
-			hlc.Timestamp{}, hlc.ClockTimestamp{}, &ident, nil))
+		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i], keys.StoreIdentKey(),
+			hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{}))
 	}
 	var dsm diskStatsMap
 	clusterProvisionedBW := int64(150)

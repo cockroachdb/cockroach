@@ -545,12 +545,10 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 	if err := storage.MVCCPut(
 		ctx,
 		eng,
-		nil, // ms
 		roachpb.Key("b"),
 		hlc.Timestamp{WallTime: 10}, // irrelevant
-		hlc.ClockTimestamp{},        // irrelevant
 		value,
-		nil, // txn
+		storage.MVCCWriteOptions{}, // irrelevant
 	); err != nil {
 		t.Fatal(err)
 	}

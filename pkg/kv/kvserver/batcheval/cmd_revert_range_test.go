@@ -69,7 +69,7 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, baseTime.Add(int64(i%10), 0), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, key, baseTime.Add(int64(i%10), 0), value, storage.MVCCWriteOptions{Stats: &stats}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,7 +83,7 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d-rev-a", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, tsA.Add(int64(i%5), 1), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, key, tsA.Add(int64(i%5), 1), value, storage.MVCCWriteOptions{Stats: &stats}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -96,7 +96,7 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d-rev-b", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, tsB.Add(1, int32(i%5)), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, key, tsB.Add(1, int32(i%5)), value, storage.MVCCWriteOptions{Stats: &stats}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -169,7 +169,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, tsC, 1, 1)
 	if err := storage.MVCCPut(
-		ctx, eng, &stats, []byte("0012"), tsC, hlc.ClockTimestamp{}, roachpb.MakeValueFromBytes([]byte("i")), &txn,
+		ctx, eng, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), storage.MVCCWriteOptions{Txn: &txn, Stats: &stats},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestCmdRevertRange(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("%04d", i))
 		var value roachpb.Value
 		value.SetString(fmt.Sprintf("%d-rev-b", i))
-		if err := storage.MVCCPut(ctx, eng, &stats, key, tsC.Add(10, int32(i%5)), hlc.ClockTimestamp{}, value, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, key, tsC.Add(10, int32(i%5)), value, storage.MVCCWriteOptions{Stats: &stats}); err != nil {
 			t.Fatalf("writing key %s: %+v", key, err)
 		}
 	}

@@ -48,17 +48,23 @@ func Put(
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.PutRequest)
 	h := cArgs.Header
-	ms := cArgs.Stats
 
 	var ts hlc.Timestamp
 	if !args.Inline {
 		ts = h.Timestamp
 	}
+
+	opts := storage.MVCCWriteOptions{
+		Txn:            h.Txn,
+		LocalTimestamp: cArgs.Now,
+		Stats:          cArgs.Stats,
+	}
+
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, cArgs.Now, args.Value, h.Txn)
+		err = storage.MVCCBlindPut(ctx, readWriter, args.Key, ts, args.Value, opts)
 	} else {
-		err = storage.MVCCPut(ctx, readWriter, ms, args.Key, ts, cArgs.Now, args.Value, h.Txn)
+		err = storage.MVCCPut(ctx, readWriter, args.Key, ts, args.Value, opts)
 	}
 	if err != nil {
 		return result.Result{}, err

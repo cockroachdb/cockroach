@@ -832,19 +832,17 @@ func MVCCGetProto(
 func MVCCPutProto(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
-	txn *roachpb.Transaction,
 	msg protoutil.Message,
+	opts MVCCWriteOptions,
 ) error {
 	value := roachpb.Value{}
 	if err := value.SetProto(msg); err != nil {
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCPut(ctx, rw, ms, key, timestamp, localTimestamp, value, txn)
+	return MVCCPut(ctx, rw, key, timestamp, value, opts)
 }
 
 // MVCCBlindPutProto sets the given key to the protobuf-serialized byte string
@@ -853,19 +851,17 @@ func MVCCPutProto(
 func MVCCBlindPutProto(
 	ctx context.Context,
 	writer Writer,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	msg protoutil.Message,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	value := roachpb.Value{}
 	if err := value.SetProto(msg); err != nil {
 		return err
 	}
 	value.InitChecksum(key)
-	return MVCCBlindPut(ctx, writer, ms, key, timestamp, localTimestamp, value, txn)
+	return MVCCBlindPut(ctx, writer, key, timestamp, value, opts)
 }
 
 // MVCCBlindPutInlineWithPrev updates an inline value using a blind put when the
@@ -912,7 +908,7 @@ func MVCCBlindPutInlineWithPrev(
 	}
 	// TODO(jackson): Thread origMetaValSize through so that a resulting
 	// ClearUnversioned sets ClearOptions.ValueSize[Known].
-	return MVCCBlindPut(ctx, rw, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil)
+	return MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, value, MVCCWriteOptions{Stats: ms})
 }
 
 // LockTableView is a transaction-bound view into an in-memory collections of
@@ -1497,17 +1493,15 @@ func (b *putBuffer) putIntentMeta(
 func MVCCPut(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	// If we're not tracking stats for the key and we're writing a non-versioned
 	// key we can utilize a blind put to avoid reading any existing value.
 	var iter MVCCIterator
-	blind := ms == nil && timestamp.IsEmpty()
+	blind := opts.Stats == nil && timestamp.IsEmpty()
 	if !blind {
 		iter = newMVCCIterator(
 			rw, timestamp, false /* rangeKeyMasking */, false /* noInterleavedIntents */, IterOptions{
@@ -1517,7 +1511,7 @@ func MVCCPut(
 		)
 		defer iter.Close()
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, txn, nil)
+	return mvccPutUsingIter(ctx, rw, iter, key, timestamp, value, nil, opts)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -1533,14 +1527,12 @@ func MVCCPut(
 func MVCCBlindPut(
 	ctx context.Context,
 	writer Writer,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
-	return mvccPutUsingIter(ctx, writer, nil, ms, key, timestamp, localTimestamp, value, txn, nil)
+	return mvccPutUsingIter(ctx, writer, nil, key, timestamp, value, nil, opts)
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
@@ -1555,11 +1547,9 @@ func MVCCBlindPut(
 func MVCCDelete(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) (foundKey bool, err error) {
 	iter := newMVCCIterator(
 		rw, timestamp, false /* rangeKeyMasking */, false /* noInterleavedIntents */, IterOptions{
@@ -1574,7 +1564,7 @@ func MVCCDelete(
 
 	// TODO(yuzefovich): can we avoid the put if the key does not exist?
 	return mvccPutInternal(
-		ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, buf, nil)
+		ctx, rw, iter, key, timestamp, noValue, buf, nil, opts)
 }
 
 var noValue = roachpb.Value{}
@@ -1587,13 +1577,11 @@ func mvccPutUsingIter(
 	ctx context.Context,
 	writer Writer,
 	iter MVCCIterator,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
-	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	opts MVCCWriteOptions,
 ) error {
 	buf := newPutBuffer()
 	defer buf.release()
@@ -1601,7 +1589,7 @@ func mvccPutUsingIter(
 	// Most callers don't care about the returned exReplaced value. The ones that
 	// do can call mvccPutInternal directly.
 	_, err := mvccPutInternal(
-		ctx, writer, iter, ms, key, timestamp, localTimestamp, value, txn, buf, valueFn)
+		ctx, writer, iter, key, timestamp, value, buf, valueFn, opts)
 	return err
 }
 
@@ -1761,6 +1749,7 @@ func replayTransactionalWrite(
 		return errors.AssertionFailedf("transaction %s with sequence %d has a different value %+v after recomputing from what was written: %+v",
 			txn.ID, txn.Sequence, value.RawBytes, writtenValue.RawBytes)
 	}
+
 	return nil
 }
 
@@ -1802,7 +1791,7 @@ func replayTransactionalWrite(
 // parameter be set to hlc.Timestamp{} when writing transactionally, but
 // hlc.Timestamp{} is already used as a sentinel for inline puts.)
 //
-// The local timestamp parameter dictates the local clock timestamp
+// The opts.LocalTimestamp parameter dictates the local clock timestamp
 // assigned to the key-value. It should be taken from the local HLC
 // clock on the leaseholder that is performing the write and must be
 // below the leaseholder's lease expiration. If the supplied local
@@ -1814,14 +1803,12 @@ func mvccPutInternal(
 	ctx context.Context,
 	writer Writer,
 	iter MVCCIterator,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
-	txn *roachpb.Transaction,
 	buf *putBuffer,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	opts MVCCWriteOptions,
 ) (bool, error) {
 	if len(key) == 0 {
 		return false, emptyKeyError()
@@ -1850,7 +1837,7 @@ func mvccPutInternal(
 	// aren't allowed within transactions. MVCC range tombstones cannot exist
 	// across them either.
 	if putIsInline {
-		if txn != nil {
+		if opts.Txn != nil {
 			return false, errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
 		}
 		var metaKeySize, metaValSize int64
@@ -1868,8 +1855,8 @@ func mvccPutInternal(
 			buf.meta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
 			metaKeySize, metaValSize, err = buf.putInlineMeta(writer, metaKey, &buf.meta)
 		}
-		if ms != nil {
-			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
+		if opts.Stats != nil {
+			updateStatsForInline(opts.Stats, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
 		}
 		return ok && !buf.meta.Deleted, err
 	}
@@ -1881,14 +1868,14 @@ func mvccPutInternal(
 	// definition for rationale.
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
-	if txn != nil {
-		readTimestamp = txn.ReadTimestamp
+	if opts.Txn != nil {
+		readTimestamp = opts.Txn.ReadTimestamp
 		if readTimestamp != timestamp {
 			return false, errors.AssertionFailedf(
 				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
 				readTimestamp, timestamp)
 		}
-		writeTimestamp = txn.WriteTimestamp
+		writeTimestamp = opts.Txn.WriteTimestamp
 	}
 
 	timestamp = hlc.Timestamp{} // prevent accidental use below
@@ -1896,7 +1883,7 @@ func mvccPutInternal(
 	// Determine what the logical operation is. Are we writing an intent
 	// or a value directly?
 	logicalOp := MVCCWriteValueOpType
-	if txn != nil {
+	if opts.Txn != nil {
 		logicalOp = MVCCWriteIntentOpType
 	}
 
@@ -1918,20 +1905,20 @@ func mvccPutInternal(
 		// handling, since they cannot be transactional.
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
-			if txn == nil || meta.Txn.ID != txn.ID {
+			if opts.Txn == nil || meta.Txn.ID != opts.Txn.ID {
 				// The current Put operation does not come from the same
 				// transaction.
 				return false, &kvpb.WriteIntentError{Intents: []roachpb.Intent{
 					roachpb.MakeIntent(meta.Txn, key),
 				}}
-			} else if txn.Epoch < meta.Txn.Epoch {
+			} else if opts.Txn.Epoch < meta.Txn.Epoch {
 				return false, errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
-					txn.Epoch, meta.Txn.Epoch, txn.ID)
-			} else if txn.Epoch == meta.Txn.Epoch && txn.Sequence <= meta.Txn.Sequence {
+					opts.Txn.Epoch, meta.Txn.Epoch, opts.Txn.ID)
+			} else if opts.Txn.Epoch == meta.Txn.Epoch && opts.Txn.Sequence <= meta.Txn.Sequence {
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return false, replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, txn, valueFn)
+				return false, replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, opts.Txn, valueFn)
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
@@ -1961,8 +1948,8 @@ func mvccPutInternal(
 			// Set when the current provisional value is not ignored due to a txn
 			// restart or a savepoint rollback. Represents an encoded MVCCValue.
 			var curProvValRaw []byte
-			if txn.Epoch == meta.Txn.Epoch /* last write inside txn */ {
-				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, txn.IgnoredSeqNums) {
+			if opts.Txn.Epoch == meta.Txn.Epoch /* last write inside txn */ {
+				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, opts.Txn.IgnoredSeqNums) {
 					// Seqnum of last write is not ignored. Retrieve the value.
 					iter.SeekGE(oldVersionKey)
 					var hasPoint bool
@@ -1988,7 +1975,7 @@ func mvccPutInternal(
 					exVal = makeOptionalValue(curIntentVal.Value)
 				} else {
 					// Seqnum of last write was ignored. Try retrieving the value from the history.
-					prevIntent, prevIntentOk := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
+					prevIntent, prevIntentOk := meta.GetPrevIntentSeq(opts.Txn.Sequence, opts.Txn.IgnoredSeqNums)
 					if prevIntentOk {
 						prevIntentVal, err := DecodeMVCCValue(prevIntent.Value)
 						if err != nil {
@@ -2110,7 +2097,7 @@ func mvccPutInternal(
 			// transaction are ignored, and there are no past committed values
 			// at this key. In that case, we can also blow up the intent
 			// history.
-			if txn.Epoch == meta.Txn.Epoch && exVal.exists {
+			if opts.Txn.Epoch == meta.Txn.Epoch && exVal.exists {
 				// Only add the current provisional value to the intent
 				// history if the current sequence number is not ignored. There's no
 				// reason to add past committed values or a value already in the intent
@@ -2161,7 +2148,7 @@ func mvccPutInternal(
 
 	versionValue := MVCCValue{}
 	versionValue.Value = value
-	versionValue.LocalTimestamp = localTimestamp
+	versionValue.LocalTimestamp = opts.LocalTimestamp
 
 	if buildutil.CrdbTestBuild {
 		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
@@ -2181,8 +2168,8 @@ func mvccPutInternal(
 	newMeta := &buf.newMeta
 	{
 		var txnMeta *enginepb.TxnMeta
-		if txn != nil {
-			txnMeta = &txn.TxnMeta
+		if opts.Txn != nil {
+			txnMeta = &opts.Txn.TxnMeta
 			// If we bumped the WriteTimestamp, we update both the TxnMeta and the
 			// MVCCMetadata.Timestamp.
 			if txnMeta.WriteTimestamp != versionKey.Timestamp {
@@ -2232,7 +2219,7 @@ func mvccPutInternal(
 	}
 
 	// Update MVCC stats.
-	if ms != nil {
+	if opts.Stats != nil {
 		// Adjust the stats metadata for MVCC range tombstones. The MVCC stats
 		// update only cares about changes to real point keys, but the above logic
 		// needs to care about MVCC range tombstones for conflict purposes.
@@ -2248,7 +2235,7 @@ func mvccPutInternal(
 		if meta != nil {
 			meta.Timestamp = origRealKeyChanged.ToLegacyTimestamp()
 		}
-		ms.Add(updateStatsOnPut(key, prevIsValue, prevValSize, origMetaKeySize, origMetaValSize,
+		opts.Stats.Add(updateStatsOnPut(key, prevIsValue, prevValSize, origMetaKeySize, origMetaValSize,
 			metaKeySize, metaValSize, meta, newMeta))
 	}
 
@@ -2279,11 +2266,9 @@ func mvccPutInternal(
 func MVCCIncrement(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 	inc int64,
 ) (int64, error) {
 	iter := newMVCCIterator(
@@ -2321,7 +2306,8 @@ func MVCCIncrement(
 		newValue.InitChecksum(key)
 		return newValue, nil
 	}
-	err := mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
+
+	err := mvccPutUsingIter(ctx, rw, iter, key, timestamp, noValue, valueFn, opts)
 
 	return newInt64Val, err
 }
@@ -2356,14 +2342,12 @@ const (
 func MVCCConditionalPut(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	iter := newMVCCIterator(
 		rw, timestamp, false /* rangeKeyMasking */, false /* noInterleavedIntents */, IterOptions{
@@ -2374,7 +2358,7 @@ func MVCCConditionalPut(
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(
-		ctx, rw, iter, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, txn)
+		ctx, rw, iter, key, timestamp, value, expVal, allowIfDoesNotExist, opts)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -2389,31 +2373,27 @@ func MVCCConditionalPut(
 func MVCCBlindConditionalPut(
 	ctx context.Context,
 	writer Writer,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	return mvccConditionalPutUsingIter(
-		ctx, writer, nil, ms, key, timestamp, localTimestamp, value, expVal, allowIfDoesNotExist, txn)
+		ctx, writer, nil, key, timestamp, value, expVal, allowIfDoesNotExist, opts)
 }
 
 func mvccConditionalPutUsingIter(
 	ctx context.Context,
 	writer Writer,
 	iter MVCCIterator,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
 		if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
@@ -2429,7 +2409,7 @@ func mvccConditionalPutUsingIter(
 		}
 		return value, nil
 	}
-	return mvccPutUsingIter(ctx, writer, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
+	return mvccPutUsingIter(ctx, writer, iter, key, timestamp, noValue, valueFn, opts)
 }
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
@@ -2444,13 +2424,11 @@ func mvccConditionalPutUsingIter(
 func MVCCInitPut(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	iter := newMVCCIterator(
 		rw, timestamp, false /* rangeKeyMasking */, false /* noInterleavedIntents */, IterOptions{
@@ -2459,7 +2437,7 @@ func MVCCInitPut(
 		},
 	)
 	defer iter.Close()
-	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
+	return mvccInitPutUsingIter(ctx, rw, iter, key, timestamp, value, failOnTombstones, opts)
 }
 
 // MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
@@ -2473,29 +2451,25 @@ func MVCCInitPut(
 func MVCCBlindInitPut(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	return mvccInitPutUsingIter(
-		ctx, rw, nil, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
+		ctx, rw, nil, key, timestamp, value, failOnTombstones, opts)
 }
 
 func mvccInitPutUsingIter(
 	ctx context.Context,
 	rw ReadWriter,
 	iter MVCCIterator,
-	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 ) error {
 	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
 		if failOnTombstones && existVal.IsTombstone() {
@@ -2512,7 +2486,7 @@ func mvccInitPutUsingIter(
 		}
 		return value, nil
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, valueFn)
+	return mvccPutUsingIter(ctx, rw, iter, key, timestamp, noValue, valueFn, opts)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -3038,12 +3012,10 @@ func MVCCClearTimeRange(
 func MVCCDeleteRange(
 	ctx context.Context,
 	rw ReadWriter,
-	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
-	localTimestamp hlc.ClockTimestamp,
-	txn *roachpb.Transaction,
+	opts MVCCWriteOptions,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
 	// Scan to find the keys to delete.
@@ -3075,8 +3047,8 @@ func MVCCDeleteRange(
 	// need to perform the initial scan at the previous sequence number so that
 	// we don't see the result from equal or later sequences.
 	var scanTxn *roachpb.Transaction
-	if txn != nil {
-		prevSeqTxn := txn.Clone()
+	if opts.Txn != nil {
+		prevSeqTxn := opts.Txn.Clone()
 		prevSeqTxn.Sequence--
 		scanTxn = prevSeqTxn
 	}
@@ -3100,7 +3072,7 @@ func MVCCDeleteRange(
 	var keys []roachpb.Key
 	for i, kv := range res.KVs {
 		if _, err := mvccPutInternal(
-			ctx, rw, iter, ms, kv.Key, timestamp, localTimestamp, noValue, txn, buf, nil,
+			ctx, rw, iter, kv.Key, timestamp, noValue, buf, nil, opts,
 		); err != nil {
 			return nil, nil, 0, err
 		}
@@ -3281,8 +3253,8 @@ func MVCCPredicateDeleteRange(
 		} else {
 			// Use Point tombstones
 			for i := int64(0); i < runSize; i++ {
-				if _, err := mvccPutInternal(ctx, rw, pointTombstoneIter, ms, buf[i], endTime, localTimestamp, noValue,
-					nil, pointTombstoneBuf, nil); err != nil {
+				if _, err := mvccPutInternal(ctx, rw, pointTombstoneIter, buf[i], endTime, noValue,
+					pointTombstoneBuf, nil, MVCCWriteOptions{LocalTimestamp: localTimestamp, Stats: ms}); err != nil {
 					return err
 				}
 			}
@@ -3432,6 +3404,9 @@ func MVCCPredicateDeleteRange(
 // When deleting an entire Raft range, passing the current MVCCStats as
 // msCovered and setting left/rightPeekBound to start/endKey will make the
 // deletion significantly faster.
+//
+// TODO(sarkesian): Consider accepting MVCCWriteOptions for this function
+// and its relevant callers.
 func MVCCDeleteRangeUsingTombstone(
 	ctx context.Context,
 	rw ReadWriter,
@@ -3917,6 +3892,14 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 		return nil, err
 	}
 	return intents, nil
+}
+
+// MVCCWriteOptions bundles options for the MVCCPut and MVCCDelete families of functions.
+type MVCCWriteOptions struct {
+	// See the comment on mvccPutInternal for details on these parameters.
+	Txn            *roachpb.Transaction
+	LocalTimestamp hlc.ClockTimestamp
+	Stats          *enginepb.MVCCStats
 }
 
 // MVCCScanOptions bundles options for the MVCCScan family of functions.

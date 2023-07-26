@@ -326,7 +326,7 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			txn.ReadTimestamp = ts
 			txn.WriteTimestamp = ts
 		}
-		require.NoError(b, MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, txn))
+		require.NoError(b, MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn}))
 	}
 
 	resolveLastIntent := func(batch Batch, idx int) {

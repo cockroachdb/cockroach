@@ -40,7 +40,7 @@ func TestQueryIntent(t *testing.T) {
 
 	writeIntent := func(k roachpb.Key, ts int64) roachpb.Transaction {
 		txn := roachpb.MakeTransaction("test", k, 0, 0, makeTS(ts), 0, 1)
-		_, err := storage.MVCCDelete(ctx, db, nil, k, makeTS(ts), hlc.ClockTimestamp{}, &txn)
+		_, err := storage.MVCCDelete(ctx, db, k, makeTS(ts), storage.MVCCWriteOptions{Txn: &txn})
 		require.NoError(t, err)
 		return txn
 	}

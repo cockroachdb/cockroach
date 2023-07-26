@@ -228,8 +228,10 @@ func DeleteRange(
 	// can update the Result's AcquiredLocks field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
 	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		h.MaxSpanRequestKeys, timestamp, cArgs.Now, h.Txn, returnKeys)
+		ctx, readWriter, args.Key, args.EndKey,
+		h.MaxSpanRequestKeys, timestamp,
+		storage.MVCCWriteOptions{Txn: h.Txn, LocalTimestamp: cArgs.Now, Stats: cArgs.Stats},
+		returnKeys)
 	if err != nil {
 		return result.Result{}, err
 	}

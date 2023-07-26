@@ -328,7 +328,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 
 		eng := e.getOrCreateStore(ctx, t, replica.StoreID, replica.NodeID)
 		if err = storage.MVCCPutProto(
-			ctx, eng, nil, key, clock.Now(), hlc.ClockTimestamp{}, nil /* txn */, &desc,
+			ctx, eng, key, clock.Now(), &desc, storage.MVCCWriteOptions{},
 		); err != nil {
 			t.Fatalf("failed to write range descriptor into store: %v", err)
 		}
@@ -622,7 +622,7 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 			StoreID:   storeID,
 		}
 		if err = storage.MVCCPutProto(
-			context.Background(), eng, nil, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &sIdent,
+			context.Background(), eng, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
 		); err != nil {
 			t.Fatalf("failed to populate test store ident: %v", err)
 		}
