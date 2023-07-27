@@ -10,7 +10,7 @@
 
 import {
   convertRawStmtsToAggregateStatistics,
-  filteredStatementsData,
+  filterStatementsData,
   getAppsFromStmtsResponse,
 } from "src/sqlActivity/util";
 import { mockStmtStats, Stmt } from "src/api/testUtils";
@@ -18,7 +18,7 @@ import { Filters } from "src/queryFilter/filter";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-describe("filteredStatementsData", () => {
+describe("filterStatementsData", () => {
   function filterAndCheckStmts(
     stmtsRaw: Stmt[],
     filters: Filters,
@@ -27,7 +27,7 @@ describe("filteredStatementsData", () => {
   ) {
     const statements = convertRawStmtsToAggregateStatistics(stmtsRaw);
 
-    const filteredStmts = filteredStatementsData(
+    const filteredStmts = filterStatementsData(
       filters,
       searchString,
       statements,
