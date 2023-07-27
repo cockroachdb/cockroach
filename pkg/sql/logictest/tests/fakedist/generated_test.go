@@ -2088,6 +2088,13 @@ func TestLogic_udf_oid_ref(
 	runLogicTest(t, "udf_oid_ref")
 }
 
+func TestLogic_udf_prepare(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_prepare")
+}
+
 func TestLogic_udf_record(
 	t *testing.T,
 ) {
