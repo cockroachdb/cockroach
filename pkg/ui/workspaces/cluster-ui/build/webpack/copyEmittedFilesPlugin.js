@@ -15,6 +15,8 @@ const path = require("path");
 const semver = require("semver");
 const { validate } = require("schema-utils");
 
+const { cleanDestinationPaths, tildeify } = require("../util");
+
 const PLUGIN_NAME = `CopyEmittedFilesPlugin`;
 
 const SCHEMA = {
@@ -65,48 +67,9 @@ class CopyEmittedFilesPlugin {
 
     const logger = compiler.getInfrastructureLogger(PLUGIN_NAME);
 
-    // Extract the major and minor versions of this cluster-ui build.
-    const pkgVersion = getPkgVersion(compiler.context);
-
     // Sanitize provided paths to ensure they point to a reasonable version of
     // cluster-ui.
-    const destinations = this.options.destinations.map((dstOpt) => {
-      const dst = detildeify(dstOpt);
-
-      // The user provided paths to a specific cluster-ui version.
-      if (dst.includes("@cockroachlabs/cluster-ui-")) {
-        // Remove a possibly-trailing '/' literal.
-        const dstClean = dst[dst.length - 1] === "/"
-          ? dst.slice(0, dst.length - 1)
-          : dst;
-
-        return dstClean;
-      }
-
-      // If the user provided a path to a project, look for a top-level
-      // node_modules/ within that directory
-      const dirents = fs.readdirSync(dst, { encoding: "utf-8", withFileTypes: true });
-      for (const dirent of dirents) {
-        if (dirent.name === "node_modules" && dirent.isDirectory()) {
-          return path.join(
-            dst,
-            `./node_modules/@cockroachlabs/cluster-ui-${pkgVersion.major}-${pkgVersion.minor}`,
-          );
-        }
-      }
-
-      const hasPnpmLock = dirents.some((dirent) => dirent.name === "pnpm-lock.yaml");
-      if (hasPnpmLock) {
-        logger.error(`Directory ${dst} doesn't have a node_modules directory, but does have a pnpm-lock.yaml.`);
-        logger.error(`Do you need to run 'pnpm install' there?`);
-        throw "missing node_modules";
-      }
-
-      logger.error(`Directory ${dst} doesn't have a node_modules directory, and does not appear to be`);
-      logger.error(`a JS package.`);
-      throw "unknown destination";
-    });
-
+    const destinations = cleanDestinationPaths(this.options.destinations, logger);
     logger.info("Emitted files will be copied to:");
     for (const dst of destinations) {
       logger.info("  " + tildeify(dst));
@@ -119,16 +82,22 @@ class CopyEmittedFilesPlugin {
     compiler.hooks.afterEnvironment.tap(PLUGIN_NAME, () => {
       logger.warn("Deleting destinations in preparation for copied files:");
       for (const dst of destinations) {
-        const prettyDst = tildeify(dst);
         const stat = fs.statSync(dst);
 
         if (stat.isDirectory()) {
-          logger.warn(`  rm -r ${prettyDst}`);
+          // Since the destination is already a directory, it's likely been
+          // created by webpack or typescript already. Don't remove the entire
+          // directory --- only remove the js subtree.
+          const jsDir = path.join(dst, "js");
+          logger.warn(`  rm -r ${tildeify(jsDir)}`);
+          fs.rmSync(jsDir, { recursive: true });
         } else {
-          logger.warn(`  rm ${prettyDst}`);
+          // Since the destination is a symlink, just remove the single file.
+          logger.warn(`  rm ${tildeify(dst)}`);
+          fs.rmSync(dst, { recursive: false });
         }
-        fs.rmSync(dst, { recursive: stat.isDirectory() });
 
+        // Ensure the destination directory and package.json exist.
         logger.debug(`mkdir -p ${path.join(dst, relOutputPath)}`);
         fs.mkdirSync(path.join(dst, relOutputPath), { recursive: true });
 
@@ -154,46 +123,6 @@ class CopyEmittedFilesPlugin {
       );
     });
   }
-}
-
-/**
- * Extracts the major and minor version number from the package at pkgRoot.
- * @param pkgRoot {string} - the absolute path to the directory that holds the
- *                           package's package.json
- * @returns {object} - an object containing the major (`.major`) and minor
- *                     (`.minor`) versions of the package
- */
-function getPkgVersion(pkgRoot) {
-  const pkgJsonStr = fs.readFileSync(
-    path.join(pkgRoot, "package.json"),
-    "utf-8",
-  );
-  const pkgJson = JSON.parse(pkgJsonStr);
-  const version = semver.parse(pkgJson.version);
-  return {
-    major: version.major,
-    minor: version.minor,
-  };
-}
-
-/**
- * Replaces the user's home directory with '~' in the provided path. The
- * opposite of `detildeify`.
- * @param {string} path - the path to replace a home directory in
- * @returns {string} `path` but with the user's home directory swapped for '~'
- */
-function tildeify(path) {
-  return path.replace(os.homedir(), "~");
-}
-
-/**
- * Replaces '~' with the user's home directory in the provided path. The
- * opposite of `tildeify`.
- * @param {string} path - the path to replace a '~' in
- * @returns {string} `path` but with '~' swapped for the user's home directory.
- */
-function detildeify(path) {
-  return path.replace("~", os.homedir());
 }
 
 module.exports.CopyEmittedFilesPlugin = CopyEmittedFilesPlugin;
