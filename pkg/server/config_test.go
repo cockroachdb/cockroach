@@ -130,6 +130,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	cfg.AmbientCtx.Tracer = nil
 	cfgExpected.Tracer = nil
 	cfgExpected.AmbientCtx.Tracer = nil
+	cfg.ExternalStorageAccessor = nil
+	cfgExpected.ExternalStorageAccessor = nil
 	// Temp storage disk monitors will have slightly different names, so we
 	// override them to point to the same one.
 	cfgExpected.TempStorageConfig.Mon = cfg.TempStorageConfig.Mon

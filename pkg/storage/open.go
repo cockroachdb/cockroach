@@ -185,6 +185,14 @@ func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 	}
 }
 
+// RemoteStorageFactory enables use of remote storage (experimental).
+func RemoteStorageFactory(accessor *cloud.ExternalStorageAccessor) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.RemoteStorageFactory = accessor
+		return nil
+	}
+}
+
 // MaxConcurrentCompactions configures the maximum number of concurrent
 // compactions an Engine will execute.
 func MaxConcurrentCompactions(n int) ConfigOption {
