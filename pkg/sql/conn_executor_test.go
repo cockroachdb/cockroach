@@ -1737,28 +1737,16 @@ func TestSessionTotalActiveTime(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
-	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, mainDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	_, err := mainDB.Exec(fmt.Sprintf("CREATE USER %s", username.TestUser))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pgURL, cleanupDB := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "TestSessionTotalActiveTime", url.User(username.TestUser))
-	defer cleanupDB()
-	rawSQL, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		err := rawSQL.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
+	rawSQL := s.SQLConnForUser(t, username.TestUser, "")
 
 	getSessionWithTestUser := func() *serverpb.Session {
 		sessions := s.SQLServer().(*sql.Server).GetExecutorConfig().SessionRegistry.SerializeAll()

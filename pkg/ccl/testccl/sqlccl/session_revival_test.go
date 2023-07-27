@@ -50,17 +50,8 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 
 	var token string
 	t.Run("generate token", func(t *testing.T) {
-		pgURL, cleanup := sqlutils.PGUrl(
-			t,
-			tenant.SQLAddr(),
-			"TestToken1",
-			url.UserPassword(username.TestUser, "hunter2"),
-		)
-		defer cleanup()
-
-		conn, err := pgx.Connect(ctx, pgURL.String())
-		require.NoError(t, err)
-		err = conn.QueryRow(ctx, "SELECT encode(crdb_internal.create_session_revival_token(), 'base64')").Scan(&token)
+		conn := tenant.SQLConnForUser(t, username.TestUser, "")
+		err := conn.QueryRowContext(ctx, "SELECT encode(crdb_internal.create_session_revival_token(), 'base64')").Scan(&token)
 		require.NoError(t, err)
 	})
 

@@ -316,6 +316,8 @@ func TestCreateStatementType(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
+	// This test does not use s.SQLConn() because it cares about looking
+	// at the statement tags in responses.
 	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgxConfig, err := pgx.ParseConfig(pgURL.String())
