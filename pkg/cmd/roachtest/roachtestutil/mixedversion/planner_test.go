@@ -69,7 +69,7 @@ func TestTestPlanner(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 11)
+	require.Len(t, plan.steps, 10)
 
 	// Assert on the pretty-printed version of the test plan as that
 	// asserts the ordering of the steps we want to take, and as a bonus
@@ -77,37 +77,36 @@ func TestTestPlanner(t *testing.T) {
 	expectedPrettyPlan := fmt.Sprintf(`
 mixed-version test plan for upgrading from %[1]s to <current>:
 ├── starting cluster at version "%[1]s" (1)
-├── upload current binary to all cockroach nodes (:1-4) (2)
-├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
-├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (4)
-├── run "initialize bank workload" (5)
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2)
+├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (3)
+├── run "initialize bank workload" (4)
 ├── start background hooks concurrently
-│   ├── run "bank workload", after 50ms delay (6)
-│   ├── run "rand workload", after 200ms delay (7)
-│   └── run "csv server", after 500ms delay (8)
+│   ├── run "bank workload", after 50ms delay (5)
+│   ├── run "rand workload", after 200ms delay (6)
+│   └── run "csv server", after 500ms delay (7)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 1 with binary version <current> (9)
-│   ├── run "mixed-version 1" (10)
-│   ├── restart node 4 with binary version <current> (11)
-│   ├── restart node 3 with binary version <current> (12)
-│   ├── run "mixed-version 2" (13)
-│   └── restart node 2 with binary version <current> (14)
+│   ├── restart node 1 with binary version <current> (8)
+│   ├── run "mixed-version 1" (9)
+│   ├── restart node 4 with binary version <current> (10)
+│   ├── restart node 3 with binary version <current> (11)
+│   ├── run "mixed-version 2" (12)
+│   └── restart node 2 with binary version <current> (13)
 ├── downgrade nodes :1-4 from "<current>" to "%[1]s"
-│   ├── restart node 4 with binary version %[1]s (15)
-│   ├── run "mixed-version 2" (16)
-│   ├── restart node 2 with binary version %[1]s (17)
-│   ├── restart node 3 with binary version %[1]s (18)
-│   ├── restart node 1 with binary version %[1]s (19)
-│   └── run "mixed-version 1" (20)
+│   ├── restart node 4 with binary version %[1]s (14)
+│   ├── run "mixed-version 2" (15)
+│   ├── restart node 2 with binary version %[1]s (16)
+│   ├── restart node 3 with binary version %[1]s (17)
+│   ├── restart node 1 with binary version %[1]s (18)
+│   └── run "mixed-version 1" (19)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 4 with binary version <current> (21)
-│   ├── run "mixed-version 1" (22)
-│   ├── restart node 1 with binary version <current> (23)
-│   ├── restart node 2 with binary version <current> (24)
-│   ├── run "mixed-version 2" (25)
-│   └── restart node 3 with binary version <current> (26)
-├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
-└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (28)
+│   ├── restart node 4 with binary version <current> (20)
+│   ├── run "mixed-version 1" (21)
+│   ├── restart node 1 with binary version <current> (22)
+│   ├── restart node 2 with binary version <current> (23)
+│   ├── run "mixed-version 2" (24)
+│   └── restart node 3 with binary version <current> (25)
+├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (26)
+└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (27)
 `, predecessorVersion)
 
 	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
@@ -121,7 +120,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	mvt.OnStartup("startup 2", dummyHook)
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	requireConcurrentHooks(t, plan.steps[4], "startup 1", "startup 2")
+	requireConcurrentHooks(t, plan.steps[3], "startup 1", "startup 2")
 
 	// Assert that AfterUpgradeFinalized hooks are scheduled to run in
 	// the last step of the test.
@@ -131,8 +130,8 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	mvt.AfterUpgradeFinalized("finalizer 3", dummyHook)
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 10)
-	requireConcurrentHooks(t, plan.steps[9], "finalizer 1", "finalizer 2", "finalizer 3")
+	require.Len(t, plan.steps, 9)
+	requireConcurrentHooks(t, plan.steps[8], "finalizer 1", "finalizer 2", "finalizer 3")
 }
 
 // TestDeterministicTestPlan tests that generating a test plan with
@@ -199,15 +198,15 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := plan.steps[4].(sequentialRunStep).steps[4].(runHookStep)
+		firstRun := plan.steps[3].(sequentialRunStep).steps[4].(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		secondRun := plan.steps[5].(sequentialRunStep).steps[1].(runHookStep)
+		secondRun := plan.steps[4].(sequentialRunStep).steps[1].(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := plan.steps[6].(sequentialRunStep).steps[3].(runHookStep)
+		thirdRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
