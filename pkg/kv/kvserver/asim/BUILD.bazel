@@ -26,10 +26,14 @@ go_test(
     deps = [
         ":asim",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/event",
+        "//pkg/kv/kvserver/asim/gen",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/skip",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )
