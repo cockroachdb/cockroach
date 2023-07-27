@@ -134,8 +134,8 @@ upsert descriptor #107
   +    columnIds:
   +    - 2
   +    id: 106
-     formatVersion: 3
-     id: 107
+     families:
+     - columnIds:
   ...
        start: "1"
      unexposedParentSchemaId: 105
@@ -289,8 +289,8 @@ upsert descriptor #107
   +    columnIds:
   +    - 2
   +    id: 106
-     formatVersion: 3
-     id: 107
+     families:
+     - columnIds:
   ...
        start: "1"
      unexposedParentSchemaId: 105
