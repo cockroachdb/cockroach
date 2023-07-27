@@ -208,7 +208,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 		// Changing the objective to CPU should not work since it isn't
 		// supported on this aarch.
 		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
-		require.Equal(t, LBRebalancingCPU, manager.Objective())
+		require.Equal(t, LBRebalancingQueries, manager.Objective())
 		require.Len(t, *callbacks, 0)
 
 		return
