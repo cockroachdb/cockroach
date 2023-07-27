@@ -301,7 +301,7 @@ func (r *Replica) setRangefeedProcessor(p rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
-	r.store.addReplicaWithRangefeed(r.RangeID)
+	r.store.addReplicaWithRangefeed(r.RangeID, p.ID())
 }
 
 func (r *Replica) unsetRangefeedProcessorLocked(p rangefeed.Processor) {
