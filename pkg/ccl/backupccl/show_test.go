@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"os"
@@ -681,14 +680,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(),
-		"TestShowBackupPrivileges-testuser", url.User("testuser"))
-	defer cleanup()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, testuser.Close())
-	}()
+	testuser := srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 
 	// Make an initial backup.
 	const full = localFoo + "/full"
@@ -698,7 +690,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 	// Make a second full backup using non into syntax.
 	sqlDB.Exec(t, `BACKUP TO $1;`, full)
 
-	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
+	_, err := testuser.Exec(`SHOW BACKUPS IN $1`, full)
 	require.True(t, testutils.IsError(err,
 		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 

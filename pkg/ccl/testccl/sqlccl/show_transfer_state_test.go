@@ -40,19 +40,10 @@ func TestShowTransferState(t *testing.T) {
 	_, err = mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
 	require.NoError(t, err)
 
+	testUserConn := tenant.SQLConnForUser(t, username.TestUser, "")
+
 	t.Run("without_transfer_key", func(t *testing.T) {
-		pgURL, cleanup := sqlutils.PGUrl(
-			t,
-			tenant.SQLAddr(),
-			"TestShowTransferState-without_transfer_key",
-			url.UserPassword(username.TestUser, "hunter2"),
-		)
-		defer cleanup()
-
-		conn, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		defer conn.Close()
-
+		conn := testUserConn
 		rows, err := conn.Query("SHOW TRANSFER STATE")
 		require.NoError(t, err, "show transfer state failed")
 		defer rows.Close()
@@ -181,17 +172,7 @@ func TestShowTransferState(t *testing.T) {
 		})
 
 		t.Run("transaction", func(t *testing.T) {
-			pgURL, cleanup := sqlutils.PGUrl(
-				t,
-				tenant.SQLAddr(),
-				"TestShowTransferState-errors-transaction",
-				url.UserPassword(username.TestUser, "hunter2"),
-			)
-			defer cleanup()
-
-			conn, err := gosql.Open("postgres", pgURL.String())
-			require.NoError(t, err)
-			defer conn.Close()
+			conn := testUserConn
 
 			var errVal, sessionState, sessionRevivalToken gosql.NullString
 			err = crdb.ExecuteTx(ctx, conn, nil /* txopts */, func(tx *gosql.Tx) error {

@@ -12,7 +12,6 @@ package application_api_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -303,7 +302,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			setupQueries := []string{
 				fmt.Sprintf("CREATE DATABASE %s", escDBName),
-				fmt.Sprintf("CREATE SCHEMA %s", schemaName),
+				fmt.Sprintf("CREATE SCHEMA %s.%s", escDBName, schemaName),
 				fmt.Sprintf(`CREATE TABLE %s.%s (%s)`, escDBName, tblName, tableSchema),
 				"CREATE USER readonly",
 				"CREATE USER app",
@@ -311,16 +310,9 @@ func TestAdminAPITableDetails(t *testing.T) {
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, tblName),
 				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
-			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.AdvSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
-			defer cleanupGoDB()
-			pgURL.Path = tc.dbName
-			db, err := gosql.Open("postgres", pgURL.String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
+			db := ts.SQLConn(t, tc.dbName)
 			for _, q := range setupQueries {
+				t.Logf("executing: %v", q)
 				if _, err := db.Exec(q); err != nil {
 					t.Fatal(err)
 				}
