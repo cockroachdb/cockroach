@@ -35,6 +35,7 @@ import (
 //
 // The dependsOnContext return value indicates if we had to consult the
 // ParseContext (either for the time or the local timezone).
+// TODO
 func ParseAndRequireString(
 	t *types.T, s string, ctx ParseContext,
 ) (d Datum, dependsOnContext bool, err error) {

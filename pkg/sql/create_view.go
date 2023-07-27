@@ -185,6 +185,10 @@ func (n *createViewNode) startExec(params runParams) error {
 	var newDesc *tabledesc.Mutable
 	applyGlobalMultiRegionZoneConfig := false
 
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable, tree.FmtAnnotations(&params.p.SemaCtx().Annotations))
+	n.createView.AsSource.Format(fmtCtx)
+	viewQuery := fmtCtx.String()
+
 	var retErr error
 	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
 		retErr = func() error {
@@ -218,7 +222,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				desc, err := makeViewTableDesc(
 					params.ctx,
 					viewName,
-					n.viewQuery,
+					viewQuery,
 					n.dbDesc.GetID(),
 					schema.GetID(),
 					id,
@@ -404,18 +408,18 @@ func makeViewTableDesc(
 	}
 
 	if sc != nil {
-		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery, false /* multiStmt */)
+		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery, false /* multiStmt */, semaCtx)
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
-	if err != nil {
-		return tabledesc.Mutable{}, err
-	}
-	desc.ViewQuery = typeReplacedQuery
+	// typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
+	// if err != nil {
+	// 	return tabledesc.Mutable{}, err
+	// }
+	// desc.ViewQuery = typeReplacedQuery
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
@@ -429,7 +433,11 @@ func makeViewTableDesc(
 // viewQuery into a statement.
 // TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
-	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
+	ctx context.Context,
+	sc resolver.SchemaResolver,
+	queryStr string,
+	multiStmt bool,
+	semaCtx *tree.SemaContext,
 ) (string, error) {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
@@ -505,6 +513,11 @@ func serializeUserDefinedTypes(
 		default:
 			return true, expr, nil
 		}
+		// TODO
+		// str, ok := innerExpr.(*tree.StrVal)
+		// if !ok {
+		// 	return true, expr, nil
+		// }
 		// We cannot type-check subqueries without using optbuilder, and there
 		// is no need to because we only need to rewrite string values that are
 		// directly cast to enums. For example, we must rewrite the 'foo' in:
@@ -596,18 +609,18 @@ func (p *planner) replaceViewDesc(
 	toReplace.ViewQuery = n.viewQuery
 
 	if sc != nil {
-		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */, p.SemaCtx())
 		if err != nil {
 			return nil, err
 		}
 		toReplace.ViewQuery = updatedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery, false /* multiStmt */)
-	if err != nil {
-		return nil, err
-	}
-	toReplace.ViewQuery = typeReplacedQuery
+	// typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery, false /* multiStmt */)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// toReplace.ViewQuery = typeReplacedQuery
 
 	// Check that the new view has at least as many columns as the old view before
 	// adding result columns.

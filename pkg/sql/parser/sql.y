@@ -3489,7 +3489,8 @@ alter_backup_schedule_cmd:
 sconst_or_placeholder:
   SCONST
   {
-    $$.val = tree.NewStrVal($1)
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    $$.val = tree.NewAnnotatedStrVal($1, aIdx)
   }
 | PLACEHOLDER
   {
@@ -3927,7 +3928,8 @@ export_stmt:
 string_or_placeholder:
   non_reserved_word_or_sconst
   {
-    $$.val = tree.NewStrVal($1)
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    $$.val = tree.NewAnnotatedStrVal($1, aIdx)
   }
 | PLACEHOLDER
   {
@@ -14836,7 +14838,8 @@ d_expr:
   }
 | SCONST
   {
-    $$.val = tree.NewStrVal($1)
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    $$.val = tree.NewAnnotatedStrVal($1, aIdx)
   }
 | BCONST
   {

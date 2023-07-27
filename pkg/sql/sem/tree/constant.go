@@ -474,6 +474,8 @@ type StrVal struct {
 	// The following fields are used to avoid allocating Datums on type resolution.
 	resString DString
 	resBytes  DBytes
+
+	AnnotatedNode
 }
 
 // NewStrVal constructs a StrVal instance. This is used during
@@ -481,6 +483,11 @@ type StrVal struct {
 // the b'...' or x'...' syntax.
 func NewStrVal(s string) *StrVal {
 	return &StrVal{s: s}
+}
+
+// NewAnnotatedStrVal TODO
+func NewAnnotatedStrVal(s string, aIdx AnnotationIdx) *StrVal {
+	return &StrVal{s: s, AnnotatedNode: AnnotatedNode{aIdx}}
 }
 
 // NewBytesStrVal constructs a StrVal instance suitable as byte array.
@@ -498,9 +505,17 @@ func (expr *StrVal) RawString() string {
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
-	if expr.scannedAsBytes {
+	switch {
+	case expr.scannedAsBytes:
 		lexbase.EncodeSQLBytes(buf, expr.s)
-	} else {
+	case ctx.HasFlags(fmtStaticallyFormatUserDefinedTypes):
+		ann := expr.GetAnnotation(ctx.ann)
+		if e, ok := ann.(*DEnum); ok {
+			e.Format(ctx)
+			return
+		}
+		fallthrough
+	default:
 		lexbase.EncodeSQLStringWithFlags(buf, expr.s, f.EncodeFlags())
 	}
 }
@@ -659,6 +674,11 @@ func (expr *StrVal) ResolveAsType(
 			}
 		}
 		val, dependsOnContext, err := ParseAndRequireString(typ, expr.s, ptCtx)
+		if e, ok := val.(*DEnum); ok {
+			// Annotate the StrVal with its DEnum equivalent.
+			expr.SetAnnotation(&semaCtx.Annotations, e)
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -671,6 +691,7 @@ func (expr *StrVal) ResolveAsType(
 		// still want to error out if the conversion is not possible though (this is
 		// used when resolving overloads).
 		expr.resString = DString(expr.s)
+		// expr.resBytes = typ.
 		c := NewTypedCastExpr(&expr.resString, typ)
 		return c.TypeCheck(ctx, semaCtx, typ)
 	}

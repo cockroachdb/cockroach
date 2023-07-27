@@ -438,7 +438,7 @@ func setFuncOptions(
 	switch lang {
 	case catpb.Function_SQL:
 		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, body, true)
+		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, body, true, &params.p.semaCtx)
 		if err != nil {
 			return err
 		}

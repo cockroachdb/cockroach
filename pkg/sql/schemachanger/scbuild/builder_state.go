@@ -1480,7 +1480,7 @@ func (b *builderState) WrapFunctionBody(
 	if lang != catpb.Function_PLPGSQL {
 		// TODO(drewk): fix this to work with PL/pgSQL.
 		bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
-		bodyStr = b.serializeUserDefinedTypes(bodyStr)
+		// bodyStr = b.serializeUserDefinedTypes(bodyStr)
 	}
 	fnBody := &scpb.FunctionBody{
 		FunctionID: fnID,
@@ -1550,7 +1550,7 @@ func (b *builderState) replaceSeqNamesWithIDs(queryStr string) string {
 		stmts[i] = s.AST
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable, tree.FmtAnnotations(&b.semaCtx.Annotations))
 	for i, stmt := range stmts {
 		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
 		if err != nil {
