@@ -12,13 +12,10 @@ package spanconfigtestcluster
 
 import (
 	"context"
-	gosql "database/sql"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
@@ -80,15 +77,10 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantState.ApplicationLayerInterface, err = testServer.StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "Tenant", url.User(username.RootUser))
-		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(h.t, err)
+		tenantSQLDB := tenantState.SQLConn(h.t, "")
 
 		tenantState.db = sqlutils.MakeSQLRunner(tenantSQLDB)
-		tenantState.cleanup = func() {
-			require.NoError(h.t, tenantSQLDB.Close())
-			cleanupPGUrl()
-		}
+		tenantState.cleanup = func() {}
 	}
 
 	var tenKnobs *spanconfig.TestingKnobs

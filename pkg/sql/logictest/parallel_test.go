@@ -22,7 +22,6 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -90,21 +88,8 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 
 func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 	for len(t.clients[nodeIdx]) <= clientIdx {
-		// Add a client.
-		pgURL, cleanupFunc := sqlutils.PGUrl(t.T,
-			t.cluster.Server(nodeIdx).AdvSQLAddr(),
-			"TestParallel",
-			url.User(username.RootUser))
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
+		db := t.cluster.Server(nodeIdx).SQLConn(t, "")
 		sqlutils.MakeSQLRunner(db).Exec(t, "SET DATABASE = test")
-		t.cluster.Stopper().AddCloser(
-			stop.CloserFn(func() {
-				_ = db.Close()
-				cleanupFunc()
-			}))
 		t.clients[nodeIdx] = append(t.clients[nodeIdx], db)
 	}
 	return t.clients[nodeIdx][clientIdx]

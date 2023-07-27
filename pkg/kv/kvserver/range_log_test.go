@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -24,11 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -258,7 +255,9 @@ func TestLogMerges(t *testing.T) {
 func TestLogRebalances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -305,16 +304,6 @@ func TestLogRebalances(t *testing.T) {
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
 	logEvent(roachpb.REMOVE_VOTER, kvserverpb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
-
-	// Open a SQL connection to verify that the events have been logged.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), "TestLogRebalances", url.User(username.RootUser))
-	defer cleanupFn()
-
-	sqlDB, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer sqlDB.Close()
 
 	// verify that two add replica events have been logged.
 	rows, err := sqlDB.QueryContext(ctx,

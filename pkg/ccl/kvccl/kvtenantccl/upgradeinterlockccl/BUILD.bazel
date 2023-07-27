@@ -23,7 +23,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
-        "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",

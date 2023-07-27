@@ -179,7 +179,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-			tenant10.SQLAddr(), "workload-worker" /* prefix */, url.User(username.RootUser))
+			tenant10.AdvSQLAddr(), "workload-worker" /* prefix */, url.User(username.RootUser))
 		if err != nil {
 			return err
 		}

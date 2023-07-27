@@ -473,30 +473,21 @@ func TestExportPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(),
-		"TestExportPrivileges-testuser", url.User("testuser"))
-	defer cleanup()
-	startTestUser := func() *gosql.DB {
-		testuser, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return testuser
-	}
-	testuser := startTestUser()
+	testuser := srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
 	dest := "nodelocal://1/privs_placeholder"
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
-	testuser.Close()
+
+	// The below SELECT GRANT hangs if we leave the user conn open.
+	_ = testuser.Close()
 
 	// Grant SELECT privilege.
 	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
 
-	// The above SELECT GRANT hangs if we leave the user conn open. Thus, we need
-	// to reinitialize it here.
-	testuser = startTestUser()
-	defer testuser.Close()
+	testuser = srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,

@@ -10,16 +10,13 @@ package tenantcapabilitiesccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -108,13 +105,7 @@ func TestDataDriven(t *testing.T) {
 		testTenantInterface, err := tc.Server(0).StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, testTenantInterface.SQLAddr(), "Tenant", url.User(username.RootUser))
-		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
-		defer func() {
-			require.NoError(t, tenantSQLDB.Close())
-			defer cleanupPGUrl()
-		}()
-		require.NoError(t, err)
+		tenantSQLDB := testTenantInterface.SQLConn(t, "")
 
 		lastUpdateTS := tc.Server(0).Clock().Now() // ensure watcher isn't starting out empty
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

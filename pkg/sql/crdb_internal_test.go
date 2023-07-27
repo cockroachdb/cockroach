@@ -1263,11 +1263,11 @@ func TestExecutionInsights(t *testing.T) {
 
 	// Start the cluster.
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// We'll check both the cluster-wide table and the node-local one.
 	virtualTables := []interface{}{
@@ -1293,17 +1293,10 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(),
-					fmt.Sprintf("TestExecutionInsights-%s-%s", table, testCase.option),
-					url.User("testuser"),
-				)
-				defer cleanup()
-				db, err := gosql.Open("postgres", pgUrl.String())
-				require.NoError(t, err)
-				defer func() { _ = db.Close() }()
+				tdb := s.SQLConnForUser(t, "testuser", "")
 
 				// Try to read the virtual table, and see that we can or cannot as expected.
-				rows, err := db.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
+				rows, err := tdb.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
 				defer func() {
 					if rows != nil {
 						_ = rows.Close()

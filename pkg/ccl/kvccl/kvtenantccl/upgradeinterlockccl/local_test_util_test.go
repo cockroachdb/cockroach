@@ -11,7 +11,6 @@ package upgradeinterlockccl
 import (
 	"context"
 	gosql "database/sql"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -142,17 +140,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	connectToTenant := func(t *testing.T, addr string) (_ *gosql.DB, cleanup func()) {
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(username.RootUser))
-		tenantDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return tenantDB, func() {
-			tenantDB.Close()
-			cleanupPGUrl()
-		}
-	}
-
-	mkTenant := func(t *testing.T, id roachpb.TenantID, bv roachpb.Version, minBv roachpb.Version) (tenantDB *gosql.DB, cleanup func()) {
+	mkTenant := func(t *testing.T, id roachpb.TenantID, bv roachpb.Version, minBv roachpb.Version) (tenantDB *gosql.DB, stopTenant func()) {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(bv, minBv, false /* initializeVersion */)
 		disableBackgroundTasks(settings)
 		if test.ExpStartupErr[variant] != "" {
@@ -173,15 +161,15 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		}
 		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
-		return connectToTenant(t, tenant.SQLAddr())
+		return tenant.SQLConn(t, ""), func() { tenant.Stopper().Stop(ctx) }
 	}
 
 	logf("creating an initial tenant server")
 	// Create a tenant before upgrading anything, and verify its
 	// version.
 	tenantID := serverutils.TestTenantID()
-	tenant, cleanup := mkTenant(t, tenantID, bv, msv)
-	defer cleanup()
+	tenant, stopTenant := mkTenant(t, tenantID, bv, msv)
+	defer stopTenant()
 	initialTenantRunner := sqlutils.MakeSQLRunner(tenant)
 
 	logf("verifying the tenant version")
@@ -305,8 +293,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		otherServerStopper.Stop(ctx)
 	} else if otherServerStartError == nil {
 		defer otherServer.Stopper().Stop(ctx)
-		otherTenant, otherCleanup := connectToTenant(t, otherServer.SQLAddr())
-		defer otherCleanup()
+		otherTenant := otherServer.SQLConn(t, "")
 		otherTenantRunner = sqlutils.MakeSQLRunner(otherTenant)
 		numTenantsStr = "2"
 	}

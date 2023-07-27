@@ -10,10 +10,8 @@ package auditloggingccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math"
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -121,13 +119,7 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	testUserURL, cleanupFn := sqlutils.PGUrl(t,
-		s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.TestUser))
-	defer cleanupFn()
-
-	testUserDb, err := gosql.Open("postgres", testUserURL.String())
-	require.NoError(t, err)
-	defer testUserDb.Close()
+	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
 	testRunner := sqlutils.MakeSQLRunner(testUserDb)
 
 	// Dummy table/user used by tests.
@@ -250,16 +242,10 @@ func TestMultiRoleAuditLogging(t *testing.T) {
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
+	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	testUserURL, cleanupFn := sqlutils.PGUrl(t,
-		s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.TestUser))
-	defer cleanupFn()
-
-	testUserDb, err := gosql.Open("postgres", testUserURL.String())
-	require.NoError(t, err)
-	defer testUserDb.Close()
+	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
 	testRunner := sqlutils.MakeSQLRunner(testUserDb)
 
 	// Dummy table/user used by tests.
@@ -374,13 +360,7 @@ func TestReducedAuditConfig(t *testing.T) {
 		return nil
 	})
 
-	testUserURL, cleanupFn := sqlutils.PGUrl(t,
-		s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.TestUser))
-	defer cleanupFn()
-
-	testUserDb, err := gosql.Open("postgres", testUserURL.String())
-	require.NoError(t, err)
-	defer testUserDb.Close()
+	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
 	testRunner := sqlutils.MakeSQLRunner(testUserDb)
 
 	// Set a cluster configuration.
@@ -436,9 +416,7 @@ func TestReducedAuditConfig(t *testing.T) {
 	}
 
 	// Open 2nd connection for the test user.
-	testUserDb2, err := gosql.Open("postgres", testUserURL.String())
-	require.NoError(t, err)
-	defer testUserDb2.Close()
+	testUserDb2 := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
 	testRunner2 := sqlutils.MakeSQLRunner(testUserDb2)
 
 	// Run a query on the new connection. The new connection will cause the reduced audit config to be re-computed.

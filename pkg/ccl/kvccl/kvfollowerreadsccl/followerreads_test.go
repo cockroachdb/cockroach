@@ -13,7 +13,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
@@ -971,6 +969,11 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		// in KV so we must ensure they're not redacted.
 		systemSQL.Exec(t, `SET CLUSTER SETTING server.secondary_tenants.redact_trace.enabled = 'false'`)
 
+		dbs := make([]*gosql.DB, numNodes)
+		for i := 0; i < numNodes; i++ {
+			dbs[i] = tenants[i].SQLConn(t, "")
+		}
+
 		// Wait until all tenant servers are aware of the setting override.
 		testutils.SucceedsSoon(t, func() error {
 			settingNames := []string{
@@ -978,16 +981,10 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			}
 			for _, settingName := range settingNames {
 				for i := 0; i < numNodes; i++ {
-					pgURL, cleanup := sqlutils.PGUrl(t, tenants[i].SQLAddr(), "Tenant", url.User(username.RootUser))
-					defer cleanup()
-					db, err := gosql.Open("postgres", pgURL.String())
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer db.Close()
+					db := dbs[i]
 
 					var val string
-					err = db.QueryRow(
+					err := db.QueryRow(
 						fmt.Sprintf("SHOW CLUSTER SETTING %s", settingName),
 					).Scan(&val)
 					require.NoError(t, err)
@@ -1003,13 +1000,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			return nil
 		})
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(
-			t, tenants[3].SQLAddr(), "Tenant", url.User(username.RootUser),
-		)
-		defer cleanupPGUrl()
-		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		defer tenantSQLDB.Close()
+		tenantSQLDB := dbs[3]
 		tenantSQL := sqlutils.MakeSQLRunner(tenantSQLDB)
 
 		tenantSQL.Exec(t, `CREATE DATABASE t`)
