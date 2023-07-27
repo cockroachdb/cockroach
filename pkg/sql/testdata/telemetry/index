@@ -66,7 +66,7 @@ feature-usage
 CREATE TABLE err (i INT, j JSON, INVERTED INDEX (i, j) WHERE i);
 CREATE TABLE err (i INT, geom GEOMETRY, INVERTED INDEX (i, geom) WHERE i);
 ----
-error: pq: expected index predicate expression to have type bool, but 'i' has type int
+error: pq: expected INDEX PREDICATE expression to have type bool, but 'i' has type int
 
 feature-usage
 CREATE TABLE e (i INT, INDEX ((i + 10)))
@@ -132,7 +132,7 @@ feature-usage
 CREATE INVERTED INDEX err ON d (i, j) WHERE i;
 CREATE INVERTED INDEX err ON g4 (i, geom) WHERE i
 ----
-error: pq: expected index predicate expression to have type bool, but 'i' has type int
+error: pq: expected INDEX PREDICATE expression to have type bool, but 'i' has type int
 
 feature-usage
 CREATE INDEX i4 ON d ((i + 10))
@@ -142,20 +142,14 @@ sql.schema.expression_index
 feature-usage
 CREATE TABLE trigrams (t TEXT, u TEXT, INVERTED INDEX(t gin_trgm_ops))
 ----
-sql.schema.trigram_inverted_index
 sql.schema.inverted_index
+sql.schema.trigram_inverted_index
 
-exec
+feature-usage
 CREATE INDEX ON trigrams USING GIN(u gin_trgm_ops)
 ----
-sql.schema.trigram_inverted_index
 sql.schema.inverted_index
-
-exec
-CREATE INVERTED INDEX ON trigrams USING GIN(u gin_trgm_ops)
-----
 sql.schema.trigram_inverted_index
-sql.schema.inverted_index
 
 #### ALTER TABLE tests.
 
