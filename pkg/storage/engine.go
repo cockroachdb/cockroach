@@ -996,6 +996,8 @@ type Engine interface {
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
+	// GetAdvancedPebbleMetrics returns key level statistics for each level of a pebble store (that overlap start and end).
+	GetAdvancedPebbleMetrics(start, end roachpb.Key) ([]enginepb.AdvancedPebbleMetrics, error)
 	// GetTableMetrics returns information about sstables that overlap start and end.
 	GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error)
 	// RegisterFlushCompletedCallback registers a callback that will be run for

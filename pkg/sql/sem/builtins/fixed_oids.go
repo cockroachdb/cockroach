@@ -2436,6 +2436,7 @@ var builtinOidsArray = []string{
 	2463: `workload_index_recs(timestamptz: timestamptz) -> string`,
 	2464: `workload_index_recs(budget: string) -> string`,
 	2465: `workload_index_recs(timestamptz: timestamptz, budget: string) -> string`,
+	2466: `crdb_internal.pebble_metrics(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int AS node_id, int AS store_id, int AS level, int AS snapshot_pinned_keys, int AS snapshot_pinned_keys_bytes, int AS point_key_delete_count, int AS point_key_delete_bytes, int AS point_key_set_count, int AS point_key_set_bytes, int AS range_delete_count, int AS range_delete_bytes, int AS range_key_set_count, int AS range_key_set_bytes, int AS range_key_delete_count, int AS range_key_delete_bytes}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -76,6 +76,32 @@ func (c *StorageEngineClient) GetTableMetrics(
 	return resp.TableMetrics, nil
 }
 
+// GetAdvancedPebbleMetrics is a tree.GetAdvancedPebbleMetricsFunc
+func (c *StorageEngineClient) GetAdvancedPebbleMetrics(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) ([]enginepb.AdvancedPebbleMetrics, error) {
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+	if err != nil {
+		return []enginepb.AdvancedPebbleMetrics{}, errors.Wrapf(err, "could not dial node ID %d", nodeID)
+	}
+
+	client := NewPerStoreClient(conn)
+	req := &GetAdvancedPebbleMetricsRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			NodeID:  roachpb.NodeID(nodeID),
+			StoreID: roachpb.StoreID(storeID),
+		},
+		Span: roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)},
+	}
+
+	resp, err := client.GetAdvancedPebbleMetrics(ctx, req)
+
+	if err != nil {
+		return []enginepb.AdvancedPebbleMetrics{}, err
+	}
+	return resp.AdvancedPebbleMetrics, nil
+}
+
 // SetCompactionConcurrency is a tree.CompactionConcurrencyFunc.
 func (c *StorageEngineClient) SetCompactionConcurrency(
 	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,

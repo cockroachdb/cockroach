@@ -89,6 +89,15 @@ message GetTableMetricsResponse{
   repeated storage.enginepb.SSTableMetricsInfo table_metrics = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableMetrics"];
 }
 
+message GetAdvancedPebbleMetricsRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+}
+
+message GetAdvancedPebbleMetricsResponse {
+  repeated storage.enginepb.AdvancedPebbleMetrics advanced_metrics = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "AdvancedPebbleMetrics"];
+}
+
 message CompactEngineSpanResponse {
 }
 
