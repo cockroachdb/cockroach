@@ -445,6 +445,12 @@ type GetTableMetricsFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) ([]enginepb.SSTableMetricsInfo, error)
 
+// GetAdvancedPebbleMetrics is used to retrieve pebble metrics on a key span
+// (end-exclusive) at the given (nodeID, storeID).
+type GetAdvancedPebbleMetricsFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) ([]enginepb.AdvancedPebbleMetrics, error)
+
 // SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
 // store.
 type SetCompactionConcurrencyFunc func(

@@ -684,6 +684,23 @@ The last argument is a JSONB object containing the following optional fields:
 			volatility.Stable,
 		),
 	),
+	"crdb_internal.pebble_metrics": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			advancedPebbleMetricsGeneratorType,
+			makeAdvancedPebbleMetricsGenerator,
+			"Returns statistics for a pebble store in the range start_key and end_key for the provided node id.",
+			volatility.Stable,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String
@@ -3270,6 +3287,112 @@ func makeTableMetricsGenerator(
 	end := []byte(tree.MustBeDBytes(args[3]))
 
 	return newTableMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
+}
+
+type advancedPebbleMetricsIterator struct {
+	metrics []enginepb.AdvancedPebbleMetrics
+	evalCtx *eval.Context
+
+	iterIdx int
+	nodeID  int32
+	storeID int32
+	start   []byte
+	end     []byte
+}
+
+var advancedPebbleMetricsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+		types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int},
+	[]string{
+		"node_id",
+		"store_id",
+		"level",
+		"snapshot_pinned_keys",
+		"snapshot_pinned_keys_bytes",
+		"point_key_delete_count",
+		"point_key_delete_bytes",
+		"point_key_set_count",
+		"point_key_set_bytes",
+		"range_delete_count",
+		"range_delete_bytes",
+		"range_key_set_count",
+		"range_key_set_bytes",
+		"range_key_delete_count",
+		"range_key_delete_bytes",
+	},
+)
+
+var _ eval.ValueGenerator = (*advancedPebbleMetricsIterator)(nil)
+
+func newAdvancedPebbleMetricsIterator(
+	evalCtx *eval.Context, nodeID, storeID int32, start, end []byte,
+) *advancedPebbleMetricsIterator {
+	return &advancedPebbleMetricsIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (apmi *advancedPebbleMetricsIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error
+	apmi.metrics, err = apmi.evalCtx.GetAdvancedPebbleMetrics(ctx, apmi.nodeID, apmi.storeID, apmi.start, apmi.end)
+	if err != nil {
+		err = errors.Wrapf(err, "getting table metrics for node %d store %d", apmi.nodeID, apmi.storeID)
+	}
+
+	return err
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (apmi *advancedPebbleMetricsIterator) Next(_ context.Context) (bool, error) {
+	apmi.iterIdx++
+	return apmi.iterIdx <= len(apmi.metrics), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (apmi *advancedPebbleMetricsIterator) Values() (tree.Datums, error) {
+	metricsInfo := apmi.metrics[apmi.iterIdx-1]
+
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(apmi.nodeID)),
+		tree.NewDInt(tree.DInt(apmi.storeID)),
+		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeys)),
+		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeysBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeDeleteBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeySetCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeySetBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeyDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeyDeleteBytes)),
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (tmi *advancedPebbleMetricsIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (tmi *advancedPebbleMetricsIterator) ResolvedType() *types.T {
+	return tableMetricsGeneratorType
+}
+
+func makeAdvancedPebbleMetricsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, errInsufficientPriv
+	}
+	nodeID := int32(tree.MustBeDInt(args[0]))
+	storeID := int32(tree.MustBeDInt(args[1]))
+	start := []byte(tree.MustBeDBytes(args[2]))
+	end := []byte(tree.MustBeDBytes(args[3]))
+
+	return newAdvancedPebbleMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
 }
 
 var tableSpanStatsGeneratorType = types.MakeLabeledTuple(

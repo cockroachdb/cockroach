@@ -1377,6 +1377,10 @@ type ExecutorConfig struct {
 	// overlap with a key range for a specified node and store.
 	GetTableMetricsFunc eval.GetTableMetricsFunc
 
+	// GetAdvancedPebbleMetrics is used to gather information about the types of
+	// keys (including snapshot pinned keys) at each level of a node store.
+	GetAdvancedPebbleMetricsFunc eval.GetAdvancedPebbleMetricsFunc
+
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector

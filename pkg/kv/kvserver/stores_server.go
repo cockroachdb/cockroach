@@ -173,6 +173,24 @@ func (is Server) GetTableMetrics(
 	return resp, err
 }
 
+func (is Server) GetAdvancedPebbleMetrics(
+	ctx context.Context, req *GetAdvancedPebbleMetricsRequest,
+) (*GetAdvancedPebbleMetricsResponse, error) {
+	resp := &GetAdvancedPebbleMetricsResponse{}
+	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
+		func(ctx context.Context, s *Store) error {
+			metrics, err := s.TODOEngine().GetAdvancedPebbleMetrics(req.Span.Key, req.Span.EndKey)
+
+			if err != nil {
+				return err
+			}
+
+			resp.AdvancedPebbleMetrics = metrics
+			return nil
+		})
+	return resp, err
+}
+
 // SetCompactionConcurrency implements PerStoreServer. It changes the compaction
 // concurrency of a store. While SetCompactionConcurrency is safe for concurrent
 // use, it adds uncertainty about the compaction concurrency actually set on

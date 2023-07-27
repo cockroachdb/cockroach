@@ -26,6 +26,23 @@ message SSTableMetricsInfo {
   uint64 approximate_span_bytes = 4 [(gogoproto.customname) = "ApproximateSpanBytes"];
 }
 
+message AdvancedPebbleMetrics {
+  // level is the lsm tree level the metrics are found.
+  int32 level = 1;
+  uint64 snapshot_pinned_keys = 2 [(gogoproto.customname) = "SnapshotPinnedKeys"];
+  uint64 snapshot_pinnedKeys_bytes = 3 [(gogoproto.customname) = "SnapshotPinnedKeysBytes"];
+  uint64 point_key_delete_count = 4 [(gogoproto.customname) = "PointKeyDeleteCount"];
+  uint64 point_key_delete_bytes = 5 [(gogoproto.customname) = "PointKeyDeleteBytes"];
+  uint64 point_key_set_count = 6 [(gogoproto.customname) = "PointKeySetCount"];
+  uint64 point_key_set_bytes = 7 [(gogoproto.customname) = "PointKeySetBytes"];
+  uint64 range_delete_count = 8 [(gogoproto.customname) = "RangeDeleteCount"];
+  uint64 range_delete_bytes = 9 [(gogoproto.customname) = "RangeDeleteBytes"];
+  uint64 range_key_set_count = 10 [(gogoproto.customname) = "RangeKeySetCount"];
+  uint64 range_key_set_bytes = 11 [(gogoproto.customname) = "RangeKeySetBytes"];
+  uint64 range_key_delete_count = 12 [(gogoproto.customname) = "RangeKeyDeleteCount"];
+  uint64 range_key_delete_bytes = 13 [(gogoproto.customname) = "RangeKeyDeleteBytes"];
+}
+
 // SSTUserProperties contains the user-added properties of a single sstable.
 message SSTUserProperties {
     string path = 1;

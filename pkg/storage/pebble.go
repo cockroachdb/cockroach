@@ -2063,6 +2063,15 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 	return metricsInfo, nil
 }
 
+// GetAdvancedPebbleMetrics implements the Engine interface.
+func (p *Pebble) GetAdvancedPebbleMetrics(
+	start, end roachpb.Key,
+) ([]enginepb.AdvancedPebbleMetrics, error) {
+	fmt.Println("START", start)
+	fmt.Println("END", end)
+	return []enginepb.AdvancedPebbleMetrics{}, nil
+}
+
 // ApproximateDiskBytes implements the Engine interface.
 func (p *Pebble) ApproximateDiskBytes(
 	from, to roachpb.Key,
