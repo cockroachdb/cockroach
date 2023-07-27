@@ -54,6 +54,9 @@ type ScheduledProcessor struct {
 	// Processor startup runs background tasks to scan intents. If processor is
 	// stopped early, this task needs to be terminated to avoid resource waste.
 	startupCancel func()
+	// stopper passed by start that is used for firing up async work from scheduler.
+	stopper       *stop.Stopper
+	txnPushActive bool
 }
 
 // NewScheduledProcessor creates a new scheduler based rangefeed Processor.
@@ -88,6 +91,7 @@ func (p *ScheduledProcessor) Start(
 ) error {
 	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
 	ctx, p.startupCancel = context.WithCancel(ctx)
+	p.stopper = stopper
 
 	// Note that callback registration must be performed before starting resolved
 	// timestamp init because resolution posts resolvedTS event when it is done.
@@ -123,6 +127,9 @@ func (p *ScheduledProcessor) process(e processorEventType) processorEventType {
 	}
 	if e&EventQueued != 0 {
 		p.processEvents(ctx)
+	}
+	if e&PushTxnQueued != 0 {
+		p.processPushTxn(ctx)
 	}
 	if e&Stopped != 0 {
 		p.processStop()
@@ -162,6 +169,37 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 			putPooledEvent(e)
 		default:
 			return
+		}
+	}
+}
+
+func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
+	if !p.txnPushActive && p.rts.IsInit() {
+		now := p.Clock.Now()
+		before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
+		oldTxns := p.rts.intentQ.Before(before)
+
+		if len(oldTxns) > 0 {
+			toPush := make([]enginepb.TxnMeta, len(oldTxns))
+			for i, txn := range oldTxns {
+				toPush[i] = txn.asTxnMeta()
+			}
+
+			// Launch an async transaction push attempt that pushes the
+			// timestamp of all transactions beneath the push offset.
+			// Ignore error if quiescing.
+			pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+				p.enqueueRequest(func(ctx context.Context) {
+					p.txnPushActive = false
+				})
+			})
+			p.txnPushActive = true
+			// TODO(oleg): we need to cap number of tasks that we can fire up across
+			// all feeds as they could potentially generate O(n) tasks for push.
+			err := p.stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
+			if err != nil {
+				pushTxns.Cancel()
+			}
 		}
 	}
 }
@@ -278,7 +316,7 @@ func (p *ScheduledProcessor) Register(
 		// Add the new registration to the registry.
 		p.reg.Register(&r)
 
-		// Publish an updated filter that includes the new registration.
+		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
 
 		// Immediately publish a checkpoint event to the registry. This will be the first event
@@ -733,4 +771,9 @@ func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 		ResolvedTS: p.rts.Get(),
 	})
 	return &event
+}
+
+// ID implements Processor interface.
+func (p *ScheduledProcessor) ID() int64 {
+	return p.scheduler.ID()
 }
