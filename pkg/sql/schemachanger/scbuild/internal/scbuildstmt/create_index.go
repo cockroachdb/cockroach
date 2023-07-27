@@ -77,9 +77,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if n.Unique {
 			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
 		}
-		b.IncrementSchemaChangeIndexCounter("inverted_index")
-		if len(n.Columns) > 0 {
-			b.IncrementSchemaChangeIndexCounter("multi_column_inverted_index")
+		b.IncrementSchemaChangeIndexCounter("inverted")
+		if len(n.Columns) > 1 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
 		}
 	}
 	var idxSpec indexSpec
