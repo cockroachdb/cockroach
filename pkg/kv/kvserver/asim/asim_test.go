@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +40,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 }
 
 func TestAllocatorSimulatorDeterministic(t *testing.T) {
-
+	skip.WithIssue(t, 105904, "asim is non-deterministic")
 	settings := config.DefaultSimulationSettings()
 
 	runs := 3
