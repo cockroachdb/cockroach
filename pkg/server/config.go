@@ -236,6 +236,7 @@ type BaseConfig struct {
 
 	// SharedStorage is specified to enable disaggregated shared storage.
 	SharedStorage string
+	*cloud.ExternalStorageAccessor
 
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
@@ -310,6 +311,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.AmbientCtx.AddLogTag("n", cfg.IDContainer)
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
+	cfg.ExternalStorageAccessor = cloud.NewExternalStorageAccessor()
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.
@@ -823,6 +825,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
 			addCfgOpt(storage.MaxWriterConcurrency(2))
+			addCfgOpt(storage.RemoteStorageFactory(cfg.ExternalStorageAccessor))
 			if sharedStorage != nil {
 				addCfgOpt(storage.SharedStorage(sharedStorage))
 			}

@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -27,14 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -622,29 +619,26 @@ func addSSTablePreApply(
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) bool {
 	if sst.RemoteFilePath != "" {
-		// TODO(dt, bilal, msbutler): Replace this with eng.IngestRemoteFile()
-		log.Warningf(ctx, "EXPERIMENTAL AddSSTABLE REMOTE FILE UNSUPPORTED; downloading %s ("+
-			"with size %d) from %s and adding it whole, ignoring span %s", sst.RemoteFilePath,
-			sst.BackingFileSize, sst.RemoteFileLoc, sst.Span)
-		s, err := env.external.OpenURL(ctx, sst.RemoteFileLoc, username.SQLUsername{})
-		if err != nil {
-			log.Fatalf(ctx, "failed to open remote location %q below raft: %v", sst.RemoteFileLoc, err)
-		}
-		r, _, err := s.ReadFile(ctx, sst.RemoteFilePath, cloud.ReadOptions{})
-		if err != nil {
-			log.Fatalf(ctx, "failed to open remote file path %q in %q below raft: %v", sst.RemoteFilePath, sst.RemoteFileLoc, err)
-		}
-		content, err := ioctx.ReadAll(ctx, r)
-		r.Close(ctx)
-		if err != nil {
-			log.Fatalf(ctx, "failed to read remote file %q in %q below raft: %v", sst.RemoteFilePath, sst.RemoteFileLoc, err)
-		}
-		sst.Data = content
-		sst.CRC32 = util.CRC32(content)
-		log.Infof(ctx, "Unsupported RemoteFile AddSSTABLE downloaded %q, read %d bytes", sst.RemoteFileLoc, len(content))
-		if err := env.sideloaded.Put(ctx, index, term, content); err != nil {
-			log.Fatalf(ctx, "failed to write downloaded remote file %q in %q below raft: %v", sst.RemoteFilePath, sst.RemoteFileLoc, err)
-		}
+		log.Infof(ctx,
+			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s",
+			sst.RemoteFilePath,
+			sst.BackingFileSize,
+			sst.Span,
+			sst.RemoteFileLoc,
+		)
+		// TODO(bilal): replace this with the real ingest.
+		/*
+			start := storage.EngineKey{Key: sst.Span.Key}
+			end := storage.EngineKey{Key: sst.Span.EndKey}
+
+			externalFile := pebble.ExternalFile{
+				Locator:         shared.Locator(sst.RemoteFileLoc),
+				ObjName:         sst.RemoteFilePath,
+				Size:            sst.BackingFileSize,
+				SmallestUserKey: start.Encode(),
+				LargestUserKey:  end.Encode(),
+			}*/
+		log.Fatalf(ctx, "Unsupported IngestRemoteFile")
 	}
 	checksum := util.CRC32(sst.Data)
 
