@@ -263,22 +263,18 @@ func TestPrivateEndpointsACL(t *testing.T) {
 		Version:                 "001",
 		TenantID:                tenant10.ToUint64(),
 		ClusterName:             "my-tenant",
-		ConnectivityType:        tenant.ALLOW_ALL,
 		AllowedPrivateEndpoints: []string{"vpce-abc123"},
 	})
 	tds.CreateTenant(tenant20, &tenant.Tenant{
 		Version:                 "002",
 		TenantID:                tenant20.ToUint64(),
 		ClusterName:             "other-tenant",
-		ConnectivityType:        tenant.ALLOW_ALL,
 		AllowedPrivateEndpoints: []string{"vpce-some-other-vpc"},
 	})
 	tds.CreateTenant(tenant30, &tenant.Tenant{
-		Version:                 "003",
-		TenantID:                tenant30.ToUint64(),
-		ClusterName:             "public-tenant",
-		ConnectivityType:        tenant.ALLOW_PUBLIC_ONLY,
-		AllowedPrivateEndpoints: []string{},
+		Version:     "003",
+		TenantID:    tenant30.ToUint64(),
+		ClusterName: "public-tenant",
 	})
 	// All tenants map to the same pod.
 	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
@@ -350,7 +346,6 @@ func TestPrivateEndpointsACL(t *testing.T) {
 					Version:                 "010",
 					TenantID:                tenant10.ToUint64(),
 					ClusterName:             "my-tenant",
-					ConnectivityType:        tenant.ALLOW_ALL,
 					AllowedPrivateEndpoints: []string{},
 				})
 
@@ -436,22 +431,18 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 		Version:           "001",
 		TenantID:          tenant10.ToUint64(),
 		ClusterName:       "my-tenant",
-		ConnectivityType:  tenant.ALLOW_ALL,
 		AllowedCIDRRanges: []string{"127.0.0.1/32"},
 	})
 	tds.CreateTenant(tenant20, &tenant.Tenant{
 		Version:           "002",
 		TenantID:          tenant20.ToUint64(),
 		ClusterName:       "other-tenant",
-		ConnectivityType:  tenant.ALLOW_ALL,
 		AllowedCIDRRanges: []string{"10.0.0.8/32"},
 	})
 	tds.CreateTenant(tenant30, &tenant.Tenant{
-		Version:           "003",
-		TenantID:          tenant30.ToUint64(),
-		ClusterName:       "private-tenant",
-		ConnectivityType:  tenant.ALLOW_PRIVATE_ONLY,
-		AllowedCIDRRanges: []string{"0.0.0.0/0"},
+		Version:     "003",
+		TenantID:    tenant30.ToUint64(),
+		ClusterName: "private-tenant",
 	})
 	// All tenants map to the same pod.
 	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
@@ -483,7 +474,6 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 				Version:           "010",
 				TenantID:          tenant10.ToUint64(),
 				ClusterName:       "my-tenant",
-				ConnectivityType:  tenant.ALLOW_ALL,
 				AllowedCIDRRanges: []string{},
 			})
 

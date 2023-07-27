@@ -88,7 +88,6 @@ func TestACLWatcher(t *testing.T) {
 		Version:                 "001",
 		TenantID:                tenantID.ToUint64(),
 		ClusterName:             "my-tenant",
-		ConnectivityType:        tenant.ALLOW_ALL,
 		AllowedCIDRRanges:       []string{"1.1.0.0/16"},
 		AllowedPrivateEndpoints: []string{"foo-bar-baz", "cockroachdb"},
 	})
@@ -266,7 +265,6 @@ func TestACLWatcher(t *testing.T) {
 			Version:                 "002",
 			TenantID:                tenantID.ToUint64(),
 			ClusterName:             "my-tenant",
-			ConnectivityType:        tenant.ALLOW_ALL,
 			AllowedCIDRRanges:       []string{"1.1.0.0/16"},
 			AllowedPrivateEndpoints: []string{"foo-bar-baz"},
 		})
@@ -319,7 +317,6 @@ func TestACLWatcher(t *testing.T) {
 			Version:           "003",
 			TenantID:          tenantID.ToUint64(),
 			ClusterName:       "my-tenant",
-			ConnectivityType:  tenant.ALLOW_ALL,
 			AllowedCIDRRanges: []string{"127.0.0.1/32"},
 		})
 
