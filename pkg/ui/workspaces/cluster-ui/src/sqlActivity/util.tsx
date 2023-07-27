@@ -10,8 +10,13 @@
 
 import { Filters, getTimeValueInSeconds } from "../queryFilter";
 import { AggregateStatistics } from "../statementsTable";
+import {
+  CollectedStatementStatistics,
+  flattenStatementStats,
+} from "src/util/appStats/appStats";
 import { containAny, unset } from "../util";
 import { filterBySearchQuery } from "../statementsPage";
+import { FixFingerprintHexValue } from "src/util/format";
 
 export function filteredStatementsData(
   filters: Filters,
@@ -23,19 +28,28 @@ export function filteredStatementsData(
   const timeValue = getTimeValueInSeconds(filters);
   const sqlTypes =
     filters.sqlType?.length > 0
-      ? filters.sqlType.split(",").map(function (sqlType: string) {
-          // Adding "Type" to match the value on the Statement
-          // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
-          return "Type" + sqlType;
-        })
+      ? filters.sqlType
+          .split(",")
+          .map(type => type.trim())
+          .map(function (sqlType: string) {
+            // Adding "Type" to match the value on the Statement
+            // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
+            return "Type" + sqlType;
+          })
       : [];
   const databases =
-    filters.database?.length > 0 ? filters.database.split(",") : [];
+    filters.database?.length > 0
+      ? filters.database.split(",").map(db => db.trim())
+      : [];
   if (databases.includes(unset)) {
     databases.push("");
   }
   const regions = filters.regions?.length > 0 ? filters.regions.split(",") : [];
   const nodes = filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
+  const appNames = filters.app
+    ?.split(",")
+    .map(app => app.trim())
+    .filter(appName => !!appName);
 
   // Return statements filtered by the values selected on the filter and
   // the search text. A statement must match all selected filters to be
@@ -55,6 +69,13 @@ export function filteredStatementsData(
         return databases.length === 0 || databases.includes(statement.database);
       }
     })
+    .filter(
+      statement =>
+        !appNames?.length ||
+        appNames.includes(
+          statement.applicationName ? statement.applicationName : unset,
+        ),
+    )
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
@@ -89,3 +110,30 @@ export function filteredStatementsData(
       search ? filterBySearchQuery(statement, search) : true,
     );
 }
+
+// convertRawStmtsToAggregateStatistics converts statements from the
+// server response to AggregatedStatistics[]
+export const convertRawStmtsToAggregateStatistics = (
+  stmts: CollectedStatementStatistics[],
+): AggregateStatistics[] => {
+  if (!stmts?.length) return [];
+
+  const statements = flattenStatementStats(stmts);
+
+  return statements.map(stmt => {
+    return {
+      aggregatedFingerprintID: stmt.statement_fingerprint_id?.toString(),
+      aggregatedFingerprintHexID: FixFingerprintHexValue(
+        stmt.statement_fingerprint_id?.toString(16),
+      ),
+      label: stmt.statement,
+      summary: stmt.statement_summary,
+      aggregatedTs: stmt.aggregated_ts,
+      implicitTxn: stmt.implicit_txn,
+      fullScan: stmt.full_scan,
+      database: stmt.database,
+      applicationName: stmt.app,
+      stats: stmt.stats,
+    };
+  });
+};
