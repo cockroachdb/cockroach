@@ -1888,12 +1888,13 @@ func TestLockStateSafeFormat(t *testing.T) {
 	// TODO(arul): add something about replicated locks here too.
 	l.holder.unreplicatedInfo.init()
 	l.holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
-	l.holder.unreplicatedInfo.seq = 1
+	require.NoError(t, l.holder.unreplicatedInfo.acquire(lock.Exclusive, 1))
+	require.NoError(t, l.holder.unreplicatedInfo.acquire(lock.Shared, 3))
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Exclusive seq: 1)]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Exclusive seq: 1)]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l).Redact())
 }
 
