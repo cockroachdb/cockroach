@@ -43,7 +43,7 @@ export function filterBySearchQuery(
     );
 }
 
-export function filteredStatementsData(
+export function filterStatementsData(
   filters: Filters,
   search: string,
   statements: AggregateStatistics[],
