@@ -18,9 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +42,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	sim.RunSim(ctx)
 }
 
-func TestAllocatorSimulatorDeterministic(t *testing.T) {
+func TestAsimDeterministic(t *testing.T) {
 
 	settings := config.DefaultSimulationSettings()
 
@@ -46,9 +50,10 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	duration := 15 * time.Minute
 	settings.TickInterval = 2 * time.Second
 
-	stores := 7
+	stores := 21
 	replsPerRange := 3
-	replicasPerStore := 100
+	replicasPerStore := 600
+
 	// NB: We want 100 replicas per store, so the number of ranges required
 	// will be 1/3 of the total replicas.
 	ranges := (replicasPerStore * stores) / replsPerRange
@@ -83,6 +88,102 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 		sim.RunSim(ctx)
 		history := sim.History()
 
+		if run == 0 {
+			refRun = history
+			continue
+		}
+		require.Equal(t, refRun.Recorded, history.Recorded)
+	}
+}
+
+func TestAsimDeterministicZoneConf(t *testing.T) {
+	const defaultSeed = 42
+	settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
+	duration := 30 * time.Minute
+	clusterGen := gen.LoadedCluster{
+		Info: state.MultiRegionConfig,
+	}
+	rangeGen := gen.BasicRanges{
+		Ranges:            200,
+		ReplicationFactor: 3,
+		KeySpace:          10000,
+	}
+
+	loadGen := gen.BasicLoad{}
+	eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
+	span := spanconfigtestutils.ParseSpan(t, "[0,9999999999)")
+	conf := spanconfigtestutils.ParseZoneConfig(t, "num_replicas=3 constraints={'+region=US_East'}").AsSpanConfig()
+	eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+		EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+			s.SetSpanConfig(span, conf)
+		},
+		At: settingsGen.Settings.StartTime,
+	})
+
+	num := 3
+	var refRun asim.History
+	for run := 0; run < num; run++ {
+		simulator := gen.GenerateSimulation(duration, clusterGen, rangeGen, loadGen, settingsGen, eventGen, defaultSeed)
+		simulator.RunSim(context.Background())
+		history := simulator.History()
+		if run == 0 {
+			refRun = history
+			continue
+		}
+		require.Equal(t, refRun.Recorded, history.Recorded)
+	}
+}
+
+func TestAsimDeterministicDiskFull(t *testing.T) {
+	const defaultSeed = 42
+	settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
+	duration := 30 * time.Minute
+	defaultKeyspace := 10000
+	clusterGen := gen.BasicCluster{
+		Nodes:         5,
+		StoresPerNode: 1,
+	}
+	rangeGen := gen.BasicRanges{
+		Ranges:            500,
+		ReplicationFactor: 3,
+		KeySpace:          defaultKeyspace,
+		Bytes:             300000000,
+	}
+
+	var rwRatio = 0.0
+	var minKey, maxKey = int64(1), int64(defaultKeyspace)
+	var accessSkew bool
+	loadGen := gen.BasicLoad{
+		RWRatio:      rwRatio,
+		Rate:         500,
+		SkewedAccess: accessSkew,
+		MinBlockSize: 128000,
+		MaxBlockSize: 128000,
+		MinKey:       minKey,
+		MaxKey:       maxKey,
+	}
+
+	capacityOverride := state.NewCapacityOverride()
+	capacityOverride.Capacity = 45000000000
+	capacityOverride.Available = -1
+	store := 5
+
+	var delay time.Duration
+	eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
+	eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+		EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+			log.Infof(ctx, "setting capacity override %+v", capacityOverride)
+			s.SetCapacityOverride(state.StoreID(store), capacityOverride)
+		},
+		At: settingsGen.Settings.StartTime.Add(delay),
+	})
+
+	num := 10
+	var refRun asim.History
+	for run := 0; run < num; run++ {
+		simulator := gen.GenerateSimulation(duration, clusterGen, rangeGen, loadGen, settingsGen, eventGen, defaultSeed)
+		simulator.RunSim(context.Background())
+		history := simulator.History()
 		if run == 0 {
 			refRun = history
 			continue
