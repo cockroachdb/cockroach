@@ -181,7 +181,8 @@ func (g *githubIssues) createPostRequest(
 
 	issueMessage := messagePrefix + message
 	if spec.RedactResults {
-		issueMessage = "The details about this test failure have been omitted; consult the log for more details"
+		issueMessage = "The details about this test failure may contain sensitive information; " +
+			"consult the logs for details. WARNING: DO NOT COPY UNREDACTED ARTIFACTS TO THIS ISSUE."
 	}
 	return issues.PostRequest{
 		MentionOnCreate: mention,
