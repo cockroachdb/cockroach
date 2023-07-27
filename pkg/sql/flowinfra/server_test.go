@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -43,8 +42,9 @@ func TestServer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	conn := s.RPCClientConn(t, username.RootUserName())
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
@@ -53,20 +53,20 @@ func TestServer(t *testing.T) {
 	r.Exec(t, `CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
 	r.Exec(t, `INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
 		Reverse: false,
-		Spans:   []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+		Spans:   []roachpb.Span{td.PrimaryIndexSpan(s.Codec())},
 	}
 	if err := rowenc.InitIndexFetchSpec(
-		&ts.FetchSpec, keys.SystemSQLCodec, td, td.GetPrimaryIndex(),
+		&ts.FetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
 		[]descpb.ColumnID{1, 2}, // a b
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	txn := kv.NewTxn(ctx, kvDB, s.NodeID())
+	txn := kv.NewTxn(ctx, kvDB, srv.NodeID())
 	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 // then run to completion. The result rows are returned. All metadata except for
 // errors is ignored.
 func runLocalFlow(
-	ctx context.Context, s serverutils.TestServerInterface, req *execinfrapb.SetupFlowRequest,
+	ctx context.Context, s serverutils.ApplicationLayerInterface, req *execinfrapb.SetupFlowRequest,
 ) (rowenc.EncDatumRows, error) {
 	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)

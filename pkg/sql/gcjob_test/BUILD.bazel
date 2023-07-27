@@ -33,7 +33,6 @@ go_test(
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/sem/catid",
-        "//pkg/sql/tests",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",

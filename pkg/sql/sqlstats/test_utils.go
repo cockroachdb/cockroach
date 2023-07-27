@@ -10,11 +10,7 @@
 
 package sqlstats
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/base"
-)
+import "time"
 
 // TestingKnobs provides hooks and knobs for unit tests.
 type TestingKnobs struct {
@@ -34,9 +30,9 @@ type TestingKnobs struct {
 	// by the flush operation to calculate aggregated_ts timestamp.
 	StubTimeNow func() time.Time
 
-	// AOSTClause overrides the AS OF SYSTEM TIME clause in queries used in
+	// aostClause overrides the AS OF SYSTEM TIME clause in queries used in
 	// persistedsqlstats.
-	AOSTClause string
+	aostClause string
 
 	// JobMonitorUpdateCheckInterval if non-zero indicates the frequency at
 	// which the job monitor needs to check whether the schedule needs to be
@@ -55,7 +51,7 @@ func (*TestingKnobs) ModuleTestingKnobs() {}
 // used when reading from statements and transactions system tables.
 func (knobs *TestingKnobs) GetAOSTClause() string {
 	if knobs != nil {
-		return knobs.AOSTClause
+		return knobs.aostClause
 	}
 
 	return "AS OF SYSTEM TIME follower_read_timestamp()"
@@ -78,8 +74,8 @@ func (knobs *TestingKnobs) GetAOSTClause() string {
 // Additionally, we don't want to completely remove the AOST clause in the unit
 // test. Therefore, `AS OF SYSTEM TIME '-1us'` is a compromise used to get
 // around the 'descriptor not found' error.
-func CreateTestingKnobs() base.ModuleTestingKnobs {
+func CreateTestingKnobs() *TestingKnobs {
 	return &TestingKnobs{
-		AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		aostClause: "AS OF SYSTEM TIME '-1us'",
 	}
 }
