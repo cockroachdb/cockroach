@@ -287,7 +287,6 @@ func TestSQLWatcherMultiple(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106821),
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -305,7 +304,7 @@ func TestSQLWatcherMultiple(t *testing.T) {
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
-		ts.Codec(),
+		ts.ApplicationLayer().Codec(),
 		ts.ClusterSettings(),
 		ts.RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
