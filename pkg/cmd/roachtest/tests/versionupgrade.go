@@ -317,7 +317,9 @@ func allowAutoUpgradeStep(node int) versionStep {
 func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		dbFunc := func(node int) *gosql.DB { return u.conn(ctx, t, node) }
-		if err := clusterupgrade.WaitForClusterUpgrade(ctx, t.L(), nodes, dbFunc); err != nil {
+		if err := clusterupgrade.WaitForClusterUpgrade(
+			ctx, t.L(), nodes, dbFunc, clusterupgrade.DefaultUpgradeTimeout,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
