@@ -477,25 +477,25 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 // Tick updates state changer to apply any changes that have occurred
 // between the last tick and this one.
 func (rc *replicaChanger) Tick(tick time.Time, state State) {
-	changeList := make(map[int]*pendingChange)
+	var changeList []*pendingChange
 
 	// NB: Add the smallest unit of time, in order to find all items in
 	// [smallest, tick].
 	pivot := &pendingChange{completeAt: tick.Add(time.Nanosecond)}
 	rc.completeAt.AscendLessThan(pivot, func(i btree.Item) bool {
 		nextChange, _ := i.(*pendingChange)
-		changeList[nextChange.ticket] = nextChange
+		changeList = append(changeList, nextChange)
 		return true
 	})
 
-	for ticket, nextChange := range changeList {
+	for _, nextChange := range changeList {
 		change := rc.pendingTickets[nextChange.ticket]
 		change.Apply(state)
 
 		// Cleanup the pending trackers for this ticket. This allows another
 		// change to be pushed for Range().
 		rc.completeAt.Delete(nextChange)
-		delete(rc.pendingTickets, ticket)
+		delete(rc.pendingTickets, nextChange.ticket)
 		delete(rc.pendingRange, change.Range())
 	}
 }
