@@ -25,6 +25,7 @@ import RangeSelect, {
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
 
 import styles from "./timeScale.module.scss";
+import { getLogger } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -182,7 +183,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
         isMoving = true;
         break;
       default:
-        console.error("Unknown direction: ", direction);
+        getLogger().error("Unknown direction: ", direction);
     }
 
     // If the timescale extends into the future then fallback to a default
