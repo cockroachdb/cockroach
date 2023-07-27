@@ -19,6 +19,7 @@ import {
 } from "./sqlApi";
 import { ContentionDetails } from "src/insights";
 import moment from "moment-timezone";
+import { getLogger } from "../util";
 
 export type ContentionFilters = {
   waitingTxnID?: string;
@@ -62,7 +63,7 @@ export async function getContentionDetailsApi(
   if (sqlResultsAreEmpty(result)) {
     if (result.error) {
       // We don't return an error if it failed to retrieve the contention information.
-      console.error(
+      getLogger().error(
         `Insights encounter an error while retrieving contention information: ${result.error}`,
       );
     }
