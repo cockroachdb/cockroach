@@ -126,8 +126,9 @@ var ycsbMeta = workload.Meta{
 		g := &ycsb{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ycsb`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`isolation-level`: {RuntimeOnly: true},
-			`workload`:        {RuntimeOnly: true},
+			`isolation-level`:          {RuntimeOnly: true},
+			`read-modify-write-in-txn`: {RuntimeOnly: true},
+			`workload`:                 {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
