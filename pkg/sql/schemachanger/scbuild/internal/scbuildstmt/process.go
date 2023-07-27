@@ -62,8 +62,8 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, on: true, checks: isV232Active},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, on: true, checks: isV232Active},
+	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, on: false, checks: isV232Active},
+	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, on: false, checks: isV232Active},
 }
 
 // supportedStatementTags tracks statement tags which are implemented
