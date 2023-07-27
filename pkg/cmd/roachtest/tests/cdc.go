@@ -2374,6 +2374,7 @@ func (cfc *changefeedCreator) Create() (int, error) {
 type changefeedInfo struct {
 	status        string
 	errMsg        string
+	startedTime   time.Time
 	statementTime time.Time
 	highwaterTime time.Time
 	finishedTime  time.Time
@@ -2409,6 +2410,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
 	return &changefeedInfo{
 		status:        status,
 		errMsg:        payload.Error,
+		startedTime:   time.UnixMicro(payload.StartedMicros),
 		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
 		highwaterTime: highwaterTime,
 		finishedTime:  time.UnixMicro(payload.FinishedMicros),
