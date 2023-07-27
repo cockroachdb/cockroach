@@ -57,6 +57,9 @@ const (
 	// RequestQueued is scheduled when request closure is put into rangefeed
 	// request queue.
 	RequestQueued
+	// PushTxnQueued is scheduled externally on ranges to push transaction with intents
+	// that block resolved timestamp advancing.
+	PushTxnQueued
 	// numProcessorEventTypes is total number of event types.
 	numProcessorEventTypes int = iota
 )
@@ -66,6 +69,7 @@ var eventNames = map[processorEventType]string{
 	Stopped:       "Stopped",
 	EventQueued:   "Data",
 	RequestQueued: "Request",
+	PushTxnQueued: "PushTxn",
 }
 
 func (e processorEventType) String() string {
