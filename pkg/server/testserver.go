@@ -72,6 +72,7 @@ import (
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -1083,20 +1084,33 @@ func (t *TestTenant) HTTPAuthServer() interface{} {
 	return t.t.authentication
 }
 
-// WaitForTenantReadiness is part of TestServerInterface.
-func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
-	// Restarting the watcher forces a new initial scan which is
-	// faster than waiting out the closed timestamp interval
-	// required to see new updates.
-	ts.node.tenantInfoWatcher.TestingRestart()
-
-	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
-
+func (ts *TestServer) waitForTenantReadinessImpl(
+	ctx context.Context, tenantID roachpb.TenantID,
+) error {
 	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
 	if err != nil {
 		return err
 	}
 
+	// Ignore the tenant capabilities entry as it may be served from a stale
+	// version of the in-RAM cache. We use the returned channel to monitor when
+	// the watcher has completed its initial scan and hydrated the in-RAM cache
+	// with the most up-to-date values.
+	_, infoCh, _ := infoWatcher.GetInfo(tenantID)
+
+	// Restarting the watcher forces a new initial scan which is faster than
+	// waiting out the closed timestamp interval required to see new updates.
+	ts.node.tenantInfoWatcher.TestingRestart()
+
+	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
+
+	// Wait for the watcher to handle the complete update from the initial scan
+	// and notify our previously registered listener.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-infoCh:
+	}
 	for {
 		info, infoCh, found := infoWatcher.GetInfo(tenantID)
 		if found && info.ServiceMode != mtinfopb.ServiceModeNone {
@@ -1111,6 +1125,15 @@ func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roach
 			continue
 		}
 	}
+}
+
+// WaitForTenantReadiness is part of serverutils.TenantControlInterface..
+func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
+	// Two minutes should be sufficient for the in-RAM caches to be hydrated with
+	// the tenant record.
+	return timeutil.RunWithTimeout(ctx, "waitForTenantReadiness", 2*time.Minute, func(ctx context.Context) error {
+		return ts.waitForTenantReadinessImpl(ctx, tenantID)
+	})
 }
 
 // StartTenant is part of the serverutils.TenantControlInterface.
