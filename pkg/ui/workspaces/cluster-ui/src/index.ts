@@ -56,3 +56,7 @@ export * from "./selectors";
 export * from "./contexts";
 export * from "./timestamp";
 export * from "./databases";
+
+export function lol() {
+  console.log('oh no');
+};
