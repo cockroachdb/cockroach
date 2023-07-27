@@ -493,6 +493,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t, "SET CLUSTER SETTING sql.schemachanger.disable_declarative_statement='!CREATE SCHEMA'")
 		tdb.Exec(t, `CREATE DATABASE db`)
 		tdb.Exec(t, `CREATE SCHEMA db.s1`)
 		tdb.Exec(t, `CREATE SCHEMA db.s2`)
