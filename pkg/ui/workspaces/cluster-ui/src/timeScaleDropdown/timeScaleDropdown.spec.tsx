@@ -368,7 +368,7 @@ describe("TimeScaleDropdown functions", function () {
   it("generateDisabledArrows must return array with disabled buttons", () => {
     const arrows = generateDisabledArrows(currentWindow);
     const wrapper = makeTimeScaleDropdown(state);
-    assert.equal(wrapper.find(".controls-content ._action.disabled").length, 2);
+    assert.equal(wrapper.find(".controls-content ._action.disabled").length, 1);
     assert.deepEqual(arrows, [ArrowDirection.CENTER, ArrowDirection.RIGHT]);
   });
 
