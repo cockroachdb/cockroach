@@ -124,6 +124,11 @@ func (p synthetic) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
+func (p synthetic) ConcurrentSchemaChangeJobIDs() []catpb.JobID {
+	return nil
+}
+
 // SkipNamespace implements the descriptor interface.
 // We never store synthetic descriptors.
 func (p synthetic) SkipNamespace() bool {

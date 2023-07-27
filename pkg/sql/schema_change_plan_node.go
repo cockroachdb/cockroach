@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -126,6 +127,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		now := p.ExecCfg().Clock.Now()
 		var isBlocked bool
+		var blockingJobIDs []catpb.JobID
 		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
@@ -141,6 +143,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 				return err
 			}
 			isBlocked = desc.HasConcurrentSchemaChanges()
+			blockingJobIDs = desc.ConcurrentSchemaChangeJobIDs()
 			return nil
 		}); err != nil {
 			return err
@@ -150,8 +153,8 @@ func (p *planner) waitForDescriptorSchemaChanges(
 		}
 		if logEvery.ShouldLog() {
 			log.Infof(ctx,
-				"schema change waiting for concurrent schema changes on descriptor %d,"+
-					" waited %v so far", descID, timeutil.Since(start),
+				"schema change waiting for %v concurrent schema change job(s) %v on descriptor %d,"+
+					" waited %v so far", len(blockingJobIDs), blockingJobIDs, descID, timeutil.Since(start),
 			)
 		}
 		if knobs != nil && knobs.WhileWaitingForConcurrentSchemaChanges != nil {

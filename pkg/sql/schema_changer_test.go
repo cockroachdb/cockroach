@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -8397,4 +8398,42 @@ SELECT fraction_completed > 0
 			return
 		}
 	}
+}
+
+// TestLegacySchemaChangerWaitsForOtherSchemaChanges tests concurrent legacy schema changes
+// wait properly for preceding ones if it's not first in line.
+func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	tdb.Exec(t, `SET use_declarative_schema_changer = off`)
+	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY);`)
+	tdb.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';`)
+
+	pattern, err := regexp.Compile(`\d+`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE INDEX idx ON t (i);`)
+	jobID1 := pattern.FindString(err.Error())
+	require.NotEmpty(t, jobID1)
+	_, err = sqlDB.Exec(`ALTER TABLE t ADD COLUMN j INT DEFAULT 30;`)
+	jobID2 := pattern.FindString(err.Error())
+	require.NotEmpty(t, jobID2)
+
+	tdb.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = '';`)
+	tdb.Exec(t, `RESUME JOB $1`, jobID2)
+	tdb.Exec(t, `RESUME JOB $1`, jobID1)
+	testutils.SucceedsSoon(t, func() error {
+		res := tdb.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id in ($1, $2)`, jobID1, jobID2)
+		if len(res) == 2 && res[0][0] == "succeeded" && res[1][0] == "succeeded" {
+			return nil
+		}
+		return errors.New("")
+	})
 }
