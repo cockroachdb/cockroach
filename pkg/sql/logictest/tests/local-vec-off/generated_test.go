@@ -2200,6 +2200,13 @@ func TestLogic_udf_plpgsql(
 	runLogicTest(t, "udf_plpgsql")
 }
 
+func TestLogic_udf_prepare(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_prepare")
+}
+
 func TestLogic_udf_privileges(
 	t *testing.T,
 ) {
