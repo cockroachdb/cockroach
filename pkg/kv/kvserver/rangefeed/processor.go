@@ -26,10 +26,10 @@ import (
 )
 
 const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// DefaultPushTxnsInterval is the default interval at which a Processor will
 	// push all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
+	DefaultPushTxnsInterval = 250 * time.Millisecond
 	// defaultPushTxnsAge is the default age at which a Processor will begin to
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = 10 * time.Second
@@ -92,7 +92,7 @@ func (sc *Config) SetDefaults() {
 		}
 	} else {
 		if sc.PushTxnsInterval == 0 {
-			sc.PushTxnsInterval = defaultPushTxnsInterval
+			sc.PushTxnsInterval = DefaultPushTxnsInterval
 		}
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge

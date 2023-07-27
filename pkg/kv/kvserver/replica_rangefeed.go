@@ -283,11 +283,11 @@ func (r *Replica) getRangefeedProcessor() rangefeed.Processor {
 	return p
 }
 
-func (r *Replica) setRangefeedProcessor(p rangefeed.Processor) {
+func (r *Replica) setRangefeedProcessor(p rangefeed.Processor, schedulerID int64) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
-	r.store.addReplicaWithRangefeed(r.RangeID)
+	r.store.addReplicaWithRangefeed(r.RangeID, schedulerID)
 }
 
 func (r *Replica) unsetRangefeedProcessorLocked(p rangefeed.Processor) {
@@ -462,7 +462,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	}
 
 	// Set the rangefeed processor and filter reference.
-	r.setRangefeedProcessor(p)
+	r.setRangefeedProcessor(p, sched.ID())
 	r.rangefeedMu.Lock()
 	r.setRangefeedFilterLocked(filter)
 	r.rangefeedMu.Unlock()

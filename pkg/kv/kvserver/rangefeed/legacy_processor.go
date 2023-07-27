@@ -220,7 +220,9 @@ func (p *LegacyProcessor) run(
 				// Launch an async transaction push attempt that pushes the
 				// timestamp of all transactions beneath the push offset.
 				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p, toPush, now, txnPushAttemptC)
+				pushTxns := newTxnPushAttempt(p, toPush, now, func() {
+					close(txnPushAttemptC)
+				})
 				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
 				if err != nil {
 					pushTxns.Cancel()

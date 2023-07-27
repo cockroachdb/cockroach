@@ -36,6 +36,9 @@ const (
 	// reqEvent is scheduled when request function id put into rangefeed request
 	// queue.
 	reqEvent schedulerEvent = 1 << 3
+	// PushTxn is scheduled externally on ranges to push transaction with intents
+	// that block resolved timestamp advancing.
+	PushTxn schedulerEvent = 1 << 4
 )
 
 var eventNames = map[schedulerEvent]string{
@@ -43,11 +46,12 @@ var eventNames = map[schedulerEvent]string{
 	schedulerEvent(sched.Stopped): "Stopped",
 	queueData:                     "Data",
 	reqEvent:                      "Request",
+	PushTxn:                       "PushTxn",
 }
 
 func (e schedulerEvent) String() string {
 	var evts []string
-	for m := schedulerEvent(sched.Queued); m <= reqEvent; m = m << 1 {
+	for m := schedulerEvent(sched.Queued); m <= PushTxn; m = m << 1 {
 		if m&e != 0 {
 			evts = append(evts, eventNames[m])
 		}
@@ -78,6 +82,9 @@ type ScheduledProcessor struct {
 	// Processor startup runs background tasks to scan intents. If processor is
 	// stopped early, this task needs to be terminated to avoid resource waste.
 	startupCancel func()
+	// stopper passed by start that is used for firing up async work from scheduler.
+	stopper       *stop.Stopper
+	txnPushActive bool
 }
 
 // NewScheduledProcessor creates a new scheduler based rangefeed Processor.
@@ -111,6 +118,7 @@ func (p *ScheduledProcessor) Start(
 ) error {
 	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
 	ctx, p.startupCancel = context.WithCancel(ctx)
+	p.stopper = stopper
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
@@ -190,6 +198,35 @@ func (p *ScheduledProcessor) process(e int) int {
 	}
 	if e&sched.Stopped != 0 {
 		p.cleanup()
+	}
+	if se&PushTxn != 0 {
+		if !p.txnPushActive && p.rts.IsInit() {
+			now := p.Clock.Now()
+			before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
+			oldTxns := p.rts.intentQ.Before(before)
+
+			if len(oldTxns) > 0 {
+				toPush := make([]enginepb.TxnMeta, len(oldTxns))
+				for i, txn := range oldTxns {
+					toPush[i] = txn.asTxnMeta()
+				}
+
+				// Launch an async transaction push attempt that pushes the
+				// timestamp of all transactions beneath the push offset.
+				// Ignore error if quiescing.
+				pushTxns := newTxnPushAttempt(p, toPush, now, func() {
+					_ = p.enqueueRequest(func(ctx context.Context) (stop bool) {
+						p.txnPushActive = false
+						return false
+					})
+				})
+				p.txnPushActive = true
+				err := p.stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
+				if err != nil {
+					pushTxns.Cancel()
+				}
+			}
+		}
 	}
 	return nextEvent
 }
@@ -303,7 +340,7 @@ func (p *ScheduledProcessor) Register(
 		// Add the new registration to the registry.
 		p.reg.Register(&r)
 
-		// Publish an updated filter that includes the new registration.
+		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
 
 		// Immediately publish a checkpoint event to the registry. This will be the first event
@@ -339,7 +376,7 @@ func (p *ScheduledProcessor) Register(
 }
 
 func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
-	return runRequest(p, func(ctx context.Context) (bool, bool) {
+	return runRequest(p, func(ctx context.Context) (removed bool, stopProcessor bool) {
 		p.reg.Unregister(ctx, r)
 		return true, p.stopping && p.reg.Len() == 0
 	})

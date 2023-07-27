@@ -260,20 +260,20 @@ type TxnPusher interface {
 //     - ABORTED:   inform the Processor to stop caring about the transaction.
 //     It will never commit and its intents can be safely ignored.
 type txnPushAttempt struct {
-	p     ProcessorTaskHelper
-	txns  []enginepb.TxnMeta
-	ts    hlc.Timestamp
-	doneC chan struct{}
+	p    ProcessorTaskHelper
+	txns []enginepb.TxnMeta
+	ts   hlc.Timestamp
+	done func()
 }
 
 func newTxnPushAttempt(
-	p ProcessorTaskHelper, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
+	p ProcessorTaskHelper, txns []enginepb.TxnMeta, ts hlc.Timestamp, done func(),
 ) runnable {
 	return &txnPushAttempt{
-		p:     p,
-		txns:  txns,
-		ts:    ts,
-		doneC: doneC,
+		p:    p,
+		txns: txns,
+		ts:   ts,
+		done: done,
 	}
 }
 
@@ -370,7 +370,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 }
 
 func (a *txnPushAttempt) Cancel() {
-	close(a.doneC)
+	a.done()
 }
 
 // intentsInBound returns LockUpdates for the provided transaction's LockSpans
