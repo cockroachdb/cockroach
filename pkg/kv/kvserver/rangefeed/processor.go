@@ -27,10 +27,10 @@ import (
 )
 
 const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// DefaultPushTxnsInterval is the default interval at which a Processor will
 	// push all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
+	DefaultPushTxnsInterval = 250 * time.Millisecond
 	// defaultPushTxnsAge is the default age at which a Processor will begin to
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = 10 * time.Second
@@ -57,6 +57,8 @@ type Config struct {
 	// PushTxnsInterval specifies the interval at which a Processor will push
 	// all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
+	// This option only applies to LegacyProcessor since ScheduledProcessor is
+	// relying on store to push events to scheduler to initiate transaction push.
 	PushTxnsInterval time.Duration
 	// PushTxnsAge specifies the age at which a Processor will begin to consider
 	// a transaction old enough to push.
@@ -93,7 +95,7 @@ func (sc *Config) SetDefaults() {
 		}
 	} else {
 		if sc.PushTxnsInterval == 0 {
-			sc.PushTxnsInterval = defaultPushTxnsInterval
+			sc.PushTxnsInterval = DefaultPushTxnsInterval
 		}
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge
@@ -197,8 +199,6 @@ func NewProcessor(cfg Config) Processor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	if cfg.Scheduler.ID() > 0 {
-		// TODO(oleg): remove logging
-		log.Infof(context.Background(), "creating new style processor for range feed on r%d", cfg.RangeID)
 		return NewScheduledProcessor(cfg)
 	}
 	return NewLegacyProcessor(cfg)
@@ -472,7 +472,9 @@ func (p *LegacyProcessor) run(
 				// Launch an async transaction push attempt that pushes the
 				// timestamp of all transactions beneath the push offset.
 				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, txnPushAttemptC)
+				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+					close(txnPushAttemptC)
+				})
 				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
 				if err != nil {
 					pushTxns.Cancel()

@@ -1020,7 +1020,10 @@ type Store struct {
 	// The subset of replicas with active rangefeeds.
 	rangefeedReplicas struct {
 		syncutil.Mutex
-		m map[roachpb.RangeID]struct{}
+		// m contains mapping from rangeID that could be used to retrieve replicas
+		// with associated rangefeed processor scheduler IDs that allow enqueueing
+		// periodic events directly.
+		m map[roachpb.RangeID]int64
 	}
 	rangefeedScheduler *rangefeed.Scheduler
 	schedulerIDSeq     int64
@@ -1455,7 +1458,7 @@ func NewStore(
 	s.unquiescedReplicas.Unlock()
 
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.rangefeedReplicas.m = map[roachpb.RangeID]int64{}
 	s.rangefeedReplicas.Unlock()
 
 	s.tsCache = tscache.New(cfg.Clock)
@@ -2197,6 +2200,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
 
+	s.startRangefeedTxnPushNotifier(ctx)
+
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
@@ -2374,9 +2379,49 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 	})
 }
 
-func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
+// startRangefeedTxnPushNotifier starts a worker that would periodically
+// enqueue txn push event for rangefeed processors to let them push lagging
+// transactions.
+// Note that this is only affecting scheduler based rangefeeds.
+func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
+	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "transaction-rangefeed-push-notifier",
+		SpanOpt:  stop.SterileRootSpan,
+	}, func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		var schedulerIDs []int64
+		updateSchedulerIDs := func() []int64 {
+			schedulerIDs = schedulerIDs[:0]
+			s.rangefeedReplicas.Lock()
+			for _, id := range s.rangefeedReplicas.m {
+				if id != 0 {
+					// Only process ranges that use scheduler.
+					schedulerIDs = append(schedulerIDs, id)
+				}
+			}
+			s.rangefeedReplicas.Unlock()
+			return schedulerIDs
+		}
+
+		ticker := time.NewTicker(rangefeed.DefaultPushTxnsInterval)
+		for {
+			select {
+			case <-ticker.C:
+				activeIDs := updateSchedulerIDs()
+				s.rangefeedScheduler.EnqueueAll(activeIDs, rangefeed.PushTxn)
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID, schedulerID int64) {
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m[rangeID] = struct{}{}
+	s.rangefeedReplicas.m[rangeID] = schedulerID
 	s.rangefeedReplicas.Unlock()
 }
 

@@ -44,6 +44,9 @@ const (
 	// ReqEvent is scheduled when request function id put into rangefeed request
 	// queue.
 	ReqEvent processorEventType = 1 << 3
+	// PushTxn is scheduled externally on ranges to push transaction with intents
+	// that block resolved timestamp advancing.
+	PushTxn processorEventType = 1 << 4
 )
 
 var eventNames = map[processorEventType]string{
@@ -51,11 +54,12 @@ var eventNames = map[processorEventType]string{
 	Stopped:   "Stopped",
 	QueueData: "Data",
 	ReqEvent:  "Request",
+	PushTxn:   "PushTxn",
 }
 
 func (e processorEventType) String() string {
 	var evts []string
-	for m := Queued; m <= ReqEvent; m = m << 1 {
+	for m := Queued; m <= PushTxn; m = m << 1 {
 		if m&e != 0 {
 			evts = append(evts, eventNames[m])
 		}

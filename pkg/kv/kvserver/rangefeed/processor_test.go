@@ -149,6 +149,7 @@ type processorTestHelper struct {
 	rts          *resolvedTimestamp
 	syncEventC   func()
 	sendSpanSync func(*roachpb.Span)
+	scheduler    *ClientScheduler
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
@@ -163,6 +164,12 @@ func (h *processorTestHelper) syncEventAndRegistrations() {
 // own internal buffers.
 func (h *processorTestHelper) syncEventAndRegistrationsSpan(span roachpb.Span) {
 	h.sendSpanSync(&span)
+}
+
+func (h *processorTestHelper) triggerTxnPush() {
+	if h.scheduler != nil {
+		_ = h.scheduler.Schedule(PushTxn)
+	}
 }
 
 type procType bool
@@ -301,6 +308,7 @@ func newTestProcessor(t tHelper, opts ...option) (Processor, *processorTestHelpe
 		h.sendSpanSync = func(span *roachpb.Span) {
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
+		h.scheduler = &cfg.Scheduler
 	default:
 		panic("unknown processor type")
 	}
@@ -890,186 +898,190 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	})
 }
 
-// TODO(oleg): write test for scheduler where push would be scheduled externally.
 func TestProcessorTxnPushAttempt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ts10 := hlc.Timestamp{WallTime: 10}
-	ts20 := hlc.Timestamp{WallTime: 20}
-	ts25 := hlc.Timestamp{WallTime: 25}
-	ts30 := hlc.Timestamp{WallTime: 30}
-	ts50 := hlc.Timestamp{WallTime: 50}
-	ts60 := hlc.Timestamp{WallTime: 60}
-	ts70 := hlc.Timestamp{WallTime: 70}
-	ts90 := hlc.Timestamp{WallTime: 90}
+	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
+		ts10 := hlc.Timestamp{WallTime: 10}
+		ts20 := hlc.Timestamp{WallTime: 20}
+		ts25 := hlc.Timestamp{WallTime: 25}
+		ts30 := hlc.Timestamp{WallTime: 30}
+		ts50 := hlc.Timestamp{WallTime: 50}
+		ts60 := hlc.Timestamp{WallTime: 60}
+		ts70 := hlc.Timestamp{WallTime: 70}
+		ts90 := hlc.Timestamp{WallTime: 90}
 
-	// Create a set of transactions.
-	txn1, txn2, txn3 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
-	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, IsoLevel: isolation.Serializable, WriteTimestamp: ts10, MinTimestamp: ts10}
-	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, IsoLevel: isolation.Snapshot, WriteTimestamp: ts20, MinTimestamp: ts20}
-	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, IsoLevel: isolation.ReadCommitted, WriteTimestamp: ts30, MinTimestamp: ts30}
-	txn1Proto := &roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
-	txn2Proto := &roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.PENDING}
-	txn3Proto := &roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
+		// Create a set of transactions.
+		txn1, txn2, txn3 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
+		txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, IsoLevel: isolation.Serializable, WriteTimestamp: ts10, MinTimestamp: ts10}
+		txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, IsoLevel: isolation.Snapshot, WriteTimestamp: ts20, MinTimestamp: ts20}
+		txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, IsoLevel: isolation.ReadCommitted, WriteTimestamp: ts30, MinTimestamp: ts30}
+		txn1Proto := &roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
+		txn2Proto := &roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.PENDING}
+		txn3Proto := &roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
 
-	// Modifications for test 2.
-	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, IsoLevel: isolation.Serializable, WriteTimestamp: ts25, MinTimestamp: ts10}
-	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, IsoLevel: isolation.Serializable, WriteTimestamp: ts50, MinTimestamp: ts10}
-	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, IsoLevel: isolation.Snapshot, WriteTimestamp: ts60, MinTimestamp: ts20}
-	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, IsoLevel: isolation.ReadCommitted, WriteTimestamp: ts70, MinTimestamp: ts30}
-	txn1ProtoT2 := &roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
-	txn2ProtoT2 := &roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
-	txn3ProtoT2 := &roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
+		// Modifications for test 2.
+		txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, IsoLevel: isolation.Serializable, WriteTimestamp: ts25, MinTimestamp: ts10}
+		txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, IsoLevel: isolation.Serializable, WriteTimestamp: ts50, MinTimestamp: ts10}
+		txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, IsoLevel: isolation.Snapshot, WriteTimestamp: ts60, MinTimestamp: ts20}
+		txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, IsoLevel: isolation.ReadCommitted, WriteTimestamp: ts70, MinTimestamp: ts30}
+		txn1ProtoT2 := &roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
+		txn2ProtoT2 := &roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
+		txn3ProtoT2 := &roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
 
-	// Modifications for test 3.
-	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, IsoLevel: isolation.Snapshot, WriteTimestamp: ts60, MinTimestamp: ts20}
-	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, IsoLevel: isolation.ReadCommitted, WriteTimestamp: ts90, MinTimestamp: ts30}
-	txn2ProtoT3 := &roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
-	txn3ProtoT3 := &roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
+		// Modifications for test 3.
+		txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, IsoLevel: isolation.Snapshot, WriteTimestamp: ts60, MinTimestamp: ts20}
+		txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, IsoLevel: isolation.ReadCommitted, WriteTimestamp: ts90, MinTimestamp: ts30}
+		txn2ProtoT3 := &roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
+		txn3ProtoT3 := &roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
 
-	testNum := 0
-	pausePushAttemptsC := make(chan struct{})
-	resumePushAttemptsC := make(chan struct{})
-	defer close(pausePushAttemptsC)
-	defer close(resumePushAttemptsC)
+		testNum := 0
+		pausePushAttemptsC := make(chan struct{})
+		resumePushAttemptsC := make(chan struct{})
+		defer close(pausePushAttemptsC)
+		defer close(resumePushAttemptsC)
 
-	// Create a TxnPusher that performs assertions during the first 3 uses.
-	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
-		// The txns are not in a sorted order. Enforce one.
-		sort.Slice(txns, func(i, j int) bool {
-			return bytes.Compare(txns[i].Key, txns[j].Key) < 0
+		// Create a TxnPusher that performs assertions during the first 3 uses.
+		var tp testTxnPusher
+		tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+			// The txns are not in a sorted order. Enforce one.
+			sort.Slice(txns, func(i, j int) bool {
+				return bytes.Compare(txns[i].Key, txns[j].Key) < 0
+			})
+
+			testNum++
+			switch testNum {
+			case 1:
+				assert.Equal(t, 3, len(txns))
+				assert.Equal(t, txn1Meta, txns[0])
+				assert.Equal(t, txn2Meta, txns[1])
+				assert.Equal(t, txn3Meta, txns[2])
+				if t.Failed() {
+					return nil, errors.New("test failed")
+				}
+
+				// Push does not succeed. Protos not at larger ts.
+				return []*roachpb.Transaction{txn1Proto, txn2Proto, txn3Proto}, nil
+			case 2:
+				assert.Equal(t, 3, len(txns))
+				assert.Equal(t, txn1MetaT2Pre, txns[0])
+				assert.Equal(t, txn2Meta, txns[1])
+				assert.Equal(t, txn3Meta, txns[2])
+				if t.Failed() {
+					return nil, errors.New("test failed")
+				}
+
+				// Push succeeds. Return new protos.
+				return []*roachpb.Transaction{txn1ProtoT2, txn2ProtoT2, txn3ProtoT2}, nil
+			case 3:
+				assert.Equal(t, 2, len(txns))
+				assert.Equal(t, txn2MetaT2Post, txns[0])
+				assert.Equal(t, txn3MetaT2Post, txns[1])
+				if t.Failed() {
+					return nil, errors.New("test failed")
+				}
+
+				// Push succeeds. Return new protos.
+				return []*roachpb.Transaction{txn2ProtoT3, txn3ProtoT3}, nil
+			default:
+				return nil, nil
+			}
+		})
+		tp.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {
+			// There's nothing to assert here. We expect the intents to correspond to
+			// transactions that had their LockSpans populated when we pushed them. This
+			// test doesn't simulate that.
+
+			if testNum > 3 {
+				return nil
+			}
+
+			<-pausePushAttemptsC
+			<-resumePushAttemptsC
+			return nil
 		})
 
-		testNum++
-		switch testNum {
-		case 1:
-			assert.Equal(t, 3, len(txns))
-			assert.Equal(t, txn1Meta, txns[0])
-			assert.Equal(t, txn2Meta, txns[1])
-			assert.Equal(t, txn3Meta, txns[2])
-			if t.Failed() {
-				return nil, errors.New("test failed")
-			}
+		p, h, stopper := newTestProcessor(t, withPusher(&tp), withProcType(pt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
 
-			// Push does not succeed. Protos not at larger ts.
-			return []*roachpb.Transaction{txn1Proto, txn2Proto, txn3Proto}, nil
-		case 2:
-			assert.Equal(t, 3, len(txns))
-			assert.Equal(t, txn1MetaT2Pre, txns[0])
-			assert.Equal(t, txn2Meta, txns[1])
-			assert.Equal(t, txn3Meta, txns[2])
-			if t.Failed() {
-				return nil, errors.New("test failed")
-			}
-
-			// Push succeeds. Return new protos.
-			return []*roachpb.Transaction{txn1ProtoT2, txn2ProtoT2, txn3ProtoT2}, nil
-		case 3:
-			assert.Equal(t, 2, len(txns))
-			assert.Equal(t, txn2MetaT2Post, txns[0])
-			assert.Equal(t, txn3MetaT2Post, txns[1])
-			if t.Failed() {
-				return nil, errors.New("test failed")
-			}
-
-			// Push succeeds. Return new protos.
-			return []*roachpb.Transaction{txn2ProtoT3, txn3ProtoT3}, nil
-		default:
-			return nil, nil
+		// Add a few intents and move the closed timestamp forward.
+		writeIntentOpFromMeta := func(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
+			return writeIntentOpWithDetails(txn.ID, txn.Key, txn.IsoLevel, txn.MinTimestamp,
+				txn.WriteTimestamp)
 		}
+		p.ConsumeLogicalOps(ctx,
+			writeIntentOpFromMeta(txn1Meta),
+			writeIntentOpFromMeta(txn2Meta),
+			writeIntentOpFromMeta(txn2Meta),
+			writeIntentOpFromMeta(txn3Meta),
+		)
+		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 40})
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 9}, h.rts.Get())
+
+		h.triggerTxnPush()
+		// Wait for the first txn push attempt to complete.
+		pausePushAttemptsC <- struct{}{}
+
+		// The resolved timestamp hasn't moved.
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 9}, h.rts.Get())
+
+		// Write another intent for one of the txns. This moves the resolved
+		// timestamp forward.
+		p.ConsumeLogicalOps(ctx, writeIntentOpFromMeta(txn1MetaT2Pre))
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 19}, h.rts.Get())
+
+		h.triggerTxnPush()
+		// Unblock the second txn push attempt and wait for it to complete.
+		resumePushAttemptsC <- struct{}{}
+		pausePushAttemptsC <- struct{}{}
+
+		// The resolved timestamp should have moved forwards to the closed
+		// timestamp.
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 40}, h.rts.Get())
+
+		// Forward the closed timestamp.
+		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 80})
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 49}, h.rts.Get())
+
+		// Txn1's first intent is committed. Resolved timestamp doesn't change.
+		p.ConsumeLogicalOps(ctx, commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.WriteTimestamp))
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 49}, h.rts.Get())
+
+		// Txn1's second intent is committed. Resolved timestamp moves forward.
+		p.ConsumeLogicalOps(ctx, commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.WriteTimestamp))
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 59}, h.rts.Get())
+
+		h.triggerTxnPush()
+		// Unblock the third txn push attempt and wait for it to complete.
+		resumePushAttemptsC <- struct{}{}
+		pausePushAttemptsC <- struct{}{}
+
+		// The resolved timestamp should have moved forwards to the closed
+		// timestamp.
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 80}, h.rts.Get())
+
+		// Forward the closed timestamp.
+		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 100})
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 89}, h.rts.Get())
+
+		// Commit txn3's only intent. Resolved timestamp moves forward.
+		p.ConsumeLogicalOps(ctx, commitIntentOp(txn3MetaT3Post.ID, txn3MetaT3Post.WriteTimestamp))
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 100}, h.rts.Get())
+
+		// Release push attempt to avoid deadlock.
+		resumePushAttemptsC <- struct{}{}
 	})
-	tp.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {
-		// There's nothing to assert here. We expect the intents to correspond to
-		// transactions that had their LockSpans populated when we pushed them. This
-		// test doesn't simulate that.
-
-		if testNum > 3 {
-			return nil
-		}
-
-		<-pausePushAttemptsC
-		<-resumePushAttemptsC
-		return nil
-	})
-
-	p, h, stopper := newTestProcessor(t, withPusher(&tp), withProcType(legacyProcessor))
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-
-	// Add a few intents and move the closed timestamp forward.
-	writeIntentOpFromMeta := func(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
-		return writeIntentOpWithDetails(txn.ID, txn.Key, txn.IsoLevel, txn.MinTimestamp,
-			txn.WriteTimestamp)
-	}
-	p.ConsumeLogicalOps(ctx,
-		writeIntentOpFromMeta(txn1Meta),
-		writeIntentOpFromMeta(txn2Meta),
-		writeIntentOpFromMeta(txn2Meta),
-		writeIntentOpFromMeta(txn3Meta),
-	)
-	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 40})
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 9}, h.rts.Get())
-
-	// Wait for the first txn push attempt to complete.
-	pausePushAttemptsC <- struct{}{}
-
-	// The resolved timestamp hasn't moved.
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 9}, h.rts.Get())
-
-	// Write another intent for one of the txns. This moves the resolved
-	// timestamp forward.
-	p.ConsumeLogicalOps(ctx, writeIntentOpFromMeta(txn1MetaT2Pre))
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 19}, h.rts.Get())
-
-	// Unblock the second txn push attempt and wait for it to complete.
-	resumePushAttemptsC <- struct{}{}
-	pausePushAttemptsC <- struct{}{}
-
-	// The resolved timestamp should have moved forwards to the closed
-	// timestamp.
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 40}, h.rts.Get())
-
-	// Forward the closed timestamp.
-	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 80})
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 49}, h.rts.Get())
-
-	// Txn1's first intent is committed. Resolved timestamp doesn't change.
-	p.ConsumeLogicalOps(ctx, commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.WriteTimestamp))
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 49}, h.rts.Get())
-
-	// Txn1's second intent is committed. Resolved timestamp moves forward.
-	p.ConsumeLogicalOps(ctx, commitIntentOp(txn1MetaT2Post.ID, txn1MetaT2Post.WriteTimestamp))
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 59}, h.rts.Get())
-
-	// Unblock the third txn push attempt and wait for it to complete.
-	resumePushAttemptsC <- struct{}{}
-	pausePushAttemptsC <- struct{}{}
-
-	// The resolved timestamp should have moved forwards to the closed
-	// timestamp.
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 80}, h.rts.Get())
-
-	// Forward the closed timestamp.
-	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 100})
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 89}, h.rts.Get())
-
-	// Commit txn3's only intent. Resolved timestamp moves forward.
-	p.ConsumeLogicalOps(ctx, commitIntentOp(txn3MetaT3Post.ID, txn3MetaT3Post.WriteTimestamp))
-	h.syncEventC()
-	require.Equal(t, hlc.Timestamp{WallTime: 100}, h.rts.Get())
-
-	// Release push attempt to avoid deadlock.
-	resumePushAttemptsC <- struct{}{}
 }
 
 // TestProcessorConcurrentStop tests that all methods in Processor's API

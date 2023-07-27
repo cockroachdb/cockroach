@@ -263,7 +263,7 @@ type txnPushAttempt struct {
 	p      processorTaskHelper
 	txns   []enginepb.TxnMeta
 	ts     hlc.Timestamp
-	doneC  chan struct{}
+	done   func()
 }
 
 func newTxnPushAttempt(
@@ -272,7 +272,7 @@ func newTxnPushAttempt(
 	p processorTaskHelper,
 	txns []enginepb.TxnMeta,
 	ts hlc.Timestamp,
-	doneC chan struct{},
+	done func(),
 ) runnable {
 	return &txnPushAttempt{
 		span:   span,
@@ -280,7 +280,7 @@ func newTxnPushAttempt(
 		p:      p,
 		txns:   txns,
 		ts:     ts,
-		doneC:  doneC,
+		done:   done,
 	}
 }
 
@@ -377,7 +377,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 }
 
 func (a *txnPushAttempt) Cancel() {
-	close(a.doneC)
+	a.done()
 }
 
 // intentsInBound returns LockUpdates for the provided transaction's LockSpans
