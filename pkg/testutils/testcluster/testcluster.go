@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -429,9 +430,14 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 	// Now that we have started all the servers on the bootstrap version, let us
 	// run the migrations up to the overridden BinaryVersion.
-	if v := tc.Servers[0].BinaryVersionOverride(); v != (roachpb.Version{}) {
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-			t.Fatal(err)
+	s := tc.Servers[0]
+	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
+		for _, layer := range []serverutils.ApplicationLayerInterface{s.SystemLayer(), s.ApplicationLayer()} {
+			ie := layer.InternalExecutor().(isql.Executor)
+			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
+				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -445,13 +451,19 @@ func (tc *TestCluster) Start(t testing.TB) {
 		//
 		// TODO(benesch): this won't be necessary once we have sticky bits for
 		// splits.
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+		if _, err := s.SystemLayer().
+			InternalExecutor().(isql.Executor).
+			Exec(context.Background(), "enable-merge-queue", nil, /* txn */
+				`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	if disableLBS {
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+		if _, err := s.SystemLayer().
+			InternalExecutor().(isql.Executor).
+			Exec(context.Background(), "enable-split-by-load", nil, /*txn */
+				`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -472,7 +484,9 @@ func (tc *TestCluster) Start(t testing.TB) {
 		var err error
 		for _, ssrv := range tc.Servers {
 			for _, dsrv := range tc.Servers {
-				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.AdvRPCAddr(), dsrv.NodeID(), rpc.DefaultClass).Connect(context.TODO())
+				stl := dsrv.StorageLayer()
+				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.SystemLayer().AdvRPCAddr(),
+					stl.NodeID(), rpc.DefaultClass).Connect(context.TODO())
 				err = errors.CombineErrors(err, e)
 			}
 		}
