@@ -994,6 +994,7 @@ type logicTest struct {
 	// If this test uses a SQL tenant server, this is its address. In this case,
 	// all clients are created against this tenant.
 	tenantAddrs []string
+	tenantApps  []serverutils.ApplicationLayerInterface
 	// map of built clients, keyed first on username and then node idx.
 	// They are persisted so that they can be reused. They are not closed
 	// until the end of a test.
@@ -1508,6 +1509,7 @@ func (t *logicTest) newCluster(
 		// TODO(cli): maybe share this code with the code in
 		// cli/democluster which does a very similar thing.
 		t.tenantAddrs = make([]string, cfg.NumNodes)
+		t.tenantApps = make([]serverutils.ApplicationLayerInterface, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			settings := makeClusterSettings(false /* forSystemTenant */)
 			tempStorageConfig := base.DefaultTestTempStorageConfigWithSize(settings, tempStorageDiskLimit)
@@ -1535,21 +1537,13 @@ func (t *logicTest) newCluster(
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
+			t.tenantApps[i] = tenant
 			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
 		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(username.RootUser))
-		defer cleanup()
-		if params.ServerArgs.Insecure {
-			pgURL.RawQuery = "sslmode=disable"
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.rootT.Fatal(err)
-		}
-		defer db.Close()
+		db := t.tenantApps[0].SQLConn(t.rootT, "")
 		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
 
 		// Increase tenant rate limits for faster tests.
@@ -1769,21 +1763,14 @@ func (t *logicTest) waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
 	settingName string, expValue string, insecure bool,
 ) {
 	// Wait until all tenant servers are aware of the setting override.
+	dbs := make([]*gosql.DB, len(t.tenantApps))
+	for i := range dbs {
+		dbs[i] = t.tenantApps[i].SQLConn(t.rootT, "")
+	}
 	testutils.SucceedsSoon(t.rootT, func() error {
-		for i := 0; i < len(t.tenantAddrs); i++ {
-			pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(username.RootUser))
-			defer cleanup()
-			if insecure {
-				pgURL.RawQuery = "sslmode=disable"
-			}
-			db, err := gosql.Open("postgres", pgURL.String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
-
+		for i := 0; i < len(t.tenantApps); i++ {
 			var val string
-			err = db.QueryRow(
+			err := dbs[i].QueryRow(
 				fmt.Sprintf("SHOW CLUSTER SETTING %s", settingName),
 			).Scan(&val)
 			if err != nil {

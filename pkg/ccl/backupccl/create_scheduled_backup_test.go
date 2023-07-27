@@ -10,9 +10,7 @@ package backupccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -970,18 +968,9 @@ func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 	defer cleanup()
 
 	th.sqlDB.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, th.server.ApplicationLayer().AdvSQLAddr(),
-		"TestCreateSchedule-testuser", url.User("testuser"),
-	)
-	defer cleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, testuser.Close())
-	}()
+	testuser := th.server.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 
-	_, err = testuser.Exec("CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@daily'")
+	_, err := testuser.Exec("CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@daily'")
 	require.Error(t, err)
 }
 

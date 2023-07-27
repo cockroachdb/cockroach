@@ -11,10 +11,8 @@ package statusccl
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"encoding/hex"
 	"fmt"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -400,7 +397,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		},
 	})
 
-	nonTenant := testCluster.Server(1 /* idx */)
+	systemLayer := testCluster.Server(1 /* idx */).SystemLayer()
 
 	tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
 
@@ -439,11 +436,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `SELECT * FROM posts_nt`},
 	}
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, nonTenant.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
-	sqlDB, err = gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
+	sqlDB = systemLayer.SQLConn(t, "")
 
 	for _, stmt := range testCaseNonTenant {
 		_, err = sqlDB.Exec(stmt.stmt)
@@ -474,8 +467,8 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	})
 
 	path := "/_status/statements"
-	var nonTenantStats serverpb.StatementsResponse
-	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantStats)
+	var systemLayerStats serverpb.StatementsResponse
+	err = serverutils.GetJSONProto(systemLayer, path, &systemLayerStats)
 	require.NoError(t, err)
 
 	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse) {
@@ -517,20 +510,20 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	// Now we verify the non tenant stats are what we expected.
 	t.Run("non-tenant-stats", func(t *testing.T) {
-		checkStatements(t, testCaseNonTenant, &nonTenantStats)
+		checkStatements(t, testCaseNonTenant, &systemLayerStats)
 	})
 
 	// Now we verify that tenant and non-tenant have no visibility into each other's stats.
 	t.Run("overlap", func(t *testing.T) {
 		for _, tenantStmt := range tenantStats.Statements {
-			for _, nonTenantStmt := range nonTenantStats.Statements {
-				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+			for _, systemLayerStmt := range systemLayerStats.Statements {
+				require.NotEqual(t, tenantStmt, systemLayerStmt, "expected tenant to have no visibility to system layer's statement stats, but found:", systemLayerStmt)
 			}
 		}
 
 		for _, tenantTxn := range tenantStats.Transactions {
-			for _, nonTenantTxn := range nonTenantStats.Transactions {
-				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+			for _, systemLayerTxn := range systemLayerStats.Transactions {
+				require.NotEqual(t, tenantTxn, systemLayerTxn, "expected tenant to have no visibility to system layer's transaction stats, but found:", systemLayerTxn)
 			}
 		}
 

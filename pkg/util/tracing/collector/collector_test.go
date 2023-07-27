@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -22,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -221,16 +218,6 @@ func TestClusterInflightTraces(t *testing.T) {
 		},
 	}
 
-	getDB := func(sqlAddr, prefix string) (_ *gosql.DB, cleanup func()) {
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, sqlAddr, prefix, url.User(username.RootUser))
-		db, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return db, func() {
-			require.NoError(t, db.Close())
-			cleanupPGUrl()
-		}
-	}
-
 	for _, config := range []string{
 		"single-tenant",
 		"shared-process",
@@ -240,12 +227,13 @@ func TestClusterInflightTraces(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 			defer tc.Stopper().Stop(ctx)
 
-			systemServers := []serverutils.ApplicationLayerInterface{tc.Servers[0], tc.Servers[1]}
+			systemServers := []serverutils.ApplicationLayerInterface{
+				tc.SystemLayer(0),
+				tc.SystemLayer(1),
+			}
 			systemDBs := make([]*gosql.DB, len(tc.Servers))
 			for i, s := range tc.Servers {
-				db, cleanup := getDB(s.SQLAddr(), "System" /* prefix */)
-				defer cleanup()
-				systemDBs[i] = db
+				systemDBs[i] = s.SQLConn(t, "")
 			}
 
 			type testCase struct {
@@ -294,9 +282,7 @@ func TestClusterInflightTraces(t *testing.T) {
 					tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
 					require.NoError(t, err)
 					tenants[i] = tenant
-					db, cleanup := getDB(tenant.SQLAddr(), "Tenant" /* prefix */)
-					defer cleanup()
-					dbs[i] = db
+					dbs[i] = tenant.SQLConn(t, "")
 				}
 				testCases = []testCase{
 					{
