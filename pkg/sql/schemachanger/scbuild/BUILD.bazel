@@ -79,7 +79,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",

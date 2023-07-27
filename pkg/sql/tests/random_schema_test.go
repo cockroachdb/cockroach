@@ -17,14 +17,15 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func setDb(t *testing.T, db *gosql.DB, name string) {
@@ -38,9 +39,12 @@ func TestCreateRandomSchema(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+
+	systemDB := s.SystemLayer().SQLConn(t, "")
+	_, err := systemDB.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
+	require.NoError(t, err)
 
 	if _, err := db.Exec("CREATE DATABASE test; CREATE DATABASE test2"); err != nil {
 		t.Fatal(err)

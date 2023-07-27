@@ -22,11 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func init() {
-	securityassets.SetLoader(securitytest.EmbeddedAssets)
-}
-
 func TestMain(m *testing.M) {
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)

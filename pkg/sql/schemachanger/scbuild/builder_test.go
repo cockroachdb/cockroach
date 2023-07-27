@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -290,16 +289,13 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SpanConfig: &spanconfig.TestingKnobs{
-				LimiterLimitOverride: func() int64 {
-					return math.MaxInt64
-				},
-			},
-		},
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+
+	systemDB := s.SystemLayer().SQLConn(t, "")
+	_, err := systemDB.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
+	require.NoError(t, err)
+
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `use defaultdb;`)
 	tdb.Exec(t, `select crdb_internal.generate_test_objects('test',  5000);`)

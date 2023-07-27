@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -554,7 +552,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	var batchNumber int
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		BeforeCopyFromInsert: func() error {
@@ -619,8 +617,7 @@ func TestTinyRows(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
-	s := serverutils.StartServerOnly(t, params)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
@@ -675,8 +672,9 @@ func TestLargeCopy(t *testing.T) {
 	skip.UnderRace(t)
 	ctx := context.Background()
 
-	s, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
@@ -686,7 +684,7 @@ func TestLargeCopy(t *testing.T) {
 	err := conn.Exec(ctx, lineitemSchemaMunged)
 	require.NoError(t, err)
 
-	desc := desctestutils.TestingGetTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "public", "lineitem")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvdb, s.Codec(), "defaultdb", "lineitem")
 	require.NotNil(t, desc, "Failed to lookup descriptor")
 
 	err = conn.Exec(ctx, "SET copy_from_atomic_enabled = false")

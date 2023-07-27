@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -37,12 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,14 +50,13 @@ import (
 
 func runTestClusterFlow(
 	t *testing.T,
-	codec keys.SQLCodec,
-	kvDB *kv.DB,
 	servers []serverutils.ApplicationLayerInterface,
 	conns []*gosql.DB,
 	clients []execinfrapb.DistSQLClient,
 ) {
 	ctx := context.Background()
 	const numRows = 100
+	kvDB, codec := servers[0].DB(), servers[0].Codec()
 
 	sumDigitsFn := func(row int) tree.Datum {
 		sum := 0
@@ -263,49 +259,45 @@ func TestClusterFlow(t *testing.T) {
 	const numNodes = 3
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tci := serverutils.StartNewTestCluster(t, numNodes, args)
-	tc := tci.(*testcluster.TestCluster)
+	tc := serverutils.StartNewTestCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
 	conns := make([]*gosql.DB, numNodes)
 	clients := make([]execinfrapb.DistSQLClient, numNodes)
 	for i := 0; i < numNodes; i++ {
-		s := tc.Server(i)
+		s := tc.Server(i).ApplicationLayer()
 		servers[i] = s
-		conns[i] = tc.ServerConn(i)
+		conns[i] = s.SQLConn(t, "")
 		conn := s.RPCClientConn(t, username.RootUserName())
 		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
 
-	runTestClusterFlow(t, keys.SystemSQLCodec, tc.Server(0).DB(), servers, conns, clients)
+	runTestClusterFlow(t, servers, conns, clients)
 }
 
 func TestTenantClusterFlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	const numPods = 3
 
-	serverParams, _ := tests.CreateTestServerParams()
-	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual, ServerArgs: serverParams}
-	tci := serverutils.StartNewTestCluster(t, 1, args)
-	tc := tci.(*testcluster.TestCluster)
-	defer tc.Stopper().Stop(context.Background())
+	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
+	args.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
+	tc := serverutils.StartNewTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
 
-	testingKnobs := base.TestingKnobs{
-		SQLStatsKnobs: &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		},
-	}
 	pods := make([]serverutils.ApplicationLayerInterface, numPods)
 	podConns := make([]*gosql.DB, numPods)
 	clients := make([]execinfrapb.DistSQLClient, numPods)
 	tenantID := serverutils.TestTenantID()
 	for i := 0; i < numPods; i++ {
-		pods[i], podConns[i] = serverutils.StartTenant(t, tci.Server(0), base.TestTenantArgs{
-			TenantID:     tenantID,
-			TestingKnobs: testingKnobs,
+		pods[i], podConns[i] = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+			TenantID: tenantID,
+			TestingKnobs: base.TestingKnobs{
+				SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
+			},
 		})
 		defer podConns[i].Close()
 		pod := pods[i]
@@ -316,7 +308,7 @@ func TestTenantClusterFlow(t *testing.T) {
 		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
 
-	runTestClusterFlow(t, keys.MakeSQLCodec(tenantID), tc.Server(0).DB(), pods, podConns, clients)
+	runTestClusterFlow(t, pods, podConns, clients)
 }
 
 // TestLimitedBufferingDeadlock sets up a scenario which leads to deadlock if

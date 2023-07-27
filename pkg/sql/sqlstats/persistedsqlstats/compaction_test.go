@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -131,15 +130,14 @@ func TestSQLStatsCompactor(t *testing.T) {
 			kvInterceptor := kvScanInterceptor{}
 			cleanupInterceptor := cleanupInterceptor{}
 
+			knobs := sqlstats.CreateTestingKnobs()
+			knobs.StubTimeNow = func() time.Time {
+				return timeutil.Now().Add(-2 * time.Hour)
+			}
 			srv, conn, _ := serverutils.StartServer(
 				t, base.TestServerArgs{
 					Knobs: base.TestingKnobs{
-						SQLStatsKnobs: &sqlstats.TestingKnobs{
-							AOSTClause: "AS OF SYSTEM TIME '-1us'",
-							StubTimeNow: func() time.Time {
-								return timeutil.Now().Add(-2 * time.Hour)
-							},
-						},
+						SQLStatsKnobs: knobs,
 						Store: &kvserver.StoreTestingKnobs{
 							TestingRequestFilter: kvInterceptor.intercept,
 						},
@@ -215,17 +213,13 @@ func TestSQLStatsCompactor(t *testing.T) {
 			generateFingerprints(t, sqlConn, tc.stmtCount)
 			serverSQLStats.Flush(ctx)
 
+			sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+			sqlStatsKnobs.OnCleanupStartForShard = cleanupInterceptor.intercept
 			statsCompactor := persistedsqlstats.NewStatsCompactor(
 				server.ClusterSettings(),
 				server.InternalDB().(isql.DB),
 				metric.NewCounter(metric.Metadata{}),
-				&sqlstats.TestingKnobs{
-					AOSTClause:             "AS OF SYSTEM TIME '-1us'",
-					OnCleanupStartForShard: cleanupInterceptor.intercept,
-					StubTimeNow: func() time.Time {
-						return timeutil.Now()
-					},
-				},
+				sqlStatsKnobs,
 			)
 
 			// Initial compaction should remove the all the oldest entries.
@@ -292,18 +286,19 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
 	t.Logf("starting test server")
 	ctx := context.Background()
 	server, conn, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(ctx)
+	s := server.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	t.Logf("launching the stats compaction job")
-	jobID, err := launchSQLStatsCompactionJob(server)
+	jobID, err := launchSQLStatsCompactionJob(s)
 	require.NoError(t, err)
 
 	t.Logf("checking the job status")

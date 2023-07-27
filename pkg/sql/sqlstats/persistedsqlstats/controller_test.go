@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -35,22 +34,17 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-
-	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-
-	server := cluster.Server(0 /* idx */)
+	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	defer cluster.Stopper().Stop(ctx)
+	server := cluster.Server(0 /* idx */).ApplicationLayer()
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
-	testConn := cluster.ServerConn(0 /* idx */)
-	observerConn := cluster.ServerConn(1 /* idx */)
+	testConn := server.SQLConn(t, "")
+	observerConn := cluster.Server(1).ApplicationLayer().SQLConn(t, "")
 
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
 	observer := sqlutils.MakeSQLRunner(observerConn)
-	defer cluster.Stopper().Stop(ctx)
 
 	testCasesForDisk := map[string]string{
 		"SELECT _":       "SELECT 1",

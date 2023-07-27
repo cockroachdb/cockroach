@@ -14,9 +14,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,12 +29,8 @@ func TestIndexRecommendationsStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	testConn.Exec(t, "CREATE DATABASE idxrectest")
