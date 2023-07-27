@@ -4,6 +4,7 @@ go_library(
     name = "colexecargs",
     srcs = [
         "expr.go",
+        "hash_joiner_args.go",
         "monitor_registry.go",
         "op_creation.go",
     ],
@@ -11,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexecerror",

@@ -64,7 +64,7 @@ func NewExternalHashJoiner(
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	spec colexecjoin.HashJoinerSpec,
+	spec colexecargs.HashJoinerSpec,
 	leftInput, rightInput colexecop.Operator,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,

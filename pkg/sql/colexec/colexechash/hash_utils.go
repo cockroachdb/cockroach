@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -224,4 +225,86 @@ func (d *TupleHashDistributor) ResetNumOutputs(numOutputs int) {
 	oldSelections := d.selections
 	d.selections = make([][]int, numOutputs)
 	copy(d.selections, oldSelections)
+}
+
+// TODO: comment.
+
+type JoinProbeState struct {
+	Type   descpb.JoinType
+	EqCols []uint32
+
+	// Buckets is used to store the computed hash value of each key in the
+	// current probe batch.
+	Buckets []uint32
+
+	// BuildIdx and ProbeIdx represents the matching row indices that are used
+	// to stitch together the join results.
+	BuildIdx []int
+	ProbeIdx []int
+
+	// ProbeRowUnmatched is used in the case of left/full outer joins. We
+	// use ProbeRowUnmatched to represent that the resulting columns should
+	// be NULL on the build table. This indicates that the probe table row
+	// did not match any build table rows.
+	ProbeRowUnmatched []bool
+}
+
+// PrepareForNewBatch prepares the JoinProbeState as well as the HashTable for
+// probing based on the new batch.
+//
+// The main goal of this method is to compute hash keys for all tuples in the
+// batch that will be stored in Buckets.
+func (s *JoinProbeState) PrepareForNewBatch(ht *HashTable, batch coldata.Batch) {
+	for i, colIdx := range s.EqCols {
+		ht.Keys[i] = batch.ColVec(int(colIdx))
+	}
+
+	batchSize := batch.Length()
+	sel := batch.Selection()
+
+	if cap(s.Buckets) < batchSize {
+		s.Buckets = make([]uint32, batchSize)
+	} else {
+		// Note that we don't need to clear old values from Buckets because the
+		// correct values will be populated in ComputeBuckets.
+		s.Buckets = s.Buckets[:batchSize]
+	}
+	ht.ComputeBuckets(s.Buckets, ht.Keys, batchSize, sel)
+	ht.ProbeScratch.SetupLimitedSlices(batchSize)
+}
+
+// PrepareForCollecting sets up the JoinProbeState for collecting by making sure
+// that various slices are of sufficient length depending on the join type.
+//
+// Note that batchSize might cap the number of tuples collected in a single
+// output batch (this is the case with non-distinct hashJoiner.collectProbe*
+// methods).
+func (s *JoinProbeState) PrepareForCollecting(batchSize int) {
+	if !s.Type.ShouldIncludeLeftColsInOutput() {
+		// Right semi/anti joins have a separate collecting method that simply
+		// records the fact whether build rows had a match and don't need these
+		// probing slices.
+		return
+	}
+	// Note that we don't need to zero out the slices if they have enough
+	// capacity because the correct values will always be set in the collecting
+	// methods.
+	if cap(s.ProbeIdx) < batchSize {
+		s.ProbeIdx = make([]int, batchSize)
+	} else {
+		s.ProbeIdx = s.ProbeIdx[:batchSize]
+	}
+	if s.Type.IsLeftAntiOrExceptAll() || s.Type == descpb.IntersectAllJoin {
+		// Left anti, except all, and intersect all joins have special
+		// collectSingleMatch method that only uses the probeIdx slice.
+		return
+	}
+	if s.Type.IsLeftOuterOrFullOuter() {
+		s.ProbeRowUnmatched = colexecutils.MaybeAllocateLimitedBoolArray(s.ProbeRowUnmatched, batchSize)
+	}
+	if cap(s.BuildIdx) < batchSize {
+		s.BuildIdx = make([]int, batchSize)
+	} else {
+		s.BuildIdx = s.BuildIdx[:batchSize]
+	}
 }

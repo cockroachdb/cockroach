@@ -16,6 +16,7 @@ package colexecjoin
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 )
 
 // execgen:template<useSel>
@@ -31,9 +32,9 @@ func collectProbeOuter(
 	if useSel {
 		_ = sel[batchSize-1]
 	}
-	maxResults := len(hj.probeState.buildIdx)
-	buildIdx := hj.probeState.buildIdx
-	probeIdx := hj.probeState.probeIdx
+	maxResults := len(hj.probeState.BuildIdx)
+	buildIdx := hj.probeState.BuildIdx
+	probeIdx := hj.probeState.ProbeIdx
 	_ = buildIdx[nResults]
 	_ = probeIdx[nResults]
 	_ = buildIdx[maxResults-1]
@@ -44,14 +45,14 @@ func collectProbeOuter(
 
 		for ; nResults < maxResults; nResults++ {
 			rowUnmatched := currentID == 0
-			// For some reason, BCE doesn't occur for probeRowUnmatched slice.
+			// For some reason, BCE doesn't occur for ProbeRowUnmatched slice.
 			// TODO(yuzefovich): figure it out.
-			hj.probeState.probeRowUnmatched[nResults] = rowUnmatched
+			hj.probeState.ProbeRowUnmatched[nResults] = rowUnmatched
 			if rowUnmatched {
-				// The row is unmatched, and we set the corresponding buildIdx
+				// The row is unmatched, and we set the corresponding BuildIdx
 				// to zero so that (as long as the build hash table has at least
 				// one row) we can copy the values vector without paying
-				// attention to probeRowUnmatched.
+				// attention to ProbeRowUnmatched.
 				//gcassert:bce
 				buildIdx[nResults] = 0
 			} else {
@@ -106,17 +107,17 @@ func collectProbeNoOuter(
 	if useSel {
 		_ = sel[batchSize-1]
 	}
-	maxResults := len(hj.probeState.buildIdx)
-	probeIdx := hj.probeState.probeIdx
+	maxResults := len(hj.probeState.BuildIdx)
+	probeIdx := hj.probeState.ProbeIdx
 	_ = probeIdx[nResults]
 	_ = probeIdx[maxResults-1]
 	for i := startIdx; i < batchSize; i++ {
 		//gcassert:bce
 		currentID := HeadIDs[i]
 		for ; currentID != 0 && nResults < maxResults; nResults++ {
-			// For some reason, BCE doesn't occur for buildIdx slice.
+			// For some reason, BCE doesn't occur for BuildIdx slice.
 			// TODO(yuzefovich): figure it out.
-			hj.probeState.buildIdx[nResults] = int(currentID - 1)
+			hj.probeState.BuildIdx[nResults] = int(currentID - 1)
 			pIdx := getIdx(i, sel, useSel)
 			//gcassert:bce
 			probeIdx[nResults] = pIdx
@@ -176,7 +177,7 @@ func collectSingleMatch(
 				//     currentID of 0 indicates that ith probing row didn't have
 				//     a match, so we include it into the output.
 				// */}}
-				hj.probeState.probeIdx[nResults] = getIdx(i, sel, useSel)
+				hj.probeState.ProbeIdx[nResults] = getIdx(i, sel, useSel)
 				nResults++
 			}
 		} else {
@@ -186,7 +187,7 @@ func collectSingleMatch(
 				//     match AND that match wasn't previously "visited", so we
 				//     include it into the output.
 				// */}}
-				hj.probeState.probeIdx[nResults] = getIdx(i, sel, useSel)
+				hj.probeState.ProbeIdx[nResults] = getIdx(i, sel, useSel)
 				nResults++
 			}
 		}
@@ -213,73 +214,12 @@ func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
 	}
 }
 
-// execgen:template<useSel>
-func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel bool) {
-	// Early bounds checks.
-	// Capture the slices in order for BCE to occur.
-	toCheckIDs := hj.ht.ProbeScratch.ToCheckID
-	probeRowUnmatched := hj.probeState.probeRowUnmatched
-	buildIdx := hj.probeState.buildIdx
-	probeIdx := hj.probeState.probeIdx
-	_ = toCheckIDs[batchSize-1]
-	_ = probeRowUnmatched[batchSize-1]
-	_ = buildIdx[batchSize-1]
-	_ = probeIdx[batchSize-1]
-	if useSel {
-		_ = sel[batchSize-1]
-	}
-	for i := 0; i < batchSize; i++ {
-		// Index of keys and outputs in the hash table is calculated as ID - 1.
-		//gcassert:bce
-		id := toCheckIDs[i]
-		rowUnmatched := id == 0
-		//gcassert:bce
-		probeRowUnmatched[i] = rowUnmatched
-		if rowUnmatched {
-			// The row is unmatched, and we set the corresponding buildIdx
-			// to zero so that (as long as the build hash table has at least
-			// one row) we can copy the values vector without paying
-			// attention to probeRowUnmatched.
-			//gcassert:bce
-			buildIdx[i] = 0
-		} else {
-			//gcassert:bce
-			buildIdx[i] = int(id - 1)
-		}
-		pIdx := getIdx(i, sel, useSel)
-		//gcassert:bce
-		probeIdx[i] = pIdx
-	}
-}
-
-// execgen:template<useSel>
-func distinctCollectProbeNoOuter(
-	hj *hashJoiner, batchSize int, nResults int, sel []int, useSel bool,
-) int {
-	// Early bounds checks.
-	// Capture the slice in order for BCE to occur.
-	toCheckIDs := hj.ht.ProbeScratch.ToCheckID
-	_ = toCheckIDs[batchSize-1]
-	if useSel {
-		_ = sel[batchSize-1]
-	}
-	for i := 0; i < batchSize; i++ {
-		//gcassert:bce
-		id := toCheckIDs[i]
-		if id != 0 {
-			// Index of keys and outputs in the hash table is calculated as ID - 1.
-			hj.probeState.buildIdx[nResults] = int(id - 1)
-			hj.probeState.probeIdx[nResults] = getIdx(i, sel, useSel)
-			nResults++
-		}
-	}
-	return nResults
-}
-
-// collect prepares the buildIdx and probeIdx arrays where the buildIdx and
-// probeIdx at each index are joined to make an output row. The total number of
+// collect prepares the BuildIdx and ProbeIdx arrays where the BuildIdx and
+// ProbeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
-func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
+func (hj *hashJoiner) collect(
+	_ *colexechash.JoinProbeState, batch coldata.Batch, batchSize int, sel []int,
+) int {
 	nResults := 0
 
 	if !hj.spec.JoinType.ShouldIncludeLeftColsInOutput() {
@@ -310,32 +250,6 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 			} else {
 				nResults = collectProbeNoOuter(hj, batchSize, nResults, batch, sel, false)
 			}
-		}
-	}
-
-	return nResults
-}
-
-// distinctCollect prepares the batch with the joined output columns where the
-// build row index for each probe row is given in the ToCheckID slice. The
-// function only handles inner, outer, and left semi joins (since all others
-// need facilities of the non-distinct collection) in the case that the equality
-// columns form a key over the right side.
-func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := 0
-
-	if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
-		nResults = batchSize
-		if sel != nil {
-			distinctCollectProbeOuter(hj, batchSize, sel, true)
-		} else {
-			distinctCollectProbeOuter(hj, batchSize, sel, false)
-		}
-	} else {
-		if sel != nil {
-			nResults = distinctCollectProbeNoOuter(hj, batchSize, nResults, sel, true)
-		} else {
-			nResults = distinctCollectProbeNoOuter(hj, batchSize, nResults, sel, false)
 		}
 	}
 

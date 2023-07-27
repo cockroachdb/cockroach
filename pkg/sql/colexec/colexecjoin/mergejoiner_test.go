@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -107,15 +108,14 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	hj := NewHashJoiner(NewHashJoinerArgs{
 		BuildSideAllocator:       testAllocator,
 		OutputUnlimitedAllocator: testAllocator,
-		Spec: HashJoinerSpec{
-			JoinType: descpb.InnerJoin,
-			Left: hashJoinerSourceSpec{
-				EqCols: []uint32{0}, SourceTypes: typs,
-			},
-			Right: hashJoinerSourceSpec{
-				EqCols: []uint32{0}, SourceTypes: typs,
-			},
-		},
+		Spec: colexecargs.MakeHashJoinerSpec(
+			descpb.InnerJoin,
+			[]uint32{0}, /* leftEqCols */
+			[]uint32{0}, /* rightEqCols */
+			typs,        /* leftTypes */
+			typs,        /* rightTypes */
+			false,       /* rightDistinct */
+		),
 		LeftSource:        leftHJSource,
 		RightSource:       rightHJSource,
 		InitialNumBuckets: HashJoinerInitialNumBuckets,

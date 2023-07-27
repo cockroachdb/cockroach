@@ -245,6 +245,9 @@ type HashTable struct {
 	// Same is only used when the HashTable contains non-distinct keys (in
 	// HashTableFullBuildMode mode) and is probed via HashTableDefaultProbeMode
 	// mode.
+	// TODO(yuzefovich): think through whether we could get rid of this slice
+	// and, instead, divide all build tuples into "equality buckets", similar to
+	// how we do hash aggregation.
 	Same []keyID
 	// Visited represents whether each of the corresponding keys have been
 	// touched by the prober.
@@ -425,7 +428,7 @@ func (ht *HashTable) unlimitedSlicesCapacity() int64 {
 // buildFromBufferedTuples builds the hash table from already buffered tuples
 // in ht.Vals. It'll determine the appropriate number of buckets that satisfy
 // the target load factor.
-func (ht *HashTable) buildFromBufferedTuples() {
+func (ht *HashTable) buildFromBufferedTuples(storeHashCodes bool) {
 	for ht.shouldResize(ht.Vals.Length()) {
 		ht.numBuckets *= 2
 	}
@@ -447,7 +450,7 @@ func (ht *HashTable) buildFromBufferedTuples() {
 		ht.unlimitedSlicesNumUint32AccountedFor = needCapacity
 	}
 	// Perform the actual build.
-	ht.buildFromBufferedTuplesNoAccounting()
+	ht.buildFromBufferedTuplesNoAccounting(storeHashCodes)
 	// Now ensure that the accounting is precise (cap's of the slices might
 	// exceed len's that we've accounted for).
 	ht.allocator.AdjustMemoryUsageAfterAllocation(memsize.Uint32 * (ht.unlimitedSlicesCapacity() - ht.unlimitedSlicesNumUint32AccountedFor))
@@ -457,7 +460,7 @@ func (ht *HashTable) buildFromBufferedTuples() {
 // buildFromBufferedTuples builds the hash table from already buffered tuples in
 // ht.Vals according to the current number of buckets. No memory accounting is
 // performed, so this function is guaranteed to not throw a memory error.
-func (ht *HashTable) buildFromBufferedTuplesNoAccounting() {
+func (ht *HashTable) buildFromBufferedTuplesNoAccounting(storeHashCodes bool) {
 	ht.BuildScratch.First = colexecutils.MaybeAllocateUint32Array(ht.BuildScratch.First, int(ht.numBuckets))
 	if ht.ProbeScratch.First != nil {
 		ht.ProbeScratch.First = colexecutils.MaybeAllocateUint32Array(ht.ProbeScratch.First, int(ht.numBuckets))
@@ -469,13 +472,16 @@ func (ht *HashTable) buildFromBufferedTuplesNoAccounting() {
 		ht.Keys[i] = ht.Vals.ColVec(int(keyCol))
 	}
 	ht.ComputeBuckets(ht.BuildScratch.Next[1:], ht.Keys, ht.Vals.Length(), nil /* sel */)
+	if storeHashCodes {
+		ht.ProbeScratch.HashBuffer = append(ht.ProbeScratch.HashBuffer[:0], ht.BuildScratch.Next[1:]...)
+	}
 	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, 1 /* offset */, uint32(ht.Vals.Length()))
 }
 
 // FullBuild executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process. Note that
 // the hash table is assumed to operate in HashTableFullBuildMode.
-func (ht *HashTable) FullBuild(input colexecop.Operator) {
+func (ht *HashTable) FullBuild(input colexecop.Operator, storeHashCodes bool) {
 	if ht.BuildMode != HashTableFullBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"HashTable.FullBuild is called in unexpected build mode %d", ht.BuildMode,
@@ -493,7 +499,7 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 		}
 		ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	}
-	ht.buildFromBufferedTuples()
+	ht.buildFromBufferedTuples(storeHashCodes)
 }
 
 // DistinctBuild appends all distinct tuples from batch to the hash table. Note
@@ -708,7 +714,7 @@ func (ht *HashTable) AppendAllDistinct(batch coldata.Batch) {
 	ht.BuildScratch.Next = append(ht.BuildScratch.Next, ht.ProbeScratch.HashBuffer[:batch.Length()]...)
 	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, numBuffered+1, uint32(batch.Length()))
 	if ht.shouldResize(ht.Vals.Length()) {
-		ht.buildFromBufferedTuples()
+		ht.buildFromBufferedTuples(false /* storeHashCodes */)
 	}
 }
 
@@ -723,7 +729,7 @@ func (ht *HashTable) RepairAfterDistinctBuild() {
 	// a minor performance hit, but it is done only once throughout the lifetime
 	// of the unordered distinct when it just spilled to disk, so the regression
 	// is ok.
-	ht.buildFromBufferedTuplesNoAccounting()
+	ht.buildFromBufferedTuplesNoAccounting(false /* storeHashCodes */)
 }
 
 // checkCols performs a column by column checkCol on the key columns.
