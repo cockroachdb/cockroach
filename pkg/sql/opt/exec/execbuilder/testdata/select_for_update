@@ -2560,3 +2560,84 @@ vectorized: true
           spans: /2-/3
           locking strength: for update
           locking wait policy: skip locked
+
+# ------------------------------------------------------------------------------
+# Tests with durable locking.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change these from EXPLAIN (OPT) to EXPLAIN (VERBOSE).
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR UPDATE
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR NO KEY UPDATE
+----
+scan t
+ └── locking: for-no-key-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR SHARE
+----
+scan t
+ └── locking: for-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE
+----
+scan t
+ └── locking: for-key-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+scan t
+ └── locking: for-share,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+scan t
+ └── locking: for-no-key-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t FOR UPDATE OF t
+----
+scan t
+ └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+values
+ └── tuple
+      └── subquery
+           └── max1-row
+                └── scan t
+                     └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
+----
+project
+ └── inner-join (lookup t)
+      ├── lookup columns are key
+      ├── distinct-on
+      │    └── scan t
+      │         └── locking: for-update,durability-guaranteed
+      └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable

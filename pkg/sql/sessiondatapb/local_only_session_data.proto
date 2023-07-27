@@ -417,6 +417,12 @@ message LocalOnlySessionData {
   bool implicit_fk_locking_for_serializable = 108 [
     (gogoproto.customname) = "ImplicitFKLockingForSerializable"
   ];
+  // DurableLockingForSerializable is true if we should use durable locking for
+  // SELECT FOR UPDATE statements, SELECT FOR SHARE statements, and constraint
+  // checks under serializable isolation. (Serializable isolation does not
+  // require locking for correctness, so by default we use best-effor locks for
+  // better performance.) Weaker isolation levels always use durable locking.
+  bool durable_locking_for_serializable = 109;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
