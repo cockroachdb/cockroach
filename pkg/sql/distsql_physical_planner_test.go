@@ -12,14 +12,13 @@ package sql
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -67,50 +65,62 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const n = 100
+
+	// NB: this test uses StartNewTestCluster because it depends on some
+	// cluster setting initializations that only testcluster does.
 	const numNodes = 1
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
 	})
-
 	defer tc.Stopper().Stop(context.Background())
 
+	s := tc.Server(0)
+	ts := s.ApplicationLayer()
+	cdb := ts.DB()
+	db := ts.SQLConn(t, "test")
+
 	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "t", "x INT PRIMARY KEY, xsquared INT",
+		t, db, "t", "x INT PRIMARY KEY, xsquared INT",
 		n,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) tree.Datum {
 			return tree.NewDInt(tree.DInt(row * row))
 		}),
 	)
 
-	ctx := tc.Server(0).AnnotateCtx(context.Background())
-
 	// Start a worker that continuously performs splits in the background.
-	_ = tc.Stopper().RunAsyncTask(ctx, "splitter", func(ctx context.Context) {
+	stopSplitter := make(chan struct{})
+	splitterDone := make(chan struct{})
+	go func() {
+		defer close(splitterDone)
 		rng, _ := randutil.NewTestRand()
-		cdb := tc.Server(0).DB()
 		for {
 			select {
-			case <-tc.Stopper().ShouldQuiesce():
-				return
+			case <-stopSplitter:
 			default:
-				// Split the table at a random row.
-				tableDesc := desctestutils.TestingGetTableDescriptor(
-					cdb, keys.SystemSQLCodec, "test", "public", "t",
-				)
-
-				val := rng.Intn(n)
-				t.Logf("splitting at %d", val)
-				pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
-				if err != nil {
-					panic(err)
-				}
-
-				if _, _, err := tc.Server(0).SplitRange(pik); err != nil {
-					panic(err)
-				}
 			}
+
+			// Split the table at a random row.
+			tableDesc := desctestutils.TestingGetTableDescriptor(
+				cdb, ts.Codec(), "test", "public", "t",
+			)
+
+			val := rng.Intn(n)
+			t.Logf("splitting at %d", val)
+			pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
+			if err != nil {
+				panic(err)
+			}
+
+			if _, _, err := s.SplitRange(pik); err != nil {
+				panic(err)
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-	})
+	}()
+	defer func() {
+		close(stopSplitter)
+		<-splitterDone
+	}()
 
 	sumX, sumXSquared := 0, 0
 	for x := 1; x <= n; x++ {
@@ -131,23 +141,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 			defer wg.Done()
 
 			// Create a gosql.DB for this worker.
-			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, tc.Server(0).AdvSQLAddr(), fmt.Sprintf("%d", idx), url.User(username.RootUser),
-			)
-			defer cleanupGoDB()
-
-			pgURL.Path = "test"
-			goDB, err := gosql.Open("postgres", pgURL.String())
-			if err != nil {
-				t.Error(err)
-				return
-			}
-
-			defer func() {
-				if err := goDB.Close(); err != nil {
-					t.Error(err)
-				}
-			}()
+			goDB := ts.SQLConn(t, "test")
 
 			// Limit to 1 connection because we set a session variable.
 			goDB.SetMaxOpenConns(1)

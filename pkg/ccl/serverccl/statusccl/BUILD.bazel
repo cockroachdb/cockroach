@@ -21,7 +21,6 @@ go_test(
         "//pkg/security",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
-        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/spanconfig",
