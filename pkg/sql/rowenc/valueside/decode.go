@@ -246,7 +246,7 @@ func DecodeUntaggedDatum(
 	case types.VoidFamily:
 		return a.NewDVoid(), buf, nil
 	default:
-		return nil, buf, errors.Errorf("couldn't decode type %s", t)
+		return nil, buf, errors.Errorf("couldn't decode type %s", t.SQLStringForError())
 	}
 }
 
