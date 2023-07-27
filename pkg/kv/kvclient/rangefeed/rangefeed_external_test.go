@@ -62,7 +62,11 @@ type feedProcessorType struct {
 }
 
 func (t feedProcessorType) String() string {
-	return fmt.Sprintf("mux=%t_scheduler=%t", t.useMuxRangefeed, t.useScheduler)
+	if t.useMuxRangefeed {
+		return fmt.Sprintf("mux/scheduler=%t", t.useScheduler)
+	} else {
+		return fmt.Sprintf("single/scheduler=%t", t.useScheduler)
+	}
 }
 
 var procTypes = []feedProcessorType{

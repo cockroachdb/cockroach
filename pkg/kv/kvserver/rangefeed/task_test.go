@@ -502,7 +502,9 @@ func TestTxnPushAttempt(t *testing.T) {
 	txns := []enginepb.TxnMeta{txn1Meta, txn2Meta, txn3Meta, txn4Meta}
 	doneC := make(chan struct{})
 	pushAttempt := newTxnPushAttempt(p.Span, p.TxnPusher, &p, txns, hlc.Timestamp{WallTime: 15},
-		doneC)
+		func() {
+			close(doneC)
+		})
 	pushAttempt.Run(context.Background())
 	<-doneC // check if closed
 
