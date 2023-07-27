@@ -702,3 +702,25 @@ func formatPebbleMetamorphicIssue(
 		ExtraLabels: []string{"metamorphic-failure"},
 	}
 }
+
+// PostGeneralFailure posts a "general" GitHub issue that does not correspond
+// to any particular failed test, etc. These will generally be build failures
+// that prevent any tests from having run. In this case we have very little
+// insight into what caused the build failure and can't properly assign owners,
+// so a general issue is filed against test-eng in this case.
+func PostGeneralFailure(formatterName, logs string) {
+	fileIssue := getIssueFilerForFormatter(formatterName)
+	postGeneralFailureImpl(logs, fileIssue)
+}
+
+func postGeneralFailureImpl(logs string, fileIssue func(context.Context, failure) error) {
+	ctx := context.Background()
+	err := fileIssue(ctx, failure{
+		title:       "unexpected build failure",
+		testMessage: logs,
+	})
+	if err != nil {
+		log.Println(err) // keep going
+	}
+
+}
