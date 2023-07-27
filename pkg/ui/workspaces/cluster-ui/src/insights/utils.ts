@@ -72,7 +72,13 @@ export const filterTransactionInsights = (
 
     filteredTransactions = filteredTransactions.filter(
       txn =>
-        txn.transactionExecutionID.toLowerCase()?.includes(search) ||
+        [
+          txn.transactionExecutionID,
+          txn.transactionFingerprintID,
+          txn.sessionID,
+        ]
+          .concat(txn.stmtExecutionIDs)
+          .some(id => id.toLowerCase()?.includes(search)) ||
         txn.query.toLowerCase().includes(search),
     );
   }
@@ -220,12 +226,20 @@ export const filterStatementInsights = (
       ),
     );
   }
+
   if (search) {
     search = search.toLowerCase();
     filteredStatements = filteredStatements.filter(
       stmt =>
         !search ||
-        stmt.statementExecutionID.toLowerCase()?.includes(search) ||
+        // Search results in all ID columns of StmtInsightEvent.
+        [
+          stmt.sessionID,
+          stmt.transactionExecutionID,
+          stmt.transactionFingerprintID,
+          stmt.statementExecutionID,
+          stmt.statementFingerprintID,
+        ].some(s => s.toLowerCase()?.includes(search)) ||
         stmt.query?.toLowerCase().includes(search),
     );
   }
