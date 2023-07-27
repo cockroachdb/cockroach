@@ -816,7 +816,7 @@ func (sc *systemTableContents) loadShowResults(
 	}
 
 	query := fmt.Sprintf("SELECT * FROM [%s]%s", showStmt, aostFor(timestamp))
-	showCmd := roachtestutil.NewCommand("%s sql", mixedversion.CurrentCockroachPath).
+	showCmd := roachtestutil.NewCommand("%s sql", test.DefaultCockroachPath).
 		Flag("certs-dir", "certs").
 		Flag("e", fmt.Sprintf("%q", query)).
 		String()

@@ -142,7 +142,7 @@ func fetchSpanStatsFromNode(
 	}
 	loginCmd := fmt.Sprintf(
 		"%s auth-session login root --certs-dir ./certs --format raw",
-		mixedversion.CurrentCockroachPath,
+		test.DefaultCockroachPath,
 	)
 	res, err := c.RunWithDetailsSingleNode(ctx, l, node, loginCmd)
 	if err != nil {
