@@ -31,7 +31,6 @@ func TestCPUProfiler(t *testing.T) {
 	sv.Init(ctx, s.Version)
 	cpuProfileInterval.Override(ctx, sv, time.Hour)
 	cpuUsageCombined.Override(ctx, sv, 80)
-	cpuProfileEnabled.Override(ctx, sv, true)
 	pastTime := time.Date(2023, 1, 1, 1, 1, 1, 1, time.UTC)
 	cases := []struct {
 		name                 string

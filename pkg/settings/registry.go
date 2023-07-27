@@ -173,6 +173,7 @@ var retiredSettings = map[string]struct{}{
 	"changefeed.replan_flow_threshold":                         {},
 	"jobs.trace.force_dump_mode":                               {},
 	"timeseries.storage.30m_resolution_ttl":                    {},
+	"server.cpu_profile.enabled":                               {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
