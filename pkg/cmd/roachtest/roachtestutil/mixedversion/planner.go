@@ -133,7 +133,7 @@ func (p *testPlanner) initSteps() []testStep {
 	return append(
 		append(steps,
 			uploadCurrentVersionStep{id: p.nextID(), rt: p.rt, crdbNodes: p.crdbNodes, dest: CurrentCockroachPath},
-			waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes},
+			waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
 			preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
 		),
 		p.hooks.StartupSteps(p.nextID, p.initialContext())...,
@@ -146,7 +146,7 @@ func (p *testPlanner) initSteps() []testStep {
 // user may have provided.
 func (p *testPlanner) finalSteps() []testStep {
 	return append([]testStep{
-		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes},
+		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
 	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.finalContext(false /* finalizing */))...)
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -233,34 +234,71 @@ func RestartNodesWithNewBinary(
 	return nil
 }
 
+// DefaultUpgradeTimeout is the default timeout used when waiting for
+// an upgrade to finish (i.e., for all migrations to run and for the
+// cluster version to propagate). This timeout should be sufficient
+// for simple tests where there isn't a lot of data; in other
+// situations, a custom timeout can be passed to
+// `WaitForClusterUpgrade`.
+var DefaultUpgradeTimeout = 10 * time.Minute
+
 // WaitForClusterUpgrade waits for the cluster version to reach the
 // first node's binary version. This function should only be called if
 // every node in the cluster has been restarted to run the same binary
 // version. We rely on the cluster's internal self-upgrading
 // mechanism to update the underlying cluster version.
 func WaitForClusterUpgrade(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, dbFunc func(int) *gosql.DB,
+	ctx context.Context,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	dbFunc func(int) *gosql.DB,
+	timeout time.Duration,
 ) error {
-	newVersion, err := BinaryVersion(dbFunc(nodes[0]))
+	firstNode := nodes[0]
+	newVersion, err := BinaryVersion(dbFunc(firstNode))
 	if err != nil {
 		return err
 	}
 
-	l.Printf("waiting for cluster to auto-upgrade to %s", newVersion)
-	for _, node := range nodes {
-		err := retry.ForDuration(10*time.Minute, func() error {
+	// waitForUpgrade will wait for the given `node` to have the
+	// expected cluster version within the given timeout.
+	waitForUpgrade := func(node int, timeout time.Duration) error {
+		var latestVersion roachpb.Version
+		err := retry.ForDuration(timeout, func() error {
 			currentVersion, err := ClusterVersion(ctx, dbFunc(node))
 			if err != nil {
 				return err
 			}
+
+			latestVersion = currentVersion
 			if currentVersion != newVersion {
-				return fmt.Errorf("%d: expected cluster version %s, got %s", node, newVersion, currentVersion)
+				return fmt.Errorf("not upgraded yet")
 			}
-			l.Printf("%s: acked by n%d", currentVersion, node)
 			return nil
 		})
 		if err != nil {
-			return err
+			return errors.Wrapf(err,
+				"timed out after %s: expected n%d to be at cluster version %s, but is still at %s",
+				timeout, node, newVersion, latestVersion,
+			)
+		}
+		l.Printf("%s: acked by n%d", newVersion, node)
+		return nil
+	}
+
+	l.Printf("waiting for cluster to auto-upgrade to %s for %s", newVersion, timeout)
+	if err := waitForUpgrade(firstNode, timeout); err != nil {
+		return err
+	}
+
+	// Wait for `propagationTimeout` for all other nodes to also
+	// acknowledge the same cluster version as the first node. This
+	// should happen much faster, as migrations should already have
+	// finished at this point.
+	propagationTimeout := 3 * time.Minute
+	for _, node := range nodes[1:] {
+		if err := waitForUpgrade(node, propagationTimeout); err != nil {
+			return fmt.Errorf("n%d is already at %s: %w", firstNode, newVersion, err)
 		}
 	}
 
