@@ -7352,7 +7352,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `ALTER TENANT [20] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [20] IMMEDIATE`)
 
-		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'tenant-20'`)
+		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster = '20', virtual_cluster_name = 'tenant-20'`)
 
 		tenantID = roachpb.MustMakeTenantID(20)
 		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {

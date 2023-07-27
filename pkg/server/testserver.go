@@ -1026,18 +1026,36 @@ func (t *TestTenant) HTTPAuthServer() interface{} {
 
 // WaitForTenantReadiness is part of TestServerInterface.
 func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
-	// Restarting the watcher forces a new initial scan which is
-	// faster than waiting out the closed timestamp interval
-	// required to see new updates.
-	ts.node.tenantInfoWatcher.TestingRestart()
-
-	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
+	// Two minutes should be sufficient for the in-RAM caches to be hydrated with
+	// the tenant record.
+	var cancel func()
+	ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 
 	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
 	if err != nil {
 		return err
 	}
 
+	// Ignore the tenant capabilities entry as it may be served from a stale
+	// version of the in-RAM cache. We use the returned channel to monitor when
+	// the watcher has completed its initial scan and hydrated the in-RAM cache
+	// with the most up-to-date values.
+	_, infoCh, _ := infoWatcher.GetInfo(tenantID)
+
+	// Restarting the watcher forces a new initial scan which is faster than
+	// waiting out the closed timestamp interval required to see new updates.
+	ts.node.tenantInfoWatcher.TestingRestart()
+
+	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
+
+	// Wait for the watcher to handle the complete update from the initial scan
+	// and notify our previously registered listener.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-infoCh:
+	}
 	for {
 		info, infoCh, found := infoWatcher.GetInfo(tenantID)
 		if found && info.ServiceMode != mtinfopb.ServiceModeNone {
