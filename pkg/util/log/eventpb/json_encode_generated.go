@@ -4854,6 +4854,15 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, ']')
 	}
 
+	if m.RequestUnitEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RequestUnitEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.RequestUnitEstimate), 'f', -1, 64)
+	}
+
 	return printComma, b
 }
 

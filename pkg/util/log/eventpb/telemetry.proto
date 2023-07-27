@@ -291,9 +291,12 @@ message SampledQuery {
   // SQLInstanceIDs is a list of all the SQL instance id used in this statements execution.
   repeated int32 sql_instance_ids = 77 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "SQLInstanceIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
+  // Estimated request units the statement cost
+  double request_unit_estimate = 78 [(gogoproto.jsontag) = ",omitempty"];
+
   reserved 12;
 
-  // Next available ID: 78.
+  // Next available ID: 79.
 }
 
 

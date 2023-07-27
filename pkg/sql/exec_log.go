@@ -383,6 +383,7 @@ func (p *planner) maybeLogStatementInternal(
 				KvGrpcCalls:                           queryLevelStats.KVBatchRequestsIssued,
 				NetworkMessages:                       queryLevelStats.NetworkMessages,
 				CpuTimeNanos:                          queryLevelStats.CPUTime.Nanoseconds(),
+				RequestUnitEstimate:                   float64(queryLevelStats.RUEstimate),
 				IndexRecommendations:                  indexRecs,
 				Indexes:                               p.curPlan.instrumentation.indexesUsed,
 				ScanCount:                             int64(p.curPlan.instrumentation.scanCounts[exec.ScanCount]),
