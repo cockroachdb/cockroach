@@ -430,6 +430,9 @@ func (tc *TestCluster) Start(t testing.TB) {
 	// Now that we have started all the servers on the bootstrap version, let us
 	// run the migrations up to the overridden BinaryVersion.
 	if v := tc.Servers[0].BinaryVersionOverride(); v != (roachpb.Version{}) {
+		if _, err := tc.storageConn.Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
 			t.Fatal(err)
 		}
@@ -445,13 +448,13 @@ func (tc *TestCluster) Start(t testing.TB) {
 		//
 		// TODO(benesch): this won't be necessary once we have sticky bits for
 		// splits.
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+		if _, err := tc.storageConn.Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	if disableLBS {
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+		if _, err := tc.storageConn.Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -472,7 +475,9 @@ func (tc *TestCluster) Start(t testing.TB) {
 		var err error
 		for _, ssrv := range tc.Servers {
 			for _, dsrv := range tc.Servers {
-				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.AdvRPCAddr(), dsrv.NodeID(), rpc.DefaultClass).Connect(context.TODO())
+				stl := dsrv.StorageLayer()
+				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.SystemLayer().AdvRPCAddr(),
+					stl.NodeID(), rpc.DefaultClass).Connect(context.TODO())
 				err = errors.CombineErrors(err, e)
 			}
 		}
