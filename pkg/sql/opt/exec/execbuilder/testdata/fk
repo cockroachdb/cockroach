@@ -77,6 +77,29 @@ vectorized: true
                   estimated row count: 2
                   label: buffer 1
 
+# Try again with durable locking enabled.
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change this from EXPLAIN (OPT) to EXPLAIN.
+query T
+EXPLAIN (OPT) INSERT INTO child VALUES (1,1), (2,2)
+----
+insert child
+ ├── values
+ │    ├── (1, 1)
+ │    └── (2, 2)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (lookup parent)
+                ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
+                ├── with-scan &1
+                └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
 
@@ -643,6 +666,30 @@ vectorized: true
                   table: parent@parent_pkey
                   spans: FULL SCAN
                   locking strength: for share
+
+# Try again with durable locking enabled.
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+# TODO(michae2, 100194): Change this from EXPLAIN (OPT) to EXPLAIN.
+query T
+EXPLAIN (OPT) UPDATE child SET p = 4
+----
+update child
+ ├── project
+ │    ├── scan child
+ │    └── projections
+ │         └── 4
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (merge)
+                ├── with-scan &1
+                ├── scan parent
+                │    └── locking: for-share,durability-guaranteed
+                └── filters (true)
+
+statement ok
+RESET enable_durable_locking_for_serializable
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
