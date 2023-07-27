@@ -401,7 +401,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 ) *scope {
 	typ, ok := b.varTypes[ident]
 	if !ok {
-		panic(errors.AssertionFailedf("failed to find type for variable %s", ident))
+		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", ident))
 	}
 	assignScope := inScope.push()
 	for i := range inScope.cols {
@@ -448,9 +448,7 @@ func (b *plpgsqlBuilder) getRaiseArgs(
 		// DEBUG log-level maps to severity DEBUG1.
 		severity = makeConstStr("DEBUG1")
 	default:
-		panic(unimplemented.Newf(
-			"unimplemented log level", "RAISE log level %s is not yet supported", raise.LogLevel,
-		))
+		panic(errors.AssertionFailedf("unexpected log level %s", raise.LogLevel))
 	}
 	// Retrieve the message, if it was set with the format syntax.
 	if raise.Message != "" {
@@ -537,7 +535,7 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 			if j > 0 {
 				// Add the next argument at the location of this parameter.
 				if argIdx >= len(args) {
-					panic(pgerror.Newf(pgcode.PLpgSQL, "too few parameters specified for RAISE"))
+					panic(pgerror.Newf(pgcode.Syntax, "too few parameters specified for RAISE"))
 				}
 				addToResult(b.buildPLpgSQLExpr(args[argIdx], types.String, s))
 				argIdx++
@@ -546,7 +544,7 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 		}
 	}
 	if argIdx < len(args) {
-		panic(pgerror.Newf(pgcode.PLpgSQL, "too many parameters specified for RAISE"))
+		panic(pgerror.Newf(pgcode.Syntax, "too many parameters specified for RAISE"))
 	}
 	return result
 }

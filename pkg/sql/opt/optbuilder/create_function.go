@@ -143,6 +143,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
+	var paramTypes tree.ParamTypes
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
@@ -170,6 +171,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
 			typeDeps.Add(int(id))
 		})
+
+		// Collect the parameters for PLpgSQL routines.
+		if language == tree.RoutineLangPLpgSQL {
+			paramTypes = append(paramTypes, tree.ParamType{
+				Name: param.Name.String(),
+				Typ:  typ,
+			})
+		}
 	}
 
 	// Collect the user defined type dependency of the return type.
@@ -205,8 +214,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			b.evalCtx.Annotations = &ann
 
 			// We need to disable stable function folding because we want to catch the
-			// volatility of stable functions. If folded, we only get a scalar and lose
-			// the volatility.
+			// volatility of stable functions. If folded, we only get a scalar and
+			// lose the volatility.
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 			})
@@ -230,8 +239,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(err)
 		}
 
-		// TODO(drewk): build and check volatility. We will need to remove the hack
-		// to disable UDFs calling other UDFs before doing this.
+		// We need to disable stable function folding because we want to catch the
+		// volatility of stable functions. If folded, we only get a scalar and lose
+		// the volatility.
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			var plBuilder plpgsqlBuilder
+			plBuilder.init(b, nil /* colRefs */, paramTypes, stmt.AST, funcReturnType)
+			stmtScope = plBuilder.build(stmt.AST, bodyScope)
+		})
+		checkStmtVolatility(targetVolatility, stmtScope, stmt)
+
 		// Format the statements with qualified datasource names.
 		formatFuncBodyStmt(fmtCtx, stmt.AST, false /* newLine */)
 		afterBuildStmt()
