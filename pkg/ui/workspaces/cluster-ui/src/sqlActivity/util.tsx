@@ -92,7 +92,10 @@ export function filterStatementsData(
     })
     .filter(
       statement =>
-        !appNames?.length || appNames.includes(statement.applicationName),
+        !appNames?.length ||
+        appNames.includes(
+          statement.applicationName ? statement.applicationName : unset,
+        ),
     )
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
