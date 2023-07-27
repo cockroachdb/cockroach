@@ -445,6 +445,12 @@ type GetTableMetricsFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) ([]enginepb.SSTableMetricsInfo, error)
 
+// ScanStorageInternalKeysFunc is used to retrieve pebble metrics on a key span
+// (end-exclusive) at the given (nodeID, storeID).
+type ScanStorageInternalKeysFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) ([]enginepb.StorageInternalKeysMetrics, error)
+
 // SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
 // store.
 type SetCompactionConcurrencyFunc func(
