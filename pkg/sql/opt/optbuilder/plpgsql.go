@@ -121,6 +121,9 @@ type plpgsqlBuilder struct {
 	// varTypes maps from the name of each variable to its type.
 	varTypes map[tree.Name]*types.T
 
+	// constants tracks the variables that were declared as constant.
+	constants map[tree.Name]struct{}
+
 	// returnType is the return type of the PL/pgSQL function.
 	returnType *types.T
 
@@ -164,12 +167,6 @@ func (b *plpgsqlBuilder) init(
 				"not-null PL/pgSQL variables are not yet supported",
 			))
 		}
-		if dec.Constant {
-			panic(unimplemented.NewWithIssueDetail(105241,
-				"constant variable",
-				"constant PL/pgSQL variables are not yet supported",
-			))
-		}
 		if dec.Collate != "" {
 			panic(unimplemented.NewWithIssueDetail(105245,
 				"variable collation",
@@ -185,13 +182,19 @@ func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *s
 	s = s.push()
 	b.ensureScopeHasExpr(s)
 
-	// Some variable declarations initialize the variable.
+	b.constants = make(map[tree.Name]struct{})
 	for _, dec := range b.decls {
 		if dec.Expr != nil {
+			// Some variable declarations initialize the variable.
 			s = b.addPLpgSQLAssign(s, dec.Var, dec.Expr)
 		} else {
 			// Uninitialized variables are null.
 			s = b.addPLpgSQLAssign(s, dec.Var, &tree.CastExpr{Expr: tree.DNull, Type: dec.Typ})
+		}
+		if dec.Constant {
+			// Add to the constants map after initializing the variable, since
+			// constant variables only prevent assignment, not initialization.
+			b.constants[dec.Var] = struct{}{}
 		}
 	}
 	if s = b.buildPLpgSQLStatements(block.Body, s); s != nil {
@@ -399,6 +402,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	inScope *scope, ident plpgsqltree.PLpgSQLVariable, val plpgsqltree.PLpgSQLExpr,
 ) *scope {
+	if b.constants != nil {
+		if _, ok := b.constants[ident]; ok {
+			panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", ident))
+		}
+	}
 	typ, ok := b.varTypes[ident]
 	if !ok {
 		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", ident))
