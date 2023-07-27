@@ -2439,6 +2439,8 @@ var builtinOidsArray = []string{
 	2466: `crdb_internal.setup_span_configs_stream(tenant_name: string) -> bytes`,
 	2467: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
 	2468: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
+	2469: `crdb_internal.scan_storage_internal_keys(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int AS node_id, int AS store_id, int AS level, int AS snapshot_pinned_keys, int AS snapshot_pinned_keys_bytes, int AS point_key_delete_count, int AS point_key_set_count, int AS range_delete_count, int AS range_key_set_count, int AS range_key_delete_count}`,
+	2470: `crdb_internal.scan_storage_internal_keys(node_id: int, store_id: int, start_key: bytes, end_key: bytes, mb_per_second: int4) -> tuple{int AS node_id, int AS store_id, int AS level, int AS snapshot_pinned_keys, int AS snapshot_pinned_keys_bytes, int AS point_key_delete_count, int AS point_key_set_count, int AS range_delete_count, int AS range_key_set_count, int AS range_key_delete_count}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
