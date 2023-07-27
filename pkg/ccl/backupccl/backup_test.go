@@ -880,7 +880,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	resolvedAsOfCollectionURIs := getResolvedCollectionURIs(collections, asOf1)
 
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE'",
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE' ORDER BY created",
 		[][]string{
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				backups[0].(string), backups[1].(string), backups[2].(string))},
