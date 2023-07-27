@@ -2063,6 +2063,13 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 	return metricsInfo, nil
 }
 
+// ScanStorageInternalKeys implements the Engine interface.
+func (p *Pebble) ScanStorageInternalKeys(
+	start, end roachpb.Key,
+) ([]enginepb.StorageInternalKeysMetrics, error) {
+	return []enginepb.StorageInternalKeysMetrics{}, nil
+}
+
 // ApproximateDiskBytes implements the Engine interface.
 func (p *Pebble) ApproximateDiskBytes(
 	from, to roachpb.Key,
