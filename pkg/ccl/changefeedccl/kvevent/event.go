@@ -12,7 +12,6 @@ package kvevent
 
 import (
 	"context"
-	"fmt"
 	"time"
 	"unsafe"
 
@@ -222,20 +221,6 @@ func (e *Event) DetachAlloc() Alloc {
 	a := e.alloc
 	e.alloc.clear()
 	return a
-}
-
-// String implements Stringer.
-func (e *Event) String() string {
-	switch {
-	case e.et == TypeFlush:
-		return "flush"
-	case e.et == TypeKV:
-		kv := e.KV()
-		return fmt.Sprintf("%s@%s", roachpb.PrettyPrintKey(nil, kv.Key), kv.Value.Timestamp)
-	default:
-		r := e.Resolved()
-		return fmt.Sprintf("resolved %s@%s (bt=%s)", r.Span, r.Timestamp, r.BoundaryType)
-	}
 }
 
 func getTypeForBoundary(bt jobspb.ResolvedSpan_BoundaryType) Type {

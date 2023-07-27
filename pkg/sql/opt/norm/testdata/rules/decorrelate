@@ -4656,42 +4656,23 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16 true_agg:18
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:18
       ├── key: (1)
-      ├── fd: (1)-->(2-5,16,18)
+      ├── fd: (1)-->(2-5,18)
       ├── group-by (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16 true_agg:18
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:18
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,16,18)
+      │    ├── fd: (1)-->(2-5,18)
       │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 column16:16 true:17
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 true:17
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5,12,16,17)
-      │    │    ├── left-join (cross)
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 column16:16
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    │    ├── fd: (1)-->(2-5,12,17)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5,16)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column16:16!null
-      │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    ├── key: ()
-      │    │    │    │    ├── fd: ()-->(16)
-      │    │    │    │    ├── limit
-      │    │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    ├── scan xy
-      │    │    │    │    │    │    └── limit hint: 1.00
-      │    │    │    │    │    └── 1
-      │    │    │    │    └── projections
-      │    │    │    │         └── true [as=column16:16]
-      │    │    │    └── filters (true)
+      │    │    │    └── fd: (1)-->(2-5)
       │    │    ├── project
       │    │    │    ├── columns: true:17!null x:12!null
       │    │    │    ├── key: (12)
@@ -4712,15 +4693,30 @@ project
       │         │    └── f:3
       │         ├── const-agg [as=s:4, outer=(4)]
       │         │    └── s:4
-      │         ├── const-agg [as=j:5, outer=(5)]
-      │         │    └── j:5
-      │         └── const-agg [as=column16:16, outer=(16)]
-      │              └── column16:16
+      │         └── const-agg [as=j:5, outer=(5)]
+      │              └── j:5
       └── filters
-           └── COALESCE(column16:16, false) OR (true_agg:18 IS NOT NULL) [outer=(16,18)]
+           └── or [outer=(18), subquery]
+                ├── coalesce
+                │    ├── subquery
+                │    │    └── project
+                │    │         ├── columns: column16:16!null
+                │    │         ├── cardinality: [0 - 1]
+                │    │         ├── key: ()
+                │    │         ├── fd: ()-->(16)
+                │    │         ├── limit
+                │    │         │    ├── cardinality: [0 - 1]
+                │    │         │    ├── key: ()
+                │    │         │    ├── scan xy
+                │    │         │    │    └── limit hint: 1.00
+                │    │         │    └── 1
+                │    │         └── projections
+                │    │              └── true [as=column16:16]
+                │    └── false
+                └── true_agg:18 IS NOT NULL
 
 # Hoist an uncorrelated equality subquery.
-norm expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
 SELECT * FROM a WHERE k = (SELECT max(x) FROM xy)
 ----
 project
@@ -4753,7 +4749,7 @@ project
            └── k:1 = max:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
 
 # Hoist an uncorrelated equality subquery that could return multiple rows.
-norm expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
 SELECT * FROM a WHERE k = (SELECT x FROM xy)
 ----
 project
@@ -4785,7 +4781,7 @@ project
 
 # Do not hoist an uncorrelated equality subquery if the corresponding session
 # setting is disabled.
-norm set=optimizer_hoist_uncorrelated_equality_subqueries=off expect-not=HoistSelectSubquery
+norm expect-not=HoistSelectSubquery
 SELECT * FROM a WHERE k = (SELECT max(x) FROM xy)
 ----
 select
@@ -4814,7 +4810,7 @@ select
 
 # Do not hoist an uncorrelated inequality subquery. We have not yet proven that
 # it will lead to a better plan.
-norm expect-not=HoistSelectSubquery
+norm expect-not=HoistSelectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
 SELECT * FROM a WHERE k < (SELECT max(x) FROM xy)
 ----
 select
@@ -5247,7 +5243,7 @@ values
            └── false
 
 # Hoist an uncorrelated equality subquery.
-norm expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
 SELECT k = (SELECT max(x) FROM xy) FROM a
 ----
 project
@@ -5276,7 +5272,7 @@ project
       └── k:1 = max:12 [as="?column?":13, outer=(1,12)]
 
 # Hoist an uncorrelated equality subquery that could return multiple rows.
-norm expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
 SELECT k = (SELECT x FROM xy) FROM a
 ----
 project
@@ -5304,7 +5300,7 @@ project
 
 # Do not hoist an uncorrelated equality subquery if the corresponding session
 # setting is disabled.
-norm set=optimizer_hoist_uncorrelated_equality_subqueries=off expect-not=HoistProjectSubquery
+norm expect-not=HoistProjectSubquery
 SELECT k = (SELECT max(x) FROM xy) FROM a
 ----
 project
@@ -5330,7 +5326,7 @@ project
 
 # Do not hoist an uncorrelated inequality subquery. We have not yet proven that
 # it will lead to a better plan.
-norm expect-not=HoistProjectSubquery
+norm expect-not=HoistProjectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
 SELECT k < (SELECT max(x) FROM xy) FROM a
 ----
 project

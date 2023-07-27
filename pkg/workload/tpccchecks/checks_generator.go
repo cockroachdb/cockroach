@@ -48,10 +48,6 @@ foreground TPC-C workload`,
 				" AS OF SYSTEM TIME CLAUSE for all checks.")
 		checkNames := func() (checkNames []string) {
 			for _, c := range tpcc.AllChecks() {
-				if c.LoadOnly {
-					// TODO(nvanbenschoten): support load-only checks.
-					continue
-				}
 				checkNames = append(checkNames, c.Name)
 			}
 			return checkNames

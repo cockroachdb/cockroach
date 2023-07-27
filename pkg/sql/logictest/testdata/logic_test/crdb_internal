@@ -11,7 +11,7 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  active_range_feeds                      table  admin  NULL  NULL
@@ -57,9 +57,6 @@ crdb_internal  kv_catalog_descriptor                   table  admin  NULL  NULL
 crdb_internal  kv_catalog_namespace                    table  admin  NULL  NULL
 crdb_internal  kv_catalog_zones                        table  admin  NULL  NULL
 crdb_internal  kv_dropped_relations                    view   admin  NULL  NULL
-crdb_internal  kv_flow_control_handles                 table  admin  NULL  NULL
-crdb_internal  kv_flow_controller                      table  admin  NULL  NULL
-crdb_internal  kv_flow_token_deductions                table  admin  NULL  NULL
 crdb_internal  kv_inherited_role_members               table  admin  NULL  NULL
 crdb_internal  kv_node_liveness                        table  admin  NULL  NULL
 crdb_internal  kv_node_status                          table  admin  NULL  NULL
@@ -163,7 +160,7 @@ FROM crdb_internal.tables WHERE NAME = 'descriptor'
 table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
 3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
 
-query TB colnames,rowsort
+query TB colnames
 SELECT * FROM crdb_internal.pg_catalog_table_is_implemented
 ----
 name                             implemented
@@ -202,7 +199,7 @@ pg_index                         false
 pg_indexes                       false
 pg_inherits                      true
 pg_init_privs                    true
-pg_language                      false
+pg_language                      true
 pg_largeobject                   true
 pg_largeobject_metadata          true
 pg_locks                         true
@@ -302,7 +299,7 @@ pg_views                         false
 statement ok
 CREATE TABLE testdb." ""\'" (i int)
 
-query T rowsort
+query T
 SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
@@ -381,15 +378,15 @@ SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
 query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
 # Accessing the tables should error for a user without a privilege.
 user testuser
@@ -408,15 +405,15 @@ GRANT SYSTEM VIEWACTIVITY TO testuser
 # Now testuser can query transactions since it has the VIEWACTIVITY privilege.
 user testuser
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
 user root
 
@@ -429,15 +426,15 @@ GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
 # testuser can query transactions since it has the VIEWACTIVITYREDACTED privilege.
 user testuser
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
 user root
 
@@ -479,10 +476,10 @@ SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  column_id  column_name  column_type  nullable  default_expr  hidden
 
-query ITITTBBBBFITT colnames
+query ITITTBBBBITT colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted  is_sharded  is_visible  visibility  shard_bucket_count  created_at  create_statement
+descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted  is_sharded  is_visible  shard_bucket_count  created_at  create_statement
 
 query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
@@ -554,7 +551,6 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
-skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -629,9 +625,9 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-1000023.1
+23.1
 
-query ITTT colnames,rowsort
+query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
@@ -783,7 +779,7 @@ SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-1000023.1
+23.1
 
 user root
 
@@ -854,7 +850,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,rowsort
+query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -888,7 +884,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,retry,rowsort
+query TT colnames,retry
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -916,7 +912,7 @@ ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
 statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
-query TT colnames,retry,rowsort
+query TT colnames,retry
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty    end_pretty
@@ -932,7 +928,7 @@ DROP INDEX foo@idx
 
 # Verify only the start keys of the manually split ranges because the merge queue could merge the
 # ranges [/Table/58/1/3, /Table/58/2/1) with its right neighbors.
-query T colnames,retry,rowsort
+query T colnames,retry
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty
@@ -1016,7 +1012,7 @@ CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 
 query ITTITTT
-SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
+SELECT * FROM crdb_internal.create_type_statements
 ----
 104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 104  test  public  118  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
@@ -1054,7 +1050,7 @@ statement ok
 SELECT * FROM t_53504
 
 query ITTTI colnames
-SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
+SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
 node_id  application_name     key                   statement_ids                                                  count
 1        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
@@ -1069,7 +1065,7 @@ subtest cluster_database_privileges
 statement ok
 CREATE DATABASE other_db; SET DATABASE = other_db
 
-query TTTT colnames,rowsort
+query TTTT colnames
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee  privilege_type  is_grantable
@@ -1081,7 +1077,7 @@ statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser;
 GRANT DROP ON DATABASE other_db TO testuser
 
-query TTTT colnames,rowsort
+query TTTT colnames
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -1110,7 +1106,7 @@ SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 29, 'badobj', 502, true);
 SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 404, 'badobj', 503, true);
 
 query ITTTT colnames
-SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id
+SELECT * FROM "".crdb_internal.invalid_objects
 ----
 id   database_name  schema_name  obj_name  error
 500  baddb          ·            ·         referenced descriptor not found
@@ -1343,13 +1339,11 @@ awaitstatement sleepQuery
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
@@ -1363,16 +1357,8 @@ SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
-
-subtest pretty_value
-
-query T
-SELECT crdb_internal.pretty_value('\x170995790a3609616d7374657264616d1cc28f5c28f5c2400080000000000000261cbbbbbbbbbbbb4800800000000000000b161b32313030312053636f747420537175617265205375697465203337161b313537333120477265676f7279205669657773204170742e20373818cabca3c10b0018ea97a9c10b001504348a2260')
-----
-/TUPLE/3:3:Bytes/amsterdam/1:4:UUID/c28f5c28-f5c2-4000-8000-000000000026/1:5:UUID/bbbbbbbb-bbbb-4800-8000-00000000000b/1:6:Bytes/21001 Scott Square Suite 37/1:7:Bytes/15731 Gregory Views Apt. 78/1:8:Time/2018-12-15T03:04:05Z/1:9:Time/2018-12-15T16:04:05Z/1:10:Decimal/88.00
 
 # test privileges/roles for contention related tables
 user testuser

@@ -39,12 +39,11 @@ import (
 // make it shorter.
 func registerSnapshotOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/snapshot-overload",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(8)),
-		Leases:    registry.MetamorphicLeases,
+		Name:    "admission-control/snapshot-overload",
+		Owner:   registry.OwnerAdmissionControl,
+		Tags:    []string{`weekly`},
+		Cluster: r.MakeClusterSpec(4, spec.CPU(8)),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
@@ -81,6 +80,10 @@ func registerSnapshotOverload(r registry.Registry) {
 				if _, err := db.ExecContext(
 					ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '256MiB'"); err != nil {
 					t.Fatalf("failed to set kv.snapshot_rebalance.max_rate: %v", err)
+				}
+				if _, err := db.ExecContext(
+					ctx, "SET CLUSTER SETTING kv.snapshot_recovery.max_rate = '256MiB'"); err != nil {
+					t.Fatalf("failed to set kv.snapshot_recovery.max_rate: %v", err)
 				}
 			}
 

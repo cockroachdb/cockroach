@@ -17,13 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,18 +110,7 @@ func Example_rebalance() {
 	s.ApplyLoad(le)
 
 	// Do the rebalance.
-	c := &state.ReplicaChange{
-		RangeID: 1,
-		Author:  1,
-		Changes: append(kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
-			NodeID:  4,
-			StoreID: 4,
-		}), kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, roachpb.ReplicationTarget{
-			NodeID:  1,
-			StoreID: 1,
-		})...),
-		Wait: 0,
-	}
+	c := &state.ReplicaChange{RangeID: 1, Add: 2, Remove: 1, Author: 1}
 	c.Apply(s)
 
 	m.Tick(ctx, start, s)

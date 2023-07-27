@@ -58,7 +58,6 @@ SHOW TENANTS WITH CAPABILITIES
 1 system ready shared can_admin_split true
 1 system ready shared can_admin_unsplit true
 1 system ready shared can_check_consistency true
-1 system ready shared can_debug_process true
 1 system ready shared can_use_nodelocal_storage true
 1 system ready shared can_view_node_info true
 1 system ready shared can_view_tsdb_metrics true
@@ -69,7 +68,6 @@ SHOW TENANTS WITH CAPABILITIES
 2 template ready none can_admin_split true
 2 template ready none can_admin_unsplit true
 2 template ready none can_check_consistency true
-2 template ready none can_debug_process true
 2 template ready none can_use_nodelocal_storage true
 2 template ready none can_view_node_info true
 2 template ready none can_view_tsdb_metrics true
@@ -80,7 +78,6 @@ SHOW TENANTS WITH CAPABILITIES
 3 application ready shared can_admin_split true
 3 application ready shared can_admin_unsplit true
 3 application ready shared can_check_consistency true
-3 application ready shared can_debug_process true
 3 application ready shared can_use_nodelocal_storage true
 3 application ready shared can_view_node_info true
 3 application ready shared can_view_tsdb_metrics true

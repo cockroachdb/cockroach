@@ -78,7 +78,7 @@ describe("SQLStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
           data: sqlStatsResponse,
-          error: null,
+          lastError: null,
           valid: true,
           lastUpdated,
           inFlight: false,
@@ -94,7 +94,7 @@ describe("SQLStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
           data: null,
-          error: error,
+          lastError: error,
           valid: false,
           lastUpdated,
           inFlight: false,
@@ -115,7 +115,7 @@ describe("SQLStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
           data: null,
-          error: null,
+          lastError: null,
           valid: false,
           lastUpdated: null,
           inFlight: false,
@@ -131,7 +131,7 @@ describe("SQLStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({
           data: null,
-          error: err,
+          lastError: err,
           valid: false,
           lastUpdated,
           inFlight: false,

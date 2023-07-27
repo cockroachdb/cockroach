@@ -1,8 +1,0 @@
-# LogicTest: local-mixed-22.2-23.1
-# TODO(otan): add tests for mixed 23.1-23.2.
-
-statement error must be finalized to use pg_lsn
-SELECT '1010F/AAAA'::text::pg_lsn
-
-statement error pg_lsn not supported until version 23.2
-CREATE TABLE pg_lsn_table(id pg_lsn, val pg_lsn)

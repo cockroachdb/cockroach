@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.storage.enginepb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
-import "kv/kvserver/concurrency/isolation/levels.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -26,14 +25,13 @@ message TxnMeta {
   bytes id = 1 [(gogoproto.customname) = "ID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.nullable) = false];
+  reserved 2;
   // key is the key which anchors the transaction. This is typically
   // the first key read or written during the transaction and
   // determines which range in the cluster will hold the transaction
   // record.
   bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
-  // iso_level is the isolation level of the transaction.
-  cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 2;
-  // epoch is the current epoch of the transaction.
+  // Incremented on txn retry.
   int32 epoch = 4 [(gogoproto.casttype) = "TxnEpoch"];
   // The proposed timestamp for the transaction. This starts as the current wall
   // time on the txn coordinator, and is forwarded by the timestamp cache if the
@@ -53,9 +51,11 @@ message TxnMeta {
   // Note that reads do not occur at this timestamp; they instead occur at
   // ReadTimestamp, which is tracked in the containing roachpb.Transaction.
   //
-  // Writes used to be performed at the txn's read timestamp before 57d02014.
-  // However, there are now several important reasons to perform writes at the
-  // write timestamp instead of the txn's read timestamp:
+  // Writes used to be performed at the txn's read timestamp, which was
+  // necessary to avoid lost update anomalies in snapshot isolation mode. We no
+  // longer support snapshot isolation mode, and there are now several important
+  // reasons that writes are performed at this timestamp instead of the txn's
+  // original timestamp:
   //
   //    1. This timestamp is forwarded by the timestamp cache when this
   //       transaction attempts to write beneath a more recent read. Leaving the
@@ -246,6 +246,70 @@ message MVCCStatsDelta {
   // whole message is marked as safe for log redaction.
 }
 
+// MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
+// width encodings for most fields that make it efficient to store positive
+// values but inefficient to store negative values. This makes the encodings
+// incompatible.
+message MVCCPersistentStats {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  int64 contains_estimates = 14; // must never go negative absent a bug
+  sfixed64 last_update_nanos = 1;
+  sfixed64 intent_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  int64 live_bytes = 4;
+  int64 live_count = 5;
+  int64 key_bytes = 6;
+  int64 key_count = 7;
+  int64 val_bytes = 8;
+  int64 val_count = 9;
+  int64 intent_bytes = 10;
+  int64 intent_count = 11;
+  int64 separated_intent_count = 16;
+  int64 range_key_count = 17;
+  int64 range_key_bytes = 18;
+  int64 range_val_count = 19;
+  int64 range_val_bytes = 20;
+  int64 sys_bytes = 12;
+  int64 sys_count = 13;
+  int64 abort_span_bytes = 15;
+}
+
+// RangeAppliedState combines the raft and lease applied indices with
+// mvcc stats. These are all persisted on each transition of the Raft
+// state machine (i.e. on each Raft application), so they are stored
+// in the same RocksDB key for efficiency.
+message RangeAppliedState {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // raft_applied_index is the highest (and last) index applied to the Raft
+  // state machine.
+  uint64 raft_applied_index = 1;
+  // lease_applied_index is the highest (and last) lease index applied to the
+  // Raft state machine.
+  uint64 lease_applied_index = 2;
+  // range_stats is the set of mvcc stats that accounts for the current value
+  // of the Raft state machine.
+  MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+
+  // raft_closed_timestamp is the largest timestamp that is known to have been
+  // closed through Raft commands as of this lease applied index. This means
+  // that the current leaseholder (if any) and any future leaseholder will not
+  // evaluate writes at or below this timestamp, and also that any in-flight
+  // commands that can still apply are writing at higher timestamps.
+  // Non-leaseholder replicas are free to serve "follower reads" at or below
+  // this timestamp.
+  util.hlc.Timestamp raft_closed_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // raft_applied_index_term is the term corresponding to raft_applied_index.
+  // The serialized proto will not contain this field until code starts
+  // setting it to a value > 0 (in v22.1). This is desirable since we don't
+  // want a mixed version cluster (v21.2 and v22.1) to have divergent replica
+  // state simply because we have introduced this field.
+  uint64 raft_applied_index_term = 5;
+}
 
 // MVCCWriteValueOp corresponds to a value being written outside of a
 // transaction. Inline values (without timestamp) are not logged.
@@ -264,7 +328,6 @@ message MVCCWriteIntentOp {
     (gogoproto.customname) = "TxnID",
     (gogoproto.nullable) = false];
   bytes txn_key = 2;
-  cockroach.kv.kvserver.concurrency.isolation.Level txn_iso_level = 5;
   util.hlc.Timestamp txn_min_timestamp = 4 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
 }

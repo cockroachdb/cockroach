@@ -105,7 +105,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test fails within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

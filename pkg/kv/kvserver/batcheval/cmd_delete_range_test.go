@@ -18,8 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -59,7 +57,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 		t.Helper()
 		var localTS hlc.ClockTimestamp
 
-		txn := roachpb.MakeTransaction("test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 5e9}, 0, 0)
+		txn := roachpb.MakeTransaction("test", nil /* baseKey */, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 5e9}, 0, 0)
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("b"), hlc.Timestamp{WallTime: 2e9}, localTS, roachpb.MakeValueFromString("b2"), nil))
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("c"), hlc.Timestamp{WallTime: 4e9}, localTS, roachpb.MakeValueFromString("c4"), nil))
 		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 2e9}, localTS, roachpb.MakeValueFromString("d2"), nil))
@@ -217,8 +215,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 						Timestamp: rangeKey.Timestamp,
 					}
 					if tc.txn {
-						txn := roachpb.MakeTransaction(
-							"txn", nil, isolation.Serializable, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
+						txn := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
 						h.Txn = &txn
 					}
 					var predicates kvpb.DeleteRangePredicates
@@ -253,8 +250,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 					// the additional seeks necessary to check for adjacent range keys that we
 					// may merge with (for stats purposes) which should not cross the range
 					// bounds.
-					var latchSpans spanset.SpanSet
-					var lockSpans lockspanset.LockSpanSet
+					var latchSpans, lockSpans spanset.SpanSet
 					declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0)
 					batch := spanset.NewBatchAt(engine.NewBatch(), &latchSpans, h.Timestamp)
 					defer batch.Close()

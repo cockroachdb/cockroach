@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -39,8 +39,8 @@ import (
 
 type mockIntentResolver struct {
 	pushTxn        func(context.Context, *enginepb.TxnMeta, kvpb.Header, kvpb.PushTxnType) (*roachpb.Transaction, *Error)
-	resolveIntent  func(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
-	resolveIntents func(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+	resolveIntent  func(context.Context, roachpb.LockUpdate) *Error
+	resolveIntents func(context.Context, []roachpb.LockUpdate) *Error
 }
 
 // mockIntentResolver implements the IntentResolver interface.
@@ -51,15 +51,15 @@ func (m *mockIntentResolver) PushTransaction(
 }
 
 func (m *mockIntentResolver) ResolveIntent(
-	ctx context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
 ) *Error {
-	return m.resolveIntent(ctx, intent, opts)
+	return m.resolveIntent(ctx, intent)
 }
 
 func (m *mockIntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
 ) *Error {
-	return m.resolveIntents(ctx, intents, opts)
+	return m.resolveIntents(ctx, intents)
 }
 
 type mockLockTableGuard struct {
@@ -84,7 +84,7 @@ func (g *mockLockTableGuard) CurState() waitingState {
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
 }
-func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
+func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool) {
 	return true
 }
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
@@ -133,7 +133,7 @@ func setupLockTableWaiterTest() (
 }
 
 func makeTxnProto(name string) roachpb.Transaction {
-	return roachpb.MakeTransaction(name, []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6)
+	return roachpb.MakeTransaction(name, []byte("key"), 0, hlc.Timestamp{WallTime: 10}, 0, 6)
 }
 
 // TestLockTableWaiterWithTxn tests the lockTableWaiter's behavior under
@@ -318,14 +318,14 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 
 			req := makeReq()
 			g.state = waitingState{
-				kind:          k,
-				txn:           &pusheeTxn.TxnMeta,
-				key:           keyA,
-				held:          lockHeld,
-				guardStrength: lock.None,
+				kind:        k,
+				txn:         &pusheeTxn.TxnMeta,
+				key:         keyA,
+				held:        lockHeld,
+				guardAccess: spanset.SpanReadOnly,
 			}
 			if waitAsWrite {
-				g.state.guardStrength = lock.Intent
+				g.state.guardAccess = spanset.SpanReadWrite
 			}
 			g.notify()
 
@@ -337,9 +337,8 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				return
 			}
 
-			// Non-transactional requests without a timeout do not push transactions
-			// that have claimed a lock; they only push lock holders. Instead, they
-			// wait for doneWaiting.
+			// Non-transactional requests without a timeout do not push
+			// reservations, only locks. They wait for doneWaiting.
 			if req.Txn == nil && !lockHeld {
 				defer notifyUntilDone(t, g)()
 				err := w.WaitOn(ctx, req, g)
@@ -372,13 +371,11 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 						require.Equal(t, pusheeTxn.ID, txn.ID)
 						require.Equal(t, roachpb.ABORTED, txn.Status)
 					}
-					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
+					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
 						require.Zero(t, intent.ClockWhilePending)
-						require.True(t, opts.Poison)
-						require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -499,7 +496,7 @@ func testErrorWaitPush(
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
 		testutils.RunTrueAndFalse(t, "pusheeActive", func(t *testing.T, pusheeActive bool) {
 			if !lockHeld && !pusheeActive {
-				// !lockHeld means a lock claim, so is only possible when
+				// !lockHeld means a lock reservation, so is only possible when
 				// pusheeActive is true.
 				skip.IgnoreLint(t, "incompatible params")
 			}
@@ -510,11 +507,11 @@ func testErrorWaitPush(
 
 			req := makeReq()
 			g.state = waitingState{
-				kind:          k,
-				txn:           &pusheeTxn.TxnMeta,
-				key:           keyA,
-				held:          lockHeld,
-				guardStrength: lock.None,
+				kind:        k,
+				txn:         &pusheeTxn.TxnMeta,
+				key:         keyA,
+				held:        lockHeld,
+				guardAccess: spanset.SpanReadOnly,
 			}
 			g.notify()
 
@@ -558,13 +555,11 @@ func testErrorWaitPush(
 					require.Equal(t, pusheeTxn.ID, txn.ID)
 					require.Equal(t, roachpb.ABORTED, txn.Status)
 				}
-				ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
+				ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 					require.Equal(t, keyA, intent.Key)
 					require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 					require.Equal(t, roachpb.ABORTED, intent.Status)
 					require.Zero(t, intent.ClockWhilePending)
-					require.True(t, opts.Poison)
-					require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
 					g.state = waitingState{kind: doneWaiting}
 					g.notify()
 					return nil
@@ -659,7 +654,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					skip.IgnoreLint(t, "incompatible params")
 				}
 				if !lockHeld && !pusheeActive {
-					// !lockHeld means a lock is claimed, so is only possible when
+					// !lockHeld means a lock reservation, so is only possible when
 					// pusheeActive is true.
 					skip.IgnoreLint(t, "incompatible params")
 				}
@@ -670,11 +665,11 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 
 				req := makeReq()
 				g.state = waitingState{
-					kind:          k,
-					txn:           &pusheeTxn.TxnMeta,
-					key:           keyA,
-					held:          lockHeld,
-					guardStrength: lock.Intent,
+					kind:        k,
+					txn:         &pusheeTxn.TxnMeta,
+					key:         keyA,
+					held:        lockHeld,
+					guardAccess: spanset.SpanReadWrite,
 				}
 				g.notify()
 
@@ -747,13 +742,11 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						require.Equal(t, pusheeTxn.ID, txn.ID)
 						require.Equal(t, roachpb.ABORTED, txn.Status)
 					}
-					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
+					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
 						require.Zero(t, intent.ClockWhilePending)
-						require.True(t, opts.Poison)
-						require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -804,11 +797,11 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		pusheeTxn := makeTxnProto("pushee")
 		lockHeld := sync
 		g.state = waitingState{
-			kind:          waitForDistinguished,
-			txn:           &pusheeTxn.TxnMeta,
-			key:           keyA,
-			held:          lockHeld,
-			guardStrength: lock.Intent,
+			kind:        waitForDistinguished,
+			txn:         &pusheeTxn.TxnMeta,
+			key:         keyA,
+			held:        lockHeld,
+			guardAccess: spanset.SpanReadWrite,
 		}
 
 		// Errors are propagated when observed while pushing transactions.
@@ -829,7 +822,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			) (*roachpb.Transaction, *Error) {
 				return &pusheeTxn, nil
 			}
-			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
+			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 				return err2
 			}
 			err = w.WaitOn(ctx, req, g)
@@ -859,8 +852,8 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	pusheeTxn.Status = roachpb.ABORTED
 
 	g.state = waitingState{
-		kind:          doneWaiting,
-		guardStrength: lock.Intent,
+		kind:        doneWaiting,
+		guardAccess: spanset.SpanReadWrite,
 	}
 	g.toResolve = []roachpb.LockUpdate{
 		roachpb.MakeLockUpdate(&pusheeTxn, roachpb.Span{Key: keyA}),
@@ -869,14 +862,12 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 
 	// Errors are propagated when observed while resolving batches of intents.
 	err1 := kvpb.NewErrorf("error1")
-	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
+	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate) *Error {
 		require.Len(t, intents, 1)
 		require.Equal(t, keyA, intents[0].Key)
 		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
 		require.Equal(t, roachpb.ABORTED, intents[0].Status)
 		require.Zero(t, intents[0].ClockWhilePending)
-		require.True(t, opts.Poison)
-		require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
 		return err1
 	}
 	err := w.WaitOn(ctx, req, g)

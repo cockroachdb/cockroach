@@ -190,24 +190,6 @@ CREATE TABLE messages_global (
 ) LOCALITY GLOBAL
 
 statement ok
-CREATE TABLE messages_global_2 (
-    account_id INT NOT NULL,
-    message_id   UUID DEFAULT gen_random_uuid(),
-    message    STRING NOT NULL,
-    PRIMARY KEY (account_id),
-    INDEX msg_idx(message)
-) LOCALITY GLOBAL
-
-statement ok
-CREATE TABLE messages_global_3 (
-    account_id INT NOT NULL,
-    message_id   UUID DEFAULT gen_random_uuid(),
-    message    STRING NOT NULL,
-    PRIMARY KEY (account_id),
-    INDEX msg_idx(message)
-) LOCALITY GLOBAL
-
-statement ok
 CREATE TABLE messages_rbt (
     account_id INT NOT NULL,
     message_id   UUID DEFAULT gen_random_uuid(),
@@ -626,7 +608,7 @@ SELECT * FROM parent LIMIT 1
 1
 
 query T retry
-EXPLAIN (OPT) SELECT * FROM parent LIMIT 1
+EXPLAIN(OPT) SELECT * FROM parent LIMIT 1
 ----
 locality-optimized-search
  ├── scan parent
@@ -707,7 +689,7 @@ AND rbr.crdb_region = 'ap-southeast-2'
 ----
 
 query T retry
-EXPLAIN (OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
+EXPLAIN(OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
 project
@@ -727,7 +709,7 @@ AND rbr.crdb_region = 'ap-southeast-2'
 ----
 
 query T retry
-EXPLAIN (OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
+EXPLAIN(OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
 project
@@ -740,13 +722,13 @@ project
 
 # A lookup join with a global table as either input should be allowed.
 query TTTTTT retry
-SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
+SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
 ----
 
 query T retry
-EXPLAIN (OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
+EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
 ----
-inner-join (lookup messages_global_2 [as=g2])
+inner-join (lookup messages_global [as=g2])
  ├── flags: force lookup join (into right side)
  ├── lookup columns are key
  ├── scan messages_global [as=g1]
@@ -754,18 +736,18 @@ inner-join (lookup messages_global_2 [as=g2])
 
 # A join relation with local home region as the left input of lookup join should be allowed.
 query TTTTTTTTT retry
-SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global_3 g3 ON g2.account_id = g3.account_id
+SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 ----
 
 query T retry
-EXPLAIN (OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global_2 g2 ON g1.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global_3 g3 ON g2.account_id = g3.account_id
+EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 ----
-inner-join (lookup messages_global_3 [as=g3])
+inner-join (lookup messages_global [as=g3])
  ├── flags: force lookup join (into right side)
  ├── lookup columns are key
- ├── inner-join (lookup messages_global_2 [as=g2])
+ ├── inner-join (lookup messages_global [as=g2])
  │    ├── flags: force lookup join (into right side)
  │    ├── lookup columns are key
  │    ├── scan messages_global [as=g1]
@@ -777,29 +759,29 @@ inner-join (lookup messages_global_3 [as=g3])
 retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 
 # The explicit REGIONAL BY ROW AS column name should be used in the error
 # message if it differs from the default crdb_region.
 retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region_alt and/or on key column \(rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM messages_rbr_alt rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 
 # A lookup join relation with a left input join relation which uses locality
 # optimized scan in one of the tables of the lookup join should be allowed.
 query TTTTTTTTT retry
 SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
   messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 ----
 
 query T retry
-EXPLAIN (OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
+EXPLAIN(OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
   messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global_2 g3 ON g2.account_id = g3.account_id
+  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 ----
-inner-join (lookup messages_global_2 [as=g3])
+inner-join (lookup messages_global [as=g3])
  ├── flags: force lookup join (into right side)
  ├── lookup columns are key
  ├── inner-join (lookup messages_global [as=g2])
@@ -841,7 +823,7 @@ SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 query T nodeidx=4
 SET enforce_home_region = true;
 USE multi_region_test_db;
-EXPLAIN (OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 ----
 project
  └── scan messages_rbr@msg_idx
@@ -867,7 +849,7 @@ SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 Hello, Region!
 
 query T retry
-EXPLAIN (OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 ----
 project
  └── scan messages_rbr@msg_idx
@@ -992,7 +974,7 @@ SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON 
 ----
 
 query T retry
-EXPLAIN (OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
+EXPLAIN(OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
 ----
 project
  └── inner-join (lookup json_arr1_rbt [as=t1])
@@ -1020,7 +1002,7 @@ AND t1.crdb_region = 'ap-southeast-2'
 # A local inverted join should not have high cost estimates (due to
 # `largeDistributeCost`).
 query T retry
-EXPLAIN (OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
+EXPLAIN(OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
 AND t1.crdb_region = 'ap-southeast-2' LIMIT 1
 ----
 project

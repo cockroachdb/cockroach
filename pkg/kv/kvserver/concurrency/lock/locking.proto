@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.kv.kvserver.concurrency.lock;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock";
 
-import "kv/kvserver/concurrency/isolation/levels.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 
@@ -131,11 +130,10 @@ enum Strength {
 //
 // The protection a lock offers is primarily determined by the Strength it is
 // held with. However, lock Modes also contain auxiliary information (eg. the
-// timestamp at which the lock was acquired, the isolation level associated with
-// a non-locking read), which may be used in conjunction with a lock's Strength
-// to resolve conflicts between a lock holder and a concurrent overlapping
-// request. This allows us to codify conflict rules as a pure function of 2 lock
-// Modes.
+// timestamp at which the lock was acquired), which may be used in conjunction
+// with a lock's Strength to resolve conflicts between a lock holder and a
+// concurrent lock acquirer. This allows us to codify conflict rules as a pure
+// function of 2 lock Modes.
 //
 // Users of the key-value layer are expected to indicate locking intentions
 // using lock Strengths; lock Mode is an internal concept for the concurrency
@@ -169,29 +167,21 @@ enum Strength {
 // lock's timestamp. If the read's timestamp is below the Intent lock's
 // timestamp then the two are compatible.
 //
-// [*] until the re-introduction of weaker isolation levels, all transactions in
-// CockroachDB used serializable isolation. Historically, CockroachDB did not
-// make a strength distinction between Exclusive locks and Intents. As such,
-// reads under concurrency control would conflict with Exclusive locks if the
-// read's timestamp was at or above the Exclusive lock's timestamp. Now that
-// there is such a distinction, non-locking reads from serializable transactions
-// do not block on Exclusive locks, regardless of their timestamp. However,
-// there is a desire to let users opt into the old behavior using the
-// ExclusiveLocksBlockNonLockingReads cluster setting. Note that this only
-// applies when both the non-locking read and Exclusive lock belong to
-// serializable  transactions, as that's the only "old" behavior to speak of
-// here.
+// [*] historically, CockroachDB did not make a strength distinction between
+// Exclusive locks and Intents. As such, reads under optimistic concurrency
+// control would conflict with Exclusive locks if the read's timestamp was at or
+// above the Exclusive lock's timestamp. Now that there is a distinction between
+// Exclusive locks and Intents, non-locking reads do not block on Exclusive
+// locks, regardless of their timestamp. However, there is a desire to let users
+// opt into the old behavior using the ExclusiveLocksBlockNonLockingReads
+// cluster setting.
 message Mode {
   // Strength in which the lock is held.
   Strength strength = 1;
 
-  // Timestamp at which the lock was/is being acquired. This field must (and
-  // only) be set for None, Exclusive, and Intent locking strengths.
+  // Timestamp at which the lock was/is being acquired. This field must be set
+  // for None, Exclusive, and Intent locking strengths.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable)=false];
-
-  // IsoLevel is the isolation level of the associated transaction. This field
-  // is only set for None and Exclusive locking strength.
-  cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 3;
 }
 
 // Durability represents the different durability properties of a lock acquired

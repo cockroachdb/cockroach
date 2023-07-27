@@ -103,7 +103,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		ExternalIODir: dir,
 		// Some scheduled backup tests fail when run within a tenant. More
 		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
 		},
@@ -1487,7 +1487,6 @@ WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, f
 		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
-		ApplicationName:         "$ internal-exec-backup",
 		RecoveryType:            scheduledBackupEventType,
 		TargetScope:             clusterScope.String(),
 		TargetCount:             1,

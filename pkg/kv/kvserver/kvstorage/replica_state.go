@@ -29,7 +29,7 @@ import (
 // TODO(pavelkalinnikov): integrate with kvstorage.Replica.
 type LoadedReplicaState struct {
 	ReplicaID roachpb.ReplicaID
-	LastIndex kvpb.RaftIndex
+	LastIndex uint64
 	ReplState kvserverpb.ReplicaState
 
 	hardState raftpb.HardState
@@ -116,7 +116,7 @@ func CreateUninitializedReplica(
 	// Before creating the replica, see if there is a tombstone which would
 	// indicate that this replica has been removed.
 	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-	var tombstone kvserverpb.RangeTombstone
+	var tombstone roachpb.RangeTombstone
 	if ok, err := storage.MVCCGetProto(
 		ctx, eng, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 	); err != nil {

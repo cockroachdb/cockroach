@@ -25,9 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -210,7 +209,7 @@ func splitTxnAttempt(
 	}
 
 	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason, true /* logAsync */); err != nil {
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason); err != nil {
 		return err
 	}
 
@@ -416,7 +415,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 				// NB: we have to wrap the existing error here as consumers of this code
 				// look at the root cause to sniff out the changed descriptor.
-				err = benignerror.New(wrapDescChangedError(err, desc, actualDesc))
+				err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
 			}
 			return reply, err
 		}
@@ -450,7 +449,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = benignerror.New(wrapDescChangedError(err, desc, actualDesc))
+			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -526,7 +525,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = benignerror.New(wrapDescChangedError(err, desc, actualDesc))
+			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
 		}
 		return reply, err
 	}
@@ -718,7 +717,11 @@ func (r *Replica) AdminMerge(
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
 		// Log the merge into the range event log.
-		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc, true /* logAsync */); err != nil {
+		// TODO(spencer): event logging API should accept a batch
+		// instead of a transaction; there's no reason this logging
+		// shouldn't be done in parallel via the batch with the updated
+		// range addressing.
+		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc); err != nil {
 			return err
 		}
 
@@ -769,7 +772,7 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*kvpb.SubsumeResponse)
 
-		err = timeutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
+		err = contextutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
 			func(ctx context.Context) error {
 				if disableWaitForReplicasInTesting {
 					return nil
@@ -789,13 +792,12 @@ func (r *Replica) AdminMerge(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					LeftDesc:                   updatedLeftDesc,
-					RightDesc:                  rightDesc,
-					RightMVCCStats:             rhsSnapshotRes.MVCCStats,
-					RightRangeIDLocalMVCCStats: rhsSnapshotRes.RangeIDLocalMVCCStats,
-					FreezeStart:                rhsSnapshotRes.FreezeStart,
-					RightClosedTimestamp:       rhsSnapshotRes.ClosedTimestamp,
-					RightReadSummary:           rhsSnapshotRes.ReadSummary,
+					LeftDesc:             updatedLeftDesc,
+					RightDesc:            rightDesc,
+					RightMVCCStats:       rhsSnapshotRes.MVCCStats,
+					FreezeStart:          rhsSnapshotRes.FreezeStart,
+					RightClosedTimestamp: rhsSnapshotRes.ClosedTimestamp,
+					RightReadSummary:     rhsSnapshotRes.ReadSummary,
 				},
 			},
 		})
@@ -842,7 +844,7 @@ func waitForApplication(
 	dialer *nodedialer.Dialer,
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
-	leaseIndex kvpb.LeaseAppliedIndex,
+	leaseIndex uint64,
 ) error {
 	g := ctxgroup.WithContext(ctx)
 	for _, repl := range replicas {
@@ -873,7 +875,7 @@ func waitForReplicasInit(
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 ) error {
-	return timeutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
@@ -1031,7 +1033,7 @@ func (r *Replica) changeReplicasImpl(
 	if err := validateReplicationChanges(desc, chgs); err != nil {
 		return nil, errors.Mark(err, errMarkInvalidReplicationChange)
 	}
-	targets := SynthesizeTargetsByChangeType(chgs)
+	targets := synthesizeTargetsByChangeType(chgs)
 
 	// NB: As of the time of this writing,`AdminRelocateRange` will only execute
 	// replication changes one by one. Thus, the order in which we execute the
@@ -1059,7 +1061,7 @@ func (r *Replica) changeReplicasImpl(
 	// NB: Promotions and demotions of LEARNER replicas are handled implicitly
 	// during the addition or removal of voting replicas and are not handled
 	// here.
-	swaps := getInternalChangesForExplicitPromotionsAndDemotions(targets.VoterDemotions, targets.NonVoterPromotions)
+	swaps := getInternalChangesForExplicitPromotionsAndDemotions(targets.voterDemotions, targets.nonVoterPromotions)
 	if len(swaps) > 0 {
 		desc, err = execChangeReplicasTxn(ctx, r.store.cfg.Tracer(), desc, reason, details, swaps, changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
@@ -1073,7 +1075,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if adds := targets.VoterAdditions; len(adds) > 0 {
+	if adds := targets.voterAdditions; len(adds) > 0 {
 		// For all newly added voters, first add LEARNER replicas. They accept raft
 		// traffic (so they can catch up) but don't get to vote (so they don't
 		// affect quorum and thus don't introduce fragility into the system). For
@@ -1092,10 +1094,10 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if len(targets.VoterAdditions)+len(targets.VoterRemovals) > 0 {
+	if len(targets.voterAdditions)+len(targets.voterRemovals) > 0 {
 		desc, err = r.execReplicationChangesForVoters(
 			ctx, desc, reason, details,
-			targets.VoterAdditions, targets.VoterRemovals,
+			targets.voterAdditions, targets.voterRemovals,
 		)
 		if err != nil {
 			// If the error occurred while transitioning out of an atomic replication
@@ -1108,7 +1110,7 @@ func (r *Replica) changeReplicasImpl(
 			}
 			// Don't leave a learner replica lying around if we didn't succeed in
 			// promoting it to a voter.
-			if adds := targets.VoterAdditions; len(adds) > 0 {
+			if adds := targets.voterAdditions; len(adds) > 0 {
 				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
 				for _, target := range adds {
 					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
@@ -1118,7 +1120,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if adds := targets.NonVoterAdditions; len(adds) > 0 {
+	if adds := targets.nonVoterAdditions; len(adds) > 0 {
 		// Add all non-voters and send them initial snapshots since some callers of
 		// `AdminChangeReplicas` (notably the mergeQueue, via `AdminRelocateRange`)
 		// care about only dealing with replicas that are mostly caught up with the
@@ -1137,7 +1139,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if removals := targets.NonVoterRemovals; len(removals) > 0 {
+	if removals := targets.nonVoterRemovals; len(removals) > 0 {
 		for _, rem := range removals {
 			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemoveNonVoter}}
 			var err error
@@ -1155,7 +1157,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if len(targets.VoterDemotions) > 0 {
+	if len(targets.voterDemotions) > 0 {
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
@@ -1165,15 +1167,13 @@ func (r *Replica) changeReplicasImpl(
 	return desc, nil
 }
 
-// TargetsForReplicationChanges is a grouped representation of a replication
-// change.
-type TargetsForReplicationChanges struct {
-	VoterDemotions, NonVoterPromotions  []roachpb.ReplicationTarget
-	VoterAdditions, VoterRemovals       []roachpb.ReplicationTarget
-	NonVoterAdditions, NonVoterRemovals []roachpb.ReplicationTarget
+type targetsForReplicationChanges struct {
+	voterDemotions, nonVoterPromotions  []roachpb.ReplicationTarget
+	voterAdditions, voterRemovals       []roachpb.ReplicationTarget
+	nonVoterAdditions, nonVoterRemovals []roachpb.ReplicationTarget
 }
 
-// SynthesizeTargetsByChangeType groups replication changes in the
+// synthesizeTargetsByChangeType groups replication changes in the
 // manner they are intended to be executed by AdminChangeReplicas.
 //
 // In particular, it coalesces ReplicationChanges of types ADD_VOTER and
@@ -1181,21 +1181,21 @@ type TargetsForReplicationChanges struct {
 // and likewise, ADD_NON_VOTER and REMOVE_VOTER changes for a given target as
 // demotions of voters into non-voters. The rest of the changes are handled
 // distinctly and are thus segregated in the return result.
-func SynthesizeTargetsByChangeType(
+func synthesizeTargetsByChangeType(
 	chgs kvpb.ReplicationChanges,
-) (result TargetsForReplicationChanges) {
+) (result targetsForReplicationChanges) {
 	// Isolate the promotions to voters and the demotions to non-voters from the
 	// rest of the changes, since we want to handle these together and execute
 	// atomic swaps of voters <-> non-voters if possible.
-	result.VoterDemotions = intersectTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
-	result.NonVoterPromotions = intersectTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
+	result.voterDemotions = intersectTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
+	result.nonVoterPromotions = intersectTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
 
 	// Synthesize the additions and removals that shouldn't get executed as
 	// promotions of non-voters or demotions of voters.
-	result.VoterAdditions = subtractTargets(chgs.VoterAdditions(), chgs.NonVoterRemovals())
-	result.VoterRemovals = subtractTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
-	result.NonVoterAdditions = subtractTargets(chgs.NonVoterAdditions(), chgs.VoterRemovals())
-	result.NonVoterRemovals = subtractTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
+	result.voterAdditions = subtractTargets(chgs.VoterAdditions(), chgs.NonVoterRemovals())
+	result.voterRemovals = subtractTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
+	result.nonVoterAdditions = subtractTargets(chgs.NonVoterAdditions(), chgs.VoterRemovals())
+	result.nonVoterRemovals = subtractTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
 
 	return result
 }
@@ -1994,7 +1994,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	rollbackCtx = logtags.AddTags(rollbackCtx, logtags.FromContext(ctx))
-	if err := timeutil.RunWithTimeout(
+	if err := contextutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
 		log.Infof(
@@ -2417,13 +2417,13 @@ func execChangeReplicasTxn(
 
 			// Log replica change into range event log.
 			err = recordRangeEventsInLog(
-				ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, true /* logAsync */, args.logChange,
+				ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
 			)
 			if err != nil {
 				return err
 			}
 			err = recordRangeEventsInLog(
-				ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, true /* logAsync */, args.logChange,
+				ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
 			)
 			if err != nil {
 				return err
@@ -2464,7 +2464,7 @@ func execChangeReplicasTxn(
 			// as "secondary payload", in case the error object makes it way
 			// to logs or telemetry during a crash.
 			err = errors.WithSecondaryError(newDescChangedError(referenceDesc, actualDesc), err)
-			err = benignerror.New(err)
+			err = &benignError{err}
 		}
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}
@@ -2501,7 +2501,6 @@ type logChangeFn func(
 	desc roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
-	logAsync bool,
 ) error
 
 func recordRangeEventsInLog(
@@ -2512,7 +2511,6 @@ func recordRangeEventsInLog(
 	rangeDesc *roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
-	logAsync bool,
 	logChange logChangeFn,
 ) error {
 	for _, repDesc := range repDescs {
@@ -2530,7 +2528,7 @@ func recordRangeEventsInLog(
 			}
 		}
 		if err := logChange(
-			ctx, txn, typ, repDesc, *rangeDesc, reason, details, logAsync,
+			ctx, txn, typ, repDesc, *rangeDesc, reason, details,
 		); err != nil {
 			return err
 		}
@@ -2809,10 +2807,19 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
-		retErr = benignerror.New(errors.Wrap(errMarkSnapshotError, "raft status not initialized"))
+		retErr = &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
 		return
 	}
 
+	//  Don't send a queue name or priority if the receiver may not understand
+	//  them or the setting is disabled. TODO(baptist): Remove the version flag in
+	//  v23.1. Consider removing the cluster setting once we have verified this
+	//  works as expected in all cases.
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2PrioritizeSnapshots) ||
+		!snapshotPrioritizationEnabled.Get(&r.store.ClusterSettings().SV) {
+		senderQueueName = 0
+		senderQueuePriority = 0
+	}
 	snapUUID := uuid.MakeV4()
 	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
@@ -2835,7 +2842,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		SenderQueueName:      senderQueueName,
 		SenderQueuePriority:  senderQueuePriority,
 		Type:                 snapType,
-		Term:                 kvpb.RaftTerm(status.Term),
+		Term:                 status.Term,
 		DelegatedSender:      sender,
 		FirstIndex:           appliedIndex,
 		DescriptorGeneration: r.Desc().Generation,
@@ -2869,26 +2876,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 			r.store.Metrics().DelegateSnapshotInProgress.Inc(1)
 		}
 
-		retErr = timeutil.RunWithTimeout(
+		retErr = contextutil.RunWithTimeout(
 			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 				// Sending snapshot
-				resp, err := r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
-				if err != nil {
-					return err
-				}
-				if resp.MsgAppResp != nil {
-					_ = r.withRaftGroup(func(rn *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
-						msg := *resp.MsgAppResp
-						// With a delegated snapshot, the recipient received the snapshot
-						// from another replica and will thus respond to it instead. But the
-						// message is valid for the actual originator of the send as well.
-						msg.To = rn.BasicStatus().ID
-						// We do want to unquiesce here - we wouldn't ever want state transitions
-						// on a quiesced replica.
-						return true, rn.Step(*resp.MsgAppResp)
-					})
-				}
-				return nil
+				return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
 			},
 		)
 		if !selfDelegate {
@@ -2913,7 +2904,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 
 // validateSnapshotDelegationRequest will validate that this replica can send
 // the snapshot that the coordinator requested. The main reasons a request can't
-// be delegated are if the Generation or Term of the replica are less than the
+// be delegated are if the Generation or Term of the replica is not equal to the
 // Generation or Term of the coordinator's request or the applied index on this
 // replica is behind the truncated index of the coordinator. Note that the request
 // is validated twice, once before "queueing" and once after. This reduces the
@@ -2925,22 +2916,18 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) error {
 	desc := r.Desc()
-	// If the delegate doesn't know about a generation change (its index is lower
-	// than the leaseholders) the snapshot it sends may be useless, so don't
-	// attempt to send it and instead return an error.
-	// NB: This is an overly strict check. Some generation changes are acceptable
-	// even if the delegate doesn't know about them. Changes like splits or merges
-	// we don't know about can invalidate the snapshot we would otherwise send. If
-	// the delegates generations is higher than the request generation, then the
-	// snapshot will still be valid since the leaseholder is also on this
-	// generation by now.
-	if desc.Generation < req.DescriptorGeneration {
+	// If the generation has changed, this snapshot may be useless, so don't
+	// attempt to send it.
+	// NB: This is an overly strict check. If other delegates are added to this
+	// snapshot, we don't necessarily need to reject sending the snapshot, however
+	// if there are merges or splits, it is safer to reject.
+	if desc.Generation != req.DescriptorGeneration {
 		log.VEventf(ctx, 2,
-			"%s: generation has changed since snapshot was generated %s < %s",
+			"%s: generation has changed since snapshot was generated %s != %s",
 			r, req.DescriptorGeneration, desc.Generation,
 		)
 		return errors.Errorf(
-			"%s: generation has changed since snapshot was generated %s < %s",
+			"%s: generation has changed since snapshot was generated %s != %s",
 			r, req.DescriptorGeneration, desc.Generation,
 		)
 	}
@@ -2977,17 +2964,15 @@ func (r *Replica) validateSnapshotDelegationRequest(
 		// haven't woken up yet.
 		return errors.Errorf("raft status not initialized")
 	}
-	replTerm := kvpb.RaftTerm(status.Term)
+	replTerm := status.Term
 
-	// Delegate has a lower term than the coordinator. This typically means the
-	// lease has been transferred, and we should not process this request. There
-	// is a potential race where the leaseholder sends a delegate request and then
-	// the term changes before this request is processed. In that case the
-	// snapshot will still be sent. There isn't a problem sending a snapshot with
-	// a lower term, however the new leaseholder may think we need a snapshot and
-	// send an additional one. This check attempts to minimize the change of the
-	// double snapshot being sent.
-	if replTerm < req.Term {
+	// Delegate has a different term than the coordinator. This typically means
+	// the lease has been transferred, and we should not process this request.
+	// There is a potential race where the leaseholder sends a delegate request
+	// and then the term changes before this request is processed. In that
+	// case this code path will not be checked and the snapshot will still be
+	// sent.
+	if replTerm != req.Term {
 		log.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
@@ -3069,7 +3054,7 @@ func (r *Replica) followerSendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
 	req *kvserverpb.DelegateSendSnapshotRequest,
-) (*raftpb.Message, error) {
+) error {
 	ctx = r.AnnotateCtx(ctx)
 	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
 	if sendThreshold > 0 {
@@ -3098,14 +3083,14 @@ func (r *Replica) followerSendSnapshot(
 	// expensive to send.
 	err := r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Throttle snapshot sending. Obtain the send semaphore and determine the rate limit.
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
 	if err != nil {
-		return nil, errors.Wrap(err, "Unable to reserve space for sending this snapshot")
+		return errors.Wrap(err, "Unable to reserve space for sending this snapshot")
 	}
 	defer cleanup()
 
@@ -3113,13 +3098,13 @@ func (r *Replica) followerSendSnapshot(
 	// sent after we are doing waiting.
 	err = r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	snapType := req.Type
 	snap, err := r.GetSnapshot(ctx, snapType, req.SnapId)
 	if err != nil {
-		return nil, errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -3129,9 +3114,9 @@ func (r *Replica) followerSendSnapshot(
 	// subject to mapping across replicas). The actual sending happens in
 	// kvBatchSnapshotStrategy.Send and results in no log entries being sent at
 	// all. Note that Metadata.Index is really the applied index of the replica.
-	snap.State.TruncatedState = &kvserverpb.RaftTruncatedState{
-		Index: kvpb.RaftIndex(snap.RaftSnap.Metadata.Index),
-		Term:  kvpb.RaftTerm(snap.RaftSnap.Metadata.Term),
+	snap.State.TruncatedState = &roachpb.RaftTruncatedState{
+		Index: snap.RaftSnap.Metadata.Index,
+		Term:  snap.RaftSnap.Metadata.Term,
 	}
 
 	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
@@ -3150,7 +3135,7 @@ func (r *Replica) followerSendSnapshot(
 				Type:     raftpb.MsgSnap,
 				From:     uint64(req.CoordinatorReplica.ReplicaID),
 				To:       uint64(req.RecipientReplica.ReplicaID),
-				Term:     uint64(req.Term),
+				Term:     req.Term,
 				Snapshot: &snap.RaftSnap,
 			},
 		},
@@ -3167,8 +3152,6 @@ func (r *Replica) followerSendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
-		req.RecipientReplica.NodeID)
 
 	recordBytesSent := func(inc int64) {
 		// Only counts for delegated bytes if we are not self-delegating.
@@ -3176,7 +3159,6 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		r.store.metrics.updateCrossLocalityMetricsOnSnapshotSent(comparisonResult, inc)
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:
@@ -3190,10 +3172,9 @@ func (r *Replica) followerSendSnapshot(
 		}
 	}
 
-	var msgAppResp *raftpb.Message
-	if err := timeutil.RunWithTimeout(
+	return contextutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
-			resp, err := r.store.cfg.Transport.SendSnapshot(
+			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
 				r.store.cfg.StorePool,
 				header,
@@ -3202,16 +3183,8 @@ func (r *Replica) followerSendSnapshot(
 				sent,
 				recordBytesSent,
 			)
-			if err != nil {
-				return err
-			}
-			msgAppResp = resp.MsgAppResp
-			return nil
 		},
-	); err != nil {
-		return nil, err
-	}
-	return msgAppResp, nil
+	)
 }
 
 // replicasCollocated is used in AdminMerge to ensure that the ranges are
@@ -3814,7 +3787,7 @@ func RelocateOne(
 
 	var ops []kvpb.ReplicationChange
 	if shouldAdd && shouldRemove {
-		ops, _, err = plan.ReplicationChangesForRebalance(
+		ops, _, err = replicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
@@ -3981,9 +3954,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica) bool {
-		return allowLeaseTransfer
-	}
+	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break

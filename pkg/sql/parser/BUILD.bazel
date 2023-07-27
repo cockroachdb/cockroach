@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "parser",
@@ -70,6 +70,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
@@ -106,7 +107,6 @@ $(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
-    tags = ["no-remote-exec"],  # keep
     visibility = ["//visibility:public"],
 )
 

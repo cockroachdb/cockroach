@@ -8,17 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { TimestampToNumber, DurationToNumber } from "src/util/convert";
-
-import { FixLong } from "src/util/fixLong";
-import { uniqueLong, unique } from "src/util/arrays";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import {
+  FixLong,
+  TimestampToNumber,
+  DurationToNumber,
+  uniqueLong,
+  unique,
+} from "src/util";
 import Long from "long";
 
-export type StatementStatistics = cockroach.sql.IStatementStatistics;
-export type ExecStats = cockroach.sql.IExecStats;
+export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
+export type ExecStats = protos.cockroach.sql.IExecStats;
 export type CollectedStatementStatistics =
-  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 export interface NumericStat {
   mean?: number;
@@ -60,7 +63,7 @@ export function aggregateNumericStats(
 export function aggregateLatencyInfo(
   a: StatementStatistics,
   b: StatementStatistics,
-): cockroach.sql.ILatencyInfo {
+): protos.cockroach.sql.ILatencyInfo {
   const min =
     a.latency_info?.min == 0 || a.latency_info?.min > b.latency_info?.min
       ? b.latency_info?.min
@@ -93,9 +96,9 @@ export function aggregateLatencyInfo(
 }
 
 export function coalesceSensitiveInfo(
-  a: cockroach.sql.ISensitiveInfo,
-  b: cockroach.sql.ISensitiveInfo,
-): cockroach.sql.ISensitiveInfo {
+  a: protos.cockroach.sql.ISensitiveInfo,
+  b: protos.cockroach.sql.ISensitiveInfo,
+): protos.cockroach.sql.ISensitiveInfo {
   return {
     last_err: a.last_err || b.last_err,
     most_recent_plan_description:

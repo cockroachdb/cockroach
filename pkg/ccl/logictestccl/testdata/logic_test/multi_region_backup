@@ -4,7 +4,7 @@
 # Tests in this file assume no multi-region tenant setup as tenants have no
 # access to nodelocal.
 
-query TTTTT rowsort
+query TTTTT
 SHOW REGIONS
 ----
 ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}
@@ -384,7 +384,7 @@ BACKUP DATABASE "mr-backup-2" TO 'nodelocal://1/mr-backup-2/';
 statement ok
 BACKUP DATABASE "mr-backup-1", "mr-backup-2" TO 'nodelocal://1/mr-backup-combined/'
 
-query T rowsort
+query T
 select database_name from [show databases]
 ----
 defaultdb
@@ -400,7 +400,7 @@ DROP DATABASE "mr-backup-1";
 statement ok
 DROP DATABASE "mr-backup-2"
 
-query T rowsort
+query T
 select database_name from [show databases]
 ----
 defaultdb
@@ -411,7 +411,7 @@ test
 statement ok
 RESTORE DATABASE "mr-backup-1" FROM 'nodelocal://1/mr-backup-1/'
 
-query T rowsort
+query T
 select database_name from [show databases]
 ----
 defaultdb
@@ -565,7 +565,7 @@ TABLE regional_by_table_in_ca_central_1  ALTER TABLE regional_by_table_in_ca_cen
 statement ok
 RESTORE DATABASE "mr-backup-2" FROM 'nodelocal://1/mr-backup-2/'
 
-query T rowsort
+query T
 select database_name from [show databases]
 ----
 defaultdb
@@ -723,7 +723,7 @@ DROP DATABASE "mr-backup-1";
 statement ok
 DROP DATABASE "mr-backup-2"
 
-query T rowsort
+query T
 select database_name from [show databases]
 ----
 defaultdb
@@ -734,7 +734,7 @@ test
 statement ok
 RESTORE DATABASE "mr-backup-1", "mr-backup-2" FROM 'nodelocal://1/mr-backup-combined/'
 
-query T rowsort
+query T
 select database_name from [show databases]
 ----
 defaultdb
@@ -1061,7 +1061,7 @@ RESTORE TABLE regional_by_table_in_ca_central_1 FROM 'nodelocal://1/rbt_table_in
 statement ok
 RESTORE TABLE global_table FROM 'nodelocal://1/global_table/';
 
-query IIIIT rowsort
+query IIIIT
 SELECT * FROM regional_by_row_table;
 ----
 1  1  1  1  NULL
@@ -1394,7 +1394,7 @@ DATABASE "mr-restore-1"  ALTER DATABASE "mr-restore-1" CONFIGURE ZONE USING
                            voter_constraints = '[+region=ap-southeast-2]',
                            lease_preferences = '[[+region=ap-southeast-2]]'
 
-query TTTTT colnames,rowsort
+query TTTTT colnames
 SHOW REGIONS
 ----
 region          zones                   database_names                          primary_region_of           secondary_region_of

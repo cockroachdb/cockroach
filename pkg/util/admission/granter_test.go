@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
@@ -98,7 +97,7 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
 			defer coords.Close()
 			coord = coords.Regular
 			return flushAndReset()
@@ -110,9 +109,8 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
+					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
-					_ OnLogEntryAdmitted, _ *syncutil.Mutex,
 				) storeRequester {
 					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
@@ -137,13 +135,9 @@ func TestGranterBasic(t *testing.T) {
 					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
 					return req
 				},
-				kvIOTokensExhaustedDuration:     metrics.KVIOTokensExhaustedDuration,
-				kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
-				kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
-				kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
-				workQueueMetrics:                workQueueMetrics,
-				disableTickerForTesting:         true,
-				knobs:                           &TestingKnobs{},
+				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+				workQueueMetrics:            workQueueMetrics,
+				disableTickerForTesting:     true,
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
@@ -154,7 +148,7 @@ func TestGranterBasic(t *testing.T) {
 			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
 			// Use the same model for all 3 kinds of models.
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
-			kvStoreGranter.setLinearModels(tlm, tlm, tlm)
+			kvStoreGranter.setAdmittedDoneModels(tlm, tlm, tlm)
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -223,49 +217,14 @@ func TestGranterBasic(t *testing.T) {
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
 
-		case "set-tokens-loop":
-			var ioTokens int
-			var elasticTokens int
-			var loop int
-			d.ScanArgs(t, "io-tokens", &ioTokens)
-			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
-			d.ScanArgs(t, "loop", &loop)
-
-			for loop > 0 {
-				loop--
-				// We are not using a real ioLoadListener, and simply setting the
-				// tokens (the ioLoadListener has its own test).
-				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-					int64(ioTokens), int64(elasticTokens),
-					int64(ioTokens*250), int64(elasticTokens*250),
-				)
-			}
-			coord.testingTryGrant()
-			return flushAndReset()
-
 		case "set-tokens":
 			var ioTokens int
 			var elasticTokens int
-			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
-			if d.HasArg("tick-interval") {
-				d.ScanArgs(t, "tick-interval", &tickInterval)
-			}
-			var burstMultiplier = 1
-			if tickInterval == 1 {
-				burstMultiplier = 250
-			} else if tickInterval == 250 {
-			} else {
-				return "unsupported tick rate"
-			}
-
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-				int64(ioTokens), int64(elasticTokens),
-				int64(ioTokens*burstMultiplier), int64(elasticTokens*burstMultiplier),
-			)
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(int64(ioTokens), int64(elasticTokens))
 			coord.testingTryGrant()
 			return flushAndReset()
 
@@ -273,7 +232,7 @@ func TestGranterBasic(t *testing.T) {
 			var origTokens, writeBytes int
 			d.ScanArgs(t, "orig-tokens", &origTokens)
 			d.ScanArgs(t, "write-bytes", &writeBytes)
-			requesters[scanWorkKind(t, d)].granter.(granterWithStoreReplicatedWorkAdmitted).storeWriteDone(
+			requesters[scanWorkKind(t, d)].granter.(granterWithStoreWriteDone).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -315,8 +274,8 @@ func TestStoreCoordinators(t *testing.T) {
 	opts := Options{
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted, _ *syncutil.Mutex) storeRequester {
+			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs) storeRequester {
 			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
 			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
@@ -327,7 +286,7 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
@@ -491,17 +450,3 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 		})
 	}
 }
-
-type noopOnLogEntryAdmitted struct{}
-
-func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(
-	context.Context,
-	roachpb.NodeID,
-	admissionpb.WorkPriority,
-	roachpb.StoreID,
-	roachpb.RangeID,
-	LogPosition,
-) {
-}
-
-var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}

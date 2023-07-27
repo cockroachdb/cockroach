@@ -47,20 +47,20 @@ data: "b"/1.000000000,0 -> /BYTES/b1
 run ok
 export fingerprint k=a end=e ts=5 stripped
 ----
-export: data_size:8  fingerprint=true
+export: data_size:8 fingerprint=true
 fingerprint: 4117139284438927868
 
 run ok
 export fingerprint k=a end=e ts=3  stripped
 ----
-export: data_size:8  fingerprint=true
+export: data_size:8 fingerprint=true
 fingerprint: 4117139284438927868
 
 # test that history is different at aost 1
 run ok
 export fingerprint k=a end=e ts=1 stripped
 ----
-export: data_size:8  fingerprint=true
+export: data_size:8 fingerprint=true
 fingerprint: 8343199592647421771
 
 # test that history is same in rangekey land -- they never get hashed

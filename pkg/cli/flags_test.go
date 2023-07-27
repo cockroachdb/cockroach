@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,6 +55,25 @@ func TestStdFlagToPflag(t *testing.T) {
 			t.Errorf("unable to find \"%s\"", f.Name)
 		}
 	})
+}
+
+func TestNoLinkForbidden(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Verify that the cockroach binary doesn't depend on certain packages.
+	buildutil.VerifyNoImports(t,
+		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach", true,
+		[]string{
+			"testing",  // defines flags
+			"go/build", // probably not something we want in the main binary
+		},
+		[]string{},
+		// The errors library uses go/build to determine
+		// the list of source directories (used to strip the source prefix
+		// in stack trace reports).
+		"github.com/cockroachdb/errors/withstack",
+	)
 }
 
 func TestCacheFlagValue(t *testing.T) {

@@ -21,23 +21,16 @@ apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://download.docker.com/linux/ubuntu focal stable
 EOF
+# This was necessary for a bug back in Xenial.
+# TODO(#90203): Determine if this is still necessary.
+add-apt-repository ppa:git-core/ppa
+apt-get update --yes
 
-curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sources.list.d/gcloud.list
+# Install the sudo version patched for CVE-2021-3156
+apt-get install --yes sudo
 
-curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add -
-echo "deb https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/azure-cli.list
-
-# Some images come with apt autoupgrade job running at start, let's give it a few minutes to finish to avoid races.
-echo "Sleeping for 3 minutes to allow apt daily cronjob to finish..."
-sleep 3m
-apt-get update
-
-# Installing gnome-keyring prevents the error described in
-# https://github.com/moby/moby/issues/34048
 apt-get install --yes \
   autoconf \
-  azure-cli \
   bison \
   build-essential \
   curl \
@@ -45,8 +38,6 @@ apt-get install --yes \
   docker-compose \
   flex \
   gnome-keyring \
-  google-cloud-sdk \
-  google-cloud-cli-gke-gcloud-auth-plugin \
   gnupg2 \
   git \
   jq \
@@ -54,7 +45,6 @@ apt-get install --yes \
   pass \
   python2 \
   python3 \
-  sudo \
   unzip
 
 # Enable support for executing binaries of all architectures via qemu emulation
@@ -76,15 +66,26 @@ EOF
 tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
-if [[ $ARCH = x86_64 ]]; then
+if [ $ARCH = x86_64 ]; then
     curl -fsSL https://dl.google.com/go/go1.19.10.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
 8b045a483d3895c6edba2e90a9189262876190dbbd21756870cdd63821810677  /tmp/go.tgz
 EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
-    # Explicitly symlink the pinned version to /usr/bin.
-    for f in /usr/local/go/bin/*; do
-        ln -s "$f" /usr/bin
+
+    # Install the older version in parallel in order to run the acceptance test on older branches
+    # TODO: Remove this when 21.1 is EOL (2022-11-18, according to
+    # https://www.cockroachlabs.com/docs/releases/release-support-policy.html)
+    curl -fsSL https://dl.google.com/go/go1.15.14.linux-amd64.tar.gz > /tmp/go_old.tgz
+    sha256sum -c - <<EOF
+6f5410c113b803f437d7a1ee6f8f124100e536cc7361920f7e640fedf7add72d /tmp/go_old.tgz
+EOF
+    mkdir -p /usr/local/go1.15
+    tar -C /usr/local/go1.15 --strip-components=1 -zxf /tmp/go_old.tgz && rm /tmp/go_old.tgz
+
+# Explicitly symlink the pinned version to /usr/bin.
+    for f in `ls /usr/local/go/bin`; do
+        ln -s /usr/local/go/bin/$f /usr/bin
     done
 fi
 
@@ -101,6 +102,22 @@ $SHASUM /tmp/bazelisk
 EOF
 chmod +x /tmp/bazelisk
 mv /tmp/bazelisk /usr/bin/bazel
+
+# gcloud won't be automatically installed for ARM machines (which run on AWS).
+if [ $ARCH = aarch64 ]; then
+    curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-377.0.0-linux-arm.tar.gz > /tmp/gcloud.tar.gz
+    sha256sum -c - <<EOF
+42dd29714b052d3460b005b3d09faacdb0818e70edd60c20d447a1594fd6aa83 /tmp/gcloud.tar.gz
+EOF
+    tar -C /usr/local -zxf /tmp/gcloud.tar.gz
+    rm /tmp/gcloud.tar.gz
+    /usr/local/google-cloud-sdk/install.sh -q --usage-reporting false
+    ln -s /usr/local/google-cloud-sdk/bin/gcloud /usr/bin
+    ln -s /usr/local/google-cloud-sdk/bin/gsutil /usr/bin
+fi
+
+# Installing gnome-keyring prevents the error described in
+# https://github.com/moby/moby/issues/34048
 
 # Add a user for the TeamCity agent if it doesn't exist already.
 id -u agent &>/dev/null 2>&1 || adduser agent --disabled-password
@@ -152,7 +169,7 @@ if [ $ARCH = x86_64 ]; then
     # which would corrupt the submodule defs. Probably good to remove once the
     # builder uses Ubuntu 18.04 or higher.
     git submodule update --init --recursive
-    for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n2) master
+    for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
     do
         git checkout "$branch"
         # TODO(benesch): store the acceptanceversion somewhere more accessible.

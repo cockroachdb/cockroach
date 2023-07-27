@@ -21,18 +21,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -70,7 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -86,45 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"golang.org/x/net/trace"
-)
-
-var maxNumNonAdminConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"server.max_connections_per_gateway",
-	"the maximum number of SQL connections per gateway allowed at a given time "+
-		"(note: this will only limit future connection attempts and will not affect already established connections). "+
-		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
-	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
-).WithPublic()
-
-// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud to limit
-// connections to serverless clusters while still being able to connect from the Cockroach Cloud control plane.
-// This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
-// This setting may be removed one day.
-var maxNumNonRootConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"server.cockroach_cloud.max_client_connections_per_gateway",
-	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
-		"The maximum number of SQL connections per gateway allowed at a given time "+
-		"(note: this will only limit future connection attempts and will not affect already established connections). "+
-		"Negative values result in unlimited number of connections. Cockroach Cloud internal users (including root user) "+
-		"are not affected by this limit.",
-	-1,
-)
-
-// maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
-// server.cockroach_cloud.max_client_connections_per_gateway.
-// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting
-// connections to serverless clusters.
-// This setting may be removed one day.
-var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
-	settings.TenantWritable,
-	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
-	"a reason to provide in the error message for connections that are denied due to "+
-		"server.cockroach_cloud.max_client_connections_per_gateway",
-	"cluster connections are limited",
 )
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
@@ -678,7 +637,8 @@ func (s *Server) GetUnscrubbedStmtStats(
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
-	err := s.sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
+	err :=
+		s.sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -697,7 +657,8 @@ func (s *Server) GetUnscrubbedTxnStats(
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
-	err := s.sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
+	err :=
+		s.sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, txnStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -746,7 +707,8 @@ func (s *Server) getScrubbedStmtStats(
 		return nil
 	}
 
-	err := statsProvider.IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
+	err :=
+		statsProvider.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch scrubbed statement stats")
@@ -797,7 +759,7 @@ func (s *Server) SetupConn(
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
-	sdMutIterator := makeSessionDataMutatorIterator(sds, args.SessionDefaults, s.cfg.Settings)
+	sdMutIterator := s.makeSessionDataMutatorIterator(sds, args.SessionDefaults)
 	sdMutIterator.onDefaultIntSizeChange = onDefaultIntSizeChange
 	if err := sdMutIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		for varName, v := range varGen {
@@ -830,68 +792,46 @@ func (s *Server) SetupConn(
 	return ConnectionHandler{ex}, nil
 }
 
-// IncrementConnectionCount increases connectionCount by 1 if possible and
-// rootConnectionCount by 1 if applicable.
-//
-// decrementConnectionCount must be called if err is nil.
-func (s *Server) IncrementConnectionCount(
-	sessionArgs SessionArgs,
-) (decrementConnectionCount func(), _ error) {
-	sv := &s.cfg.Settings.SV
-	maxNumNonRootConnectionsValue := maxNumNonRootConnections.Get(sv)
-	maxNumConnectionsValue := maxNumNonAdminConnections.Get(sv)
-	maxNumNonRootConnectionsReasonValue := maxNumNonRootConnectionsReason.Get(sv)
-	var maxNumNonRootConnectionsExceeded, maxNumConnectionsExceeded bool
-	// This lock blocks other connections from being made so minimize the amount
-	// of work done inside lock.
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		// Root user is not affected by connection limits.
-		if sessionArgs.User.IsRootUser() {
-			s.mu.connectionCount++
-			s.mu.rootConnectionCount++
-			decrementConnectionCount = func() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				s.mu.connectionCount--
-				s.mu.rootConnectionCount--
-			}
-			return
-		}
-		connectionCount := s.mu.connectionCount
-		nonRootConnectionCount := connectionCount - s.mu.rootConnectionCount
-		maxNumNonRootConnectionsExceeded = maxNumNonRootConnectionsValue >= 0 && nonRootConnectionCount >= maxNumNonRootConnectionsValue
-		if maxNumNonRootConnectionsExceeded {
-			return
-		}
-		maxNumConnectionsExceeded = !sessionArgs.IsSuperuser && maxNumConnectionsValue >= 0 && connectionCount >= maxNumConnectionsValue
-		if maxNumConnectionsExceeded {
-			return
-		}
+// IncrementConnectionCount increases connectionCount by 1.
+func (s *Server) IncrementConnectionCount() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.connectionCount++
+}
+
+// IncrementRootConnectionCount increases both connectionCount and rootConnectionCount by 1.
+func (s *Server) IncrementRootConnectionCount() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.connectionCount++
+	s.mu.rootConnectionCount++
+}
+
+// DecrementConnectionCount decreases connectionCount by 1.
+func (s *Server) DecrementConnectionCount() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.connectionCount--
+}
+
+// DecrementRootConnectionCount decreases both connectionCount and rootConnectionCount by 1.
+func (s *Server) DecrementRootConnectionCount() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.connectionCount--
+	s.mu.rootConnectionCount--
+}
+
+// IncrementConnectionCountIfLessThan increases connectionCount by 1 and returns true if connectionCount < max,
+// otherwise it does nothing and returns false.
+func (s *Server) IncrementConnectionCountIfLessThan(max int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lt := s.mu.connectionCount < max
+	if lt {
 		s.mu.connectionCount++
-		decrementConnectionCount = func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			s.mu.connectionCount--
-		}
-	}()
-	if maxNumNonRootConnectionsExceeded {
-		return nil, errors.WithHintf(
-			pgerror.Newf(pgcode.TooManyConnections, "%s", redact.SafeString(maxNumNonRootConnectionsReasonValue)),
-			"the maximum number of allowed connections is %d",
-			maxNumNonRootConnectionsValue,
-		)
 	}
-	if maxNumConnectionsExceeded {
-		return nil, errors.WithHintf(
-			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
-			"the maximum number of allowed connections is %d and can be modified using the %s config key",
-			maxNumConnectionsValue,
-			maxNumNonAdminConnections.Key(),
-		)
-	}
-	return decrementConnectionCount, nil
+	return lt
 }
 
 // GetConnectionCount returns the current number of connections.
@@ -899,6 +839,13 @@ func (s *Server) GetConnectionCount() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.connectionCount
+}
+
+// GetNonRootConnectionCount returns the current number of non root connections.
+func (s *Server) GetNonRootConnectionCount() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.connectionCount - s.mu.rootConnectionCount
 }
 
 // ConnectionHandler is the interface between the result of SetupConn
@@ -982,6 +929,19 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 	}
 	populateMinimalSessionData(sd)
 	return sd
+}
+
+func (s *Server) makeSessionDataMutatorIterator(
+	sds *sessiondata.Stack, defaults SessionDefaults,
+) *sessionDataMutatorIterator {
+	return &sessionDataMutatorIterator{
+		sds: sds,
+		sessionDataMutatorBase: sessionDataMutatorBase{
+			defaults: defaults,
+			settings: s.cfg.Settings,
+		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+	}
 }
 
 // populateMinimalSessionData populates sd with some minimal values needed for
@@ -1148,6 +1108,7 @@ func (s *Server) newConnExecutor(
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -1969,7 +1930,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	ex.extraTxnState.createdSequences = nil
 
 	if ex.extraTxnState.fromOuterTxn {
 		if ex.extraTxnState.shouldResetSyntheticDescriptors {
@@ -1995,6 +1955,8 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
+
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -2756,7 +2718,7 @@ func (ex *connExecutor) execCopyOut(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var numOutputRows int
 	var cancelQuery context.CancelFunc
-	ctx, cancelQuery = ctxlog.WithCancel(ctx)
+	ctx, cancelQuery = contextutil.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
@@ -2792,7 +2754,6 @@ func (ex *connExecutor) execCopyOut(
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			numOutputRows,
-			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
 			copyErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -2980,7 +2941,7 @@ func (ex *connExecutor) execCopyIn(
 
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
-	ctx, cancelQuery = ctxlog.WithCancel(ctx)
+	ctx, cancelQuery = contextutil.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
@@ -3042,8 +3003,7 @@ func (ex *connExecutor) execCopyIn(
 		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(ctx, ex.executorType, true,
 			int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter,
-			numInsertedRows, ex.state.mu.stmtCount,
-			0, /* bulkJobId */
+			numInsertedRows, 0, /* bulkJobId */
 			copyErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
@@ -3363,11 +3323,9 @@ func (ex *connExecutor) setTransactionModes(
 			return err
 		}
 	}
-	if modes.Isolation != tree.UnspecifiedIsolation {
-		level := ex.txnIsolationLevelToKV(ctx, modes.Isolation)
-		if err := ex.state.setIsolationLevel(level); err != nil {
-			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
-		}
+	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
+		return errors.AssertionFailedf(
+			"unknown isolation level: %s", errors.Safe(modes.Isolation))
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && asOfTs.IsEmpty() {
@@ -3385,67 +3343,6 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	return ex.state.setReadOnlyMode(rwMode)
-}
-
-var allowSnapshotIsolation = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.txn.snapshot_isolation.enabled",
-	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
-		"the time of writing, this setting is intended only for usage by "+
-		"CockroachDB developers.",
-	false,
-)
-
-func (ex *connExecutor) txnIsolationLevelToKV(
-	ctx context.Context, level tree.IsolationLevel,
-) isolation.Level {
-	if level == tree.UnspecifiedIsolation {
-		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
-	}
-	allowLevelCustomization := ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2)
-	ret := isolation.Serializable
-	if allowLevelCustomization {
-		switch level {
-		case tree.ReadUncommittedIsolation:
-			// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
-			// this: https://www.postgresql.org/docs/current/transaction-iso.html.
-			fallthrough
-		case tree.ReadCommittedIsolation:
-			ret = isolation.ReadCommitted
-		case tree.RepeatableReadIsolation:
-			// REPEATABLE READ is mapped to SNAPSHOT.
-			fallthrough
-		case tree.SnapshotIsolation:
-			// SNAPSHOT is only allowed if the cluster setting is enabled. Otherwise
-			// it is mapped to SERIALIZABLE.
-			allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
-			if allowSnapshot {
-				ret = isolation.Snapshot
-			} else {
-				ret = isolation.Serializable
-			}
-		case tree.SerializableIsolation:
-			ret = isolation.Serializable
-		default:
-			log.Fatalf(context.Background(), "unknown isolation level: %s", level)
-		}
-	}
-	return ret
-}
-
-func kvTxnIsolationLevelToTree(level isolation.Level) tree.IsolationLevel {
-	var ret tree.IsolationLevel
-	switch level {
-	case isolation.Serializable:
-		ret = tree.SerializableIsolation
-	case isolation.ReadCommitted:
-		ret = tree.ReadCommittedIsolation
-	case isolation.Snapshot:
-		ret = tree.SnapshotIsolation
-	default:
-		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
-	}
-	return ret
 }
 
 func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
@@ -3543,7 +3440,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			QueryCancelKey:                 ex.queryCancelKey,
 			DescIDGenerator:                ex.getDescIDGenerator(),
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
-			JobsProfiler:                   p,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -3573,7 +3469,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.TxnIsSingleStmt = false
-	evalCtx.TxnIsoLevel = ex.state.isolationLevel
 	if newTxn || !ex.implicitTxn() {
 		// Only update the stmt timestamp if in a new txn or an explicit txn. This is because this gets
 		// called multiple times during an extended protocol implicit txn, but we
@@ -4003,7 +3898,6 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Priority:              ex.state.priority.String(),
 			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
 			LastAutoRetryReason:   autoRetryReasonStr,
-			IsolationLevel:        kvTxnIsolationLevelToTree(ex.state.isolationLevel).String(),
 		}
 	}
 

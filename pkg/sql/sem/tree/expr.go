@@ -1726,7 +1726,6 @@ func (node *DTimeTZ) String() string          { return AsString(node) }
 func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DBox2D) String() string           { return AsString(node) }
-func (node *DPGLSN) String() string           { return AsString(node) }
 func (node *DGeography) String() string       { return AsString(node) }
 func (node *DGeometry) String() string        { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }

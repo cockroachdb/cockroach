@@ -1387,8 +1387,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
-	require.NoError(t, err)
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
 
 	flowCtx := execinfra.FlowCtx{

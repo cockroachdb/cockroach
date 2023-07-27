@@ -412,7 +412,6 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  3. It is not a set-returning function.
 //  4. Its arguments are only Variable or Const expressions.
 //  5. It is not a record-returning function.
-//  6. It does not recursively call itself.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -441,12 +440,8 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // UDFs used as data sources return multiple columns. Other UDFs returning a
 // single column can be inlined since subqueries can only return a single
 // column.
-func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFCallPrivate) bool {
-	if udfp.Def == nil {
-		panic(errors.AssertionFailedf("expected non-nil UDF definition"))
-	}
-	if udfp.Def.IsRecursive || udfp.Def.Volatility == volatility.Volatile ||
-		len(udfp.Def.Body) != 1 || udfp.Def.SetReturning || udfp.Def.MultiColDataSource {
+func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning || udfp.MultiColDataSource {
 		return false
 	}
 	if !args.IsConstantsAndPlaceholdersAndVariables() {
@@ -458,14 +453,14 @@ func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFCal
 // ConvertUDFToSubquery returns a subquery expression that is equivalent to the
 // given UDF and UDF arguments.
 func (c *CustomFuncs) ConvertUDFToSubquery(
-	args memo.ScalarListExpr, udfp *memo.UDFCallPrivate,
+	args memo.ScalarListExpr, udfp *memo.UDFPrivate,
 ) opt.ScalarExpr {
 	// argForParam returns the argument that can be substituted for the given
 	// column, if the column is a parameter of the UDF. It returns ok=false if
 	// the column is not a UDF parameter.
 	argForParam := func(col opt.ColumnID) (e opt.Expr, ok bool) {
-		for i := range udfp.Def.Params {
-			if udfp.Def.Params[i] == col {
+		for i := range udfp.Params {
+			if udfp.Params[i] == col {
 				return args[i], true
 			}
 		}
@@ -494,11 +489,11 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 	//
 	// TODO(mgartner): The ordering may need to be preserved in the
 	// SubqueryPrivate for SETOF UDFs.
-	stmt := udfp.Def.Body[0]
-	returnColID := udfp.Def.BodyProps[0].Presentation[0].ID
+	stmt := udfp.Body[0]
+	returnColID := stmt.PhysProps.Presentation[0].ID
 	res := c.f.ConstructSubquery(
 		c.f.ConstructProject(
-			replace(stmt).(memo.RelExpr),
+			replace(stmt.RelExpr).(memo.RelExpr),
 			nil, /* projections */
 			opt.MakeColSet(returnColID),
 		),
@@ -513,7 +508,7 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 	//     ELSE <subquery>
 	//   END
 	//
-	if !udfp.Def.CalledOnNullInput && len(args) > 0 {
+	if !udfp.CalledOnNullInput && len(args) > 0 {
 		var anyArgIsNull opt.ScalarExpr
 		for i := range args {
 			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
@@ -536,7 +531,7 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 			memo.ScalarListExpr{
 				c.f.ConstructWhen(
 					anyArgIsNull,
-					c.f.ConstructNull(udfp.Def.Typ),
+					c.f.ConstructNull(udfp.Typ),
 				),
 			},
 			res,

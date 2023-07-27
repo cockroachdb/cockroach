@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -34,11 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	crlparquet "github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/fraugster/parquet-go/parquetschema"
 	"github.com/lib/pq/oid"
@@ -46,7 +44,48 @@ import (
 
 const exportParquetFilePatternDefault = exportFilePatternPart + ".parquet"
 
-func fileName(spec execinfrapb.ExportSpec, part string) string {
+// parquetExporter is used to augment the parquetWriter, encapsulating the internals to make
+// exporting oblivious for the consumers.
+type parquetExporter struct {
+	buf            *bytes.Buffer
+	parquetWriter  *goparquet.FileWriter
+	schema         *parquetschema.SchemaDefinition
+	parquetColumns []ParquetColumn
+	compression    roachpb.IOFileFormat_Compression
+}
+
+// Write appends a record to a parquet file.
+func (c *parquetExporter) Write(record map[string]interface{}) error {
+	return c.parquetWriter.AddData(record)
+}
+
+// Flush is merely a placeholder to mimic the CSV Exporter (we may add their methods
+// to an interface in the near future). All flushing is done by parquetExporter.Close().
+func (c *parquetExporter) Flush() error {
+	return nil
+}
+
+// Close flushes all records to parquetExporter.buf and closes the parquet writer.
+func (c *parquetExporter) Close() error {
+	return c.parquetWriter.Close()
+}
+
+// Bytes results in the slice of bytes.
+func (c *parquetExporter) Bytes() []byte {
+	return c.buf.Bytes()
+}
+
+func (c *parquetExporter) ResetBuffer() {
+	c.buf.Reset()
+	c.parquetWriter = c.buildFileWriter()
+}
+
+// Len returns length of the buffer with content.
+func (c *parquetExporter) Len() int {
+	return c.buf.Len()
+}
+
+func (c *parquetExporter) FileName(spec execinfrapb.ExportSpec, part string) string {
 	pattern := exportParquetFilePatternDefault
 	if spec.NamePattern != "" {
 		pattern = spec.NamePattern
@@ -64,6 +103,44 @@ func fileName(spec execinfrapb.ExportSpec, part string) string {
 	return fileName
 }
 
+func (c *parquetExporter) buildFileWriter() *goparquet.FileWriter {
+	var parquetCompression parquet.CompressionCodec
+	switch c.compression {
+	case roachpb.IOFileFormat_Gzip:
+		parquetCompression = parquet.CompressionCodec_GZIP
+	case roachpb.IOFileFormat_Snappy:
+		parquetCompression = parquet.CompressionCodec_SNAPPY
+	default:
+		parquetCompression = parquet.CompressionCodec_UNCOMPRESSED
+	}
+	pw := goparquet.NewFileWriter(c.buf,
+		goparquet.WithCompressionCodec(parquetCompression),
+		goparquet.WithSchemaDefinition(c.schema),
+	)
+	return pw
+}
+
+// newParquetExporter creates a new parquet file writer, defines the parquet
+// file schema, and initializes a new parquetExporter.
+func newParquetExporter(sp execinfrapb.ExportSpec, typs []*types.T) (*parquetExporter, error) {
+	var exporter *parquetExporter
+
+	buf := bytes.NewBuffer([]byte{})
+	parquetColumns, err := newParquetColumns(typs, sp)
+	if err != nil {
+		return nil, err
+	}
+	schema := NewParquetSchema(parquetColumns)
+
+	exporter = &parquetExporter{
+		buf:            buf,
+		schema:         schema,
+		parquetColumns: parquetColumns,
+		compression:    sp.Format.Compression,
+	}
+	return exporter, nil
+}
+
 // ParquetColumn contains the relevant data to map a crdb table column to a parquet table column.
 type ParquetColumn struct {
 	name     string
@@ -79,6 +156,27 @@ type ParquetColumn struct {
 	// DecodeFn converts a native go type, created by the parquet vendor while
 	// reading a parquet file, into a crdb column value
 	DecodeFn func(interface{}) (tree.Datum, error)
+}
+
+// GetEncoder gets (exports) the encoder for a ParquetColumn.
+func (pc *ParquetColumn) GetEncoder() (func(datum tree.Datum) (interface{}, error), error) {
+	if pc.encodeFn == nil {
+		return nil, errors.Errorf("Parquet column does not have an encode function")
+	}
+	return pc.encodeFn, nil
+}
+
+// newParquetColumns creates a list of parquet columns, given the input relation's column types.
+func newParquetColumns(typs []*types.T, sp execinfrapb.ExportSpec) ([]ParquetColumn, error) {
+	parquetColumns := make([]ParquetColumn, len(typs))
+	for i := 0; i < len(typs); i++ {
+		parquetCol, err := NewParquetColumn(typs[i], sp.ColNames[i], sp.Format.Parquet.ColNullability[i])
+		if err != nil {
+			return nil, err
+		}
+		parquetColumns[i] = parquetCol
+	}
+	return parquetColumns, nil
 }
 
 // populateLogicalStringCol is a helper function for populating parquet schema
@@ -100,9 +198,6 @@ func RoundtripStringer(d tree.Datum) string {
 
 // NewParquetColumn populates a ParquetColumn by finding the right parquet type
 // and defining the encoder and decoder.
-//
-// TODO(#104278): delete this function and dependencies once it is not required
-// by tests.
 func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, error) {
 	col := ParquetColumn{}
 	col.definition = new(parquetschema.ColumnDefinition)
@@ -320,14 +415,6 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 				return nil, err
 			}
 			return tree.NewDEnum(e), nil
-		}
-	case types.PGLSNFamily:
-		populateLogicalStringCol(schemaEl)
-		col.encodeFn = func(d tree.Datum) (interface{}, error) {
-			return []byte(d.(*tree.DPGLSN).LSN.String()), nil
-		}
-		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.ParseDPGLSN(string(x.([]byte)))
 		}
 	case types.Box2DFamily:
 		populateLogicalStringCol(schemaEl)
@@ -581,6 +668,26 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 	return col, nil
 }
 
+// NewParquetSchema creates the schema for the parquet file, see example schema:
+//
+//	https://github.com/fraugster/parquet-go/issues/18#issuecomment-946013210
+//
+// see docs here:
+//
+//	https://pkg.go.dev/github.com/fraugster/parquet-go/parquetschema#SchemaDefinition
+func NewParquetSchema(parquetFields []ParquetColumn) *parquetschema.SchemaDefinition {
+	schemaDefinition := new(parquetschema.SchemaDefinition)
+	schemaDefinition.RootColumn = new(parquetschema.ColumnDefinition)
+	schemaDefinition.RootColumn.SchemaElement = parquet.NewSchemaElement()
+
+	for i := 0; i < len(parquetFields); i++ {
+		schemaDefinition.RootColumn.Children = append(schemaDefinition.RootColumn.Children,
+			parquetFields[i].definition)
+		schemaDefinition.RootColumn.SchemaElement.Name = "root"
+	}
+	return schemaDefinition
+}
+
 func newParquetWriterProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -626,14 +733,6 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 	ctx, span := tracing.ChildSpan(ctx, "parquetWriter")
 	defer span.Finish()
 
-	knobs := sp.testingKnobsOrNil()
-	mon := sp.flowCtx.Mon
-	if knobs != nil && knobs.MemoryMonitor != nil {
-		mon = knobs.MemoryMonitor
-	}
-	memAcc := mon.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-
 	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
 	uniqueID := builtins.GenerateUniqueInt(builtins.ProcessUniqueID(instanceID))
 
@@ -642,43 +741,22 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, output)
 		alloc := &tree.DatumAlloc{}
-		datumRowAlloc := make([]tree.Datum, len(sp.spec.ColNames))
 
-		var buf bytes.Buffer
-		sch, err := crlparquet.NewSchema(sp.spec.ColNames, typs)
+		exporter, err := newParquetExporter(sp.spec, typs)
 		if err != nil {
 			return err
 		}
 
-		// TODO: util/parquet supports more compression formats. The
-		// exporter can be updated to supported these too.
-		var compression crlparquet.CompressionCodec
-		switch sp.spec.Format.Compression {
-		case roachpb.IOFileFormat_Snappy:
-			compression = crlparquet.CompressionSnappy
-		case roachpb.IOFileFormat_Gzip:
-			compression = crlparquet.CompressionGZIP
-		case roachpb.IOFileFormat_Auto, roachpb.IOFileFormat_None:
-			compression = crlparquet.CompressionNone
-		default:
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"parquet writer does not support compression format %s", sp.spec.Format.Compression)
-		}
-
+		parquetRow := make(map[string]interface{}, len(typs))
 		chunk := 0
 		done := false
 		for {
 			var rows int64
-			buf.Reset()
-			writer, err := crlparquet.NewWriter(sch, &buf, crlparquet.WithCompressionCodec(compression))
-			if err != nil {
-				return err
-			}
-			cummulativeAllocSize := int64(0)
+			exporter.ResetBuffer()
 			for {
 				// If the bytes.Buffer sink exceeds the target size of a Parquet file, we
 				// flush before exporting any additional rows.
-				if int64(buf.Len()) >= sp.spec.ChunkSize {
+				if int64(exporter.buf.Len()) >= sp.spec.ChunkSize {
 					break
 				}
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
@@ -693,39 +771,42 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 					break
 				}
 				rows++
-				datumRowAlloc = datumRowAlloc[:0]
+
 				for i, ed := range row {
-					// Make a best-effort attempt to capture the memory used by the parquet writer
-					// when encoding datums to write to files. In many cases, the datum will be
-					// encoded to bytes and these bytes will be buffered until the file is closed.
-					datumAllocSize := int64(float64(ed.Size()) * eventMemoryMultipier.Get(&sp.flowCtx.EvalCtx.Settings.SV))
-					cummulativeAllocSize += datumAllocSize
-					if err := memAcc.Grow(ctx, datumAllocSize); err != nil {
-						return err
-					}
-					if !ed.IsNull() {
+					if ed.IsNull() {
+						parquetRow[exporter.parquetColumns[i].name] = nil
+					} else {
 						if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 							return err
 						}
+
+						// If we're encoding a DOidWrapper, then we want to cast
+						// the wrapped datum. Note that we don't use
+						// eval.UnwrapDatum since we're not interested in
+						// evaluating the placeholders.
+						edNative, err := exporter.parquetColumns[i].encodeFn(tree.UnwrapDOidWrapper(ed.Datum))
+						if err != nil {
+							return err
+						}
+						parquetRow[exporter.parquetColumns[i].name] = edNative
 					}
-					// If we're encoding a DOidWrapper, then we want to cast
-					// the wrapped datum. Note that we don't use
-					// eval.UnwrapDatum since we're not interested in
-					// evaluating the placeholders.
-					datumRowAlloc = append(datumRowAlloc, tree.UnwrapDOidWrapper(ed.Datum))
 				}
-				if err := writer.AddRow(datumRowAlloc); err != nil {
+				if err := exporter.Write(parquetRow); err != nil {
 					return err
 				}
 			}
 			if rows < 1 {
 				break
 			}
-			// Flushes data to the buffer.
-			if err := writer.Close(); err != nil {
-				return errors.Wrap(err, "failed to close parquet writer")
+			if err := exporter.Flush(); err != nil {
+				return errors.Wrap(err, "failed to flush parquet exporter")
 			}
-			memAcc.Shrink(ctx, cummulativeAllocSize)
+
+			// Close exporter to ensure buffer and any compression footer is flushed.
+			err = exporter.Close()
+			if err != nil {
+				return errors.Wrapf(err, "failed to close exporting exporter")
+			}
 
 			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
 			if err != nil {
@@ -739,11 +820,11 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 
 			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
 			chunk++
-			filename := fileName(sp.spec, part)
+			filename := exporter.FileName(sp.spec, part)
 
-			size := buf.Len()
+			size := exporter.Len()
 
-			if err := cloud.WriteFile(ctx, es, filename, &buf); err != nil {
+			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(exporter.Bytes())); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
@@ -786,14 +867,6 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 // Resume is part of the execinfra.Processor interface.
 func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
-}
-
-// Resume is part of the execinfra.Processor interface.
-func (sp *parquetWriterProcessor) testingKnobsOrNil() *ExportTestingKnobs {
-	if sp.flowCtx.TestingKnobs().Export == nil {
-		return nil
-	}
-	return sp.flowCtx.TestingKnobs().Export.(*ExportTestingKnobs)
 }
 
 func init() {

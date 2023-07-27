@@ -144,8 +144,8 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Disabling the test tenant due to test failures. More
 				// investigation is required. Tracked with #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				ExternalIODir:     externalDir,
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            externalDir,
 			},
 		})
 		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -265,7 +265,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 		// reference a nil pointer below where we're expecting a database
 		// descriptor to exist. More investigation is required.
 		// Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)

@@ -14,8 +14,8 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -26,11 +26,6 @@ import (
 )
 
 const rangeIDChunkSize = 1000
-
-// priorityIDsValue is a placeholder value for raftScheduler.priorityIDs. IntMap
-// requires an unsafe.Pointer value, but we don't care about the value (only
-// the key), so we can reuse the same allocation.
-var priorityIDsValue = unsafe.Pointer(new(bool))
 
 type rangeIDChunk struct {
 	// Valid contents are buf[rd:wr], read at buf[rd], write at buf[wr].
@@ -70,15 +65,28 @@ func (c *rangeIDChunk) Len() int {
 // that would occur if a slice were used (the copying would occur on slice
 // reallocation).
 //
-// The queue implements a FIFO queueing policy with no prioritization of some
-// ranges over others.
+// The queue has a naive understanding of priority and fairness. For the most
+// part, it implements a FIFO queueing policy with no prioritization of some
+// ranges over others. However, the queue can be configured with up to one
+// high-priority range, which will always be placed at the front when added.
 type rangeIDQueue struct {
-	len    int
+	len int
+
+	// Default priority.
 	chunks list.List
+
+	// High priority.
+	priorityID     roachpb.RangeID
+	priorityStack  []byte // for debugging in case of assertion failure; see #75939
+	priorityQueued bool
 }
 
 func (q *rangeIDQueue) Push(id roachpb.RangeID) {
 	q.len++
+	if q.priorityID == id {
+		q.priorityQueued = true
+		return
+	}
 	if q.chunks.Len() == 0 || q.back().WriteCap() == 0 {
 		q.chunks.PushBack(&rangeIDChunk{})
 	}
@@ -94,6 +102,10 @@ func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
 		return 0, false
 	}
 	q.len--
+	if q.priorityQueued {
+		q.priorityQueued = false
+		return q.priorityID, true
+	}
 	frontElem := q.chunks.Front()
 	front := frontElem.Value.(*rangeIDChunk)
 	id, ok := front.PopFront()
@@ -108,6 +120,16 @@ func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
 
 func (q *rangeIDQueue) Len() int {
 	return q.len
+}
+
+func (q *rangeIDQueue) SetPriorityID(id roachpb.RangeID) {
+	if q.priorityID != 0 && q.priorityID != id {
+		panic(fmt.Sprintf(
+			"priority range ID already set: old=%d, new=%d, first set at:\n\n%s",
+			q.priorityID, id, q.priorityStack))
+	}
+	q.priorityStack = debug.Stack()
+	q.priorityID = id
 }
 
 func (q *rangeIDQueue) back() *rangeIDChunk {
@@ -163,66 +185,38 @@ var raftSchedulerBatchPool = sync.Pool{
 
 // raftSchedulerBatch is a batch of range IDs to enqueue. It enables
 // efficient per-shard enqueueing.
-type raftSchedulerBatch struct {
-	rangeIDs    [][]roachpb.RangeID // by shard
-	priorityIDs map[roachpb.RangeID]bool
-}
+type raftSchedulerBatch [][]roachpb.RangeID // by shard
 
-func newRaftSchedulerBatch(numShards int, priorityIDs *syncutil.IntMap) *raftSchedulerBatch {
+func newRaftSchedulerBatch(numShards int) raftSchedulerBatch {
 	b := raftSchedulerBatchPool.Get().(*raftSchedulerBatch)
-	if cap(b.rangeIDs) >= numShards {
-		b.rangeIDs = b.rangeIDs[:numShards]
-	} else {
-		b.rangeIDs = make([][]roachpb.RangeID, numShards)
+	if len(*b) != numShards {
+		*b = make([][]roachpb.RangeID, numShards)
 	}
-	if b.priorityIDs == nil {
-		b.priorityIDs = make(map[roachpb.RangeID]bool, 8) // expect few ranges, if any
-	}
-	// Cache the priority range IDs in an owned map, since we expect this to be
-	// very small or empty and we do a lookup for every Add() call.
-	priorityIDs.Range(func(id int64, _ unsafe.Pointer) bool {
-		b.priorityIDs[roachpb.RangeID(id)] = true
-		return true
-	})
-	return b
+	return *b
 }
 
-func (b *raftSchedulerBatch) Add(id roachpb.RangeID) {
-	shardIdx := shardIndex(id, len(b.rangeIDs), b.priorityIDs[id])
-	b.rangeIDs[shardIdx] = append(b.rangeIDs[shardIdx], id)
+func (b raftSchedulerBatch) Add(id roachpb.RangeID) {
+	shard := int(id) % len(b)
+	b[shard] = append(b[shard], id)
 }
 
-func (b *raftSchedulerBatch) Close() {
-	for i := range b.rangeIDs {
-		b.rangeIDs[i] = b.rangeIDs[i][:0]
+func (b raftSchedulerBatch) Reset() {
+	for i := range b {
+		b[i] = b[i][:0]
 	}
-	for i := range b.priorityIDs {
-		delete(b.priorityIDs, i)
-	}
-	raftSchedulerBatchPool.Put(b)
 }
 
-// shardIndex returns the raftScheduler shard index of the given range ID based
-// on the shard count and the range's priority. Priority ranges are assigned to
-// the reserved shard 0, other ranges are modulo range ID (ignoring shard 0).
-// numShards will always be 2 or more (1 priority, 1 regular).
-func shardIndex(id roachpb.RangeID, numShards int, priority bool) int {
-	if priority {
-		return 0
-	}
-	return 1 + int(int64(id)%int64(numShards-1)) // int64s to avoid overflow
+func (b raftSchedulerBatch) Close() {
+	b.Reset()
+	raftSchedulerBatchPool.Put(&b)
 }
 
 type raftScheduler struct {
 	ambientContext log.AmbientContext
 	processor      raftProcessor
 	metrics        *StoreMetrics
-	// shards contains scheduler shards. Ranges and workers are allocated to
-	// separate shards to reduce contention at high worker counts. Allocation
-	// is modulo range ID, with shard 0 reserved for priority ranges.
-	shards      []*raftSchedulerShard // 1 + RangeID % (len(shards) - 1)
-	priorityIDs syncutil.IntMap
-	done        sync.WaitGroup
+	shards         []*raftSchedulerShard // RangeID % len(shards)
+	done           sync.WaitGroup
 }
 
 type raftSchedulerShard struct {
@@ -241,7 +235,6 @@ func newRaftScheduler(
 	processor raftProcessor,
 	numWorkers int,
 	shardSize int,
-	priorityWorkers int,
 	maxTicks int,
 ) *raftScheduler {
 	s := &raftScheduler{
@@ -249,17 +242,9 @@ func newRaftScheduler(
 		processor:      processor,
 		metrics:        metrics,
 	}
-
-	// Priority shard at index 0.
-	if priorityWorkers <= 0 {
-		priorityWorkers = 1
-	}
-	s.shards = append(s.shards, newRaftSchedulerShard(priorityWorkers, maxTicks))
-
-	// Regular shards, excluding priority shard.
 	numShards := 1
 	if shardSize > 0 && numWorkers > shardSize {
-		numShards = (numWorkers-1)/shardSize + 1 // ceiling division
+		numShards = (numWorkers-1)/shardSize + 1
 	}
 	for i := 0; i < numShards; i++ {
 		shardWorkers := numWorkers / numShards
@@ -269,19 +254,15 @@ func newRaftScheduler(
 		if shardWorkers <= 0 {
 			shardWorkers = 1 // ensure we always have a worker
 		}
-		s.shards = append(s.shards, newRaftSchedulerShard(shardWorkers, maxTicks))
+		shard := &raftSchedulerShard{
+			state:      map[roachpb.RangeID]raftScheduleState{},
+			numWorkers: shardWorkers,
+			maxTicks:   maxTicks,
+		}
+		shard.cond = sync.NewCond(&shard.Mutex)
+		s.shards = append(s.shards, shard)
 	}
 	return s
-}
-
-func newRaftSchedulerShard(numWorkers, maxTicks int) *raftSchedulerShard {
-	shard := &raftSchedulerShard{
-		state:      map[roachpb.RangeID]raftScheduleState{},
-		numWorkers: numWorkers,
-		maxTicks:   maxTicks,
-	}
-	shard.cond = sync.NewCond(&shard.Mutex)
-	return shard
 }
 
 func (s *raftScheduler) Start(stopper *stop.Stopper) {
@@ -332,24 +313,20 @@ func (s *raftScheduler) Wait(context.Context) {
 	s.done.Wait()
 }
 
-// AddPriorityID adds the given range ID to the set of priority ranges.
-func (s *raftScheduler) AddPriorityID(rangeID roachpb.RangeID) {
-	s.priorityIDs.Store(int64(rangeID), priorityIDsValue)
+// SetPriorityID configures the single range that the scheduler will prioritize
+// above others. Once set, callers are not permitted to change this value.
+func (s *raftScheduler) SetPriorityID(id roachpb.RangeID) {
+	for _, shard := range s.shards {
+		shard.Lock()
+		shard.queue.SetPriorityID(id)
+		shard.Unlock()
+	}
 }
 
-// RemovePriorityID removes the given range ID from the set of priority ranges.
-func (s *raftScheduler) RemovePriorityID(rangeID roachpb.RangeID) {
-	s.priorityIDs.Delete(int64(rangeID))
-}
-
-// PriorityIDs returns the current priority ranges.
-func (s *raftScheduler) PriorityIDs() []roachpb.RangeID {
-	var priorityIDs []roachpb.RangeID
-	s.priorityIDs.Range(func(id int64, _ unsafe.Pointer) bool {
-		priorityIDs = append(priorityIDs, roachpb.RangeID(id))
-		return true
-	})
-	return priorityIDs
+func (s *raftScheduler) PriorityID() roachpb.RangeID {
+	s.shards[0].Lock()
+	defer s.shards[0].Unlock()
+	return s.shards[0].queue.priorityID
 }
 
 func (ss *raftSchedulerShard) worker(
@@ -454,8 +431,8 @@ func (ss *raftSchedulerShard) worker(
 // NewEnqueueBatch creates a new range ID batch for enqueueing via
 // EnqueueRaft(Ticks|Requests). The caller must call Close() on the batch when
 // done.
-func (s *raftScheduler) NewEnqueueBatch() *raftSchedulerBatch {
-	return newRaftSchedulerBatch(len(s.shards), &s.priorityIDs)
+func (s *raftScheduler) NewEnqueueBatch() raftSchedulerBatch {
+	return newRaftSchedulerBatch(len(s.shards))
 }
 
 func (ss *raftSchedulerShard) enqueue1Locked(
@@ -488,9 +465,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 
 func (s *raftScheduler) enqueue1(addFlags raftScheduleFlags, id roachpb.RangeID) {
 	now := nowNanos()
-	_, hasPriority := s.priorityIDs.Load(int64(id))
-	shardIdx := shardIndex(id, len(s.shards), hasPriority)
-	shard := s.shards[shardIdx]
+	shard := s.shards[int(id)%len(s.shards)]
 	shard.Lock()
 	n := shard.enqueue1Locked(addFlags, id, now)
 	shard.Unlock()
@@ -521,10 +496,10 @@ func (ss *raftSchedulerShard) enqueueN(addFlags raftScheduleFlags, ids ...roachp
 	return count
 }
 
-func (s *raftScheduler) enqueueBatch(addFlags raftScheduleFlags, batch *raftSchedulerBatch) {
-	for shardIdx, ids := range batch.rangeIDs {
-		count := s.shards[shardIdx].enqueueN(addFlags, ids...)
-		s.shards[shardIdx].signal(count)
+func (s *raftScheduler) enqueueBatch(addFlags raftScheduleFlags, batch raftSchedulerBatch) {
+	for i, ids := range batch {
+		count := s.shards[i].enqueueN(addFlags, ids...)
+		s.shards[i].signal(count)
 	}
 }
 
@@ -546,11 +521,11 @@ func (s *raftScheduler) EnqueueRaftRequest(id roachpb.RangeID) {
 	s.enqueue1(stateRaftRequest, id)
 }
 
-func (s *raftScheduler) EnqueueRaftRequests(batch *raftSchedulerBatch) {
+func (s *raftScheduler) EnqueueRaftRequests(batch raftSchedulerBatch) {
 	s.enqueueBatch(stateRaftRequest, batch)
 }
 
-func (s *raftScheduler) EnqueueRaftTicks(batch *raftSchedulerBatch) {
+func (s *raftScheduler) EnqueueRaftTicks(batch raftSchedulerBatch) {
 	s.enqueueBatch(stateRaftTick, batch)
 }
 

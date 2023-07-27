@@ -17,10 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -59,7 +57,7 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 	if err := d.decode(ctx, ents); err != nil {
 		return false, err
 	}
-	anyLocal := d.retrieveLocalProposals()
+	anyLocal := d.retrieveLocalProposals(ctx)
 	d.createTracingSpans(ctx)
 	return anyLocal, nil
 }
@@ -75,61 +73,66 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 	return nil
 }
 
-// retrieveLocalProposals removes all proposals which have a log entry pending
-// immediate application from the proposals map. The entries which are paired up
-// with a proposal in that way are considered "local", meaning a client is
-// waiting on their result, and may be reproposed (as a new proposal) with a new
-// lease index in case they apply with an illegal lease index (see
-// tryReproposeWithNewLeaseIndex).
-func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
+// retrieveLocalProposals binds each of the decoder's commands to their local
+// proposals if they were proposed locally. The method also sets the ctx fields
+// on all commands.
+func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal bool) {
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
-
+	// Assign all the local proposals first then delete all of them from the map
+	// in a second pass. This ensures that we retrieve all proposals correctly
+	// even if the applier has multiple entries for the same proposal, in which
+	// case the proposal was reproposed (either under its original or a new
+	// MaxLeaseIndex) which we handle in a second pass below.
 	var it replicatedCmdBufSlice
-
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		cmd.proposal = d.r.mu.proposals[cmd.ID]
-		var alloc *quotapool.IntAlloc
-		if cmd.proposal != nil {
-			// INVARIANT: a proposal is consumed (i.e. removed from the proposals map)
-			// the first time it comes up for application. (If the proposal fails due
-			// to an illegal LeaseAppliedIndex, a new proposal might be spawned to
-			// retry but that proposal will be unrelated as far as log application is
-			// concerned).
+		anyLocal = anyLocal || cmd.IsLocal()
+	}
+	if !anyLocal && d.r.mu.proposalQuota == nil {
+		// Fast-path.
+		return false
+	}
+	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
+		cmd := it.cur()
+		var toRelease *quotapool.IntAlloc
+		shouldRemove := cmd.IsLocal() &&
+			// If this entry does not have the most up-to-date view of the
+			// corresponding proposal's maximum lease index then the proposal
+			// must have been reproposed with a higher lease index. (see
+			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
+			// version of the proposal in the pipeline, so don't remove the
+			// proposal from the map. We expect this entry to be rejected by
+			// checkForcedErr.
 			//
-			// INVARIANT: local proposals are not in the proposals map while being
-			// applied, and they never re-enter the proposals map either during or
-			// afterwards.
+			// Note that lease proposals always use a MaxLeaseIndex of zero (since
+			// they have their own replay protection), so they always meet this
+			// criterion. While such proposals can be reproposed, only the first
+			// instance that gets applied matters and so removing the command is
+			// always what we want to happen.
+			cmd.Cmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
+		if shouldRemove {
+			// Delete the proposal from the proposals map. There may be reproposals
+			// of the proposal in the pipeline, but those will all have the same max
+			// lease index, meaning that they will all be rejected after this entry
+			// applies (successfully or otherwise). If tryReproposeWithNewLeaseIndex
+			// picks up the proposal on failure, it will re-add the proposal to the
+			// proposal map, but this won't affect this replicaApplier.
 			//
-			// (propBuf.{Insert,ReinsertLocked} ignores proposals that have
-			// v2SeenDuringApplicationSet to make this true).
-			if cmd.proposal.v2SeenDuringApplication {
-				err := errors.AssertionFailedf("ProposalData seen twice during application: %+v", cmd.proposal)
-				logcrash.ReportOrPanic(d.r.AnnotateCtx(cmd.ctx), &d.r.store.ClusterSettings().SV, "%v", err)
-				// If we didn't panic, treat the proposal as non-local. This makes sure
-				// we don't repropose it under a new lease index.
-				cmd.proposal = nil
-			} else {
-				cmd.proposal.v2SeenDuringApplication = true
-				anyLocal = true
-				delete(d.r.mu.proposals, cmd.ID)
-				if d.r.mu.proposalQuota != nil {
-					alloc = cmd.proposal.quotaAlloc
-					cmd.proposal.quotaAlloc = nil
-				}
-			}
+			// While here, add the proposal's quota size to the quota release queue.
+			// We check the proposal map again first to avoid double free-ing quota
+			// when reproposals from the same proposal end up in the same entry
+			// application batch.
+			delete(d.r.mu.proposals, cmd.ID)
+			toRelease = cmd.proposal.quotaAlloc
+			cmd.proposal.quotaAlloc = nil
 		}
-
-		// NB: this may append nil. It's intentional. The quota release queue
-		// needs to have one slice entry per entry applied (even if the entry
-		// is rejected).
-		//
-		// TODO(tbg): there used to be an optimization where we'd elide mutating
-		// this slice until we saw a local proposal under a populated
-		// b.r.mu.proposalQuota. We can bring it back.
+		// At this point we're not guaranteed to have proposalQuota initialized,
+		// the same is true for quotaReleaseQueues. Only queue the proposal's
+		// quota for release if the proposalQuota is initialized.
 		if d.r.mu.proposalQuota != nil {
-			d.r.mu.quotaReleaseQueue = append(d.r.mu.quotaReleaseQueue, alloc)
+			d.r.mu.quotaReleaseQueue = append(d.r.mu.quotaReleaseQueue, toRelease)
 		}
 	}
 	return anyLocal

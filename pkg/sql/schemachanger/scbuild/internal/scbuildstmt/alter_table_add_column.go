@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -50,10 +48,6 @@ func alterTableAddColumn(
 	fallBackIfSubZoneConfigExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 	fallBackIfVirtualColumnWithNotNullConstraint(t)
-	// Version gates functionally that is implemented after the statement is
-	// publicly published.
-	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, t)
-
 	// Check column non-existence.
 	{
 		elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
@@ -129,13 +123,10 @@ func alterTableAddColumn(
 			IsHidden:                desc.Hidden,
 			IsInaccessible:          desc.Inaccessible,
 			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
+			PgAttributeNum:          desc.GetPGAttributeNum(),
 		},
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
-	}
-	// Only set PgAttributeNum if it differs from ColumnID.
-	if pgAttNum := desc.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(desc.ID) {
-		spec.col.PgAttributeNum = pgAttNum
 	}
 	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
 		spec.col.GeneratedAsIdentitySequenceOption = *ptr
@@ -232,18 +223,27 @@ func alterTableAddColumn(
 		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
 	}
 	// Add secondary indexes for this column.
-	backing := addColumn(b, spec, t)
+	var primaryIdx *scpb.PrimaryIndex
+
+	if newPrimary := addColumn(b, spec, t); newPrimary != nil {
+		primaryIdx = newPrimary
+	} else {
+		publicTargets := b.QueryByID(tbl.TableID).Filter(
+			func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+				return target == scpb.ToPublic
+			},
+		)
+		_, _, primaryIdx = scpb.FindPrimaryIndex(publicTargets)
+	}
 	if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
-		// TODO (xiang): Think it through whether this (i.e. backing is usually
-		// final and sometimes old) is okay.
-		idx.ID = b.NextTableIndexID(tbl.TableID)
+		idx.ID = b.NextTableIndexID(tbl)
 		{
 			namesToIDs := columnNamesToIDs(b, tbl)
 			for _, colName := range cdd.PrimaryKeyOrUniqueIndexDescriptor.KeyColumnNames {
 				idx.KeyColumnIDs = append(idx.KeyColumnIDs, namesToIDs[colName])
 			}
 		}
-		addSecondaryIndexTargetsForAddColumn(b, tbl, idx, backing)
+		addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
 	}
 	b.LogEventForExistingTarget(spec.col)
 	switch spec.colType.Type.Family() {
@@ -251,52 +251,6 @@ func alterTableAddColumn(
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
-	}
-}
-
-// We start to support mixing add column(s), drop column(s), alter PK in one
-// ALTER TABLE stmt from V23_2. Before that, we only support just add column(s),
-// or just drop column(s), or just alter PK in one ALTER TABLE stmt.
-func fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(
-	b BuildCtx, tableID catid.DescID, n tree.NodeFormatter,
-) {
-	addingAnyColumn := !b.QueryByID(tableID).
-		Filter(isColumnFilter).
-		Filter(publicTargetFilter).
-		Filter(notReachedTargetYetFilter).
-		IsEmpty()
-
-	droppingAnyColumn := !b.QueryByID(tableID).
-		Filter(isColumnFilter).
-		Filter(absentTargetFilter).
-		Filter(notReachedTargetYetFilter).
-		IsEmpty()
-
-	alteringAnyPK := false
-	currentPrimaryIndexID := mustRetrieveCurrentPrimaryIndexElement(b, tableID).IndexID
-	scpb.ForEachPrimaryIndex(
-		b.QueryByID(tableID).Filter(publicTargetFilter).Filter(notReachedTargetYetFilter), func(
-			current scpb.Status, target scpb.TargetStatus, e *scpb.PrimaryIndex,
-		) {
-			// If any adding primary index has different key columns than current
-			// primary index `old`, then we conclude an ALTER PK happened.
-			if !haveSameIndexColsByKind(b, tableID, currentPrimaryIndexID, e.IndexID, scpb.IndexColumn_KEY) {
-				alteringAnyPK = true
-			}
-		})
-
-	boolToInt := func(b bool) int {
-		if b {
-			return 1
-		}
-		return 0
-	}
-
-	if boolToInt(addingAnyColumn)+boolToInt(droppingAnyColumn)+boolToInt(alteringAnyPK) > 1 {
-		if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V23_2) {
-			panic(scerrors.NotImplementedErrorf(n, "mixing ADD COLUMN, DROP COLUMN, "+
-				"and ALTER PRIMARY KEY not supported before V23.2"))
-		}
 	}
 }
 
@@ -335,12 +289,6 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 	addColumnIgnoringNotNull := func(
 		b BuildCtx, spec addColumnSpec, n tree.NodeFormatter,
 	) (backing *scpb.PrimaryIndex) {
-		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.notNull && spec.unique {
-			panic(scerrors.NotImplementedErrorf(n,
-				"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
-					"concurrent insert. See issue #90174"))
-		}
-
 		b.Add(spec.col)
 		if spec.fam != nil {
 			b.Add(spec.fam)
@@ -356,112 +304,159 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		if spec.comment != nil {
 			b.Add(spec.comment)
 		}
-		// Don't need to modify primary indexes for virtual columns.
+		// Add or update primary index for non-virtual columns.
 		if spec.colType.IsVirtual {
-			chain := getPrimaryIndexChain(b, spec.tbl.TableID)
-			if chain.finalSpec.primary != nil {
-				return chain.finalSpec.primary
-			} else {
-				return chain.oldSpec.primary
-			}
+			return nil
+		}
+		// Check whether a target to add a new primary index already exists. If so,
+		// simply add the new column to its storing columns.
+		tableID := spec.tbl.TableID
+		existing, freshlyAdded := getPrimaryIndexes(b, tableID)
+		if freshlyAdded != nil {
+			handleAddColumnFreshlyAddedPrimaryIndex(b, spec, freshlyAdded, n)
+			return freshlyAdded
 		}
 
-		inflatedChain := getInflatedPrimaryIndexChain(b, spec.tbl.TableID)
+		// As a special case, if we have a new column which has no computed
+		// expression and no default value, then we can just add it to the
+		// current primary index; there's no need to build a new index as
+		// it would have exactly the same data as the current index.
+		//
+		// Note that it's not totally obvious that this is safe. In particular,
+		// if we were to fail the schema change, we'd need to roll back. Rolling
+		// back the addition of this new column to the primary index is only safe
+		// if no value was ever written to the column. Fortunately, we know that
+		// the only case that this column ever gets data written to it is if it
+		// becomes public and the only way the column becomes public is if the
+		// schema change makes it to the non-revertible phase (this is true because
+		// making a new column public is not revertible).
+		//
+		// If ever we were to change how we encoded NULLs, perhaps so that we could
+		// interpret a missing value as an arbitrary default expression, we'd need
+		// to revisit this optimization.
+		//
+		// TODO(ajwerner): The above comment is incorrect in that we don't mark
+		// the marking of a column public as non-revertible. In cases with more
+		// than a single statement or more complex schema changes in a transaction
+		// this is buggy. We need to change that but it causes other tests, namely
+		// in cdc, to fail because it leads to the new primary index being published
+		// to public before the column is published as public. We'll need to figure
+		// out how to make sure that that happens atomically. Leaving that for a
+		// follow-up change in order to get this in.
+		allTargets := b.QueryByID(spec.tbl.TableID)
 		if spec.def == nil && spec.colType.ComputeExpr == nil {
-			// Optimization opportunity: if we were to add a new column without default
-			// value nor computed expression, then we can just add the column to existing
-			// non-nil primary indexes without actually backfilling any data. This is
-			// achieved by inflating the chain of primary indexes and add this column
-			// to *all* four primary indexes. Later, in the de-duplication step, we'd
-			// recognize this and drop redundant primary indexes appropriately.
-			addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.oldSpec.primary, spec.col, scpb.ToPublic)
+			if spec.notNull && spec.unique {
+				panic(scerrors.NotImplementedErrorf(n,
+					"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
+						"concurrent insert. See issue #90174"))
+			}
+			b.Add(&scpb.IndexColumn{
+				TableID:       spec.tbl.TableID,
+				IndexID:       existing.IndexID,
+				ColumnID:      spec.col.ColumnID,
+				OrdinalInKind: getNextStoredIndexColumnOrdinal(allTargets, existing),
+				Kind:          scpb.IndexColumn_STORED,
+			})
+			return existing
 		}
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter1Spec.primary, spec.col, scpb.Transient)
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter2Spec.primary, spec.col, scpb.Transient)
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.finalSpec.primary, spec.col, scpb.ToPublic)
-		return inflatedChain.finalSpec.primary
+
+		// Otherwise, create a new primary index target and swap it with the existing
+		// primary index.
+		out := makeIndexSpec(b, existing.TableID, existing.IndexID)
+		inColumns := make([]indexColumnSpec, len(out.columns)+1)
+		for i, ic := range out.columns {
+			inColumns[i] = makeIndexColumnSpec(ic)
+		}
+		inColumns[len(out.columns)] = indexColumnSpec{
+			columnID: spec.col.ColumnID,
+			kind:     scpb.IndexColumn_STORED,
+		}
+		out.apply(b.Drop)
+		in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
+		in.apply(b.Add)
+		temp.apply(b.AddTransient)
+		return in.primary
 	}
 
 	backing = addColumnIgnoringNotNull(b, spec, n)
-	if backing == nil {
-		panic(errors.AssertionFailedf("programming error: backing primary index is nil; it" +
-			"should at least be the existing primary index (aka `old`)"))
-	}
 	if spec.notNull {
 		cnne := scpb.ColumnNotNull{
 			TableID:  spec.tbl.TableID,
 			ColumnID: spec.col.ColumnID,
 		}
-		cnne.IndexIDForValidation = backing.IndexID
+		if backing != nil {
+			cnne.IndexIDForValidation = backing.IndexID
+		}
 		b.Add(&cnne)
 	}
 	return backing
 }
 
-// addStoredColumnToPrimaryIndexTargeting adds a stored column `col` to primary
-// index `idx` and its associated temporary index.
-// The column in primary index is targeting `target` (either ToPublic or Transient),
-// and the column in its temporary index is always targeting Transient.
-func addStoredColumnToPrimaryIndexTargeting(
-	b BuildCtx,
-	tableID catid.DescID,
-	idx *scpb.PrimaryIndex,
-	col *scpb.Column,
-	target scpb.TargetStatus,
+// handleAddColumnFreshlyAddedPrimaryIndex is used when adding a column to a
+// table and a previous command has already created a new primary index. In
+// this situation, we need to add the new column to this new primary index.
+func handleAddColumnFreshlyAddedPrimaryIndex(
+	b BuildCtx, spec addColumnSpec, freshlyAdded *scpb.PrimaryIndex, n tree.NodeFormatter,
 ) {
-	addIndexColumnToInternal(b, tableID, idx.IndexID, col.ColumnID, scpb.IndexColumn_STORED, target)
-	addIndexColumnToInternal(b, tableID, idx.TemporaryIndexID, col.ColumnID, scpb.IndexColumn_STORED, scpb.Transient)
-}
-
-func addIndexColumnToInternal(
-	b BuildCtx,
-	tableID catid.DescID,
-	indexID catid.IndexID,
-	columnID catid.ColumnID,
-	kind scpb.IndexColumn_Kind,
-	target scpb.TargetStatus,
-) {
-	if indexID == 0 {
-		return
+	// Check to make sure we aren't removing any columns from this index.
+	// If we are, it means that this transaction is both adding and removing
+	// physical columns from the table, and we need an intermediate, transient
+	// primary index.
+	//
+	// TODO(ajwerner): Handle adding and dropping columns in the same statement
+	// and transaction.
+	if haveDroppingColumn := !b.QueryByID(freshlyAdded.TableID).
+		Filter(isColumnFilter).
+		Filter(absentTargetFilter).
+		IsEmpty(); haveDroppingColumn {
+		panic(scerrors.NotImplementedErrorf(n, "ADD COLUMN after DROP COLUMN"))
 	}
 
-	var exist bool
-	for _, toStoredCol := range getIndexColumns(b.QueryByID(tableID), indexID, kind) {
-		if toStoredCol.ColumnID == columnID {
-			exist = true
-			break
-		}
-	}
-	if exist {
-		panic(errors.AssertionFailedf("programming error: attempt to add column %v to primary"+
-			"index %v's storing columns in table %v, but this column already exists there.",
-			columnID, exist, tableID))
-	}
-
-	indexCol := scpb.IndexColumn{
-		TableID:       tableID,
-		IndexID:       indexID,
-		ColumnID:      columnID,
-		OrdinalInKind: getNextStoredIndexColumnOrdinal(b.QueryByID(tableID), indexID),
-		Kind:          scpb.IndexColumn_STORED,
-	}
-	switch target {
-	case scpb.ToPublic:
-		b.Add(&indexCol)
-	case scpb.Transient:
-		b.AddTransient(&indexCol)
-	default:
-		panic(errors.AssertionFailedf("programming error: add index column element "+
-			"should only target PUBLIC or TRANSIENT; get %v", target.Status()))
-	}
-}
-
-func getNextStoredIndexColumnOrdinal(allTargets ElementResultSet, indexID catid.IndexID) uint32 {
-	max := -1
-	scpb.ForEachIndexColumn(allTargets.Filter(notFilter(ghostElementFilter)), func(
-		status scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn,
+	var tempIndex *scpb.TemporaryIndex
+	scpb.ForEachTemporaryIndex(b.QueryByID(spec.tbl.TableID), func(
+		status scpb.Status, ts scpb.TargetStatus, e *scpb.TemporaryIndex,
 	) {
-		if e.IndexID == indexID && e.Kind == scpb.IndexColumn_STORED &&
+		if ts != scpb.Transient {
+			return
+		}
+		if e.IndexID == freshlyAdded.TemporaryIndexID {
+			if tempIndex != nil {
+				panic(errors.AssertionFailedf(
+					"multiple temporary index elements exist with index id %d for table %d",
+					freshlyAdded.TemporaryIndexID, e.TableID,
+				))
+			}
+			tempIndex = e
+		}
+	})
+	if tempIndex == nil {
+		panic(errors.AssertionFailedf(
+			"failed to find temporary index element for new primary index id %d for table %d",
+			freshlyAdded.IndexID, freshlyAdded.TableID,
+		))
+	}
+	// Add the new index column to the index and to its temp index.
+	ic := &scpb.IndexColumn{
+		TableID:  spec.tbl.TableID,
+		IndexID:  freshlyAdded.IndexID,
+		ColumnID: spec.col.ColumnID,
+		OrdinalInKind: getNextStoredIndexColumnOrdinal(
+			b.QueryByID(spec.tbl.TableID), freshlyAdded,
+		),
+		Kind: scpb.IndexColumn_STORED,
+	}
+	b.Add(ic)
+	tempIC := protoutil.Clone(ic).(*scpb.IndexColumn)
+	tempIC.IndexID = tempIndex.IndexID
+	b.Add(tempIC)
+}
+
+func getNextStoredIndexColumnOrdinal(allTargets ElementResultSet, idx *scpb.PrimaryIndex) uint32 {
+	max := -1
+	scpb.ForEachIndexColumn(allTargets, func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
+	) {
+		if e.IndexID == idx.IndexID && e.Kind == scpb.IndexColumn_STORED &&
 			int(e.OrdinalInKind) > max {
 			max = int(e.OrdinalInKind)
 		}
@@ -474,7 +469,7 @@ func getNextStoredIndexColumnOrdinal(allTargets ElementResultSet, indexID catid.
 func getImplicitSecondaryIndexName(
 	b BuildCtx, descID descpb.ID, indexID descpb.IndexID, numImplicitColumns int,
 ) string {
-	elts := b.QueryByID(descID).Filter(notFilter(absentTargetFilter))
+	elts := b.QueryByID(descID).Filter(notAbsentTargetFilter)
 	var idx *scpb.Index
 	scpb.ForEachSecondaryIndex(elts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex) {
 		if e.IndexID == indexID {
@@ -551,9 +546,7 @@ func getIndexColumns(
 	elts ElementResultSet, id descpb.IndexID, kind scpb.IndexColumn_Kind,
 ) []*scpb.IndexColumn {
 	var keyColumns []*scpb.IndexColumn
-	scpb.ForEachIndexColumn(elts.Filter(notFilter(ghostElementFilter)), func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
-	) {
+	scpb.ForEachIndexColumn(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
 		if e.IndexID == id && e.Kind == kind {
 			keyColumns = append(keyColumns, e)
 		}
@@ -575,7 +568,6 @@ func addSecondaryIndexTargetsForAddColumn(
 		IsInverted:    desc.Type == descpb.IndexDescriptor_INVERTED,
 		SourceIndexID: newPrimaryIdx.IndexID,
 		IsNotVisible:  desc.NotVisible,
-		Invisibility:  desc.Invisibility,
 	}
 	tempIndexID := index.IndexID + 1 // this is enforced below
 	index.TemporaryIndexID = tempIndexID
@@ -592,14 +584,12 @@ func addSecondaryIndexTargetsForAddColumn(
 	// schema changer.
 	{
 		// Apply any implicit partitioning columns first, if they are missing.
-		scpb.ForEachIndexPartitioning(
-			b.QueryByID(tbl.TableID),
-			func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
-				if e.IndexID == newPrimaryIdx.IndexID {
-					partitioning = &e.PartitioningDescriptor
-				}
-			},
-		)
+		scpb.ForEachIndexPartitioning(b, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+			if e.IndexID == newPrimaryIdx.IndexID &&
+				e.TableID == newPrimaryIdx.TableID {
+				partitioning = &e.PartitioningDescriptor
+			}
+		})
 		keyColSet := catalog.TableColSet{}
 		extraSuffixColumns := catalog.TableColSet{}
 		for _, colID := range desc.KeyColumnIDs {
@@ -728,19 +718,4 @@ func addSecondaryIndexTargetsForAddColumn(
 			PartitioningDescriptor: *protoutil.Clone(partitioning).(*catpb.PartitioningDescriptor),
 		})
 	}
-}
-
-func mustRetrieveTemporaryIndexElem(
-	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
-) (temporaryIndexElem *scpb.TemporaryIndex) {
-	scpb.ForEachTemporaryIndex(b.QueryByID(tableID), func(current scpb.Status, target scpb.TargetStatus, e *scpb.TemporaryIndex) {
-		if e.IndexID == indexID {
-			temporaryIndexElem = e
-		}
-	})
-	if temporaryIndexElem == nil {
-		panic(errors.AssertionFailedf("programming error: cannot find a TemporaryIndex element"+
-			" of ID %v", indexID))
-	}
-	return temporaryIndexElem
 }

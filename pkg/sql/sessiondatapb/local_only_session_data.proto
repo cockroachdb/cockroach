@@ -387,42 +387,18 @@ message LocalOnlySessionData {
   // expression with a column reference, which can produce more efficient query
   // plans.
   bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
-  // TestingOptimizerInjectPanics indicates whether random panics are injected
-  // during optimization. The goal of this setting is to flush out cases where
-  // panics used for error-propagation are uncaught.
-  bool testing_optimizer_inject_panics = 103;
   // OptimizerUseImprovedComputedColumnFiltersDerivation, when true, causes the
   // optimizer to derive filters on computed columns in more cases. Previously,
   // filters could only be derived when the expression defining the computed
   // column involved a single column and that column was equated with a single
   // constant value in a WHERE clause filter.
   bool optimizer_use_improved_computed_column_filters_derivation = 104;
-  // DefaultTxnIsolationLevel indicates the default isolation level of newly
-  // created transactions.
-  // NOTE: we'd prefer to use tree.IsolationLevel here, but doing so would
-  // introduce a package dependency cycle.
-  int64 default_txn_isolation_level = 105;
-  // ReplicationMode represents the replication parameter passed in during
-  // connection time.
-  ReplicationMode replication_mode = 106;
-  // OptimizerUseImprovedJoinElimination, when true, allows the optimizer to
-  // eliminate joins in more cases by remapping columns from the eliminated
-  // input of the join to equivalent columns from the preserved input.
-  bool optimizer_use_improved_join_elimination = 107;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
   // in the SessionData message instead.                                   //
   ///////////////////////////////////////////////////////////////////////////
-}
-
-// ReplicationMode represents the replication={0,1,on,off,database} connection
-// parameter in PostgreSQL.
-enum ReplicationMode {
-  REPLICATION_MODE_DISABLED = 0;
-  REPLICATION_MODE_ENABLED = 1;
-  REPLICATION_MODE_DATABASE = 2;
 }
 
 // SequenceCacheEntry is an entry in a SequenceCache.

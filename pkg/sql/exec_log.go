@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -121,7 +120,7 @@ func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
 	isCopy bool,
-	numRetries, txnCounter, rows, stmtCount int,
+	numRetries, txnCounter, rows int,
 	bulkJobId uint64,
 	err error,
 	queryReceived time.Time,
@@ -133,7 +132,7 @@ func (p *planner) maybeLogStatement(
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
-		rows, stmtCount, bulkJobId, err, queryReceived, hasAdminRoleCache,
+		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
 	)
 }
@@ -142,7 +141,7 @@ func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
 	execType executorType,
 	isCopy bool,
-	numRetries, txnCounter, rows, stmtCount int,
+	numRetries, txnCounter, rows int,
 	bulkJobId uint64,
 	err error,
 	startTime time.Time,
@@ -215,7 +214,6 @@ func (p *planner) maybeLogStatementInternal(
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
 		TxnCounter:    uint32(txnCounter),
-		StmtPosInTxn:  uint32(stmtCount),
 	}
 
 	// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
@@ -325,17 +323,6 @@ func (p *planner) maybeLogStatementInternal(
 
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 
-			var sqlInstanceIDs []int32
-			if len(queryLevelStats.SqlInstanceIds) > 0 {
-				sqlInstanceIDs = make([]int32, 0, len(queryLevelStats.SqlInstanceIds))
-				for sqlId := range queryLevelStats.SqlInstanceIds {
-					sqlInstanceIDs = append(sqlInstanceIDs, int32(sqlId))
-				}
-				sort.Slice(sqlInstanceIDs, func(i, j int) bool {
-					return sqlInstanceIDs[i] < sqlInstanceIDs[j]
-				})
-			}
-
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:                  execDetails,
 				SkippedQueries:                        skippedQueries,
@@ -372,12 +359,10 @@ func (p *planner) maybeLogStatementInternal(
 				ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 				ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
 				Regions:                               queryLevelStats.Regions,
-				SQLInstanceIDs:                        sqlInstanceIDs,
 				NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
 				KVBytesRead:                           queryLevelStats.KVBytesRead,
-				KVPairsRead:                           queryLevelStats.KVPairsRead,
 				KVRowsRead:                            queryLevelStats.KVRowsRead,
 				KvTimeNanos:                           queryLevelStats.KVTime.Nanoseconds(),
 				KvGrpcCalls:                           queryLevelStats.KVBatchRequestsIssued,

@@ -87,6 +87,6 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 			refRun = history
 			continue
 		}
-		require.Equal(t, refRun.Recorded, history.Recorded)
+		require.Equal(t, refRun, history)
 	}
 }

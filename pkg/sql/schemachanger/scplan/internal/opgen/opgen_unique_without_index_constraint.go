@@ -46,10 +46,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.UniqueWithoutIndexConstraint, md *opGenContext) *scop.ValidateConstraint {
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
+				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.ValidateConstraint {
 					return &scop.ValidateConstraint{
 						TableID:              this.TableID,
 						ConstraintID:         this.ConstraintID,

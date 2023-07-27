@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "echotest",
-    testonly = 1,
     srcs = ["echotest.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/echotest",
     visibility = ["//visibility:public"],

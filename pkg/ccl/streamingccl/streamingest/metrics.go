@@ -128,12 +128,6 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaDistSQLReplanCount = metric.Metadata{
-		Name:        "replication.distsql_replan_count",
-		Help:        "Total number of dist sql replanning events",
-		Measurement: "Events",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
@@ -144,7 +138,6 @@ type Metrics struct {
 	Flushes                     *metric.Counter
 	JobProgressUpdates          *metric.Counter
 	ResolvedEvents              *metric.Counter
-	ReplanCount                 *metric.Counter
 	FlushHistNanos              metric.IHistogram
 	CommitLatency               metric.IHistogram
 	AdmitLatency                metric.IHistogram
@@ -169,7 +162,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		Flushes:              metric.NewCounter(metaReplicationFlushes),
 		ResolvedEvents:       metric.NewCounter(metaReplicationResolvedEventsIngested),
 		JobProgressUpdates:   metric.NewCounter(metaJobProgressUpdates),
-		ReplanCount:          metric.NewCounter(metaDistSQLReplanCount),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationFlushHistNanos,
 			Duration: histogramWindow,

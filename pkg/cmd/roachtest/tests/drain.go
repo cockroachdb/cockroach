@@ -60,8 +60,8 @@ func registerDrain(r registry.Registry) {
 			Name:                "drain/not-at-quorum",
 			Owner:               registry.OwnerSQLFoundations,
 			Cluster:             r.MakeClusterSpec(3),
-			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
+			Leases:              registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClusterNotAtQuorum(ctx, t, c)
 			},
@@ -135,7 +135,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 			return err
 		}
 
-		expectedDrain := drainWaitDuration + connectionWaitDuration + queryWaitDuration*2 + leaseTransferWaitDuration
+		expectedDrain := drainWaitDuration + connectionWaitDuration + queryWaitDuration*2 + leaseTransferWaitDuration + 10*time.Second
 		if !strings.Contains(
 			results.Stderr,
 			fmt.Sprintf(
@@ -364,7 +364,6 @@ func prepareCluster(
 	defer db.Close()
 
 	waitPhasesSettingStmts := []string{
-		"SET CLUSTER SETTING server.shutdown.jobs_wait = '0s';",
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.drain_wait = '%fs';", drainWait.Seconds()),
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.query_wait = '%fs'", queryWait.Seconds()),
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connection_wait = '%fs'", connectionWait.Seconds()),

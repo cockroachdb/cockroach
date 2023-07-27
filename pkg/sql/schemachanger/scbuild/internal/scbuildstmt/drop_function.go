@@ -11,8 +11,6 @@
 package scbuildstmt
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -53,8 +51,8 @@ func DropFunction(b BuildCtx, n *tree.DropFunction) {
 		if len(dependentNames) > 0 {
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"cannot drop function %q because other objects ([%v]) still depend on it",
-				toCheckBackRefsNames[i].Name, strings.Join(dependentNames, ", "),
+				"cannot drop function %q because other objects (%v) still depend on it",
+				toCheckBackRefsNames[i].Name, dependentNames,
 			))
 
 		}

@@ -1,7 +1,7 @@
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "kvcoord",
@@ -48,7 +48,6 @@ go_library(
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant",
@@ -65,6 +64,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
         "//pkg/util/errorutil/unimplemented",
@@ -151,7 +151,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],
     shard_count = 16,
-    tags = ["no-remote-exec"],
+    tags = ["no-remote"],
     deps = [
         "//build/bazelutil:noop",
         "//pkg/base",
@@ -169,8 +169,6 @@ go_test(
         "//pkg/kv/kvpb/kvpbmock",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/concurrency",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/tscache",

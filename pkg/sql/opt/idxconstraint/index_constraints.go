@@ -810,7 +810,6 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 	// TODO(radu): we should be able to get the constraints for all offsets in a
 	// single traversal of the subtree.
 	var ofsC constraint.Constraint
-	numIterations := 0
 	for delta := 0; ; {
 		// In each iteration, we try to extend keys with constraints for the offset
 		// that corresponds to where the key ends. We can skip offsets at which no
@@ -846,12 +845,6 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 			ofsC.IntersectWith(c.evalCtx, &exprConstraint)
 		}
 		out.Combine(c.evalCtx, &ofsC)
-		numIterations++
-		// In case we can't exit this loop, allow the cancel checker to cancel
-		// this query.
-		if (numIterations % 16) == 0 {
-			c.checkCancellation()
-		}
 	}
 
 	// It's hard in the most general case to determine if the constraints are
@@ -1107,7 +1100,6 @@ func (ic *Instance) Init(
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 	ps partition.PrefixSorter,
-	checkCancellation func(),
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -1123,7 +1115,7 @@ func (ic *Instance) Init(
 		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
 		ic.allFilters = append(ic.allFilters, optionalFilters...)
 	}
-	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory, checkCancellation)
+	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory)
 	ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 
 	// Note: If consolidate is true, we only consolidate spans at the
@@ -1230,8 +1222,6 @@ type indexConstraintCtx struct {
 	keyCtx []constraint.KeyContext
 
 	factory *norm.Factory
-
-	checkCancellation func()
 }
 
 func (c *indexConstraintCtx) init(
@@ -1241,7 +1231,6 @@ func (c *indexConstraintCtx) init(
 	colsInComputedColsExpressions opt.ColSet,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
-	checkCancellation func(),
 ) {
 	var keyCols, computedColSet opt.ColSet
 	for _, col := range columns {
@@ -1263,7 +1252,6 @@ func (c *indexConstraintCtx) init(
 		evalCtx:                       evalCtx,
 		factory:                       factory,
 		keyCtx:                        make([]constraint.KeyContext, len(columns)),
-		checkCancellation:             checkCancellation,
 	}
 	for i := range columns {
 		c.keyCtx[i].EvalCtx = evalCtx

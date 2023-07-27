@@ -112,11 +112,9 @@ type CreatePartitioningCCLCallback func(
 // - errors are panicked;
 // - caches are avoided at all times, we read straight from storage;
 // - MayResolve* methods return zero values if nothing could be found;
-// - MayResolve* methods ignore dropped and offline descriptors*;
-// - MustReadDescriptor searches all public, offline, and dropped descriptors;
+// - MayResolve* methods ignore dropped or offline descriptors;
+// - MustReadDescriptor does not;
 // - MustReadDescriptor panics if the descriptor was not found.
-//
-// *: MayResolveSchema allows us to resolve an offline schema descriptor if needed.
 type CatalogReader interface {
 	tree.TypeReferenceResolver
 	tree.QualifiedNameResolver
@@ -126,13 +124,12 @@ type CatalogReader interface {
 	MayResolveDatabase(ctx context.Context, name tree.Name) catalog.DatabaseDescriptor
 
 	// MayResolveSchema looks up a schema by name.
-	// If withOffline is set, we include offline schema descs into our search.
-	MayResolveSchema(ctx context.Context, name tree.ObjectNamePrefix, withOffline bool) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
+	MayResolveSchema(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
-	// MayResolvePrefix looks up a database and schema given the prefix at best
+	// MustResolvePrefix looks up a database and schema given the prefix at best
 	// effort, meaning the prefix may not have explicit catalog and schema name.
 	// It fails if the db or schema represented by the prefix does not exist.
-	MayResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
+	MustResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)

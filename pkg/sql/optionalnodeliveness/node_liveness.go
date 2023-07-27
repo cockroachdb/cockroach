@@ -11,9 +11,24 @@
 package optionalnodeliveness
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
+
+// Interface is the interface used in Container.
+type Interface interface {
+	Self() (livenesspb.Liveness, bool)
+	GetLivenesses() []livenesspb.Liveness
+	GetLiveness(nodeID roachpb.NodeID) (liveness.Record, bool)
+	GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error)
+	IsAvailable(roachpb.NodeID) bool
+	IsAvailableNotDraining(roachpb.NodeID) bool
+	IsLive(roachpb.NodeID) (bool, error)
+}
 
 // Container optionally gives access to liveness information about
 // the KV nodes. It is typically not available to anyone but the system tenant.
@@ -22,13 +37,13 @@ type Container struct {
 }
 
 // MakeContainer initializes an Container wrapping a
-// (possibly nil) *NodeVitalityInterface.
+// (possibly nil) *NodeLiveness.
 //
 // Use of node liveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeContainer(nl livenesspb.NodeVitalityInterface) Container {
+func MakeContainer(nl Interface) Container {
 	return Container{
 		w: errorutil.MakeTenantSQLDeprecatedWrapper(nl, nl != nil),
 	}
@@ -39,12 +54,12 @@ func MakeContainer(nl livenesspb.NodeVitalityInterface) Container {
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) OptionalErr(issue int) (livenesspb.NodeVitalityInterface, error) {
+func (nl *Container) OptionalErr(issue int) (Interface, error) {
 	v, err := nl.w.OptionalErr(issue)
 	if err != nil {
 		return nil, err
 	}
-	return v.(livenesspb.NodeVitalityInterface), nil
+	return v.(Interface), nil
 }
 
 var _ = (*Container)(nil).OptionalErr // silence unused lint
@@ -54,10 +69,10 @@ var _ = (*Container)(nil).OptionalErr // silence unused lint
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) Optional(issue int) (livenesspb.NodeVitalityInterface, bool) {
+func (nl *Container) Optional(issue int) (Interface, bool) {
 	v, ok := nl.w.Optional()
 	if !ok {
 		return nil, false
 	}
-	return v.(livenesspb.NodeVitalityInterface), true
+	return v.(Interface), true
 }

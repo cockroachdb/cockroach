@@ -235,30 +235,36 @@ vectorized: true
     │ render user_id_default: user_id_default
     │ render crdb_internal_user_id_shard_16_comp: crdb_internal_user_id_shard_16_comp
     │
-    └── • project
+    └── • distinct
         │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
+        │ estimated row count: 0 (missing stats)
+        │ distinct on: user_id_default
+        │ nulls are distinct
         │
-        └── • lookup join (anti)
-            │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-            │ estimated row count: 0 (missing stats)
-            │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
-            │ equality cols are key
-            │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
+        └── • project
+            │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
             │
-            └── • render
+            └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                │ render column2: column2
-                │ render val_cast: val_cast
-                │ render user_id_default: user_id_default
+                │ estimated row count: 0 (missing stats)
+                │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
+                │ equality cols are key
+                │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
                 │
-                └── • values
-                      columns: (column2, val_cast, user_id_default)
-                      size: 3 columns, 1 row
-                      row 0, expr 0: 'seattle'
-                      row 0, expr 1: '4321'
-                      row 0, expr 2: gen_random_uuid()
+                └── • render
+                    │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
+                    │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+                    │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+                    │ render column2: column2
+                    │ render val_cast: val_cast
+                    │ render user_id_default: user_id_default
+                    │
+                    └── • values
+                          columns: (column2, val_cast, user_id_default)
+                          size: 3 columns, 1 row
+                          row 0, expr 0: 'seattle'
+                          row 0, expr 1: '4321'
+                          row 0, expr 2: gen_random_uuid()
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val, part) VALUES (4321, 'seattle'), (8765, 'new york') ON CONFLICT DO NOTHING;

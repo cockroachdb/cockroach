@@ -559,11 +559,10 @@ func TestDB_DelRange(t *testing.T) {
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 	s, db := setup(t)
-	defer s.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(context.Background())
 
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -576,7 +575,7 @@ func TestTxn_Commit(t *testing.T) {
 	b := &kv.Batch{}
 	b.Get("aa")
 	b.Get("ab")
-	if err := db.Run(ctx, b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 	expected := map[string][]byte{
@@ -584,27 +583,6 @@ func TestTxn_Commit(t *testing.T) {
 		"ab": []byte("2"),
 	}
 	checkResults(t, expected, b.Results)
-}
-
-func TestTxn_Rollback(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s, db := setup(t)
-	defer s.Stopper().Stop(ctx)
-
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.Put(ctx, "a", "1"); err != nil {
-			return err
-		}
-		return txn.Rollback(ctx)
-	})
-	require.NoError(t, err)
-
-	// Check that the transaction was rolled back.
-	r, err := db.Get(ctx, "a")
-	require.NoError(t, err)
-	require.False(t, r.Exists())
 }
 
 func TestDB_Put_insecure(t *testing.T) {

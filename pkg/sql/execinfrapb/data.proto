@@ -256,34 +256,6 @@ message ProducerMessage {
   reserved 2;
 }
 
-message ChangefeedMeta {
-  message FrontierSpan {
-    optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
-    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  }
-  message DrainInfo {
-    // Node id of the node being drained.
-    optional int32 node_id = 1 [
-      (gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  }
-
-  // Checkpoint is set by the aggregator when it exits.
-  // It contains an up to date snapshot of its local frontier.
-  repeated FrontierSpan checkpoint = 1 [(gogoproto.nullable) = false];
-
-  // DrainInfo is set by the aggregator when it detects that the node is
-  // being drained.  In those cases, it emits an up to date state, containing
-  // checkpoint information.
-  optional DrainInfo drain_info = 2;
-
-  // Heartbeat is set by the aggregators when they send heartbeat
-  // metadata to the coordinator.
-// This message is used by the aggregator to check/ping the coordinator processor.
-  optional bool heartbeat = 3  [(gogoproto.nullable) = false];
-}
-
 // RemoteProducerMetadata represents records that a producer wants to pass to
 // a consumer, other than data rows. It's named RemoteProducerMetadata to not
 // clash with ProducerMetadata, which is used internally within a node and has
@@ -323,16 +295,6 @@ message RemoteProducerMetadata {
     optional google.protobuf.Any progress_details = 4 [(gogoproto.nullable) = false];
     optional roachpb.BulkOpSummary bulk_summary = 5 [(gogoproto.nullable) = false];
     repeated int32 completed_span_idx = 6;
-    // NodeID is the node from which the progress is being pushed to the
-    // coordinator of a bulk job.
-    optional int32 node_id = 7 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
-    // FlowID is the unique identifier of the physical plan shared by all remote
-    // flows.
-    optional bytes flow_id = 8 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "FlowID",
-      (gogoproto.customtype) = "FlowID"];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
@@ -352,10 +314,8 @@ message RemoteProducerMetadata {
     SamplerProgress sampler_progress = 7;
     Metrics metrics = 8;
     BulkProcessorProgress bulk_processor_progress = 9;
-    ChangefeedMeta changefeed = 11;
   }
   reserved 6, 10;
-  // NEXT ID: 12
 }
 
 // DistSQLVersionGossipInfo represents the DistSQL server version information

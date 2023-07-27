@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,17 +26,18 @@ func TestClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testClusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+	}
+	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
 	defer tc.Stopper().Stop(context.Background())
-	expected := tc.TenantOrServer(0).RPCContext().LogicalClusterID.Get()
 
 	for i := 0; i < 3; i++ {
-		conn := serverutils.OpenDBConn(t, tc.TenantOrServer(i).SQLAddr(), "system", false, tc.Stopper())
-		db := sqlutils.MakeSQLRunner(conn)
+		db := sqlutils.MakeSQLRunner(tc.Conns[i])
 		var clusterID uuid.UUID
 		db.QueryRow(t, "SELECT crdb_internal.cluster_id()").Scan(&clusterID)
-		if expected != clusterID {
-			t.Fatalf("expected %v, got %v", expected, clusterID)
+		if id := tc.Servers[0].RPCContext().LogicalClusterID.Get(); id != clusterID {
+			t.Fatalf("expected %v, got %v", id, clusterID)
 		}
 	}
 }

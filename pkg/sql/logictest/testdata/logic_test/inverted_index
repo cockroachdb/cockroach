@@ -73,6 +73,14 @@ CREATE INVERTED INDEX ON c (foo DESC)
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
+statement error column foo of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
+CREATE TABLE d (
+  id INT PRIMARY KEY,
+  foo JSONB,
+  bar JSONB,
+  INVERTED INDEX (foo, bar)
+)
+
 statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
@@ -803,92 +811,6 @@ INSERT INTO f VALUES
   (41, '[[{"a": {"b": []}}]]'),
   (42, '{"a": "a"}'),
   (43, '[[0, 1, 2], [0, 1, 2], "s"]')
-
-# Testing the equality operator without the fetch value
-# operator on an inverted index.
-
-query T
-SELECT j FROM f@i WHERE j = '[[0, 1, 2]]' ORDER BY k
-----
-[[0, 1, 2]]
-
-query T
-SELECT j FROM f@i WHERE j = '{"a": "a"}' ORDER BY k
-----
-{"a": "a"}
-
-query T
-SELECT j FROM f@i WHERE j = '{"b": 2, "a": 1}' ORDER BY k
-----
-{"a": 1, "b": 2}
-
-query T
-SELECT j FROM f@i WHERE j = '{"a": {"b": "c"}, "d": "e"}' ORDER BY k
-----
-{"a": {"b": "c"}, "d": "e"}
-
-query T
-SELECT j FROM f@i WHERE j = 'null' ORDER BY k
-----
-null
-
-query T
-SELECT j FROM f@i WHERE j = '[]' ORDER BY k
-----
-[]
-
-query T
-SELECT j FROM f@i WHERE j = '{}' ORDER BY k
-----
-{}
-
-query T
-SELECT j FROM f@i WHERE j = '1' ORDER BY k
-----
-
-query T
-SELECT j FROM f@i WHERE j = '[[]]' ORDER BY k
-----
-[[]]
-
-query T
-SELECT j FROM f@i WHERE j = '[[0, 1, 2], [0, 1, 2], "s"]' ORDER BY k
-----
-[[0, 1, 2], [0, 1, 2], "s"]
-
-# Testing the IN operator without the fetch value operator on
-# an inverted index.
-
-query T
-SELECT j FROM f@i WHERE j IN ('{}', '[]', 'null') ORDER BY k
-----
-null
-{}
-[]
-
-query T
-SELECT j FROM f@i WHERE j IN ('[1]') ORDER BY k
-----
-
-query T
-SELECT j FROM f@i WHERE j IN ('{"a": "b", "x": ["c", "d", "e"]}', '{}') ORDER BY k
-----
-{"a": "b", "x": ["c", "d", "e"]}
-{}
-
-query T
-SELECT j FROM f@i WHERE j IN ('{"a": []}', '{"a": {}}') ORDER BY k
-----
-{"a": []}
-{"a": {}}
-
-query T
-SELECT j FROM f@i WHERE j IN ('{"a": [1, 2, null]}', '[[]]', '[[{"a": {"b": []}}]]')
-ORDER BY k
-----
-{"a": [1, 2, null]}
-[[]]
-[[{"a": {"b": []}}]]
 
 query T
 SELECT j FROM f@i WHERE j->0 @> '[0, 1, 2, 3]' ORDER BY k
@@ -1912,6 +1834,8 @@ SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
 [[2]]
 [[1], [2]]
 
+statement error pq: index element j->'some_key' of type jsonb is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE t2 (j JSON, INDEX ((j->'some_key')))
 
 statement ok
 CREATE TABLE table_desc_inverted_index (

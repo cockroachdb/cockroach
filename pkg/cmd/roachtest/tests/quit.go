@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
@@ -150,7 +150,7 @@ func (q *quitTest) waitForUpReplication(ctx context.Context) {
 
 // runWithTimeout runs a command with a 1-minute timeout.
 func (q *quitTest) runWithTimeout(ctx context.Context, fn func(ctx context.Context)) {
-	if err := timeutil.RunWithTimeout(ctx, "do", time.Minute, func(ctx context.Context) error {
+	if err := contextutil.RunWithTimeout(ctx, "do", time.Minute, func(ctx context.Context) error {
 		fn(ctx)
 		return nil
 	}); err != nil {

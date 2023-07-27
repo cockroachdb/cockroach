@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -415,7 +414,6 @@ func TestHashAggregator(t *testing.T) {
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewTestRand()
 	for _, tc := range hashAggregatorTestCases {
 		log.Infof(context.Background(), "%s", tc.name)
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
@@ -432,22 +430,20 @@ func TestHashAggregator(t *testing.T) {
 		}
 		colexectestutils.RunTestsWithOrderedCols(t, testAllocator, []colexectestutils.Tuples{tc.input}, typs, tc.expected, verifier, tc.orderedCols,
 			func(sources []colexecop.Operator) (colexecop.Operator, error) {
-				args := &colexecagg.NewAggregatorArgs{
-					Allocator:      testAllocator,
-					MemAccount:     testMemAcc,
-					Input:          sources[0],
-					InputTypes:     tc.typs,
-					Spec:           tc.spec,
-					EvalCtx:        &evalCtx,
-					Constructors:   constructors,
-					ConstArguments: constArguments,
-					OutputTypes:    outputTypes,
-				}
-				args.TestingKnobs.HashTableNumBuckets = uint32(1 + rng.Intn(7))
 				return NewHashAggregator(
 					context.Background(),
 					&colexecagg.NewHashAggregatorArgs{
-						NewAggregatorArgs:        args,
+						NewAggregatorArgs: &colexecagg.NewAggregatorArgs{
+							Allocator:      testAllocator,
+							MemAccount:     testMemAcc,
+							Input:          sources[0],
+							InputTypes:     tc.typs,
+							Spec:           tc.spec,
+							EvalCtx:        &evalCtx,
+							Constructors:   constructors,
+							ConstArguments: constArguments,
+							OutputTypes:    outputTypes,
+						},
 						HashTableAllocator:       testAllocator,
 						OutputUnlimitedAllocator: testAllocator,
 						MaxOutputBatchMemSize:    math.MaxInt64,

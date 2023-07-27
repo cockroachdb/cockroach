@@ -21,7 +21,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -1198,7 +1197,6 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 func TestLintClusterSettingNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	skip.UnderRace(t, "lint only test")
 	skip.UnderDeadlock(t, "lint only test")
@@ -1287,22 +1285,11 @@ func TestLintClusterSettingNames(t *testing.T) {
 				"sql.metrics.statement_details.sample_logical_plans": `sql.metrics.statement_details.sample_logical_plans: use .enabled for booleans`,
 				"sql.trace.log_statement_execute":                    `sql.trace.log_statement_execute: use .enabled for booleans`,
 				"trace.debug.enable":                                 `trace.debug.enable: use .enabled for booleans`,
-
-				// These were grandfathered because the test wasn't running on
-				// the CCL code.
-				"bulkio.backup.export_request_verbose_tracing":            `bulkio.backup.export_request_verbose_tracing: use .enabled for booleans`,
-				"bulkio.backup.read_timeout":                              `bulkio.backup.read_timeout: use ".timeout" instead of "_timeout"`,
-				"bulkio.backup.split_keys_on_timestamps":                  `bulkio.backup.split_keys_on_timestamps: use .enabled for booleans`,
-				"bulkio.restore.memory_monitor_ssts":                      `bulkio.restore.memory_monitor_ssts: use .enabled for booleans`,
-				"bulkio.restore.use_simple_import_spans":                  `bulkio.restore.use_simple_import_spans: use .enabled for booleans`,
-				"changefeed.balance_range_distribution.enable":            `changefeed.balance_range_distribution.enable: use .enabled for booleans`,
-				"changefeed.batch_reduction_retry_enabled":                `changefeed.batch_reduction_retry_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.idle_timeout":                                 `changefeed.idle_timeout: use ".timeout" instead of "_timeout"`,
-				"changefeed.new_pubsub_sink_enabled":                      `changefeed.new_pubsub_sink_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.new_webhook_sink_enabled":                     `changefeed.new_webhook_sink_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.permissions.require_external_connection_sink": `changefeed.permissions.require_external_connection_sink: use .enabled for booleans`,
-				"server.oidc_authentication.autologin":                    `server.oidc_authentication.autologin: use .enabled for booleans`,
-				"stream_replication.job_liveness_timeout":                 `stream_replication.job_liveness_timeout: use ".timeout" instead of "_timeout"`,
+				// These two settings have been deprecated in favor of a new (better named) setting
+				// but the old name is still around to support migrations.
+				// TODO(knz): remove these cases when these settings are retired.
+				"timeseries.storage.10s_resolution_ttl": `timeseries.storage.10s_resolution_ttl: part "10s_resolution_ttl" has invalid structure`,
+				"timeseries.storage.30m_resolution_ttl": `timeseries.storage.30m_resolution_ttl: part "30m_resolution_ttl" has invalid structure`,
 
 				// These use the _timeout suffix to stay consistent with the
 				// corresponding session variables.
@@ -1310,7 +1297,6 @@ func TestLintClusterSettingNames(t *testing.T) {
 				"sql.defaults.lock_timeout":                        `sql.defaults.lock_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
-				"cloudstorage.gs.chunking.retry_timeout":           `cloudstorage.gs.chunking.retry_timeout: use ".timeout" instead of "_timeout"`,
 			}
 			expectedErr, found := grandFathered[varName]
 			if !found || expectedErr != nameErr.Error() {
@@ -1354,18 +1340,14 @@ func TestCancelQueriesRace(t *testing.T) {
 		_, _ = sqlDB.ExecContext(ctx, `SELECT pg_sleep(10)`)
 		close(waiter)
 	}()
-	_, err1 := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+	_, err := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
-
-	_, err2 := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+	require.NoError(t, err)
+	_, err = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
-	// At least one query cancellation is expected to succeed.
-	require.Truef(
-		t,
-		err1 == nil || err2 == nil,
-		"Both query cancellations failed with errors: %v and %v", err1, err2)
+	require.NoError(t, err)
 
 	cancel()
 	<-waiter

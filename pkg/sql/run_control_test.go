@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -831,16 +830,15 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 	return db
 }
 
-// TestTenantStatementTimeoutAdmissionQueueCancellation tests that a KV request
+// TestTenantStatementTimeoutAdmissionQueueCancelation tests that a KV request
 // that is canceled via a statement timeout is properly removed from the
 // admission control queue. A testing filter is used to "park" a small number of
 // requests thereby consuming those CPU "slots" and testing knobs are used to
 // tightly control the number of entries in the queue so that we guarantee our
 // main statement with a timeout is blocked.
-func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
+func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	skip.UnderStress(t, "times out under stress")
 
@@ -881,9 +879,8 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	}
 
 	params := base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
 		Knobs: base.TestingKnobs{
-			AdmissionControlOptions: &admission.Options{
+			AdmissionControl: &admission.Options{
 				MaxCPUSlots: numBlockers,
 				// During testing if CPU isn't responsive and skipEnforcement
 				// turns off admission control queuing behavior, for this test
@@ -924,9 +921,11 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 		},
 	}
 
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	kvserver, _, _ := serverutils.StartServer(t, params)
+	defer kvserver.Stopper().Stop(context.Background())
+
+	tenant, db := serverutils.StartTenant(t, kvserver, base.TestTenantArgs{TenantID: tenantID})
+	defer db.Close()
 
 	r1 := sqlutils.MakeSQLRunner(db)
 	r1.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
@@ -937,7 +936,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	require.Equal(t, tableID, int(id))
 
 	makeTenantConn := func() *sqlutils.SQLRunner {
-		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tt.SQLAddr(), "" /* useDatabase */, false /* insecure */, tt.Stopper()))
+		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper()))
 	}
 
 	blockers := make([]*sqlutils.SQLRunner, numBlockers)

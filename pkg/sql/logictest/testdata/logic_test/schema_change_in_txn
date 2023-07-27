@@ -29,7 +29,7 @@ COMMIT
 # constraint in the same transaction as CREATE TABLE.
 # TODO (lucy): Add a job to validate the table in this situation.
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM test.child] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM test.child
 ----
 child  child_pkey          PRIMARY KEY  PRIMARY KEY (id ASC)                                     true
 child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id) NOT VALID  false
@@ -38,7 +38,7 @@ statement ok
 ALTER TABLE test.child VALIDATE CONSTRAINT fk_child_parent_id
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM test.child] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM test.child
 ----
 child  child_pkey          PRIMARY KEY  PRIMARY KEY (id ASC)                           true
 child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  true
@@ -71,7 +71,7 @@ COMMIT
 
 # Verify that the constraint is validated.
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM test.child] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM test.child
 ----
 child  child_pkey          PRIMARY KEY  PRIMARY KEY (id ASC)                           true
 child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  true
@@ -683,8 +683,6 @@ subtest rollback_mutations
 statement ok
 INSERT INTO customers (k) VALUES ('z'), ('x')
 
-skip_on_retry
-
 statement ok
 BEGIN
 
@@ -913,7 +911,7 @@ statement ok
 COMMIT
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM check_table] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM check_table
 ----
 check_table  c_0               CHECK        CHECK ((c > 0)) NOT VALID  false
 check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (k ASC)        true
@@ -946,14 +944,14 @@ COMMIT
 
 # Constraint e_0 was not added
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM check_table] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM check_table
 ----
 check_table  c_0               CHECK        CHECK ((c > 0)) NOT VALID  false
 check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (k ASC)        true
 check_table  d_0               CHECK        CHECK ((d > 0))            true
 
 # Adding column e was rolled back
-query TTBTTTB rowsort
+query TTBTTTB
 SHOW COLUMNS FROM check_table
 ----
 k  INT8  false  NULL  ·  {check_table_pkey}  false
@@ -1131,7 +1129,7 @@ COMMIT
 
 # Verify that the constraints had been validated in the above txn
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM check_table] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM check_table
 ----
 check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 check_table  ck_a              CHECK        CHECK ((a = 0))          true
@@ -1505,7 +1503,7 @@ COMMIT
 # Verify that table y is in a consistent state (otherwise, SHOW CONSTRAINTS
 # would fail with an error)
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM y] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM y
 ----
 y  y_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
 y  y_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true
@@ -1851,7 +1849,7 @@ statement ok
 COMMIT
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM t_52501_valid] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM t_52501_valid
 ----
 t_52501_valid  a_auto_not_null     CHECK        CHECK ((a IS NOT NULL))  true
 t_52501_valid  t_52501_valid_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
@@ -1894,7 +1892,7 @@ statement ok
 COMMIT
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM child_54265] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM child_54265
 ----
 child_54265  child_54265_a_fkey  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false
 child_54265  child_54265_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                               true

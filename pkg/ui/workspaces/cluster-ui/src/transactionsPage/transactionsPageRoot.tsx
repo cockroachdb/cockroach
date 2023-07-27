@@ -16,14 +16,14 @@ import { TransactionsPageProps } from "./transactionsPage";
 import { TransactionsPage } from ".";
 import { statementsSql } from "../util/docs";
 import {
-  ActiveTransactionsView,
-  ActiveTransactionsViewProps,
-} from "./activeTransactionsView";
+  RecentTransactionsView,
+  RecentTransactionsViewProps,
+} from "./recentTransactionsView";
 import { Anchor } from "src/anchor";
 
 export type TransactionsPageRootProps = {
   fingerprintsPageProps: TransactionsPageProps;
-  activePageProps: ActiveTransactionsViewProps;
+  activePageProps: RecentTransactionsViewProps;
 };
 
 export const TransactionsPageRoot = ({
@@ -58,7 +58,7 @@ export const TransactionsPageRoot = ({
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),
-      component: <ActiveTransactionsView {...activePageProps} />,
+      component: <RecentTransactionsView {...activePageProps} />,
     },
   ];
 

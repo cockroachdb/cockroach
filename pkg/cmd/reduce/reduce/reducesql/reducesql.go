@@ -32,7 +32,6 @@ var SQLPasses = []reduce.Pass{
 	removeWithCTEs,
 	removeWith,
 	removeCreateDefs,
-	removeCreateFuncParams,
 	removeComputedColumn,
 	removeValuesCols,
 	removeWithSelectExprs,
@@ -45,7 +44,6 @@ var SQLPasses = []reduce.Pass{
 	removeLimit,
 	removeOrderBy,
 	removeOrderByExprs,
-	removeNullsInOrderByExprs,
 	removeGroupBy,
 	removeGroupByExprs,
 	removeCreateNullDefs,
@@ -197,21 +195,6 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				}
 				if node.AsSource != nil {
 					walk(node.AsSource)
-				}
-			case *tree.CreateFunction:
-				for i := range node.Options {
-					if body, ok := node.Options[i].(tree.FunctionBodyStr); ok {
-						stmts, err := parser.Parse(string(body))
-						if err != nil {
-							// Ignore parsing errors.
-							continue
-						}
-						funcAsts := collectASTs(stmts)
-						for _, ast := range funcAsts {
-							walk(ast)
-						}
-						node.Options[i] = tree.FunctionBodyStr(joinASTs(asts))
-					}
 				}
 			case *tree.CTE:
 				walk(node.Stmt)
@@ -550,37 +533,6 @@ var (
 		}
 		return 0
 	})
-	removeNullsInOrderByExprs = walkSQL("remove NULLS FIRST/LAST in ORDER BY exprs", func(xfi int, node interface{}) int {
-		hasOrderBy := true
-		var ob tree.OrderBy
-		switch node := node.(type) {
-		case *tree.Delete:
-			ob = node.OrderBy
-		case *tree.FuncExpr:
-			ob = node.OrderBy
-		case *tree.Select:
-			ob = node.OrderBy
-		case *tree.Update:
-			ob = node.OrderBy
-		case *tree.WindowDef:
-			ob = node.OrderBy
-		default:
-			hasOrderBy = false
-		}
-		if !hasOrderBy {
-			return 0
-		}
-		n := 0
-		for i := range ob {
-			if ob[i].NullsOrder != tree.DefaultNullsOrder {
-				n++
-				if xfi < n {
-					ob[i].NullsOrder = tree.DefaultNullsOrder
-				}
-			}
-		}
-		return n
-	})
 	removeGroupBy = walkSQL("remove GROUP BY", func(xfi int, node interface{}) int {
 		xf := xfi == 0
 		switch node := node.(type) {
@@ -803,17 +755,6 @@ var (
 			n := len(node.Defs)
 			if xfi < n {
 				node.Defs = append(node.Defs[:xfi], node.Defs[xfi+1:]...)
-			}
-			return n
-		}
-		return 0
-	})
-	removeCreateFuncParams = walkSQL("remove CREATE FUNCTION parameters", func(xfi int, node interface{}) int {
-		switch node := node.(type) {
-		case *tree.CreateFunction:
-			n := len(node.Params)
-			if xfi < n {
-				node.Params = append(node.Params[:xfi], node.Params[xfi+1:]...)
 			}
 			return n
 		}

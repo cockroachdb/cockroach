@@ -28,10 +28,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.ColumnNotNull, md *opGenContext) *scop.ValidateColumnNotNull {
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
+				emit(func(this *scpb.ColumnNotNull) *scop.ValidateColumnNotNull {
 					return &scop.ValidateColumnNotNull{
 						TableID:              this.TableID,
 						ColumnID:             this.ColumnID,

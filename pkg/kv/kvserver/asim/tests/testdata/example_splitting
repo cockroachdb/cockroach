@@ -1,9 +1,6 @@
 # Explore how load based and sized based splitting occur in isolation. In this
 # example, there is only one store so no rebalancing activity should occur. 
-gen_cluster nodes=1
-----
-
-gen_ranges ranges=1 repl_factor=1
+gen_state stores=1 ranges=1 repl_factor=1
 ----
 
 # Create a load generator, where there is higher ops/s than the qps split
@@ -17,7 +14,7 @@ setting split_qps_threshold=2500
 
 # Assert that the number of replicas should not change at all during the last 6
 # ticks of the simulation.
-assertion stat=replicas type=steady ticks=6 upper_bound=0.00
+assertion stat=replicas type=steady ticks=6 threshold=0.00
 ----
 
 eval duration=5m samples=2 seed=42
@@ -31,21 +28,21 @@ plot stat=replicas sample=2
 ----
 ----
 
- 5.00 ┤         ╭─────────────────────────────────────────────────────────────────────
- 4.73 ┤         │
- 4.47 ┤         │
- 4.20 ┤         │
- 3.93 ┤      ╭──╯
+ 6.00 ┤          ╭────────────────────────────────────────────────────────────────────
+ 5.67 ┤          │
+ 5.33 ┤          │
+ 5.00 ┤          │
+ 4.67 ┤          │
+ 4.33 ┤          │
+ 4.00 ┤      ╭───╯
  3.67 ┤      │
- 3.40 ┤      │
- 3.13 ┤      │
- 2.87 ┤      │
- 2.60 ┤      │
+ 3.33 ┤      │
+ 3.00 ┤      │
+ 2.67 ┤      │
  2.33 ┤      │
- 2.07 ┤   ╭──╯
- 1.80 ┤   │
- 1.53 ┤   │
- 1.27 ┤   │
+ 2.00 ┤   ╭──╯
+ 1.67 ┤   │
+ 1.33 ┤   │
  1.00 ┼───╯
                                            replicas
 ----
@@ -67,23 +64,23 @@ plot stat=replicas sample=4
 ----
 ----
 
- 9.00 ┤                          ╭────────────────────────────────────────────────────
- 8.47 ┤                          │
- 7.93 ┤                      ╭───╯
- 7.40 ┤                      │
- 6.87 ┤                   ╭──╯
- 6.33 ┤                   │
- 5.80 ┤               ╭───╯
- 5.27 ┤               │
- 4.73 ┤            ╭──╯
- 4.20 ┤         ╭──╯
- 3.67 ┤         │
- 3.13 ┤      ╭──╯
- 2.60 ┤      │
- 2.07 ┤   ╭──╯
- 1.53 ┤   │
- 1.00 ┼───╯
-                                           replicas
+ 10.00 ┤                                     ╭─────────────────────────────────────────
+  9.40 ┤                                     │
+  8.80 ┤                            ╭────────╯
+  8.20 ┤                            │
+  7.60 ┤                       ╭────╯
+  7.00 ┤                    ╭──╯
+  6.40 ┤                    │
+  5.80 ┤                 ╭──╯
+  5.20 ┤                 │
+  4.60 ┤             ╭───╯
+  4.00 ┤          ╭──╯
+  3.40 ┤          │
+  2.80 ┤      ╭───╯
+  2.20 ┤      │
+  1.60 ┤   ╭──╯
+  1.00 ┼───╯
+                                            replicas
 ----
 ----
 

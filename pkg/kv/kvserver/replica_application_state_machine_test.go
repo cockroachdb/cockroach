@@ -94,10 +94,10 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Stage a command with the ChangeReplicas trigger.
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: uint64(r.mu.state.RaftAppliedIndex + 1),
+				Index: r.mu.state.RaftAppliedIndex + 1,
 				Type:  raftpb.EntryConfChange,
 			},
-			ID: raftlog.MakeCmdIDKey(),
+			ID: makeIDKey(),
 			Cmd: kvserverpb.RaftCommand{
 				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
@@ -198,16 +198,16 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		// byte size of 1.
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: uint64(raftAppliedIndex + 1),
+				Index: raftAppliedIndex + 1,
 				Type:  raftpb.EntryNormal,
 			},
-			ID: raftlog.MakeCmdIDKey(),
+			ID: makeIDKey(),
 			Cmd: kvserverpb.RaftCommand{
 				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
 				ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 					State: &kvserverpb.ReplicaState{
-						TruncatedState: &kvserverpb.RaftTruncatedState{
+						TruncatedState: &roachpb.RaftTruncatedState{
 							Index: truncatedIndex + 1,
 						},
 					},
@@ -285,7 +285,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			require.NoError(t, pErr.GoError())
 		}
 
-		raftLogSize, truncatedIndex := func() (_rls int64, truncIdx kvpb.RaftIndex) {
+		raftLogSize, truncatedIndex := func() (_rls int64, truncIdx uint64) {
 			// Lock the replica. We do this early to avoid interference from any other
 			// moving parts on the Replica, whatever they may be. For example, we don't
 			// want a skewed lease applied index because commands are applying concurrently
@@ -317,16 +317,16 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			// byte size of 1.
 			ent := &raftlog.Entry{
 				Entry: raftpb.Entry{
-					Index: uint64(raftAppliedIndex + 1),
+					Index: raftAppliedIndex + 1,
 					Type:  raftpb.EntryNormal,
 				},
-				ID: raftlog.MakeCmdIDKey(),
+				ID: makeIDKey(),
 				Cmd: kvserverpb.RaftCommand{
 					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
 					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 						State: &kvserverpb.ReplicaState{
-							TruncatedState: &kvserverpb.RaftTruncatedState{
+							TruncatedState: &roachpb.RaftTruncatedState{
 								Index: truncatedIndex + 1,
 							},
 						},
@@ -448,10 +448,10 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 		req, repr := descWriteRepr(s)
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: uint64(raftAppliedIndex + 1),
+				Index: raftAppliedIndex + 1,
 				Type:  raftpb.EntryNormal,
 			},
-			ID: raftlog.MakeCmdIDKey(),
+			ID: makeIDKey(),
 			Cmd: kvserverpb.RaftCommand{
 				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,

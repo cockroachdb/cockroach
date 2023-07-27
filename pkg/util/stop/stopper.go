@@ -171,7 +171,6 @@ type Stopper struct {
 		// should execute immediately.
 		quiescing, stopping bool
 		closers             []Closer
-		quiescers           []func()
 
 		// idAlloc is incremented atomically under the read lock when adding a
 		// context to be canceled.
@@ -239,19 +238,6 @@ func (s *Stopper) addTask(delta int32) (updated int32) {
 // means that the stopper is either quiescing or stopping.
 func (s *Stopper) refuseRLocked() bool {
 	return s.mu.stopping || s.mu.quiescing
-}
-
-// OnQuiesce is like AddCloser, but invokes on quiesce.
-// If the Stopper is already quiescing, the function will be invoked
-// synchronously.
-func (s *Stopper) OnQuiesce(f func()) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.refuseRLocked() {
-		f()
-		return
-	}
-	s.mu.quiescers = append(s.mu.quiescers, f)
 }
 
 // AddCloser adds an object to close after the stopper has been stopped.
@@ -592,9 +578,6 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 			s.mu.qCancels.Delete(k)
 			return true
 		})
-		for _, f := range s.mu.quiescers {
-			f()
-		}
 	}()
 
 	for s.NumTasks() > 0 {

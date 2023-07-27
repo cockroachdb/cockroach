@@ -1733,8 +1733,9 @@ func (ef *execFactory) ConstructDelete(
 	*del = deleteNode{
 		source: input.(planNode),
 		run: deleteRun{
-			td:             tableDeleter{rd: rd, alloc: ef.getDatumAlloc()},
-			numPassthrough: len(passthrough),
+			td:                        tableDeleter{rd: rd, alloc: ef.getDatumAlloc()},
+			partialIndexDelValsOffset: len(rd.FetchCols) + len(passthrough),
+			numPassthrough:            len(passthrough),
 		},
 	}
 

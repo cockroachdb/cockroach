@@ -70,7 +70,7 @@ describe("jobs sagas", () => {
         .withReducer(reducer)
         .hasFinalState<JobsState>({
           data: jobsResponse,
-          error: null,
+          lastError: null,
           valid: true,
           inFlight: false,
           lastUpdated,
@@ -86,7 +86,7 @@ describe("jobs sagas", () => {
         .withReducer(reducer)
         .hasFinalState<JobsState>({
           data: null,
-          error: error,
+          lastError: error,
           valid: false,
           inFlight: false,
           lastUpdated,

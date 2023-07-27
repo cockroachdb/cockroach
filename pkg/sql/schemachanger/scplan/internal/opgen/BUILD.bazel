@@ -54,7 +54,6 @@ go_library(
         "opgen_secondary_index.go",
         "opgen_secondary_index_partial.go",
         "opgen_sequence.go",
-        "opgen_sequence_option.go",
         "opgen_sequence_owner.go",
         "opgen_table.go",
         "opgen_table_comment.go",

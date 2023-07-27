@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
@@ -52,15 +51,6 @@ func TestFormatCrdbV2(t *testing.T) {
 	tm, err := time.Parse(MessageTimeFormat, "060102 15:04:05.654321")
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	tm2, err := time.Parse(MessageTimeFormatWithTZ, "060102 17:04:05.654321+020000")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if tm.UnixNano() != tm2.UnixNano() {
-		t.Fatalf("expected same, got %q vs %q", tm.In(time.UTC), tm2.In(time.UTC))
 	}
 
 	emptyCtx := context.Background()
@@ -161,18 +151,7 @@ func TestFormatCrdbV2(t *testing.T) {
 	}
 
 	// We only use the datadriven framework for the ability to rewrite the output.
-	datadriven.RunTest(t, "testdata/crdb_v2", func(t *testing.T, td *datadriven.TestData) string {
-		var loc *time.Location
-		if arg, ok := td.Arg("tz"); ok {
-			var err error
-			var tz string
-			arg.Scan(t, 0, &tz)
-			loc, err = timeutil.LoadLocation(tz)
-			if err != nil {
-				td.Fatalf(t, "invalid tz: %v", err)
-			}
-		}
-
+	datadriven.RunTest(t, "testdata/crdb_v2", func(t *testing.T, _ *datadriven.TestData) string {
 		var buf bytes.Buffer
 		for _, tc := range testCases {
 			// override non-deterministic fields to stabilize the expected output.
@@ -181,7 +160,7 @@ func TestFormatCrdbV2(t *testing.T) {
 			tc.gid = 11
 
 			buf.WriteString("#\n")
-			f := formatCrdbV2{loc: loc}
+			f := formatCrdbV2{}
 			b := f.formatEntry(tc)
 			fmt.Fprintf(&buf, "%s", b.String())
 			putBuffer(b)

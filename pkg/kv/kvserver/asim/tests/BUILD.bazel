@@ -2,26 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_test(
     name = "tests_test",
-    srcs = [
-        "datadriven_simulation_test.go",
-        "helpers_test.go",
-    ],
+    srcs = ["datadriven_simulation_test.go"],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tests"],
     deps = [
-        "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gen",
         "//pkg/kv/kvserver/asim/metrics",
-        "//pkg/kv/kvserver/asim/state",
-        "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb",
-        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
-        "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
@@ -36,8 +26,6 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/metrics",
-        "//pkg/roachpb",
-        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/util/log",
         "@com_github_montanaflynn_stats//:stats",
     ],

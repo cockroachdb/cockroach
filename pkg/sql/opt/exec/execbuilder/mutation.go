@@ -520,10 +520,9 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
 
-	// Construct the result columns for the passthrough set.
+	//Construct the result columns for the passthrough set
 	var passthroughCols colinfo.ResultColumns
 	if del.NeedResults() {
-		passthroughCols = make(colinfo.ResultColumns, 0, len(del.PassthroughCols))
 		for _, passthroughCol := range del.PassthroughCols {
 			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
 			passthroughCols = append(passthroughCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
@@ -973,12 +972,8 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 
 // forUpdateLocking is the row-level locking mode used by mutations during their
 // initial row scan, when such locking is deemed desirable. The locking mode is
-// equivalent to that used by a SELECT FOR UPDATE statement, except not durable.
-var forUpdateLocking = opt.Locking{
-	Strength:   tree.ForUpdate,
-	WaitPolicy: tree.LockWaitBlock,
-	Durability: tree.LockDurabilityBestEffort,
-}
+// equivalent that used by a SELECT ... FOR UPDATE statement.
+var forUpdateLocking = opt.Locking{Strength: tree.ForUpdate}
 
 // shouldApplyImplicitLockingToMutationInput determines whether or not the
 // builder should apply a FOR UPDATE row-level locking mode to the initial row

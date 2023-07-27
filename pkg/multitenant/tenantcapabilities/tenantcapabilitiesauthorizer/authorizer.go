@@ -390,32 +390,3 @@ func (a *Authorizer) getMode(
 	}
 	return cp, selectedMode
 }
-
-func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-	errFn := func() error {
-		return errors.New("client tenant does not have capability to debug the process")
-	}
-	cp, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break // fallthrough to the next check.
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errFn()
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		cp, tenantcapabilities.CanDebugProcess,
-	) {
-		return errFn()
-	}
-	return nil
-}

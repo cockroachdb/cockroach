@@ -141,7 +141,7 @@ func registerAsyncpg(r registry.Registry) {
 		Name:    "asyncpg",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
-		Tags:    registry.Tags(`default`, `orm`),
+		Tags:    []string{`default`, `orm`},
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAsyncpg(ctx, t, c)

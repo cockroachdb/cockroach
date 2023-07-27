@@ -1,9 +1,5 @@
 # LogicTest: cockroach-go-testserver-upgrade-to-master
 
-# This test should only be executed to test upgrades from 22.2 -> 23.2
-# (experimental version skipping).
-skip 103956
-
 query I
 SELECT 1
 ----
@@ -26,7 +22,7 @@ false
 upgrade 0
 
 query B nodeidx=0
-SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
+SELECT crdb_internal.node_executable_version() = '23.1'
 ----
 true
 

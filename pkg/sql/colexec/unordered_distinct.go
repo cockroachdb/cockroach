@@ -38,8 +38,6 @@ func NewUnorderedDistinct(
 		typs:                 typs,
 		nullsAreDistinct:     nullsAreDistinct,
 		UpsertDistinctHelper: colexecbase.UpsertDistinctHelper{ErrorOnDup: errorOnDup},
-		// This number was chosen after running the micro-benchmarks.
-		hashTableNumBuckets: 128,
 	}
 }
 
@@ -57,8 +55,7 @@ type UnorderedDistinct struct {
 	typs               []*types.T
 	nullsAreDistinct   bool
 
-	Ht                  *colexechash.HashTable
-	hashTableNumBuckets uint32
+	Ht *colexechash.HashTable
 	// lastInputBatch tracks the last input batch read from the input and not
 	// emitted into the output. It is the only batch that we need to export when
 	// spilling to disk, and it will contain only the distinct tuples that need
@@ -78,14 +75,15 @@ func (op *UnorderedDistinct) Init(ctx context.Context) {
 		return
 	}
 	op.Input.Init(op.Ctx)
-	// This number was chosen after running the micro-benchmarks.
+	// These numbers were chosen after running the micro-benchmarks.
 	const hashTableLoadFactor = 2.0
+	const hashTableNumBuckets = 128
 	op.Ht = colexechash.NewHashTable(
 		op.Ctx,
 		op.hashTableAllocator,
 		coldata.BatchSize(),
 		hashTableLoadFactor,
-		op.hashTableNumBuckets,
+		hashTableNumBuckets,
 		op.typs,
 		op.distinctCols,
 		!op.nullsAreDistinct, /* allowNullEquality */

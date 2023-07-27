@@ -155,10 +155,18 @@ func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.Writ
 	return l.blobClient.Writer(ctx, joinRelativePath(l.base, basename))
 }
 
+// ReadFile is shorthand for ReadFileAt with offset 0.
 func (l *localFileStorage) ReadFile(
-	ctx context.Context, basename string, opts cloud.ReadOptions,
+	ctx context.Context, basename string,
+) (ioctx.ReadCloserCtx, error) {
+	body, _, err := l.ReadFileAt(ctx, basename, 0)
+	return body, err
+}
+
+func (l *localFileStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
 ) (ioctx.ReadCloserCtx, int64, error) {
-	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), opts.Offset)
+	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), offset)
 	if err != nil {
 		// The format of the error returned by the above ReadFile call differs based
 		// on whether we are reading from a local or remote nodelocal store.

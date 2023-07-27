@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
@@ -321,14 +321,20 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 	}), nil
 }
 
-func (s *azureStorage) ReadFile(
-	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
-	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFile")
+// ReadFile is shorthand for ReadFileAt with offset 0.
+func (s *azureStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
+	reader, _, err := s.ReadFileAt(ctx, basename, 0)
+	return reader, err
+}
+
+func (s *azureStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (ioctx.ReadCloserCtx, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
 	resp, err := s.getBlob(basename).DownloadStream(ctx, &azblob.DownloadStreamOptions{Range: azblob.
-		HTTPRange{Offset: opts.Offset}})
+		HTTPRange{Offset: offset}})
 	if err != nil {
 		if azerr := (*azcore.ResponseError)(nil); errors.As(err, &azerr) {
 			if azerr.ErrorCode == "BlobNotFound" {
@@ -343,18 +349,17 @@ func (s *azureStorage) ReadFile(
 		return nil, 0, errors.Wrapf(err, "failed to create azure reader")
 	}
 
-	if !opts.NoFileSize {
-		if opts.Offset == 0 {
-			fileSize = *resp.ContentLength
-		} else {
-			fileSize, err = cloud.CheckHTTPContentRangeHeader(*resp.ContentRange, opts.Offset)
-			if err != nil {
-				return nil, 0, err
-			}
+	var size int64
+	if offset == 0 {
+		size = *resp.ContentLength
+	} else {
+		size, err = cloud.CheckHTTPContentRangeHeader(*resp.ContentRange, offset)
+		if err != nil {
+			return nil, 0, err
 		}
 	}
 	reader := resp.NewRetryReader(ctx, &azblob.RetryReaderOptions{MaxRetries: 3})
-	return ioctx.ReadCloserAdapter(reader), fileSize, nil
+	return ioctx.ReadCloserAdapter(reader), size, nil
 }
 
 func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
@@ -386,7 +391,7 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
-	err := timeutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			_, err := s.getBlob(basename).Delete(ctx, nil)
 			return err
@@ -396,7 +401,7 @@ func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var props blob.GetPropertiesResponse
-	err := timeutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			props, err = s.getBlob(basename).GetProperties(ctx, nil)

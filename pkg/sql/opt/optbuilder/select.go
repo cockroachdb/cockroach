@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -879,27 +878,11 @@ func (b *Builder) addComputedColsForTable(
 			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
-		colType := tabCol.DatumType()
-		if texpr := tableScope.resolveAndRequireType(expr, colType); texpr != nil {
+		if texpr := tableScope.resolveAndRequireType(expr, tabCol.DatumType()); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
 			var scalar opt.ScalarExpr
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 				scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
-				// Add an assignment cast if the types are not identical.
-				scalarType := scalar.DataType()
-				if !colType.Identical(scalarType) {
-					// Assert that an assignment cast is available from the
-					// expression type to the column type.
-					if !cast.ValidCast(scalarType, colType, cast.ContextAssignment) {
-						panic(sqlerrors.NewInvalidAssignmentCastError(
-							scalarType, colType, string(tabCol.ColName()),
-						))
-					}
-					// TODO(mgartner): This should be an assignment cast, but
-					// until #81698 is addressed, that could cause reads to
-					// error after adding a virtual computed column to a table.
-					scalar = b.factory.ConstructCast(scalar, colType)
-				}
 			})
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared

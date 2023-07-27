@@ -83,6 +83,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	if stmt.Locality != nil {
 		isRbr = stmt.Locality.LocalityLevel == tree.LocalityLevelRow
 		isRbt = stmt.Locality.LocalityLevel == tree.LocalityLevelTable
+		fmt.Println(isRbt)
 	}
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
@@ -851,19 +852,14 @@ func (tt *Table) addIndexWithVersion(
 		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
 	}
 
-	// The test catalog does not support the hash-sharded index syntactic sugar.
-	if def.Sharded != nil {
-		panic("hash-sharded indexes are not supported by the test catalog")
-	}
-
 	idx := &Index{
-		IdxName:      tt.makeIndexName(def.Name, def.Columns, typ),
-		Unique:       typ != nonUniqueIndex,
-		Inverted:     def.Inverted,
-		IdxZone:      cat.EmptyZone(),
-		table:        tt,
-		version:      version,
-		Invisibility: def.Invisibility,
+		IdxName:    tt.makeIndexName(def.Name, def.Columns, typ),
+		Unique:     typ != nonUniqueIndex,
+		Inverted:   def.Inverted,
+		IdxZone:    cat.EmptyZone(),
+		table:      tt,
+		version:    version,
+		NotVisible: def.NotVisible,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.

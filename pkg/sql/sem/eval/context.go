@@ -17,12 +17,10 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -80,8 +78,6 @@ type Context struct {
 	// TxnIsSingleStmt specifies the current implicit transaction consists of only
 	// a single statement.
 	TxnIsSingleStmt bool
-	// TxnIsoLevel is the isolation level of the current transaction.
-	TxnIsoLevel isolation.Level
 
 	Settings *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.
@@ -224,9 +220,6 @@ type Context struct {
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 
-	// GetTableMetrics is used in crdb_internal.sstable_metrics.
-	GetTableMetrics GetTableMetricsFunc
-
 	// SetCompactionConcurrency is used to change the compaction concurrency of
 	// a store.
 	SetCompactionConcurrency SetCompactionConcurrencyFunc
@@ -234,10 +227,6 @@ type Context struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
-
-	// InspectzServer is used to power various crdb_internal vtables, exposing
-	// the equivalent of /inspectz but through SQL.
-	InspectzServer inspectzpb.InspectzServer
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.
@@ -274,30 +263,6 @@ type Context struct {
 	// database which owns a table accessed by the current SQL request.
 	// This slice is only populated during the optbuild stage.
 	RemoteRegions catpb.RegionNames
-
-	// JobsProfiler is the interface for builtins to extract job specific
-	// execution details that may have been aggregated during a job's lifetime.
-	JobsProfiler JobsProfiler
-
-	// RoutineSender allows nested routines in tail-call position to defer their
-	// execution until control returns to the parent routine. It is only valid
-	// during local execution. It may be unset.
-	RoutineSender DeferredRoutineSender
-}
-
-// JobsProfiler is the interface used to fetch job specific execution details
-// that may have been aggregated during a job's lifetime.
-type JobsProfiler interface {
-	// GenerateExecutionDetailsJSON generates a JSON blob of the job specific
-	// execution details.
-	GenerateExecutionDetailsJSON(ctx context.Context, evalCtx *Context, jobID jobspb.JobID) ([]byte, error)
-
-	// RequestExecutionDetailFiles triggers the collection of execution details
-	// for the specified jobID that are then persisted to `system.job_info`. This
-	// currently includes the following pieces of information:
-	//
-	// - Latest DistSQL diagram of the job
-	RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.JobID) error
 }
 
 // DescIDGenerator generates unique descriptor IDs.

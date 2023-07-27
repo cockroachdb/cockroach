@@ -106,8 +106,7 @@ func TestTryFilterTSVector(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tsvectorOrd),
-			nil,       /* computedColumns */
-			func() {}, /* checkCancellation */
+			nil, /* computedColumns */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

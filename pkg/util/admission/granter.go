@@ -308,9 +308,6 @@ type kvStoreTokenGranter struct {
 	// computing startingIOTokens-availableIOTokens.
 	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
-	availableTokensMetrics          *metric.Gauge
-	tookWithoutPermissionMetric     *metric.Counter
-	totalTokensTaken                *metric.Counter
 	exhaustedStart                  time.Time
 
 	// Estimation models.
@@ -327,7 +324,7 @@ type kvStoreTokenChildGranter struct {
 	parent    *kvStoreTokenGranter
 }
 
-var _ granterWithStoreReplicatedWorkAdmitted = &kvStoreTokenChildGranter{}
+var _ granterWithStoreWriteDone = &kvStoreTokenChildGranter{}
 var _ granter = &kvStoreTokenChildGranter{}
 
 // grantKind implements granter.
@@ -355,26 +352,11 @@ func (cg *kvStoreTokenChildGranter) continueGrantChain(grantChainID grantChainID
 	// Ignore since grant chains are not used for store tokens.
 }
 
-// storeWriteDone implements granterWithStoreReplicatedWorkAdmitted.
+// storeWriteDone implements granterWithStoreWriteDone.
 func (cg *kvStoreTokenChildGranter) storeWriteDone(
 	originalTokens int64, doneInfo StoreWorkDoneInfo,
 ) (additionalTokens int64) {
-	cg.parent.coord.mu.Lock()
-	defer cg.parent.coord.mu.Unlock()
-	// NB: the token/metric adjustments we want to make here are the same as we
-	// want to make through the storeReplicatedWorkAdmittedLocked, so we (ab)use
-	// it. The one difference is that post token adjustments, if we observe the
-	// granter was previously exhausted but is no longer so, we're allowed to
-	// admit other waiting requests.
-	return cg.parent.storeReplicatedWorkAdmittedLocked(
-		cg.workClass, originalTokens, storeReplicatedWorkAdmittedInfo(doneInfo), true /* canGrantAnother */)
-}
-
-// storeReplicatedWorkAdmitted implements granterWithStoreReplicatedWorkAdmitted.
-func (cg *kvStoreTokenChildGranter) storeReplicatedWorkAdmittedLocked(
-	originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo,
-) (additionalTokens int64) {
-	return cg.parent.storeReplicatedWorkAdmittedLocked(cg.workClass, originalTokens, admittedInfo, false /* canGrantAnother */)
+	return cg.parent.storeWriteDone(cg.workClass, originalTokens, doneInfo)
 }
 
 func (sg *kvStoreTokenGranter) tryGet(workClass admissionpb.WorkClass, count int64) bool {
@@ -396,7 +378,6 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens > 0 {
 			sg.subtractTokensLocked(count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
-			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	case admissionpb.ElasticWorkClass:
@@ -404,7 +385,6 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.coordMu.elasticDiskBWTokensAvailable -= count
 			sg.subtractTokensLocked(count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
-			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	}
@@ -435,8 +415,6 @@ func (sg *kvStoreTokenGranter) tookWithoutPermission(workClass admissionpb.WorkC
 func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
 	wc := admissionpb.WorkClass(demuxHandle)
 	sg.subtractTokensLocked(count, false)
-	sg.tookWithoutPermissionMetric.Inc(count)
-	sg.totalTokensTaken.Inc(count)
 	if wc == admissionpb.ElasticWorkClass {
 		sg.coordMu.elasticDiskBWTokensAvailable -= count
 	}
@@ -463,7 +441,6 @@ func (sg *kvStoreTokenGranter) subtractTokensLocked(count int64, forceTickMetric
 			sg.exhaustedStart = now
 		}
 	}
-	sg.availableTokensMetrics.Update(sg.coordMu.availableIOTokens)
 }
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
@@ -509,10 +486,7 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 
 // setAvailableTokens implements granterWithIOTokens.
 func (sg *kvStoreTokenGranter) setAvailableTokens(
-	ioTokens int64,
-	elasticDiskBandwidthTokens int64,
-	ioTokenCapacity int64,
-	elasticDiskBandwidthTokensCapacity int64,
+	ioTokens int64, elasticDiskBandwidthTokens int64,
 ) (ioTokensUsed int64) {
 	sg.coord.mu.Lock()
 	defer sg.coord.mu.Unlock()
@@ -522,16 +496,15 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	// availableIOTokens become <= 0. We want to remember this previous
 	// over-allocation.
 	sg.subtractTokensLocked(-ioTokens, true)
-
-	if sg.coordMu.availableIOTokens > ioTokenCapacity {
-		sg.coordMu.availableIOTokens = ioTokenCapacity
+	if sg.coordMu.availableIOTokens > ioTokens {
+		// Clamp to tokens.
+		sg.coordMu.availableIOTokens = ioTokens
 	}
-	sg.startingIOTokens = sg.coordMu.availableIOTokens
-	sg.availableTokensMetrics.Update(sg.coordMu.availableIOTokens)
+	sg.startingIOTokens = ioTokens
 
 	sg.coordMu.elasticDiskBWTokensAvailable += elasticDiskBandwidthTokens
-	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokensCapacity {
-		sg.coordMu.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokensCapacity
+	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokens {
+		sg.coordMu.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokens
 	}
 
 	return ioTokensUsed
@@ -549,7 +522,7 @@ func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() [admissionpb.NumWorkC
 }
 
 // setAdmittedModelsLocked implements granterWithIOTokens.
-func (sg *kvStoreTokenGranter) setLinearModels(
+func (sg *kvStoreTokenGranter) setAdmittedDoneModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	sg.coord.mu.Lock()
@@ -559,35 +532,49 @@ func (sg *kvStoreTokenGranter) setLinearModels(
 	sg.ingestLM = ingestLM
 }
 
-func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
-	wc admissionpb.WorkClass,
-	originalTokens int64,
-	admittedInfo storeReplicatedWorkAdmittedInfo,
-	canGrantAnother bool,
+// storeWriteDone implements granterWithStoreWriteDone.
+func (sg *kvStoreTokenGranter) storeWriteDone(
+	wc admissionpb.WorkClass, originalTokens int64, doneInfo StoreWorkDoneInfo,
 ) (additionalTokens int64) {
+	// Normally, we follow the structure of a foo() method calling into a foo()
+	// method on the GrantCoordinator, which then calls fooLocked() on the
+	// kvStoreTokenGranter. For example, returnGrant follows this structure.
+	// This allows the GrantCoordinator to do two things (a) acquire the mu
+	// before calling into kvStoreTokenGranter, (b) do side-effects, like
+	// terminating grant chains and doing more grants after the call into the
+	// fooLocked() method.
+	// For storeWriteDone we don't bother with this structure involving the
+	// GrantCoordinator (which has served us well across various methods and
+	// various granter implementations), since the decision on when the
+	// GrantCoordinator should call tryGrantLocked is more complicated. And since this
+	// storeWriteDone is unique to the kvStoreTokenGranter (and not implemented
+	// by other granters) this approach seems acceptable.
+
 	// Reminder: coord.mu protects the state in the kvStoreTokenGranter.
+	sg.coord.mu.Lock()
 	exhaustedFunc := func() bool {
 		return sg.coordMu.availableIOTokens <= 0 ||
 			(wc == admissionpb.ElasticWorkClass && sg.coordMu.elasticDiskBWTokensAvailable <= 0)
 	}
 	wasExhausted := exhaustedFunc()
-	actualL0WriteTokens := sg.l0WriteLM.applyLinearModel(admittedInfo.WriteBytes)
-	actualL0IngestTokens := sg.l0IngestLM.applyLinearModel(admittedInfo.IngestedBytes)
+	actualL0WriteTokens := sg.l0WriteLM.applyLinearModel(doneInfo.WriteBytes)
+	actualL0IngestTokens := sg.l0IngestLM.applyLinearModel(doneInfo.IngestedBytes)
 	actualL0Tokens := actualL0WriteTokens + actualL0IngestTokens
 	additionalL0TokensNeeded := actualL0Tokens - originalTokens
 	sg.subtractTokensLocked(additionalL0TokensNeeded, false)
-	actualIngestTokens := sg.ingestLM.applyLinearModel(admittedInfo.IngestedBytes)
+	actualIngestTokens := sg.ingestLM.applyLinearModel(doneInfo.IngestedBytes)
 	additionalDiskBWTokensNeeded := (actualL0WriteTokens + actualIngestTokens) - originalTokens
 	if wc == admissionpb.ElasticWorkClass {
 		sg.coordMu.elasticDiskBWTokensAvailable -= additionalDiskBWTokensNeeded
 	}
 	sg.coordMu.diskBWTokensUsed[wc] += additionalDiskBWTokensNeeded
-	if canGrantAnother && (additionalL0TokensNeeded < 0 || additionalDiskBWTokensNeeded < 0) {
+	if additionalL0TokensNeeded < 0 || additionalDiskBWTokensNeeded < 0 {
 		isExhausted := exhaustedFunc()
-		if (wasExhausted && !isExhausted) || sg.coord.knobs.AlwaysTryGrantWhenAdmitted {
+		if wasExhausted && !isExhausted {
 			sg.coord.tryGrantLocked()
 		}
 	}
+	sg.coord.mu.Unlock()
 	// For multi-tenant fairness accounting, we choose to ignore disk bandwidth
 	// tokens. Ideally, we'd have multiple resource dimensions for the fairness
 	// decisions, but we don't necessarily need something more sophisticated
@@ -686,24 +673,6 @@ var (
 		Name:        "admission.granter.io_tokens_exhausted_duration.kv",
 		Help:        "Total duration when IO tokens were exhausted, in micros",
 		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
-	}
-	kvIONumIOTokensTookWithoutPermission = metric.Metadata{
-		Name:        "admission.granter.io_tokens_took_without_permission.kv",
-		Help:        "Total number of tokens taken without permission",
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-	kvIOTotalTokensTaken = metric.Metadata{
-		Name:        "admission.granter.io_tokens_taken.kv",
-		Help:        "Total number of tokens taken",
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-	kvIOTokensAvailable = metric.Metadata{
-		Name:        "admission.granter.io_tokens_available.kv",
-		Help:        "Number of tokens available",
-		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
 )

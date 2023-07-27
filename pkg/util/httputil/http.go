@@ -45,34 +45,15 @@ const (
 	GzipEncoding = "gzip"
 )
 
-type JSONOptions struct {
-	ignoreUnknownFields bool
-}
-
-type JSONOption func(result *JSONOptions)
-
-func IgnoreUnknownFields() JSONOption {
-	return func(result *JSONOptions) {
-		result.ignoreUnknownFields = true
-	}
-}
-
 // GetJSON uses the supplied client to GET the URL specified by the parameters
-// and unmarshals the result into response. This will fail if the response
-// contains unknown fields.
+// and unmarshals the result into response.
 // TODO(someone): make this context-aware, see client.go.
 func GetJSON(httpClient http.Client, path string, response protoutil.Message) error {
-	return GetJSONWithOptions(httpClient, path, response)
-}
-
-func GetJSONWithOptions(
-	httpClient http.Client, path string, response protoutil.Message, opts ...JSONOption,
-) error {
 	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
 		return err
 	}
-	_, err = doJSONRequest(httpClient, req, response, opts...)
+	_, err = doJSONRequest(httpClient, req, response)
 	return err
 }
 
@@ -167,13 +148,8 @@ func PostProtobuf(
 }
 
 func doJSONRequest(
-	httpClient http.Client, req *http.Request, response protoutil.Message, opts ...JSONOption,
+	httpClient http.Client, req *http.Request, response protoutil.Message,
 ) (*http.Response, error) {
-	options := &JSONOptions{}
-	for _, opt := range opts {
-		opt(options)
-	}
-
 	if timeout := httpClient.Timeout; timeout > 0 {
 		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
 	}
@@ -190,10 +166,6 @@ func doJSONRequest(
 		return resp, errors.Errorf(
 			"status: %s, content-type: %s, body: %s, error: %v", resp.Status, contentType, b, err,
 		)
-	}
-	if options.ignoreUnknownFields {
-		json := jsonpb.Unmarshaler{AllowUnknownFields: true}
-		return resp, json.Unmarshal(resp.Body, response)
 	}
 	return resp, jsonpb.Unmarshal(resp.Body, response)
 }

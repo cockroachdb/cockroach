@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -497,7 +496,7 @@ func (v *Value) SetProto(msg protoutil.Message) error {
 	// directly into the Value.RawBytes field instead of allocating a separate
 	// []byte and copying.
 	v.ensureRawBytes(headerSize + msg.Size())
-	if _, err := protoutil.MarshalToSizedBuffer(msg, v.RawBytes[headerSize:]); err != nil {
+	if _, err := protoutil.MarshalTo(msg, v.RawBytes[headerSize:]); err != nil {
 		return err
 	}
 	// Special handling for timeseries data.
@@ -936,7 +935,6 @@ func (TransactionStatus) SafeValue() {}
 func MakeTransaction(
 	name string,
 	baseKey Key,
-	isoLevel isolation.Level,
 	userPriority UserPriority,
 	now hlc.Timestamp,
 	maxOffsetNs int64,
@@ -952,7 +950,6 @@ func MakeTransaction(
 		TxnMeta: enginepb.TxnMeta{
 			Key:               baseKey,
 			ID:                u,
-			IsoLevel:          isoLevel,
 			WriteTimestamp:    now,
 			MinTimestamp:      now,
 			Priority:          MakePriority(userPriority),
@@ -1173,34 +1170,12 @@ func (t *Transaction) BumpEpoch() {
 	t.Epoch++
 }
 
-// BumpReadTimestamp forwards the transaction's read timestamp to the provided
-// timestamp. It also forwards its write timestamp, if necessary, to ensure that
-// its write timestamp is always greater than or equal to its read timestamp.
-//
-// A transaction's write timestamp serves as a lower bound on its commit
-// timestamp. It is free to advance over the course of the transaction's
-// lifetime when experiencing read-write or write-write contention. The write
-// timestamp can advance without restraint or prior validation.
-//
-// A transaction's read timestamp establishes the consistent read snapshot that
-// the transaction observes when reading data. Unlike the write timestamp, the
-// read timestamp is not free to advance, except in specific circumstances.
-// Movement of the read timestamp outside these circumstances would break the
-// consistent view of data that the transaction is meaning to provide. The read
-// can be advanced in three situations:
-//   - When a transaction restarts and moves to a new epoch. At this time, the
-//     reads and writes performed in the prior epoch(s) are considered invalid
-//     and the read snapshot can be re-established using a new read timestamp.
-//   - When a transaction performs a read refresh, having validated that all
-//     prior reads are equivalent at the old and new read timestamp. For details
-//     about transaction read refreshes, see the comment on txnSpanRefresher.
-//   - When the transaction reaches a statement boundary, if the transaction's
-//     isolation level permits it to observe a different read snapshot on each
-//     statement. For more, see the comment on isolation.Level.
-func (t *Transaction) BumpReadTimestamp(timestamp hlc.Timestamp) {
-	t.ReadTimestamp.Forward(timestamp)
-	t.WriteTimestamp.Forward(t.ReadTimestamp)
-	// TODO(nvanbenschoten): remove this when the WriteTooOld flag is removed.
+// Refresh reconfigures a transaction to account for a read refresh up to the
+// specified timestamp. For details about transaction read refreshes, see the
+// comment on txnSpanRefresher.
+func (t *Transaction) Refresh(timestamp hlc.Timestamp) {
+	t.WriteTimestamp.Forward(timestamp)
+	t.ReadTimestamp.Forward(t.WriteTimestamp)
 	t.WriteTooOld = false
 }
 
@@ -1222,7 +1197,6 @@ func (t *Transaction) Update(o *Transaction) {
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
-	t.IsoLevel = o.IsoLevel
 
 	// Update epoch-scoped state, depending on the two transactions' epochs.
 	if t.Epoch < o.Epoch {
@@ -1763,7 +1737,7 @@ func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
 }
 
 // LeaseSequence is a custom type for a lease sequence number.
-type LeaseSequence uint64
+type LeaseSequence int64
 
 // SafeValue implements the redact.SafeValue interface.
 func (s LeaseSequence) SafeValue() {}
@@ -1979,17 +1953,9 @@ func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
 }
 
 // MakeLockAcquisition makes a lock acquisition message from the given
-// txn, key, durability level, and lock strength.
-func MakeLockAcquisition(
-	txn *Transaction, key Key, dur lock.Durability, str lock.Strength,
-) LockAcquisition {
-	return LockAcquisition{
-		Span:           Span{Key: key},
-		Txn:            txn.TxnMeta,
-		Durability:     dur,
-		Strength:       str,
-		IgnoredSeqNums: txn.IgnoredSeqNums,
-	}
+// txn, key, and durability level.
+func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcquisition {
+	return LockAcquisition{Span: Span{Key: key}, Txn: txn.TxnMeta, Durability: dur}
 }
 
 // MakeLockUpdate makes a lock update from the given txn and span.

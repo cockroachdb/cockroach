@@ -11,6 +11,8 @@
 package colenc
 
 import (
+	"unsafe"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -142,9 +144,9 @@ func encodeKeys[T []byte | roachpb.Key](
 			}
 			s := ss.Get(r + start)
 			if dir == encoding.Ascending {
-				kys[r] = encoding.EncodeStringAscending(b, encoding.UnsafeConvertBytesToString(s))
+				kys[r] = encoding.EncodeStringAscending(b, unsafeConvertBytesToString(s))
 			} else {
-				kys[r] = encoding.EncodeStringDescending(b, encoding.UnsafeConvertBytesToString(s))
+				kys[r] = encoding.EncodeStringDescending(b, unsafeConvertBytesToString(s))
 			}
 		}
 	case types.TimestampFamily, types.TimestampTZFamily:
@@ -173,21 +175,6 @@ func encodeKeys[T []byte | roachpb.Key](
 			} else {
 				b, err = encoding.EncodeDurationDescending(b, ds.Get(r+start))
 			}
-			if err != nil {
-				return err
-			}
-			kys[r] = b
-		}
-	case types.JsonFamily:
-		jsonVector := vec.JSON()
-		for r := 0; r < count; r++ {
-			b := kys[r]
-			if partialIndexAndNullCheck(kys, r, start, nulls, dir) {
-				continue
-			}
-			var err error
-			jsonObj := jsonVector.Get(r + start)
-			b, err = jsonObj.EncodeForwardIndex(b, dir)
 			if err != nil {
 				return err
 			}
@@ -246,4 +233,8 @@ func (b *BatchEncoder) encodeIndexKey(
 		}
 	}
 	return nil
+}
+
+func unsafeConvertBytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }

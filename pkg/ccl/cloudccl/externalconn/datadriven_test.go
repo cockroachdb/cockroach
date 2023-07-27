@@ -51,7 +51,6 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestTenantProbabilistic,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs:   jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					ExternalConnection: ecTestingKnobs,

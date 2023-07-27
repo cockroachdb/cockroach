@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -256,7 +257,8 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
 
@@ -270,7 +272,7 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "t", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if len(desc.AllMutations()) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}

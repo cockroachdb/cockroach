@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package base exposes basic utilities used across cockroach.
 package base
 
 import (

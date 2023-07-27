@@ -138,8 +138,8 @@ outer:
 		}
 
 		for _, origColDef := range origDesc.Columns {
-			// We don't take over hidden/inaccessible/virtual columns.
-			if origColDef.Hidden || origColDef.Inaccessible || origColDef.Virtual {
+			// We don't take over hidden/inaccessible columns.
+			if origColDef.Hidden || origColDef.Inaccessible {
 				continue
 			}
 			colID := t.desc.NextColumnID
@@ -163,7 +163,6 @@ outer:
 				t.desc.Families[0].ColumnIDs, colID)
 			t.desc.Families[0].ColumnNames = append(
 				t.desc.Families[0].ColumnNames, newColDef.Name)
-
 			// Add to the primary index as either a key or store column.
 			for i, name := range origDesc.PrimaryIndex.KeyColumnNames {
 				if name == origColDef.Name {

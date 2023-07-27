@@ -692,7 +692,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 		base.TestServerArgs{
 			// Hangs when run from a test tenant. More investigation is
 			// required here. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -715,10 +715,10 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	var jobID jobspb.JobID = -1
 	var importSummary roachpb.RowCount
 
-	registry.TestingWrapResumerConstructor(jobspb.TypeImport,
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 		// Arrange for our special job resumer to be
 		// returned the very first time we start the import.
-		func(raw jobs.Resumer) jobs.Resumer {
+		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
 			resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
@@ -733,7 +733,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 				}
 			}
 			return resumer
-		})
+		},
+	}
 
 	testBarrier, csvBarrier := newSyncBarrier()
 	csv1 := newCsvGenerator(0, 10*batchSize+1, &intGenerator{}, &strGenerator{})
@@ -799,7 +800,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		base.TestServerArgs{
 			// Test hangs when run within a test tenant. More investigation
 			// is required here. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -822,10 +823,10 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	var jobID jobspb.JobID = -1
 	var importSummary roachpb.RowCount
 
-	registry.TestingWrapResumerConstructor(jobspb.TypeImport,
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 		// Arrange for our special job resumer to be
 		// returned the very first time we start the import.
-		func(raw jobs.Resumer) jobs.Resumer {
+		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
 			resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
@@ -841,7 +842,8 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 				}
 			}
 			return resumer
-		})
+		},
+	}
 
 	csv1 := newCsvGenerator(0, 10*batchSize+1, &intGenerator{}, &strGenerator{})
 	csv2 := newCsvGenerator(0, 20*batchSize-1, &intGenerator{}, &strGenerator{})

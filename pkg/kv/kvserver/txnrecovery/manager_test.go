@@ -40,7 +40,7 @@ func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 func makeStagingTransaction(clock *hlc.Clock) roachpb.Transaction {
 	now := clock.Now()
 	offset := clock.MaxOffset().Nanoseconds()
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, now, offset, 0)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, now, offset, 0)
 	txn.Status = roachpb.STAGING
 	return txn
 }
@@ -107,8 +107,8 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 
 			br := ba.CreateReply()
 			br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = txn
-			br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundUnpushedIntent = true
-			br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundUnpushedIntent = !prevent
+			br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = true
+			br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = !prevent
 
 			mockSender = kv.SenderFunc(func(
 				_ context.Context, ba *kvpb.BatchRequest,
@@ -288,8 +288,8 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				} else {
 					br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = txn
 				}
-				br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundUnpushedIntent = true
-				br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundUnpushedIntent = false
+				br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = true
+				br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = false
 
 				mockSender = kv.SenderFunc(func(
 					_ context.Context, ba *kvpb.BatchRequest,

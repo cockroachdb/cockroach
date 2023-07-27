@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -248,11 +247,10 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.RangePriorReadSummaryKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangePriorReadSummary", revertSupportUnknown},
 		{keys.RangeGCThresholdKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeGCThreshold", revertSupportUnknown},
 		{keys.RangeVersionKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeVersion", revertSupportUnknown},
-		{keys.RangeGCHintKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RangeGCHint", revertSupportUnknown},
 
 		{keys.RaftHardStateKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RaftHardState", revertSupportUnknown},
 		{keys.RangeTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RangeTombstone", revertSupportUnknown},
-		{keys.RaftLogKey(roachpb.RangeID(1000001), kvpb.RaftIndex(200001)), "/Local/RangeID/1000001/u/RaftLog/logIndex:200001", revertSupportUnknown},
+		{keys.RaftLogKey(roachpb.RangeID(1000001), uint64(200001)), "/Local/RangeID/1000001/u/RaftLog/logIndex:200001", revertSupportUnknown},
 		{keys.RangeLastReplicaGCTimestampKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RangeLastReplicaGCTimestamp", revertSupportUnknown},
 
 		{keys.MakeRangeKeyPrefix(roachpb.RKey(tenSysCodec.TablePrefix(42))), `/Local/Range/Table/42`, revertSupportUnknown},
@@ -483,7 +481,7 @@ exp:    %s
 				t.Errorf("%d: from string expected %s, got %s", i, exp, test.key.String())
 			}
 
-			scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
+			scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 			parsed, err := scanner.Scan(keyInfo)
 			if err != nil {
 				if !errors.HasType(err, (*keys.ErrUglifyUnsupported)(nil)) {

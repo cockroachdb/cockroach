@@ -463,7 +463,6 @@ func TestAvroSchema(t *testing.T) {
 			`INT8`:              `["null","long"]`,
 			`INTERVAL`:          `["null","string"]`,
 			`JSONB`:             `["null","string"]`,
-			`PG_LSN`:            `["null","string"]`,
 			`STRING`:            `["null","string"]`,
 			`STRING COLLATE fr`: `["null","string"]`,
 			`TIME`:              `["null",{"type":"long","logicalType":"time-micros"}]`,
@@ -486,18 +485,15 @@ func TestAvroSchema(t *testing.T) {
 			}
 
 			colType := typ.SQLString()
-
-			t.Run(typ.String(), func(t *testing.T) {
-				tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
-				require.NoError(t, err)
-				field, err := columnToAvroSchema(
-					cdcevent.ResultColumn{ResultColumn: colinfo.ResultColumn{Typ: tableDesc.PublicColumns()[1].GetType()}},
-				)
-				require.NoError(t, err)
-				schema, err := json.Marshal(field.SchemaType)
-				require.NoError(t, err)
-				require.Equal(t, goldens[colType], string(schema), `SQL type %s`, colType)
-			})
+			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
+			require.NoError(t, err)
+			field, err := columnToAvroSchema(
+				cdcevent.ResultColumn{ResultColumn: colinfo.ResultColumn{Typ: tableDesc.PublicColumns()[1].GetType()}},
+			)
+			require.NoError(t, err)
+			schema, err := json.Marshal(field.SchemaType)
+			require.NoError(t, err)
+			require.Equal(t, goldens[colType], string(schema), `SQL type %s`, colType)
 
 			// Delete from goldens for the following assertion that we don't have any
 			// unexpectedly unused goldens.
@@ -656,12 +652,6 @@ func TestAvroSchema(t *testing.T) {
 				sql:         `''`,
 				avro:        `{"bytes":""}`,
 				numRawBytes: 0},
-
-			{
-				sqlType: `PG_LSN`,
-				sql:     `'A/0'`,
-				avro:    `{"string":"A\/0"}`,
-			},
 		}
 
 		for _, test := range goldens {

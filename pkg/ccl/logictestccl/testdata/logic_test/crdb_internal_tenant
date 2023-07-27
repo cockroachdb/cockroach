@@ -19,7 +19,7 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  active_range_feeds                      table  admin  NULL  NULL
@@ -65,9 +65,6 @@ crdb_internal  kv_catalog_descriptor                   table  admin  NULL  NULL
 crdb_internal  kv_catalog_namespace                    table  admin  NULL  NULL
 crdb_internal  kv_catalog_zones                        table  admin  NULL  NULL
 crdb_internal  kv_dropped_relations                    view   admin  NULL  NULL
-crdb_internal  kv_flow_control_handles                 table  admin  NULL  NULL
-crdb_internal  kv_flow_controller                      table  admin  NULL  NULL
-crdb_internal  kv_flow_token_deductions                table  admin  NULL  NULL
 crdb_internal  kv_inherited_role_members               table  admin  NULL  NULL
 crdb_internal  kv_node_liveness                        table  admin  NULL  NULL
 crdb_internal  kv_node_status                          table  admin  NULL  NULL
@@ -170,7 +167,7 @@ table_id  parent_id  name        database_name  version  format_version         
 statement ok
 CREATE TABLE testdb." ""\'" (i int)
 
-query T rowsort
+query T
 SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
@@ -250,15 +247,15 @@ SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
 query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
-query TITTTTIIITTTT colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
 query ITTTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
@@ -295,10 +292,10 @@ SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  column_id  column_name  column_type  nullable  default_expr  hidden
 
-query ITITTBBBBFITT colnames
+query ITITTBBBBITT colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted  is_sharded  is_visible  visibility  shard_bucket_count  created_at  create_statement
+descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted  is_sharded  is_visible  shard_bucket_count  created_at  create_statement
 
 query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
@@ -400,7 +397,7 @@ select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::st
 ----
 23.1
 
-query ITTT colnames,rowsort
+query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
@@ -598,7 +595,7 @@ CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 
 query ITTITTT
-SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
+SELECT * FROM crdb_internal.create_type_statements
 ----
 104  test  public  113  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 104  test  public  115  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
@@ -626,7 +623,7 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 statement ok
 SELECT * FROM t_53504
 
-query ITTTI colnames,rowsort
+query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
 node_id  application_name     key                   statement_ids                                                  count

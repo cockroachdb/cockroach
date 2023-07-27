@@ -686,7 +686,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	// This subtest verifies that the statistic for a single dropped table is
 	// deleted promptly.
 	t.Run("basic", func(t *testing.T) {
-		// Lower the garbage collection interval to speed up the test.
+		// Enable the garbage collector with low interval to speed up the test.
 		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '1s';")
 		// Create a table with short TTL and collect stats on it.
 		runner.Exec(t, "CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;")
@@ -719,7 +719,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	// This subtest verifies that the stats garbage collector respects the limit
 	// on the number of dropped tables processed at once.
 	t.Run("limit", func(t *testing.T) {
-		// Disable the stats garbage collector for now.
+		// Ensure that the stats garbage collector is disabled for now.
 		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '0s';")
 
 		// Create 5 tables with short TTL and collect stats on them.

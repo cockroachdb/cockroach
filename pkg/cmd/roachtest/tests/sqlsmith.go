@@ -148,33 +148,17 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 
 		// We will enable panic injection on this connection in the vectorized
-		// engine and optimizer (and will ignore the injected errors) in order
-		// to test that the panic-catching mechanism of error propagation works
-		// as expected.
+		// engine (and will ignore the injected errors) in order to test that
+		// the panic-catching mechanism of error propagation works as expected.
 		// Note: it is important to enable this testing knob only after all
 		// other setup queries have already completed, including the smither
 		// instantiation (otherwise, the setup might fail because of the
 		// injected panics).
-		injectVectorizePanicsStmt := "SET testing_vectorize_inject_panics=true;"
-		if _, err := conn.Exec(injectVectorizePanicsStmt); err != nil {
+		injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+		if _, err := conn.Exec(injectPanicsStmt); err != nil {
 			t.Fatal(err)
 		}
-		logStmt(injectVectorizePanicsStmt)
-		injectOptimizerPanicsStmt := "SET testing_optimizer_inject_panics=true;"
-		// Because we've already enabled the vectorized panic injection,
-		// enabling the optimizer panic injection might fail due to the injected
-		// vectorized panic. To go around this, we will retry this statement at
-		// most 100 times.
-		const maxRetries = 100
-		for attempt := 1; ; attempt++ {
-			if _, err = conn.Exec(injectOptimizerPanicsStmt); err == nil {
-				break
-			}
-			if attempt == maxRetries {
-				t.Fatalf("failed to enable optimizer panic injection with %d retries: %v", maxRetries, err)
-			}
-		}
-		logStmt(injectOptimizerPanicsStmt)
+		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
 		until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
@@ -194,8 +178,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				m := c.NewMonitor(ctx, c.Node(1))
-				m.Go(func(context.Context) error {
+				go func(context.Context) {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
 					// catch that here, and only pass the error into
@@ -211,11 +194,15 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					if stmt == "" {
 						// If an empty statement is generated, then ignore it.
 						done <- errors.Newf("Empty statement returned by generate")
-						return nil
+						return
 					}
 
-					// TODO(yuzefovich): investigate why using the context with
-					// a timeout results in poisoning the connection (#101208).
+					// At the moment, CockroachDB doesn't support pgwire query
+					// cancellation which is needed for correct handling of context
+					// cancellation, so instead of using a context with timeout, we opt
+					// in for using CRDB's 'statement_timeout'.
+					// TODO(yuzefovich): once #41335 is implemented, go back to using a
+					// context with timeout.
 					_, err := conn.Exec(stmt)
 					if err == nil {
 						logStmt(stmt)
@@ -226,9 +213,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						}
 					}
 					done <- err
-					return nil
-				})
-				defer m.Wait()
+				}(ctx)
 				select {
 				case <-time.After(timeout * 2):
 					// SQLSmith generates queries that either perform full table scans of
@@ -246,10 +231,11 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			if err != nil {
 				es := err.Error()
 				if strings.Contains(es, "internal error") {
+					// TODO(yuzefovich): we temporarily ignore internal errors
+					// that are because of #40929.
 					var expectedError bool
 					for _, exp := range []string{
-						// Optimizer panic-injection surfaces as an internal error.
-						"injected panic in optimizer",
+						"could not parse \"0E-2019\" as type decimal",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
 					}

@@ -327,10 +327,19 @@ func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCl
 	return w
 }
 
-func (e *esWrapper) ReadFile(
-	ctx context.Context, basename string, opts ReadOptions,
+func (e *esWrapper) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
+	r, err := e.ExternalStorage.ReadFile(ctx, basename)
+	if err != nil {
+		return r, err
+	}
+
+	return e.wrapReader(ctx, r), nil
+}
+
+func (e *esWrapper) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
 ) (ioctx.ReadCloserCtx, int64, error) {
-	r, s, err := e.ExternalStorage.ReadFile(ctx, basename, opts)
+	r, s, err := e.ExternalStorage.ReadFileAt(ctx, basename, offset)
 	if err != nil {
 		return r, s, err
 	}

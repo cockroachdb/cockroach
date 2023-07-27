@@ -7,11 +7,7 @@ spawn $argv demo --no-line-editor --no-example-database --max-sql-memory=10% --n
 
 eexpect "WARNING: HIGH MEMORY USAGE"
 
-# try to exit early via Ctrl+C.
+eexpect "defaultdb>"
 interrupt
-# If the demo command started the prompt before we got a chance to send Ctrl+C above,
-# it's not going to accept Ctrl+C any more. Instead, send a quit command.
-send "\r\\q\r"
-eexpect eof
 
 end_test

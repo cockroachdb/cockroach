@@ -63,9 +63,6 @@ type Catalog interface {
 	// DeleteName deletes a namespace entry.
 	DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error
 
-	// AddName adds a namespace entry.
-	AddName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error
-
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
@@ -94,9 +91,6 @@ type Catalog interface {
 	// transaction so far, assuming that they haven't been persisted yet
 	// by calling Run.
 	Reset(ctx context.Context) error
-
-	// InitializeSequence initializes the initial value for a sequence.
-	InitializeSequence(id descpb.ID, startVal int64)
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.

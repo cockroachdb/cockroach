@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -291,7 +292,7 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -707,13 +708,13 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 
 	ctx := context.Background()
 
-	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
-	sd.Database = "d"
 	p, cleanup := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
 		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
-		sd,
-	)
+		sessiondatapb.SessionData{
+			Database:   "d",
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		})
 	defer cleanup()
 
 	present, err := schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "simple")
@@ -742,13 +743,13 @@ func TestFullyQualifyTables(t *testing.T) {
 	require.NoError(t, err)
 	createChangeFeedStmt := stmt.AST.(*tree.CreateChangefeed)
 
-	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
-	sd.Database = "ocean"
 	p, cleanupPlanHook := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
 		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
-		sd,
-	)
+		sessiondatapb.SessionData{
+			Database:   "ocean",
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		})
 	defer cleanupPlanHook()
 
 	tablePatterns := make([]tree.TablePattern, 0)

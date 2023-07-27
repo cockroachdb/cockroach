@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -47,19 +46,18 @@ import (
 // scbuild.Dependencies object built using the test server interface and which
 // it passes to the callback.
 func WithBuilderDependenciesFromTestServer(
-	s serverutils.TestTenantInterface, nodeID roachpb.NodeID, fn func(scbuild.Dependencies),
+	s serverutils.TestServerInterface, fn func(scbuild.Dependencies),
 ) {
-	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
-	sd.Database = "defaultdb"
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
-		kv.NewTxn(ctx, s.DB(), nodeID),
+		kv.NewTxn(context.Background(), s.DB(), s.NodeID()),
 		username.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
-		sd,
+		// Setting the database on the session data to "defaultdb" in the obvious
+		// way doesn't seem to do what we want.
+		sessiondatapb.SessionData{},
 	)
 	defer cleanup()
 	planner := ip.(interface {
@@ -73,7 +71,7 @@ func WithBuilderDependenciesFromTestServer(
 	})
 
 	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
-		ctx, "test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
+		"test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
 	)
 	defer refCleanup()
 

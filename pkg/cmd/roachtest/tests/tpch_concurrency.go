@@ -201,20 +201,22 @@ func registerTPCHConcurrency(r registry.Registry) {
 	const timeout = 18 * time.Hour
 
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:      "tpch_concurrency",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Timeout:   timeout,
+		Cluster:   r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency/no_streamer",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:      "tpch_concurrency/no_streamer",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Timeout:   timeout,
+		Cluster:   r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},

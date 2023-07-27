@@ -145,20 +145,14 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		})
 		var savedTxn *kv.Txn
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetIsoLevel(o.IsoLevel); err != nil {
-				panic(err)
-			}
 			if savedTxn != nil && txn.TestingCloneTxn().Epoch == 0 {
 				// If the txn's current epoch is 0 and we've run at least one prior
 				// iteration, we were just aborted.
 				retryOnAbort.Next()
 			}
 			savedTxn = txn
-			// First error. Because we need to mark everything that
-			// we didn't "reach" due to a prior error with errOmitted,
-			// we *don't* return eagerly on this but save it to the end.
-			var err error
 			{
+				var err error
 				for i := range o.Ops {
 					op := &o.Ops[i]
 					op.Result().Reset() // in case we're a retry
@@ -167,12 +161,6 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 						// to do this because we want, as an invariant, to have marked all
 						// operations as either failed or succeeded.
 						*op.Result() = resultInit(ctx, errOmitted)
-						if op.Batch != nil {
-							for _, op := range op.Batch.Ops {
-								*op.Result() = resultInit(ctx, errOmitted)
-							}
-						}
-
 						continue
 					}
 
@@ -182,20 +170,9 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 						err = errors.DecodeError(ctx, *r.Err)
 					}
 				}
-			}
-			if err != nil {
-				if o.CommitInBatch != nil {
-					// We failed before committing, so set errOmitted everywhere
-					// and then return the original error.
-					o.CommitInBatch.Result = resultInit(ctx, errOmitted)
-					for _, op := range o.CommitInBatch.Ops {
-						// NB: the `op` is definitely not a batch since we can't nest
-						// batches within each other, so we don't need that second level of
-						// recursion here.
-						*op.Result() = resultInit(ctx, errOmitted)
-					}
+				if err != nil {
+					return err
 				}
-				return err
 			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()

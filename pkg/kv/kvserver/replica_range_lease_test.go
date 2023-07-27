@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -128,7 +127,6 @@ func TestReplicaLeaseStatus(t *testing.T) {
 				Clock: clock,
 				Gossip: gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(),
 					zonepb.DefaultZoneConfigRef()),
-				Settings: cluster.MakeTestingClusterSettings(),
 			})
 			r := Replica{store: &Store{
 				Ident: &roachpb.StoreIdent{StoreID: 1, NodeID: 1},

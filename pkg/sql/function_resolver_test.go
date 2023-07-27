@@ -67,19 +67,17 @@ CREATE FUNCTION f() RETURNS VOID VOLATILE LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE FUNCTION f(INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT a FROM t $$;
 `)
 
-	var m sessiondatapb.MigratableSession
-	var sessionSerialized []byte
-	tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &m))
-	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
-	require.NoError(t, err)
-	sd.SessionData = m.SessionData
-	sd.LocalOnlySessionData = m.LocalOnlySessionData
+	var sessionData sessiondatapb.SessionData
+	{
+		var sessionSerialized []byte
+		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	}
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
@@ -245,19 +243,17 @@ CREATE FUNCTION sc1.lower() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 3 $$;
 		},
 	}
 
-	var m sessiondatapb.MigratableSession
-	var sessionSerialized []byte
-	tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &m))
-	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
-	require.NoError(t, err)
-	sd.SessionData = m.SessionData
-	sd.LocalOnlySessionData = m.LocalOnlySessionData
+	var sessionData sessiondatapb.SessionData
+	{
+		var sessionSerialized []byte
+		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	}
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
@@ -384,19 +380,17 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ S
 		},
 	}
 
-	var m sessiondatapb.MigratableSession
-	var sessionSerialized []byte
-	tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &m))
-	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
-	require.NoError(t, err)
-	sd.SessionData = m.SessionData
-	sd.LocalOnlySessionData = m.LocalOnlySessionData
+	var sessionData sessiondatapb.SessionData
+	{
+		var sessionSerialized []byte
+		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	}
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()

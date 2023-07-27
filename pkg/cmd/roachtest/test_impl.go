@@ -155,10 +155,6 @@ func (t *testImpl) Name() string {
 	return t.spec.Name
 }
 
-func (t *testImpl) SnapshotPrefix() string {
-	return t.spec.SnapshotPrefix
-}
-
 // L returns the test's logger.
 func (t *testImpl) L() *logger.Logger {
 	return t.l

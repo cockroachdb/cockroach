@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -57,7 +56,7 @@ type TestSpec struct {
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.
-	Tags map[string]struct{}
+	Tags []string
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster spec.ClusterSpec
 	// NativeLibs specifies the native libraries required to be present on
@@ -106,19 +105,6 @@ type TestSpec struct {
 
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
-
-	// True iff results from this test should not be published externally,
-	// e.g. to GitHub.
-	RedactResults bool
-
-	// SnapshotPrefix is set by tests that make use of volume snapshots.
-	// Prefixes must be not only be unique across tests, but one cannot be a
-	// prefix of another.
-	//
-	// TODO(irfansharif): Search by taking in the other parts of the snapshot
-	// fingerprint, i.e. the node count, the version, etc. that appear in the
-	// infix. This will get rid of this awkward prefix naming restriction.
-	SnapshotPrefix string
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
@@ -156,18 +142,17 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 	if !filter.Name.MatchString(t.Name) {
 		return FailedFilter
 	}
-
-	if len(filter.Tags) == 0 {
+	if len(t.Tags) == 0 {
+		if !filter.Tag.MatchString("default") {
+			return FailedTags
+		}
 		return Matched
 	}
-
-	for tag := range filter.Tags {
-		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
-		if matchesAll(t.Tags, strings.Split(tag, ",")) {
+	for _, t := range t.Tags {
+		if filter.Tag.MatchString(t) {
 			return Matched
 		}
 	}
-
 	return FailedTags
 }
 
@@ -177,31 +162,6 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 func PromSub(raw string) string {
 	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
 	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
-}
-
-func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
-	for _, tag := range filterTags {
-		negate := false
-		if tag[0] == '!' {
-			negate = true
-			tag = tag[1:]
-		}
-		_, tagExists := testTags[tag]
-
-		if negate == tagExists {
-			return false
-		}
-	}
-	return true
-}
-
-// Tags returns a set of strings.
-func Tags(values ...string) map[string]struct{} {
-	set := make(map[string]struct{})
-	for _, s := range values {
-		set[s] = struct{}{}
-	}
-	return set
 }
 
 // LeaseType specifies the type of leases to use for the cluster.

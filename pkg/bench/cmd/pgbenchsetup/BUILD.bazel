@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "pgbenchsetup_lib",
-    testonly = 1,
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/bench/cmd/pgbenchsetup",
     visibility = ["//visibility:private"],
@@ -14,7 +13,6 @@ go_library(
 
 go_binary(
     name = "pgbenchsetup",
-    testonly = 1,
     embed = [":pgbenchsetup_lib"],
     visibility = ["//visibility:public"],
 )

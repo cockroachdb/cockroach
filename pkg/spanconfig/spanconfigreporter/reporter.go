@@ -54,6 +54,12 @@ var conformanceReportRateLimit = settings.RegisterFloatSetting(
 	},
 )
 
+// Liveness is the subset of the interface satisfied by CRDB's node liveness
+// component that the reporter relies on.
+type Liveness interface {
+	GetIsLiveMap() livenesspb.IsLiveMap
+}
+
 // Reporter is used to figure out whether ranges backing specific spans conform
 // to the span configs that apply over them. It's a concrete implementation of
 // the spanconfig.Reporter interface.
@@ -80,7 +86,7 @@ type Reporter struct {
 		//   configs from different points in time. If this too becomes a
 		//   problem, we can explicitly generate a snapshot like we do for
 		//   liveness.
-		livenesspb.NodeVitalityInterface
+		Liveness
 		rangedesc.Scanner
 		constraint.StoreResolver
 		spanconfig.StoreReader
@@ -95,7 +101,7 @@ var _ spanconfig.Reporter = &Reporter{}
 
 // New constructs and returns a Reporter.
 func New(
-	liveness livenesspb.NodeVitalityInterface,
+	liveness Liveness,
 	resolver constraint.StoreResolver,
 	reader spanconfig.StoreReader,
 	scanner rangedesc.Scanner,
@@ -119,7 +125,7 @@ func New(
 		r.rateLimiter.UpdateLimit(newLimit, int64(newLimit))
 	})
 
-	r.dep.NodeVitalityInterface = liveness
+	r.dep.Liveness = liveness
 	r.dep.StoreResolver = resolver
 	r.dep.Scanner = scanner
 	r.dep.StoreReader = reader
@@ -147,7 +153,7 @@ func (r *Reporter) SpanConfigConformance(
 	report := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
-	isLiveMap := r.dep.NodeVitalityInterface.ScanNodeVitalityFromCache()
+	isLiveMap := r.dep.Liveness.GetIsLiveMap()
 	for _, span := range spans {
 		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
 			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },
@@ -161,7 +167,7 @@ func (r *Reporter) SpanConfigConformance(
 
 					status := desc.Replicas().ReplicationStatus(
 						func(rDesc roachpb.ReplicaDescriptor) bool {
-							isLive := isLiveMap[rDesc.NodeID].IsLive(livenesspb.SpanConfigConformance)
+							isLive := isLiveMap[rDesc.NodeID].IsLive
 							if !isLive {
 								unavailableNodes[rDesc.NodeID] = struct{}{}
 							}

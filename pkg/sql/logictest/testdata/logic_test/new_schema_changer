@@ -1,7 +1,5 @@
 # knob-opt: disable-corpus-generation sync-event-log
 
-skip_on_retry
-
 subtest add_column
 
 statement ok
@@ -387,7 +385,7 @@ CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 statement ok
 EXPLAIN (DDL) DROP VIEW v1Dep CASCADE;
 
-statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
+statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it
 DROP VIEW v1Dep RESTRICT;
 
 statement error pq: "v1dep" is not a materialized view
@@ -442,7 +440,7 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-statement error "customers" is referenced by foreign key from table "orders"
+statement error "customers" is referenced by foreign key from table "shipments"
 DROP TABLE defaultdb.customers;
 
 statement ok
@@ -781,7 +779,6 @@ DROP DATABASE db1 CASCADE
 statement ok
 DROP SCHEMA sc2 CASCADE
 
-skipif config local-mixed-22.2-23.1
 # No comments should be left after.
 query T
 SELECT comment FROM system.comments ORDER BY comment ASC
@@ -874,22 +871,22 @@ CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
 statement ok
 CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
 
-query TTBITTTBBBF colnames,nosort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
-tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true     1
-tindex      bar          true        2             a                         a              ASC        false    true      true     1
-tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
-tindex      bar2         true        2             a                         a              ASC        false    true      true     1
-tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
-tindex      bar3         false       2             a                         a              ASC        true     true      true     1
-tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true     1
-tindex      bar4         true        2             a                         a              ASC        false    true      true     1
-tindex      foo          true        1             b                         b              ASC        false    false     true     1
-tindex      foo          true        2             a                         a              ASC        false    true      true     1
-tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true     1
-tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true     1
+table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible
+tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true
+tindex      bar          true        2             a                         a              ASC        false    true      true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar2         true        2             a                         a              ASC        false    true      true
+tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar3         false       2             a                         a              ASC        true     true      true
+tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true
+tindex      bar4         true        2             a                         a              ASC        false    true      true
+tindex      foo          true        1             b                         b              ASC        false    false     true
+tindex      foo          true        2             a                         a              ASC        false    true      true
+tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true
+tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true
 
 statement error  duplicate key value violates unique constraint "bar3"
 INSERT INTO tIndex VALUES (2,1)
@@ -901,22 +898,22 @@ INSERT INTO tIndex VALUES (20000,10000)
 #statement error pgcode 23505 violates unique constraint "bar"
 #CREATE UNIQUE INDEX bar ON tIndex (b)
 
-query TTBITTTBBBF colnames,nosort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible  visibility
-tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true     1
-tindex      bar          true        2             a                         a              ASC        false    true      true     1
-tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
-tindex      bar2         true        2             a                         a              ASC        false    true      true     1
-tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true     1
-tindex      bar3         false       2             a                         a              ASC        true     true      true     1
-tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true     1
-tindex      bar4         true        2             a                         a              ASC        false    true      true     1
-tindex      foo          true        1             b                         b              ASC        false    false     true     1
-tindex      foo          true        2             a                         a              ASC        false    true      true     1
-tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true     1
-tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true     1
+table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible
+tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true
+tindex      bar          true        2             a                         a              ASC        false    true      true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar2         true        2             a                         a              ASC        false    true      true
+tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar3         false       2             a                         a              ASC        true     true      true
+tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true
+tindex      bar4         true        2             a                         a              ASC        false    true      true
+tindex      foo          true        1             b                         b              ASC        false    false     true
+tindex      foo          true        2             a                         a              ASC        false    true      true
+tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true
+tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true
 
 # test for DESC index
 
@@ -939,18 +936,18 @@ CREATE INDEX b_desc ON tIndx (b DESC)
 statement ok
 CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM tIndx
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-tindx       b_asc       true        1             b            b           ASC        false    false     true     1
-tindx       b_asc       true        2             c            c           DESC       false    false     true     1
-tindx       b_asc       true        3             a            a           ASC        false    true      true     1
-tindx       b_desc      true        1             b            b           DESC       false    false     true     1
-tindx       b_desc      true        2             a            a           ASC        false    true      true     1
-tindx       tindx_pkey  false       1             a            a           ASC        false    false     true     1
-tindx       tindx_pkey  false       2             b            b           N/A        true     false     true     1
-tindx       tindx_pkey  false       3             c            c           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+tindx       b_asc       true        1             b            b           ASC        false    false     true
+tindx       b_asc       true        2             c            c           DESC       false    false     true
+tindx       b_asc       true        3             a            a           ASC        false    true      true
+tindx       b_desc      true        1             b            b           DESC       false    false     true
+tindx       b_desc      true        2             a            a           ASC        false    true      true
+tindx       tindx_pkey  false       1             a            a           ASC        false    false     true
+tindx       tindx_pkey  false       2             b            b           N/A        true     false     true
+tindx       tindx_pkey  false       3             c            c           N/A        true     false     true
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -967,7 +964,6 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error  must be owner of table privs or have CREATE privilege on table privs
 CREATE INDEX foo ON privs (b)
 
@@ -977,12 +973,12 @@ CREATE INDEX foo ON privs (b)
 
 user root
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
-privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+privs       privs_pkey  false       1             a            a           ASC        false    false     true
+privs       privs_pkey  false       2             b            b           N/A        true     false     true
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -992,14 +988,14 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-privs       foo         true        1             b            b           ASC        false    false     true     1
-privs       foo         true        2             a            a           ASC        false    true      true     1
-privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
-privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+privs       foo         true        1             b            b           ASC        false    false     true
+privs       foo         true        2             a            a           ASC        false    true      true
+privs       privs_pkey  false       1             a            a           ASC        false    false     true
+privs       privs_pkey  false       2             b            b           N/A        true     false     true
 
 user root
 
@@ -1406,12 +1402,7 @@ SET use_declarative_schema_changer = 'unsafe'
 statement error pgcode 2BP01 cannot drop index "idx" because view "child" depends on it
 DROP INDEX parent@idx
 
-skipif config local-mixed-22.2-23.1
 statement ok
-EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
-
-onlyif config local-mixed-22.2-23.1
-statement error cannot explain a statement which is not supported by the declarative schema change
 EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 
 statement ok
@@ -1436,6 +1427,8 @@ INSERT INTO t VALUES (1), (2), (3)
 
 statement ok
 SET use_declarative_schema_changer = 'unsafe_always';
+
+skip_on_retry
 
 statement ok
 BEGIN
@@ -1465,39 +1458,3 @@ SELECT * FROM t
 2  5  42
 3  6  42
 
-subtest create-schema
-
-statement ok
-BEGIN
-
-skipif config local-mixed-22.2-23.1
-statement ok
-CREATE SCHEMA sc
-
-skipif config local-mixed-22.2-23.1
-query TT rowsort
-SHOW SCHEMAS
-----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
-public              admin
-sc                  root
-
-skipif config local-mixed-22.2-23.1
-statement ok
-DROP SCHEMA sc
-
-skipif config local-mixed-22.2-23.1
-query TT rowsort
-SHOW SCHEMAS
-----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
-public              admin
-
-statement ok
-COMMIT

@@ -132,7 +132,7 @@ var statsGarbageCollectionInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"sql.stats.garbage_collection_interval",
 	"interval between deleting stats for dropped tables, set to 0 to disable",
-	time.Hour,
+	0,
 	settings.NonNegativeDuration,
 )
 

@@ -392,11 +392,9 @@ func TestDistinct(t *testing.T) {
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
 		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			ud := NewUnorderedDistinct(
+			return NewUnorderedDistinct(
 				testAllocator, input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
-			)
-			ud.(*UnorderedDistinct).hashTableNumBuckets = uint32(1 + rng.Intn(7))
-			return ud, nil
+			), nil
 		})
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
@@ -444,9 +442,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
-			ud := NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
-			ud.(*UnorderedDistinct).hashTableNumBuckets = uint32(1 + rng.Intn(7))
-			return ud, nil
+			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */), nil
 		},
 	)
 }

@@ -1007,8 +1007,8 @@ func sanityCheckFileIterator(
 	}
 }
 
-//lint:ignore U1000 unused
-func runTestRestoreEntryCover(t *testing.T, numBackups int, simpleImportSpans bool) {
+func TestRestoreEntryCover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	r, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
@@ -1038,99 +1038,103 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int, simpleImportSpans bo
 		return merged
 	}
 
-	for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
-		for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
-			for _, hasExternalFilesList := range []bool{true, false} {
-				backups, err := MockBackupChain(ctx, numBackups, spans, files, r, hasExternalFilesList, execCfg)
-				require.NoError(t, err)
-				layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx,
-					execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
-				require.NoError(t, err)
-				randLayer := rand.Intn(len(backups))
-				randBackup := backups[randLayer]
-				sanityCheckFileIterator(ctx, t, layerToIterFactory[randLayer], randBackup)
-				for _, target := range []int64{0, 1, 4, 100, 1000} {
-					t.Run(fmt.Sprintf("numSpans=%d, numFiles=%d, merge=%d, slim=%t",
-						spans, files, target, hasExternalFilesList), func(t *testing.T) {
-						introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+	for _, numBackups := range []int{1, 2, 3, 5, 9, 10, 11, 12} {
+		for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
+			for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
+				for _, hasExternalFilesList := range []bool{true, false} {
+					for _, simpleImportSpans := range []bool{true, false} {
+						backups, err := MockBackupChain(ctx, numBackups, spans, files, r, hasExternalFilesList, execCfg)
 						require.NoError(t, err)
-						cover, err := makeImportSpans(
-							ctx,
-							backups[numBackups-1].Spans,
-							backups,
-							layerToIterFactory,
-							nil,
-							target<<20,
-							introducedSpanFrontier,
-							[]jobspb.RestoreProgress_FrontierEntry{},
-							simpleImportSpans)
+						layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx,
+							execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
 						require.NoError(t, err)
-						require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
-							cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
-
-						// Check that the correct import spans are created if the job is
-						// resumed after the completion of some random entries in the cover.
-						if len(cover) > 0 {
-							for n := 1; n <= 5; n++ {
-								var completedSpans []roachpb.Span
-								var highWater []byte
-								var frontierEntries []jobspb.RestoreProgress_FrontierEntry
-
-								// Randomly choose to use frontier checkpointing instead of
-								// explicitly testing both forms to avoid creating an exponential
-								// number of tests.
-								useFrontierCheckpointing := rand.Intn(2) == 0
-								if useFrontierCheckpointing {
-									completedSpans = getRandomCompletedSpans(cover, n)
-									for _, sp := range completedSpans {
-										frontierEntries = append(frontierEntries, jobspb.RestoreProgress_FrontierEntry{
-											Span:      sp,
-											Timestamp: completedSpanTime,
-										})
-									}
-								} else {
-									idx := r.Intn(len(cover))
-									highWater = cover[idx].Span.EndKey
-								}
-
-								resumeCover, err := makeImportSpans(
+						randLayer := rand.Intn(len(backups))
+						randBackup := backups[randLayer]
+						sanityCheckFileIterator(ctx, t, layerToIterFactory[randLayer], randBackup)
+						for _, target := range []int64{0, 1, 4, 100, 1000} {
+							t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d, merge=%d, slim=%t, simple=%t",
+								numBackups, spans, files, target, hasExternalFilesList, simpleImportSpans), func(t *testing.T) {
+								introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+								require.NoError(t, err)
+								cover, err := makeImportSpans(
 									ctx,
 									backups[numBackups-1].Spans,
 									backups,
 									layerToIterFactory,
-									highWater,
+									nil,
 									target<<20,
 									introducedSpanFrontier,
-									frontierEntries,
+									[]jobspb.RestoreProgress_FrontierEntry{},
 									simpleImportSpans)
 								require.NoError(t, err)
+								require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
+									cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
 
-								// Compute the spans that are required on resume by subtracting
-								// completed spans from the original required spans.
-								var resumedRequiredSpans roachpb.Spans
-								for _, origReq := range backups[numBackups-1].Spans {
-									var resumeReq []roachpb.Span
-									if useFrontierCheckpointing {
-										resumeReq = roachpb.SubtractSpans([]roachpb.Span{origReq}, completedSpans)
-									} else {
-										resumeReq = roachpb.SubtractSpans([]roachpb.Span{origReq}, []roachpb.Span{{Key: cover[0].Span.Key, EndKey: highWater}})
+								// Check that the correct import spans are created if the job is
+								// resumed after the completion of some random entries in the cover.
+								if len(cover) > 0 {
+									for n := 1; n <= 5; n++ {
+										var completedSpans []roachpb.Span
+										var highWater []byte
+										var frontierEntries []jobspb.RestoreProgress_FrontierEntry
+
+										// Randomly choose to use frontier checkpointing instead of
+										// explicitly testing both forms to avoid creating an exponential
+										// number of tests.
+										useFrontierCheckpointing := rand.Intn(2) == 0
+										if useFrontierCheckpointing {
+											completedSpans = getRandomCompletedSpans(cover, n)
+											for _, sp := range completedSpans {
+												frontierEntries = append(frontierEntries, jobspb.RestoreProgress_FrontierEntry{
+													Span:      sp,
+													Timestamp: completedSpanTime,
+												})
+											}
+										} else {
+											idx := r.Intn(len(cover))
+											highWater = cover[idx].Span.EndKey
+										}
+
+										resumeCover, err := makeImportSpans(
+											ctx,
+											backups[numBackups-1].Spans,
+											backups,
+											layerToIterFactory,
+											highWater,
+											target<<20,
+											introducedSpanFrontier,
+											frontierEntries,
+											simpleImportSpans)
+										require.NoError(t, err)
+
+										// Compute the spans that are required on resume by subtracting
+										// completed spans from the original required spans.
+										var resumedRequiredSpans roachpb.Spans
+										for _, origReq := range backups[numBackups-1].Spans {
+											var resumeReq []roachpb.Span
+											if useFrontierCheckpointing {
+												resumeReq = roachpb.SubtractSpans([]roachpb.Span{origReq}, completedSpans)
+											} else {
+												resumeReq = roachpb.SubtractSpans([]roachpb.Span{origReq}, []roachpb.Span{{Key: cover[0].Span.Key, EndKey: highWater}})
+											}
+											resumedRequiredSpans = append(resumedRequiredSpans, resumeReq...)
+										}
+
+										var errorMsg string
+										if useFrontierCheckpointing {
+											errorMsg = fmt.Sprintf("completed spans in frontier: %v", completedSpans)
+										} else {
+											errorMsg = fmt.Sprintf("highwater: %v", highWater)
+										}
+
+										require.NoError(t, checkRestoreCovering(ctx, backups, resumedRequiredSpans,
+											resumeCover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage),
+											errorMsg)
 									}
-									resumedRequiredSpans = append(resumedRequiredSpans, resumeReq...)
 								}
-
-								var errorMsg string
-								if useFrontierCheckpointing {
-									errorMsg = fmt.Sprintf("completed spans in frontier: %v", completedSpans)
-								} else {
-									errorMsg = fmt.Sprintf("highwater: %v", highWater)
-								}
-
-								require.NoError(t, checkRestoreCovering(ctx, backups, resumedRequiredSpans,
-									resumeCover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage),
-									errorMsg)
-							}
+							})
 						}
-					})
+					}
 				}
 			}
 		}

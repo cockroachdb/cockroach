@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
@@ -237,7 +237,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		// This test fails when run from within a test tenant. This is likely
 		// due to the lack of support for tenant streaming, but more
 		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -297,16 +297,6 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 }
 
-func spansForTables(db *kv.DB, codec keys.SQLCodec, tables ...string) []roachpb.Span {
-	spans := make([]roachpb.Span, 0, len(tables))
-	for _, table := range tables {
-		desc := desctestutils.TestingGetPublicTableDescriptor(
-			db, codec, "d", table)
-		spans = append(spans, desc.PrimaryIndexSpan(codec))
-	}
-	return spans
-}
-
 func encodeSpec(
 	t *testing.T,
 	h *replicationtestutils.ReplicationHelper,
@@ -315,16 +305,13 @@ func encodeSpec(
 	previousReplicatedTime hlc.Timestamp,
 	tables ...string,
 ) []byte {
-	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, tables...)
-	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans)
-}
+	var spans []roachpb.Span
+	for _, table := range tables {
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			h.SysServer.DB(), srcTenant.Codec, "d", table)
+		spans = append(spans, desc.PrimaryIndexSpan(srcTenant.Codec))
+	}
 
-func encodeSpecForSpans(
-	t *testing.T,
-	initialScanTime hlc.Timestamp,
-	previousReplicatedTime hlc.Timestamp,
-	spans []roachpb.Span,
-) []byte {
 	spec := &streampb.StreamPartitionSpec{
 		InitialScanTimestamp:        initialScanTime,
 		PreviousReplicatedTimestamp: previousReplicatedTime,
@@ -346,7 +333,7 @@ func TestStreamPartition(t *testing.T) {
 		base.TestServerArgs{
 			// Test fails within a test tenant. More investigation is required.
 			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 		})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -494,7 +481,7 @@ func TestStreamAddSSTable(t *testing.T) {
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -584,7 +571,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 		})
 	defer cleanup()
 	srcTenantID := serverutils.TestTenantID()
@@ -645,16 +632,29 @@ func TestCompleteStreamReplication(t *testing.T) {
 	}
 }
 
+func sortDelRanges(receivedDelRanges []kvpb.RangeFeedDeleteRange) {
+	sort.Slice(receivedDelRanges, func(i, j int) bool {
+		if !receivedDelRanges[i].Timestamp.Equal(receivedDelRanges[j].Timestamp) {
+			return receivedDelRanges[i].Timestamp.Compare(receivedDelRanges[j].Timestamp) < 0
+		}
+		if !receivedDelRanges[i].Span.Key.Equal(receivedDelRanges[j].Span.Key) {
+			return receivedDelRanges[i].Span.Key.Compare(receivedDelRanges[j].Span.Key) < 0
+		}
+		return receivedDelRanges[i].Span.EndKey.Compare(receivedDelRanges[j].Span.EndKey) < 0
+	})
+}
+
 func TestStreamDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 93568)
 	skip.UnderStressRace(t, "disabled under stress and race")
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -676,46 +676,15 @@ USE d;
 	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 	streamID := replicationProducerSpec.StreamID
 	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
-	streamResumeTimestamp := h.SysServer.Clock().Now()
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	// Only subscribe to table t1 and t2, not t3.
-	// We start the stream at a resume timestamp to avoid any initial scan.
-	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, "t1", "t2")
-	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans)
-
 	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
-		streamPartitionQuery, streamID, spec)
+		streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
+			hlc.Timestamp{}, "t1", "t2"))
 	defer feed.Close(ctx)
-	codec := source.mu.codec.(*partitionStreamDecoder)
 
-	// We wait for the frontier to advance because we want to
-	// ensure that we encounter the range deletes during the
-	// rangefeed's steady state rather than the catchup scan.
-	//
-	// The representation of the range deletes we send is slightly
-	// different if we encounter them during the catchup scan.
-	//
-	// NB: It is _still_ possible that we encounter the range
-	// deletes during a catchup scan if we hit a rangefeed restart
-	// during the test.
-	f, err := span.MakeFrontier(spans...)
-	require.NoError(t, err)
-	for f.Frontier().IsEmpty() {
-		t.Logf("waiting for frontier to advance to a non-zero timestamp")
-		source.mu.Lock()
-		source.mu.rows.Next()
-		source.mu.codec.decode()
-		if codec.e.Checkpoint != nil {
-			for _, rs := range codec.e.Checkpoint.ResolvedSpans {
-				_, err := f.Forward(rs.Span, rs.Timestamp)
-				require.NoError(t, err)
-			}
-		}
-		source.mu.Unlock()
-	}
-	t.Logf("frontier advanced to a %s", f.Frontier())
-
+	// TODO(casper): Replace with DROP TABLE once drop table uses the MVCC-compatible DelRange
 	t1Span, t2Span, t3Span := h.TableSpan(srcTenant.Codec, "t1"),
 		h.TableSpan(srcTenant.Codec, "t2"), h.TableSpan(srcTenant.Codec, "t3")
 	// Range deleted is outside the subscribed spans
@@ -725,31 +694,30 @@ USE d;
 	// Range is t1e - t2sn, emitting t2s - t2sn.
 	require.NoError(t, h.SysServer.DB().DelRangeUsingTombstone(ctx, t1Span.EndKey, t2Span.Key.Next()))
 
-	// Expected DelRange events. We store these and the received
-	// del ranges in maps to account for possible duplicate
-	// delivery.
-	expectedDelRanges := make(map[string]struct{})
-	expectedDelRanges[roachpb.Span{Key: t1Span.Key, EndKey: t1Span.EndKey}.String()] = struct{}{}
-	expectedDelRanges[roachpb.Span{Key: t2Span.Key, EndKey: t2Span.EndKey}.String()] = struct{}{}
-	expectedDelRanges[roachpb.Span{Key: t2Span.Key, EndKey: t2Span.Key.Next()}.String()] = struct{}{}
+	// Expected DelRange spans after sorting.
+	expectedDelRangeSpan1 := roachpb.Span{Key: t1Span.Key, EndKey: t1Span.EndKey}
+	expectedDelRangeSpan2 := roachpb.Span{Key: t2Span.Key, EndKey: t2Span.EndKey}
+	expectedDelRangeSpan3 := roachpb.Span{Key: t2Span.Key, EndKey: t2Span.Key.Next()}
 
-	receivedDelRanges := make(map[string]struct{})
+	codec := source.mu.codec.(*partitionStreamDecoder)
+	receivedDelRanges := make([]kvpb.RangeFeedDeleteRange, 0, 3)
 	for {
 		source.mu.Lock()
 		require.True(t, source.mu.rows.Next())
 		source.mu.codec.decode()
 		if codec.e.Batch != nil {
-			for _, dr := range codec.e.Batch.DelRanges {
-				receivedDelRanges[dr.Span.String()] = struct{}{}
-			}
+			receivedDelRanges = append(receivedDelRanges, codec.e.Batch.DelRanges...)
 		}
 		source.mu.Unlock()
-		if len(receivedDelRanges) >= 3 {
+		if len(receivedDelRanges) == 3 {
 			break
 		}
 	}
 
-	require.Equal(t, expectedDelRanges, receivedDelRanges)
+	sortDelRanges(receivedDelRanges)
+	require.Equal(t, expectedDelRangeSpan1, receivedDelRanges[0].Span)
+	require.Equal(t, expectedDelRangeSpan2, receivedDelRanges[1].Span)
+	require.Equal(t, expectedDelRangeSpan3, receivedDelRanges[2].Span)
 
 	// Adding a SSTable that contains DeleteRange
 	batchHLCTime := h.SysServer.Clock().Now()
@@ -766,19 +734,17 @@ USE d;
 		// Delete range for t3s - t3e, emitting nothing.
 		storageutils.RangeKV(string(t3Span.Key), string(t3Span.EndKey), ts, ""),
 	})
+	expectedDelRange1 := kvpb.RangeFeedDeleteRange{Span: t1Span, Timestamp: batchHLCTime}
+	expectedDelRange2 := kvpb.RangeFeedDeleteRange{Span: t2Span, Timestamp: batchHLCTime}
 	require.Equal(t, t1Span.Key, start)
 	require.Equal(t, t3Span.EndKey, end)
 
-	expectedDelRanges = make(map[string]struct{})
-	expectedDelRanges[t1Span.String()] = struct{}{}
-	expectedDelRanges[t2Span.String()] = struct{}{}
-
 	// Using same batch ts so that this SST can be emitted through rangefeed.
-	_, _, _, err = h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
+	_, _, _, err := h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
 		false, hlc.Timestamp{}, nil, false, batchHLCTime)
 	require.NoError(t, err)
 
-	receivedDelRanges = make(map[string]struct{})
+	receivedDelRanges = receivedDelRanges[:0]
 	receivedKVs := make([]roachpb.KeyValue, 0)
 	for {
 		source.mu.Lock()
@@ -787,18 +753,18 @@ USE d;
 		if codec.e.Batch != nil {
 			require.Empty(t, codec.e.Batch.Ssts)
 			receivedKVs = append(receivedKVs, codec.e.Batch.KeyValues...)
-			for _, dr := range codec.e.Batch.DelRanges {
-				receivedDelRanges[dr.Span.String()] = struct{}{}
-			}
+			receivedDelRanges = append(receivedDelRanges, codec.e.Batch.DelRanges...)
 		}
 		source.mu.Unlock()
 
-		if len(receivedDelRanges) >= 2 && len(receivedKVs) >= 1 {
+		if len(receivedDelRanges) == 2 && len(receivedKVs) == 1 {
 			break
 		}
 	}
 
+	sortDelRanges(receivedDelRanges)
 	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
 	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
-	require.Equal(t, expectedDelRanges, receivedDelRanges)
+	require.Equal(t, expectedDelRange1, receivedDelRanges[0])
+	require.Equal(t, expectedDelRange2, receivedDelRanges[1])
 }

@@ -1,0 +1,4 @@
+Bump the version below when changing libedit configure flags. Search for "BUILD
+ARTIFACT CACHING" in the top-level Makefile for rationale.
+
+2

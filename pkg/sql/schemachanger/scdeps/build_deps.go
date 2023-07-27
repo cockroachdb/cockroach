@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -110,54 +109,32 @@ func (d *buildDeps) MayResolveDatabase(
 
 // MayResolveSchema implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveSchema(
-	ctx context.Context, name tree.ObjectNamePrefix, withOffline bool,
+	ctx context.Context, name tree.ObjectNamePrefix,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
 	if !name.ExplicitCatalog {
 		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
 	}
 	db := d.MayResolveDatabase(ctx, name.CatalogName)
-	byNameGetterBuilder := d.descsCollection.ByName(d.txn)
-	if withOffline {
-		byNameGetterBuilder = byNameGetterBuilder.WithOffline()
-	}
-	schema, err := byNameGetterBuilder.MaybeGet().Schema(ctx, db, name.Schema())
+	schema, err := d.descsCollection.ByName(d.txn).MaybeGet().Schema(ctx, db, name.Schema())
 	if err != nil {
 		panic(err)
 	}
 	return db, schema
 }
 
-func (d *buildDeps) MayResolvePrefix(
+func (d *buildDeps) MustResolvePrefix(
 	ctx context.Context, name tree.ObjectNamePrefix,
-) (db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor) {
-	const withOffline = false
+) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
+	if !name.ExplicitCatalog {
+		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
+		name.ExplicitCatalog = true
+	}
+
 	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
-			db, sc = d.MayResolveSchema(ctx, name, withOffline)
-			return db, sc
+		db, sc := d.MayResolveSchema(ctx, name)
+		if sc == nil {
+			panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
 		}
-
-		// Two parts: D.T.
-		// Try to use the current database, and be satisfied if it's sufficient to find the object.
-		db, sc = d.MayResolveSchema(ctx, tree.ObjectNamePrefix{
-			CatalogName:     tree.Name(d.CurrentDatabase()),
-			SchemaName:      name.SchemaName,
-			ExplicitCatalog: true,
-			ExplicitSchema:  true,
-		},
-			withOffline)
-		if db != nil && sc != nil {
-			return db, sc
-		}
-
-		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
-		db, sc = d.MayResolveSchema(ctx, tree.ObjectNamePrefix{
-			CatalogName:     name.SchemaName,
-			SchemaName:      catconstants.PublicSchemaName,
-			ExplicitCatalog: true,
-			ExplicitSchema:  true,
-		},
-			withOffline)
 		return db, sc
 	}
 
@@ -166,12 +143,13 @@ func (d *buildDeps) MayResolvePrefix(
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		name.SchemaName = tree.Name(scName)
 		name.ExplicitSchema = true
-		db, sc = d.MayResolveSchema(ctx, name, false /* withOffline */)
+		db, sc := d.MayResolveSchema(ctx, name)
 		if sc != nil {
 			return db, sc
 		}
 	}
-	return nil, nil
+
+	panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
 }
 
 // MayResolveTable implements the scbuild.CatalogReader interface.

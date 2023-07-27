@@ -46,9 +46,9 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
+	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
 	defer srcServer.Stopper().Stop(ctx)
-	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled})
+	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
 	defer destServer.Stopper().Stop(ctx)
 
 	srcTenantID := serverutils.TestTenantID()
@@ -93,7 +93,7 @@ func TestCutoverBuiltin(t *testing.T) {
 			// Disable the test tenant as the test below looks for a
 			// streaming job assuming that it's within the system tenant.
 			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -297,7 +297,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 				},
 			},
 		},
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -327,7 +327,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	// Create a mock replication job with the `foo` table span so that on cut over
 	// we can revert the table's ranges.
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	jobExecCtx, ctxClose := sql.MakeJobExecContext(ctx, "test-cutover-fraction-progressed", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
+	jobExecCtx, ctxClose := sql.MakeJobExecContext("test-cutover-fraction-progressed", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
 	defer ctxClose()
 
 	mockReplicationJobDetails := jobspb.StreamIngestionDetails{

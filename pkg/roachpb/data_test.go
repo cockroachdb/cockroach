@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
@@ -438,47 +437,12 @@ func TestSetGetChecked(t *testing.T) {
 
 func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
-	txn := MakeTransaction("test", Key("a"), isolation.Serializable, 1, origNow, 0, 99)
+	txn := MakeTransaction("test", Key("a"), 1, origNow, 0, 99)
 	// Advance the txn timestamp.
 	txn.WriteTimestamp = txn.WriteTimestamp.Add(10, 2)
 	txn.BumpEpoch()
 	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
-	}
-}
-
-func TestTransactionBumpReadTimestamp(t *testing.T) {
-	ts9 := makeTS(9, 1)
-	ts10 := makeTS(10, 1)
-	ts11 := makeTS(11, 1)
-	ts12 := makeTS(12, 1)
-	ts13 := makeTS(13, 1)
-	origReadTs := ts10
-	origWriteTs := ts12
-
-	testCases := []struct {
-		bumpTs     hlc.Timestamp
-		expReadTs  hlc.Timestamp
-		expWriteTs hlc.Timestamp
-	}{
-		{ts9, origReadTs, origWriteTs},
-		{ts10, origReadTs, origWriteTs},
-		{ts11, ts11, origWriteTs},
-		{ts12, ts12, origWriteTs},
-		{ts13, ts13, ts13},
-	}
-	for _, c := range testCases {
-		t.Run(c.bumpTs.String(), func(t *testing.T) {
-			var txn Transaction
-			txn.ReadTimestamp = origReadTs
-			txn.WriteTimestamp = origWriteTs
-			txn.WriteTooOld = true
-
-			txn.BumpReadTimestamp(c.bumpTs)
-			require.Equal(t, c.expReadTs, txn.ReadTimestamp)
-			require.Equal(t, c.expWriteTs, txn.WriteTimestamp)
-			require.False(t, txn.WriteTooOld)
-		})
 	}
 }
 
@@ -540,9 +504,8 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		ID:                uuid.MakeV4(),
 		Key:               Key("foo"),
-		IsoLevel:          isolation.Snapshot,
+		ID:                uuid.MakeV4(),
 		Epoch:             2,
 		WriteTimestamp:    makeSynTS(20, 21),
 		MinTimestamp:      makeSynTS(10, 11),
@@ -797,7 +760,7 @@ func TestTransactionRestart(t *testing.T) {
 
 func TestTransactionRefresh(t *testing.T) {
 	txn := nonZeroTxn
-	txn.BumpReadTimestamp(makeTS(25, 1))
+	txn.Refresh(makeTS(25, 1))
 
 	expTxn := nonZeroTxn
 	expTxn.WriteTimestamp = makeTS(25, 1)
@@ -2114,7 +2077,7 @@ func TestTxnLocksAsLockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := MakeTransaction("hello", Key("k"), isolation.Serializable, 0, ts, 0, 99)
+	txn := MakeTransaction("hello", Key("k"), 0, ts, 0, 99)
 
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}

@@ -34,6 +34,7 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			var (
+				appTenantName  = "app"
 				tpccWarehouses = 500
 				crdbNodes      = c.Range(1, crdbNodeCount)
 				workloadNode   = c.Node(crdbNodeCount + 1)

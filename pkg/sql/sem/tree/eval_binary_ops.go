@@ -176,10 +176,6 @@ type (
 	PlusINetIntOp struct{}
 	// PlusIntINetOp is a BinaryEvalOp.
 	PlusIntINetOp struct{}
-	// PlusDecimalPGLSNOp is a BinaryEvalOp.
-	PlusDecimalPGLSNOp struct{}
-	// PlusPGLSNDecimalOp is a BinaryEvalOp.
-	PlusPGLSNDecimalOp struct{}
 )
 
 type (
@@ -231,10 +227,6 @@ type (
 	MinusINetOp struct{}
 	// MinusINetIntOp is a BinaryEvalOp.
 	MinusINetIntOp struct{}
-	// MinusPGLSNDecimalOp is a BinaryEvalOp.
-	MinusPGLSNDecimalOp struct{}
-	// MinusPGLSNOp is a BinaryEvalOp.
-	MinusPGLSNOp struct{}
 )
 type (
 	// MultDecimalIntOp is a BinaryEvalOp.

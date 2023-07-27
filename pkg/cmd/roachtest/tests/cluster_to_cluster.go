@@ -83,8 +83,6 @@ type c2cSetup struct {
 
 const maxExpectedLatencyDefault = 2 * time.Minute
 
-const maxCutoverTimeoutDefault = 5 * time.Minute
-
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
@@ -272,11 +270,6 @@ func (kv replicateKV) runDriver(
 }
 
 type replicateBulkOps struct {
-	// short uses less data during the import and rollback steps. Also only runs one rollback.
-	short bool
-
-	// debugSkipRollback skips all rollback steps during the test.
-	debugSkipRollback bool
 }
 
 func (bo replicateBulkOps) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -293,8 +286,6 @@ func (bo replicateBulkOps) runDriver(
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
-		short:             bo.short,
-		debugSkipRollback: bo.debugSkipRollback,
 		tenantName:        setup.src.name})
 	return nil
 }
@@ -304,9 +295,6 @@ func (bo replicateBulkOps) runDriver(
 type replicationSpec struct {
 	// name specifies the name of the roachtest
 	name string
-
-	// whether this is a performance test
-	benchmark bool
 
 	// srcodes is the number of nodes on the source cluster.
 	srcNodes int
@@ -333,9 +321,6 @@ type replicationSpec struct {
 	// timeout specifies when the roachtest should fail due to timeout.
 	timeout time.Duration
 
-	// cutoverTimeout specifies how long we expect cutover to take.
-	cutoverTimeout time.Duration
-
 	expectedNodeDeaths int32
 
 	// maxLatency override the maxAcceptedLatencyDefault.
@@ -343,9 +328,6 @@ type replicationSpec struct {
 
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
-
-	// tags are used to categorize the test.
-	tags map[string]struct{}
 }
 
 // replicationDriver manages c2c roachtest execution.
@@ -410,7 +392,7 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 	destSQL := sqlutils.MakeSQLRunner(destDB)
 
 	srcClusterSettings(t, srcSQL)
-	destClusterSettings(t, destSQL, rd.rs.additionalDuration)
+	destClusterSettings(t, destSQL)
 
 	createTenantAdminRole(t, "src-system", srcSQL)
 	createTenantAdminRole(t, "dst-system", destSQL)
@@ -567,7 +549,7 @@ func (rd *replicationDriver) stopReplicationStream(
 	ctx context.Context, ingestionJob int, cutoverTime time.Time,
 ) {
 	rd.setup.dst.sysSQL.Exec(rd.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, rd.setup.dst.name, cutoverTime)
-	err := retry.ForDuration(rd.rs.cutoverTimeout, func() error {
+	err := retry.ForDuration(time.Minute*5, func() error {
 		var status string
 		var payloadBytes []byte
 		res := rd.setup.dst.sysSQL.DB.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJob)
@@ -637,31 +619,6 @@ AS OF SYSTEM TIME '%s'`, startTimeDecimal, aost)
 	require.Equal(rd.t, srcFingerprint, destFingerprint)
 }
 
-// checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
-// participating in the replication stream, if the test is running on multi node clusters.
-//
-// Note: this isn't a strict requirement of all physical replication streams,
-// rather we check this here because we expect a distributed physical
-// replication stream in a healthy pair of multinode clusters.
-func (rd *replicationDriver) checkParticipatingNodes(ingestionJobId int) {
-	progress := getJobProgress(rd.t, rd.setup.dst.sysSQL, jobspb.JobID(ingestionJobId)).GetStreamIngest()
-	if rd.rs.srcNodes > 1 {
-		require.Greater(rd.t, len(progress.StreamAddresses), 1, "only 1 src node participating")
-	}
-	if rd.rs.dstNodes > 1 {
-		var destNodeCount int
-		destNodes := make(map[int]struct{})
-		for _, dstNode := range progress.PartitionProgress {
-			dstNodeID := int(dstNode.DestSQLInstanceID)
-			if _, ok := destNodes[dstNodeID]; !ok {
-				destNodes[dstNodeID] = struct{}{}
-				destNodeCount++
-			}
-		}
-		require.Greater(rd.t, destNodeCount, 1, "only 1 dst node participating")
-	}
-}
-
 func (rd *replicationDriver) main(ctx context.Context) {
 	metricSnapper := rd.startStatsCollection(ctx)
 	rd.preStreamingWorkload(ctx)
@@ -710,11 +667,6 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	if rd.rs.maxAcceptedLatency != 0 {
 		maxExpectedLatency = rd.rs.maxAcceptedLatency
 	}
-
-	if rd.rs.cutoverTimeout == 0 {
-		rd.rs.cutoverTimeout = maxCutoverTimeoutDefault
-	}
-
 	lv := makeLatencyVerifier("stream-ingestion", 0, maxExpectedLatency, rd.t.L(),
 		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths > 0)
 	defer lv.maybeLogLatencyHist()
@@ -745,8 +697,6 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.setup.dst.sysSQL.QueryRow(rd.t, "SELECT clock_timestamp()").Scan(&currentTime)
 	cutoverTime := currentTime.Add(-rd.rs.cutover)
 	rd.t.Status("cutover time chosen: ", cutoverTime.String())
-
-	rd.checkParticipatingNodes(ingestionJobID)
 
 	retainedTime := rd.getReplicationRetainedTime()
 
@@ -786,12 +736,10 @@ func c2cRegisterWrapper(
 	r.Add(registry.TestSpec{
 		Name:            sp.name,
 		Owner:           registry.OwnerDisasterRecovery,
-		Benchmark:       sp.benchmark,
 		Cluster:         r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
 		Leases:          registry.MetamorphicLeases,
 		Timeout:         sp.timeout,
 		Skip:            sp.skip,
-		Tags:            sp.tags,
 		RequiresLicense: true,
 		Run:             run,
 	})
@@ -818,12 +766,11 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationSpec{
 		{
-			name:      "c2c/tpcc/warehouses=500/duration=10/cutover=5",
-			benchmark: true,
-			srcNodes:  4,
-			dstNodes:  4,
-			cpus:      8,
-			pdSize:    1000,
+			name:     "c2c/tpcc/warehouses=500/duration=10/cutover=5",
+			srcNodes: 4,
+			dstNodes: 4,
+			cpus:     8,
+			pdSize:   1000,
 			// 500 warehouses adds 30 GB to source
 			//
 			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
@@ -834,12 +781,11 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:            5 * time.Minute,
 		},
 		{
-			name:      "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
-			benchmark: true,
-			srcNodes:  4,
-			dstNodes:  4,
-			cpus:      8,
-			pdSize:    1000,
+			name:     "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
+			srcNodes: 4,
+			dstNodes: 4,
+			cpus:     8,
+			pdSize:   1000,
 			// 500 warehouses adds 30 GB to source
 			//
 			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
@@ -851,7 +797,6 @@ func registerClusterToCluster(r registry.Registry) {
 		},
 		{
 			name:               "c2c/kv0",
-			benchmark:          true,
 			srcNodes:           3,
 			dstNodes:           3,
 			cpus:               8,
@@ -860,7 +805,6 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
-			tags:               registry.Tags("aws"),
 		},
 		{
 			name:     "c2c/UnitTest",
@@ -876,31 +820,16 @@ func registerClusterToCluster(r registry.Registry) {
 			skip:               "for local ad hoc testing",
 		},
 		{
-			name:               "c2c/BulkOps/full",
+			name:               "c2c/BulkOps",
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			pdSize:             100,
+			pdSize:             500,
 			workload:           replicateBulkOps{},
-			timeout:            2 * time.Hour,
-			cutoverTimeout:     1 * time.Hour,
+			timeout:            4 * time.Hour,
 			additionalDuration: 0,
 			cutover:            5 * time.Minute,
-			maxAcceptedLatency: 1 * time.Hour,
-			skip:               "Reveals a bad bug related to replicating an import. See https://github.com/cockroachdb/cockroach/issues/105676 ",
-		},
-		{
-			name:               "c2c/BulkOps/singleImport",
-			srcNodes:           4,
-			dstNodes:           4,
-			cpus:               8,
-			pdSize:             100,
-			workload:           replicateBulkOps{short: true, debugSkipRollback: true},
-			timeout:            2 * time.Hour,
-			cutoverTimeout:     1 * time.Hour,
-			additionalDuration: 0,
-			cutover:            1 * time.Minute,
-			maxAcceptedLatency: 1 * time.Hour,
+			skip:               "flaky",
 		},
 	} {
 		sp := sp
@@ -1370,16 +1299,9 @@ func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	db.ExecMultiple(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
 }
 
-func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
+func destClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	db.ExecMultiple(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`,
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
-		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`)
-
-	if additionalDuration != 0 {
-		replanFrequency := additionalDuration / 2
-		db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING stream_replication.replan_flow_frequency = '%s'`,
-			replanFrequency))
-	}
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
 }
 
 func copyPGCertsAndMakeURL(

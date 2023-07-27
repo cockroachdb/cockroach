@@ -124,7 +124,7 @@ func (tdb *typeDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state
-	if scpb.MigrateDescriptorState(version, tdb.maybeModified.ParentID, tdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, tdb.maybeModified.DeclarativeSchemaChangerState) {
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil

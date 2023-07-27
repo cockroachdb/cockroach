@@ -2,7 +2,7 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 load(":gen.bzl", "batch_gen")
 
 go_library(
@@ -15,7 +15,6 @@ go_library(
         "data.go",
         "errors.go",
         "method.go",
-        "node_decommissioned_error.go",
         "replica_unavailable_error.go",
         ":gen-batch-generated",  # keep
         ":gen-errordetailtype-stringer",  # keep
@@ -42,10 +41,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_gogo_protobuf//proto",
-        "@com_github_gogo_protobuf//types",
-        "@com_github_gogo_status//:status",
         "@com_github_golang_mock//gomock",  # keep
-        "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",  # keep
     ],
 )
@@ -56,7 +52,6 @@ go_test(
         "api_test.go",
         "batch_test.go",
         "errors_test.go",
-        "node_decommissioned_error_test.go",
         "replica_unavailable_error_test.go",
         "string_test.go",
     ],
@@ -66,7 +61,6 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvnemesis/kvnemesisutil",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
@@ -97,7 +91,6 @@ proto_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock:lock_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/settings:settings_proto",
         "//pkg/sql/catalog/fetchpb:fetchpb_proto",
@@ -119,7 +112,6 @@ go_proto_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/readsummary/rspb",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/catalog/fetchpb",

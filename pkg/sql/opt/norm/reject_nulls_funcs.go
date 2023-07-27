@@ -31,9 +31,6 @@ func (c *CustomFuncs) RejectNullCols(in memo.RelExpr) opt.ColSet {
 func (c *CustomFuncs) HasNullRejectingFilter(
 	filters memo.FiltersExpr, nullRejectCols opt.ColSet,
 ) bool {
-	if nullRejectCols.Empty() {
-		return false
-	}
 	for i := range filters {
 		constraints := filters[i].ScalarProps().Constraints
 		if constraints == nil {

@@ -206,7 +206,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		}
 		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
 		require.NoError(t, err)
-		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
+		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, ent.Index, ent.Term)
 		require.NoError(t, err)
 		require.Equal(t, origSSTData, sst)
 		break
@@ -230,7 +230,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 
 		const count = 10
 
-		var indexes []kvpb.RaftIndex
+		var indexes []uint64
 		addLastIndex := func() {
 			lastIndex := tc.repl.GetLastIndex()
 			indexes = append(indexes, lastIndex)

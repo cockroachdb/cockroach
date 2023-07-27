@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/spf13/cobra"
@@ -131,7 +131,7 @@ func requestCertBundle(
 // peer.
 // TODO(aaron-crl): Parallelize this and handle errors.
 func runConnectJoin(cmd *cobra.Command, args []string) error {
-	return timeutil.RunWithTimeout(context.Background(), "init handshake", nodeJoinTimeout, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(context.Background(), "init handshake", nodeJoinTimeout, func(ctx context.Context) error {
 		ctx = logtags.AddTag(ctx, "init-tls-handshake", nil)
 
 		stopper := stop.NewStopper()

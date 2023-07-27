@@ -19,7 +19,7 @@ admit tenant=t1 pri=normal-pri create-time=1us size=1B range=r2 origin=n1 log-po
 # request with the lower create time sorts first despite having the higher log
 # position. Admission work queues order work based entirely on create-times,
 # and the assignment of monotonic create-times (WRT log positions) happens only
-# within a range by the StoreWorkQueue.
+# within a range and by higher-level components -- kvflowcontrol.Handle.
 print
 ----
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B

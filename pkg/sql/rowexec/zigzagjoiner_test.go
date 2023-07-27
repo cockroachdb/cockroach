@@ -771,8 +771,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
-	require.NoError(t, err)
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

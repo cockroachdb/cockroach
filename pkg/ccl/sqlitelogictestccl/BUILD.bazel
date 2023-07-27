@@ -16,5 +16,4 @@ go_test(
         "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],
     embed = [":sqlitelogictestccl"],
-    tags = ["ccl_test"],
 )

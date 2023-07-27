@@ -14,13 +14,11 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
@@ -28,19 +26,10 @@ import (
 	"go.etcd.io/raft/v3/tracker"
 )
 
-// quiesceAfterTicks is the number of ticks without proposals after which ranges
-// should quiesce. Unquiescing incurs a raft proposal which has a non-neglible
-// cost, and low-latency clusters may otherwise (un)quiesce very frequently,
-// e.g. on every tick.
-var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
-
-// raftDisableQuiescence disables raft quiescence.
-var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
-
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(ctx, "quiescing r%d", r.RangeID)
+			log.Infof(ctx, "quiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
@@ -48,71 +37,60 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
 		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
-		log.Infof(ctx, "r%d already quiesced", r.RangeID)
+		log.Infof(ctx, "already quiesced")
 	}
 }
 
-// maybeUnquiesce unquiesces the replica if it is quiesced and can be
-// unquiesced, returning true in that case. See maybeUnquiesceLocked() for
-// details.
-func (r *Replica) maybeUnquiesce(wakeLeader, mayCampaign bool) bool {
+func (r *Replica) maybeUnquiesce() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.maybeUnquiesceLocked(wakeLeader, mayCampaign)
+	return r.maybeUnquiesceLocked()
 }
 
-// maybeUnquiesceLocked unquiesces the replica if it is quiesced and can be
-// unquiesced, returning true in that case.
-//
-// If wakeLeader is true, wake the leader by proposing an empty command. Should
-// typically be true, unless e.g. the caller is either about to propose a
-// command anyway, or it knows the leader is awake because it received a message
-// from it.
-//
-// If mayCampaign is true, the replica may campaign if it thinks the leader has
-// died in the meanwhile. This will respect PreVote and CheckQuorum, and thus
-// won't disrupt a current leader. Followers that also consider the leader dead
-// will forget about it and become a leaderless follower when receiving the
-// (pre)votes. Thus, if a quorum of replicas independently consider the leader
-// to be dead when unquiescing, they can hold an election immediately despite
-// PreVote+CheckQuorum. Should typically be true, unless the caller wants to
-// avoid election ties.
-func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
+func (r *Replica) maybeUnquiesceLocked() bool {
+	return r.maybeUnquiesceWithOptionsLocked(true /* campaignOnWake */)
+}
+
+func (r *Replica) maybeUnquiesceWithOptionsLocked(campaignOnWake bool) bool {
 	if !r.canUnquiesceRLocked() {
 		return false
 	}
 	ctx := r.AnnotateCtx(context.TODO())
 	if log.V(3) {
-		log.Infof(ctx, "unquiescing r%d", r.RangeID)
+		log.Infof(ctx, "unquiescing %d", r.RangeID)
 	}
 	r.mu.quiescent = false
 	r.mu.laggingFollowersOnQuiesce = nil
 	r.store.unquiescedReplicas.Lock()
 	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 	r.store.unquiescedReplicas.Unlock()
-
-	st := r.raftSparseStatusRLocked()
-	if st.RaftState == raft.StateLeader {
-		r.mu.lastUpdateTimes.updateOnUnquiesce(
-			r.mu.state.Desc.Replicas().Descriptors(), st.Progress, timeutil.Now())
-
-	} else if st.RaftState == raft.StateFollower && st.Lead != raft.None && wakeLeader {
-		// Propose an empty command which will wake the leader.
-		if log.V(3) {
-			log.Infof(ctx, "waking r%d leader", r.RangeID)
-		}
-		data := raftlog.EncodeCommandBytes(raftlog.EntryEncodingStandardWithoutAC, raftlog.MakeCmdIDKey(), nil)
-		_ = r.mu.internalRaftGroup.Propose(data)
-		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
-	}
-
-	// NB: campaign after attempting to wake leader, since we won't send the
-	// proposal in candidate state. This gives it a chance to assert leadership if
-	// we're wrong about it being dead.
-	if mayCampaign {
+	if campaignOnWake {
 		r.maybeCampaignOnWakeLocked(ctx)
 	}
+	// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
+	r.mu.lastUpdateTimes.updateOnUnquiesce(
+		r.mu.state.Desc.Replicas().Descriptors(), r.raftSparseStatusRLocked().Progress, timeutil.Now(),
+	)
+	return true
+}
 
+func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
+	if !r.canUnquiesceRLocked() {
+		return false
+	}
+	ctx := r.AnnotateCtx(context.TODO())
+	if log.V(3) {
+		log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
+	}
+	r.mu.quiescent = false
+	r.mu.laggingFollowersOnQuiesce = nil
+	r.store.unquiescedReplicas.Lock()
+	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+	r.store.unquiescedReplicas.Unlock()
+	r.maybeCampaignOnWakeLocked(ctx)
+	// Propose an empty command which will wake the leader.
+	data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
+	_ = r.mu.internalRaftGroup.Propose(data)
 	return true
 }
 
@@ -135,10 +113,13 @@ func (r *Replica) canUnquiesceRLocked() bool {
 		// then abandoned, and we don't do a good job garbage collecting them at a
 		// later point (see https://github.com/cockroachdb/cockroach/issues/73424),
 		// so it is important that they are cheap. Keeping them quiesced instead of
-		// letting them unquiesce and tick every 500ms indefinitely avoids a
+		// letting them unquiesce and tick every 200ms indefinitely avoids a
 		// meaningful amount of periodic work for each uninitialized replica.
 		r.IsInitialized() &&
-		// Destroyed replicas have no Raft group, and can't unquiesce.
+		// A replica's Raft group begins in a dormant state and is initialized
+		// lazily in response to any Raft traffic (see stepRaftGroup) or KV request
+		// traffic (see maybeInitializeRaftGroup). If it has yet to be initialized,
+		// let it remain quiesced. The Raft group will be initialized soon enough.
 		r.mu.internalRaftGroup != nil
 }
 
@@ -191,13 +172,18 @@ func (r *Replica) canUnquiesceRLocked() bool {
 // are behind, whether or not they are live. If any entry in the livenessMap is
 // nil, then the missing node ID is treated as live and will prevent the range
 // from quiescing.
+//
+// TODO(peter): There remains a scenario in which a follower is left unquiesced
+// while the leader is quiesced: the follower's receive queue is full and the
+// "quiesce" message is dropped. This seems very very unlikely because if the
+// follower isn't keeping up with raft messages it is unlikely that the leader
+// would quiesce. The fallout from this situation are undesirable raft
+// elections which will cause throughput hiccups to the range, but not
+// correctness issues.
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
-	ctx context.Context, leaseStatus kvserverpb.LeaseStatus, livenessMap livenesspb.IsLiveMap,
+	ctx context.Context, now hlc.ClockTimestamp, livenessMap livenesspb.IsLiveMap,
 ) bool {
-	if r.store.cfg.TestingKnobs.DisableQuiescence {
-		return false
-	}
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
 	}
@@ -206,16 +192,16 @@ func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 
 type quiescer interface {
 	ClusterSettings() *cluster.Settings
-	StoreID() roachpb.StoreID
 	descRLocked() *roachpb.RangeDescriptor
 	isRaftLeaderRLocked() bool
 	raftSparseStatusRLocked() *raftSparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
-	raftLastIndexRLocked() kvpb.RaftIndex
+	raftLastIndexRLocked() uint64
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
-	ticksSinceLastProposalRLocked() int
+	getLeaseRLocked() (roachpb.Lease, roachpb.Lease)
+	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -289,28 +275,30 @@ func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeI
 func shouldReplicaQuiesce(
 	ctx context.Context,
 	q quiescer,
-	leaseStatus kvserverpb.LeaseStatus,
+	now hlc.ClockTimestamp,
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raftSparseStatus, laggingReplicaSet, bool) {
+	if testingDisableQuiescence {
+		return nil, nil, false
+	}
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
 		}
 		return nil, nil, false
 	}
-	if ticks := q.ticksSinceLastProposalRLocked(); ticks < quiesceAfterTicks {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: proposed %d ticks ago", ticks)
-		}
-		return nil, nil, false
-	}
 	// Fast path: don't quiesce expiration-based leases, since they'll likely be
 	// renewed soon. The lease may not be ours, but in that case we wouldn't be
 	// able to quiesce anyway (see leaseholder condition below).
-	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
-		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
-		return nil, nil, false
+	//
+	// TODO(erikgrinaker): Out of caution, we only do this when
+	// kv.expiration_leases_only.enabled is true. We should always do this.
+	if l, _ := q.getLeaseRLocked(); l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
+		if ExpirationLeasesOnly.Get(&q.ClusterSettings().SV) {
+			log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
+			return nil, nil, false
+		}
 	}
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
@@ -371,7 +359,7 @@ func shouldReplicaQuiesce(
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if !leaseStatus.IsValid() || !leaseStatus.OwnedBy(q.StoreID()) {
+	if !q.ownsValidLeaseRLocked(ctx, now) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
@@ -387,7 +375,7 @@ func shouldReplicaQuiesce(
 		return nil, nil, false
 	}
 	lastIndex := q.raftLastIndexRLocked()
-	if kvpb.RaftIndex(status.Commit) != lastIndex {
+	if status.Commit != lastIndex {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
 				status.Commit, lastIndex)
@@ -467,12 +455,13 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 		if roachpb.ReplicaID(id) == r.replicaID {
 			continue
 		}
-		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(id), lastFromReplica)
+		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
+			roachpb.ReplicaID(id), lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
-			r.maybeUnquiesceLocked(false /* wakeLeader */, false /* mayCampaign */) // already leader
+			r.maybeUnquiesceLocked()
 			return false
 		}
 

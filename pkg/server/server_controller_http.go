@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -32,6 +31,10 @@ const (
 	// ClusterNameParamInQueryURL is the HTTP query URL parameter used
 	// to select a particular virtual cluster.
 	ClusterNameParamInQueryURL = "cluster"
+
+	// TenantSelectCookieName is the name of the HTTP cookie used to select a particular tenant,
+	// if the custom header is not specified.
+	TenantSelectCookieName = `tenant`
 
 	// AcceptHeader is the canonical header name for accept.
 	AcceptHeader = "Accept"
@@ -56,10 +59,10 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	// routed to a specific node and skip the fanout, creating inconsistent
 	// outcomes that were path-dependent on the user's existing cookies.
 	switch r.URL.Path {
-	case authserver.LoginPath, authserver.DemoLoginPath:
+	case loginPath, DemoLoginPath:
 		c.attemptLoginToAllTenants().ServeHTTP(w, r)
 		return
-	case authserver.LogoutPath:
+	case logoutPath:
 		// Since we do not support per-tenant logout until
 		// https://github.com/cockroachdb/cockroach/issues/92855
 		// is completed, we should always fanout a logout
@@ -74,14 +77,14 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
 		http.SetCookie(w, &http.Cookie{
-			Name:     authserver.SessionCookieName,
+			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
 			Expires:  timeutil.Unix(0, 0),
 		})
 		http.SetCookie(w, &http.Cookie{
-			Name:     authserver.TenantSelectCookieName,
+			Name:     TenantSelectCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
@@ -117,7 +120,7 @@ func getTenantNameFromHTTPRequest(st *cluster.Settings, r *http.Request) roachpb
 	}
 
 	// No parameter, no explicit header. Is there a cookie?
-	if c, _ := r.Cookie(authserver.TenantSelectCookieName); c != nil && c.Value != "" {
+	if c, _ := r.Cookie(TenantSelectCookieName); c != nil && c.Value != "" {
 		return roachpb.TenantName(c.Value)
 	}
 
@@ -143,7 +146,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		tenantNames := c.getCurrentTenantNames()
-		var tenantNameToSetCookieSlice []authserver.SessionCookieValue
+		var tenantNameToSetCookieSlice []sessionCookieValue
 		// The request body needs to be cloned since r.Clone() does not do it.
 		clonedBody, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -185,10 +188,10 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 				collectedErrors[i] = sw.buf.String()
 				log.Warningf(ctx, "unable to find session cookie for tenant %q: HTTP %d - %s", name, sw.code, &sw.buf)
 			} else {
-				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, authserver.MakeSessionCookieValue(
-					string(name),
-					setCookieHeader,
-				))
+				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, sessionCookieValue{
+					name:      string(name),
+					setCookie: setCookieHeader,
+				})
 				// In the case of /demologin, we want to redirect to the provided location
 				// in the header. If we get back a cookie along with an
 				// http.StatusTemporaryRedirect code, be sure to transfer the response code
@@ -205,9 +208,9 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		// be called and cookies should be set. Otherwise, login was not successful
 		// for any of the tenants.
 		if len(tenantNameToSetCookieSlice) > 0 {
-			sessionsStr := authserver.CreateAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
+			sessionsStr := createAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
 			cookie := http.Cookie{
-				Name:     authserver.SessionCookieName,
+				Name:     SessionCookieName,
 				Value:    sessionsStr,
 				Path:     "/",
 				HttpOnly: false,
@@ -219,16 +222,16 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			// We only set the default selection from the cluster setting
 			// if it's one of the valid logins. Otherwise, we just use the
 			// first one in the list.
-			tenantSelection := tenantNameToSetCookieSlice[0].Name()
+			tenantSelection := tenantNameToSetCookieSlice[0].name
 			defaultName := multitenant.DefaultTenantSelect.Get(&c.st.SV)
 			for _, t := range tenantNameToSetCookieSlice {
-				if t.Name() == defaultName {
-					tenantSelection = t.Name()
+				if t.name == defaultName {
+					tenantSelection = t.name
 					break
 				}
 			}
 			cookie = http.Cookie{
-				Name:     authserver.TenantSelectCookieName,
+				Name:     TenantSelectCookieName,
 				Value:    tenantSelection,
 				Path:     "/",
 				HttpOnly: false,
@@ -274,9 +277,9 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		sessionCookie, err := r.Cookie(authserver.SessionCookieName)
+		sessionCookie, err := r.Cookie(SessionCookieName)
 		if errors.Is(err, http.ErrNoCookie) {
-			sessionCookie, err = r.Cookie(authserver.SessionCookieName)
+			sessionCookie, err = r.Cookie(SessionCookieName)
 			if err != nil {
 				log.Warningf(ctx, "unable to find session cookie: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -325,7 +328,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		}
 		// Clear session and tenant cookies after all logouts have completed.
 		cookie := http.Cookie{
-			Name:     authserver.SessionCookieName,
+			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
@@ -333,7 +336,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		}
 		http.SetCookie(w, &cookie)
 		cookie = http.Cookie{
-			Name:     authserver.TenantSelectCookieName,
+			Name:     TenantSelectCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,

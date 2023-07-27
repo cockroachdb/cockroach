@@ -19,7 +19,6 @@ import (
 	// Hook up the pretty printer.
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -35,7 +34,6 @@ func TestBatchRequestString(t *testing.T) {
 	txn := roachpb.MakeTransaction(
 		"test",
 		nil, // baseKey
-		isolation.Serializable,
 		roachpb.NormalUserPriority,
 		hlc.Timestamp{}, // now
 		0,               // maxOffsetNs

@@ -962,10 +962,8 @@ func (r *testRunner) runTest(
 				shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			}
 
-			if teamCity {
-				shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
-					t.Name(), runID, t.duration().Milliseconds())
-			}
+			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
+				t.Name(), runID, t.duration().Milliseconds())
 		}
 
 		if teamCity {
@@ -1014,7 +1012,7 @@ func (r *testRunner) runTest(
 
 	t.start = timeutil.Now()
 
-	timeout := 3 * time.Hour
+	timeout := 10 * time.Hour
 	if d := s.Timeout; d != 0 {
 		timeout = d
 	}

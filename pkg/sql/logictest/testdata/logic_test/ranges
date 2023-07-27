@@ -159,7 +159,7 @@ ALTER INDEX d.c@c_i_idx SPLIT AT VALUES (0)
 
 # Hex encode start_key, end_key so that text is UTF-8 compatible.
 # Non-UTF-8 characters cause git to treat this as a binary file and prevent diff from working.
-query TTTTTI colnames,rowsort
+query TTTTTI colnames
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, crdb_internal.lease_holder(start_key) FROM crdb_internal.ranges_no_leases;
 ----
 encode                  start_pretty             encode                  end_pretty               replicas  crdb_internal.lease_holder
@@ -241,7 +241,7 @@ f67189f67b              /Table/113/1/123         f6718a                  /Table/
 f6718a                  /Table/113/2             f6718a88                /Table/113/2/0           {1}       1
 f6718a88                /Table/113/2/0           ffff                    /Max                     {1}       1
 
-query TTTTTI colnames,rowsort
+query TTTTTI colnames
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, lease_holder FROM crdb_internal.ranges
 ----
 encode                  start_pretty             encode                  end_pretty               replicas  lease_holder

@@ -176,7 +176,7 @@ func TestUsingSimulation(t *testing.T) {
 					for _, line := range strings.Split(d.Input, "\n") {
 						name := strings.TrimPrefix(strings.TrimSpace(line), "handle=")
 						replicaHandles[name] = &replicaHandle{
-							handle:             kvflowhandle.New(controller, hmetrics, clock, roachpb.RangeID(0), roachpb.TenantID{}, nil /* knobs */),
+							handle:             kvflowhandle.New(controller, hmetrics, clock),
 							deductionTracker:   make(map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker),
 							outstandingReturns: make(map[kvflowcontrol.Stream]kvflowcontrol.Tokens),
 							snapshots:          make([]snapshot, 0),
@@ -630,9 +630,9 @@ func (h *replicaHandle) deductTokens(
 	// Increment the quorum log position -- all token deductions are bound to
 	// incrementing log positions.
 	h.quorumLogPosition.Index += 1
-	streams := h.handle.TestingDeductTokensForInner(ctx, pri, h.quorumLogPosition, tokens)
+	_, streams := h.handle.TestingDeductTokensForInner(ctx, pri, time.Time{}, h.quorumLogPosition, tokens)
 	for _, stream := range streams {
-		_ = h.deductionTracker[stream].Track(ctx, pri, tokens, h.quorumLogPosition)
+		h.deductionTracker[stream].Track(ctx, pri, tokens, h.quorumLogPosition)
 	}
 }
 
@@ -988,7 +988,7 @@ func (ht *handleOpTicker) tick(ctx context.Context, t time.Time) {
 	case "connect":
 		ht.replicaHandle.quorumLogPosition = ht.position
 		ht.replicaHandle.handle.ConnectStream(ctx, ht.position, ht.stream)
-		ht.replicaHandle.deductionTracker[ht.stream] = kvflowtokentracker.New(ht.position, ht.stream, nil /* knobs */)
+		ht.replicaHandle.deductionTracker[ht.stream] = kvflowtokentracker.New(ht.position, nil /* knobs */)
 	case "snapshot":
 		ht.replicaHandle.snapshots = append(ht.replicaHandle.snapshots, snapshot{
 			time:   t,

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// TxnCoordSenderFactory implements kv.TxnSenderFactory.
+// TxnCoordSenderFactory implements client.TxnSenderFactory.
 type TxnCoordSenderFactory struct {
 	log.AmbientContext
 

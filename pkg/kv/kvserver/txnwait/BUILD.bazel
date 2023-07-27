@@ -12,7 +12,6 @@ go_library(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
@@ -37,7 +36,6 @@ go_test(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",

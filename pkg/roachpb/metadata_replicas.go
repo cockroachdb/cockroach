@@ -483,26 +483,6 @@ func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
 	return out
 }
 
-// Difference compares two sets of replicas, returning the replica descriptors
-// that were added and removed when going from one to the other. 'd' is the before
-// state, 'o' is the one after.
-func (d ReplicaSet) Difference(o ReplicaSet) (added, removed []ReplicaDescriptor) {
-	return o.Subtract(d), d.Subtract(o)
-}
-
-// Subtract one sets of replicas from another. This returning the replica
-// descriptors that were present in the original and not the other. 'd' is the
-// original set of descriptors, 'o' is the other.
-func (d ReplicaSet) Subtract(o ReplicaSet) []ReplicaDescriptor {
-	var repls []ReplicaDescriptor
-	for _, repl := range d.Descriptors() {
-		if _, found := o.GetReplicaDescriptorByID(repl.ReplicaID); !found {
-			repls = append(repls, repl)
-		}
-	}
-	return repls
-}
-
 // IsAddition returns true if `c` refers to a replica addition operation.
 func (c ReplicaChangeType) IsAddition() bool {
 	switch c {

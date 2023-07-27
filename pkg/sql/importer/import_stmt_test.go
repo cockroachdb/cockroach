@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -73,7 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -135,6 +133,7 @@ ORDER BY table_name
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
 
 	tests := []struct {
 		name     string
@@ -2010,7 +2009,7 @@ func TestImportRowLimit(t *testing.T) {
 
 	t.Run("row limit multiple csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test; USE test`)
-		defer sqlDB.Exec(t, `DROP DATABASE test`)
+		defer sqlDB.Exec(t, (`DROP DATABASE test`))
 
 		data = "pear\navocado\nwatermelon\nsugar"
 		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
@@ -2039,9 +2038,9 @@ func TestFailedImportGC(t *testing.T) {
 		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
 		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		SQLMemoryPoolSize: 256 << 20,
-		ExternalIODir:     baseDir,
+		DisableDefaultTestTenant: true,
+		SQLMemoryPoolSize:        256 << 20,
+		ExternalIODir:            baseDir,
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{
 				RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil },
@@ -2052,9 +2051,8 @@ func TestFailedImportGC(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
@@ -2063,13 +2061,17 @@ func TestFailedImportGC(t *testing.T) {
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	kvDB := tc.Server(0).DB()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	// The test assumes we'll use the MVCC range tombstone in the GC job. We need
+	// to set this cluster setting to make that true.
+	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
 
 	forceFailure = true
 	defer func() { forceFailure = false }()
@@ -2145,23 +2147,23 @@ func TestImportIntoCSVCancel(t *testing.T) {
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     baseDir,
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
 	setupDoneCh := make(chan struct{})
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.onSetupFinish = func(flowinfra.Flow) {
 					close(setupDoneCh)
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -2202,17 +2204,16 @@ func TestImportCSVStmt(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		SQLMemoryPoolSize: 256 << 20,
-		ExternalIODir:     baseDir,
+		DisableDefaultTestTenant: true,
+		SQLMemoryPoolSize:        256 << 20,
+		ExternalIODir:            baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
@@ -2221,7 +2222,8 @@ func TestImportCSVStmt(t *testing.T) {
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -2775,9 +2777,9 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     baseDir,
-		SQLMemoryPoolSize: 256 << 20,
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir,
+		SQLMemoryPoolSize:        256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -2954,32 +2956,24 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     datapathutils.TestDataPath(t, "csv")}})
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            datapathutils.TestDataPath(t, "csv")}})
 	defer tc.Stopper().Stop(ctx)
 
 	aboutToRunDSP := make(chan struct{})
 	allowRunDSP := make(chan struct{})
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.beforeRunDSP = func() error {
-					select {
-					case aboutToRunDSP <- struct{}{}:
-					case <-time.After(testutils.DefaultSucceedsSoonDuration):
-						return errors.New("timed out on aboutToRunDSP")
-					}
-					select {
-					case <-allowRunDSP:
-					case <-time.After(testutils.DefaultSucceedsSoonDuration):
-						return errors.New("timed out on allowRunDSP")
-					}
+					aboutToRunDSP <- struct{}{}
+					<-allowRunDSP
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -3004,38 +2998,16 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 
 	// On the first attempt, we trip the node 3 breaker between distsql planning
 	// and actually running the plan.
-	select {
-	case <-aboutToRunDSP:
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
-		t.Fatal("timed out on aboutToRunDSP")
-	}
-	{
-		b, ok := tc.Server(0).NodeDialer().(*nodedialer.Dialer).GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
-		require.True(t, ok)
-		undo := circuit.TestingSetTripped(b, errors.New("boom"))
-		defer undo()
-	}
-
-	timeout := testutils.DefaultSucceedsSoonDuration
-	select {
-	case allowRunDSP <- struct{}{}:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on allowRunDSP attempt 1")
-	}
+	<-aboutToRunDSP
+	breaker := tc.Server(0).DistSQLServer().(*distsql.ServerImpl).PodNodeDialer.GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
+	breaker.Break()
+	allowRunDSP <- struct{}{}
 
 	// The failure above should be retried. We expect this to succeed even if we
 	// don't reset the breaker because node 3 should no longer be included in
 	// the plan.
-	select {
-	case <-aboutToRunDSP:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on aboutToRunDSP")
-	}
-	select {
-	case allowRunDSP <- struct{}{}:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on allowRunDSP")
-	}
+	<-aboutToRunDSP
+	allowRunDSP <- struct{}{}
 	require.NoError(t, g.Wait())
 }
 
@@ -3065,8 +3037,8 @@ func TestImportIntoCSV(t *testing.T) {
 		},
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     baseDir}})
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
@@ -3078,9 +3050,8 @@ func TestImportIntoCSV(t *testing.T) {
 	var delayImportFinish chan struct{}
 
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if importBodyFinished != nil {
@@ -3104,7 +3075,8 @@ func TestImportIntoCSV(t *testing.T) {
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -3946,7 +3918,6 @@ func TestImportIntoCSV(t *testing.T) {
 }
 
 func benchUserUpload(b *testing.B, uploadBaseURI string) {
-	defer log.Scope(b).Close(b)
 	const (
 		nodes = 3
 	)
@@ -4112,7 +4083,6 @@ var _ importRowProducer = &csvBenchmarkStream{}
 // BenchmarkConvertRecord-16    	  500000	      2376 ns/op	  50.49 MB/s	    3606 B/op	     101 allocs/op
 // BenchmarkConvertRecord-16    	  500000	      2390 ns/op	  50.20 MB/s	    3606 B/op	     101 allocs/op
 func BenchmarkCSVConvertRecord(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	tpchLineItemDataRows := [][]string{
@@ -4772,7 +4742,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 		base.TestServerArgs{
 			// Test hangs when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -4812,10 +4782,10 @@ func TestImportDefaultWithResume(t *testing.T) {
 			jobIDCh := make(chan jobspb.JobID)
 			var jobID jobspb.JobID = -1
 
-			registry.TestingWrapResumerConstructor(jobspb.TypeImport,
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 				// Arrange for our special job resumer to be
 				// returned the very first time we start the import.
-				func(raw jobs.Resumer) jobs.Resumer {
+				jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 					resumer := raw.(*importResumer)
 					resumer.testingKnobs.alwaysFlushJobProgress = true
 					resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
@@ -4829,7 +4799,8 @@ func TestImportDefaultWithResume(t *testing.T) {
 						}
 					}
 					return resumer
-				})
+				},
+			}
 
 			expectedNumRows := 10*batchSize + 1
 			testBarrier, csvBarrier := newSyncBarrier()
@@ -5063,7 +5034,6 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 // BenchmarkDelimitedConvertRecord-16    	  500000	      3004 ns/op	  39.94 MB/s
 // BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
@@ -5166,7 +5136,6 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 // BenchmarkPgCopyConvertRecord-16    	  339940	      3610 ns/op	  33.24 MB/s
 // BenchmarkPgCopyConvertRecord-16    	  307701	      3833 ns/op	  31.30 MB/s
 func BenchmarkPgCopyConvertRecord(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
@@ -5295,7 +5264,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test fails when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -5416,10 +5385,6 @@ func setSmallIngestBufferSizes(t *testing.T, sqlDB *sqlutils.SQLRunner) {
 func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderStressWithIssue(t, 102839, "flaky test")
-	skip.UnderDeadlockWithIssue(t, 102839, "flaky test")
-	skip.UnderRaceWithIssue(t, 102839, "flaky test")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -6155,7 +6120,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			}))
 			for i, file := range files {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
-				content, _, err := store.ReadFile(ctx, file, cloud.ReadOptions{NoFileSize: true})
+				content, err := store.ReadFile(ctx, file)
 				require.NoError(t, err)
 				descBytes, err := ioctx.ReadAll(ctx, content)
 				require.NoError(t, err)
@@ -6483,7 +6448,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
 		args := mkArgs()
-		args.DefaultTestTenant = base.TODOTestTenantDisabled
+		args.DisableDefaultTestTenant = true
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
@@ -6495,15 +6460,16 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		}
 
 		for i := 0; i < tc.NumServers(); i++ {
-			tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-				jobspb.TypeImport,
-				func(raw jobs.Resumer) jobs.Resumer {
-					r := raw.(*importResumer)
-					r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
-						return errors.New("testing injected failure")
-					}
-					return r
-				})
+			tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
+				map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+					jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+						r := raw.(*importResumer)
+						r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
+							return errors.New("testing injected failure")
+						}
+						return r
+					},
+				}
 		}
 
 		sqlDB.Exec(t, `CREATE DATABASE failedimportpgdump; SET DATABASE = failedimportpgdump`)
@@ -6660,9 +6626,9 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	st := cluster.MakeClusterSettings()
 	stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
 	args := base.TestServerArgs{
-		Settings:          st,
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     baseDir,
+		Settings:                 st,
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir,
 	}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -7128,7 +7094,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	// Test fails within a test tenant. More investigation is required.
 	// Tracked with #76378.
-	args.DefaultTestTenant = base.TODOTestTenantDisabled
+	args.DisableDefaultTestTenant = true
 	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc := serverutils.StartNewTestCluster(t, nodes, params)
@@ -7136,9 +7102,8 @@ func TestImportJobEventLogging(t *testing.T) {
 
 	var forceFailure bool
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
@@ -7147,7 +7112,8 @@ func TestImportJobEventLogging(t *testing.T) {
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	connDB := tc.ServerConn(0)
@@ -7502,7 +7468,7 @@ CREATE TABLE f (
 )
 `)
 		data = "1,1\n1,2"
-		sqlDB.ExpectErr(t, "duplicate key in index: duplicate key: (/Tenant/10)?/Table/109/2/1/0",
+		sqlDB.ExpectErr(t, "duplicate key in index: duplicate key: /Table/109/2/1/0",
 			fmt.Sprintf(`IMPORT INTO f (a,b) CSV DATA ('%s')`, srv.URL))
 	})
 

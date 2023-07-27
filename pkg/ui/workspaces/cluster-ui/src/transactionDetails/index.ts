@@ -10,5 +10,5 @@
 
 export * from "./transactionDetails";
 export * from "./transactionDetailsConnected";
-export * from "./activeTransactionDetails";
-export * from "./activeTransactionDetailsConnected";
+export * from "./recentTransactionDetails";
+export * from "./recentTransactionDetailsConnected";

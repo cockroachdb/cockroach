@@ -1788,9 +1788,9 @@ func TestSetSessionArguments(t *testing.T) {
 
 	expectedOptions := map[string]string{
 		"search_path": "public, testsp, \"Abc\", def",
-		// Setting the isolation level to read uncommitted should map
-		// to read committed.
-		"default_transaction_isolation": "read committed",
+		// setting an isolation level is a noop:
+		// all transactions execute with serializable isolation.
+		"default_transaction_isolation": "serializable",
 		"application_name":              "test",
 		"datestyle":                     "ISO, YMD",
 		"intervalstyle":                 "iso_8601",
@@ -2037,7 +2037,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	}
 
 	getConnectionCount := func() int {
-		return int(testServer.TenantOrServer().SQLServer().(*sql.Server).GetConnectionCount())
+		return int(testServer.SQLServer().(*sql.Server).GetConnectionCount())
 	}
 
 	requireConnectionCount := func(t *testing.T, expectedCount int) {

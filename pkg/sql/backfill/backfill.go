@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -506,7 +505,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(desc, nil /* allowList */)
+	ib.initIndexes(desc)
 
 	// Initialize ib.cols and ib.colIdxMap.
 	if err := ib.initCols(desc); err != nil {
@@ -641,12 +640,11 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	desc catalog.TableDescriptor,
-	allowList []catid.IndexID,
 	mon *mon.BytesMonitor,
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(desc, allowList)
+	ib.initIndexes(desc)
 
 	// Initialize ib.indexBackfillerCols.
 	if err := ib.initCols(desc); err != nil {
@@ -730,25 +728,19 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 }
 
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
-// populates the added field to be all adding index mutations.
-// If `allowList` is non-nil, we only add those in this list.
-// If `allowList` is nil, we add all adding index mutations.
-func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor, allowList []catid.IndexID) {
-	var allowListAsSet catid.IndexSet
-	if len(allowList) > 0 {
-		allowListAsSet = catid.MakeIndexIDSet(allowList...)
-	}
-
+// populates the added field. It returns a set of column ordinals that must be
+// fetched in order to backfill the added indexes.
+func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) {
 	mutations := desc.AllMutations()
 	mutationID := mutations[0].MutationID()
+
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
 	for _, m := range mutations {
 		if m.MutationID() != mutationID {
 			break
 		}
-		if IndexMutationFilter(m) &&
-			(allowListAsSet.Empty() || allowListAsSet.Contains(m.AsIndex().GetID())) {
+		if IndexMutationFilter(m) {
 			idx := m.AsIndex()
 			ib.added = append(ib.added, idx)
 		}

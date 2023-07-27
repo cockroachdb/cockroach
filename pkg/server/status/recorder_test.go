@@ -23,20 +23,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
-	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,8 +115,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		st,
 	)
-	logReg := metric.NewRegistry()
-	recorder.AddNode(reg1, logReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	nodeDescTenant := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(7),
@@ -138,7 +134,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		stTenant,
 	)
-	recorderTenant.AddNode(regTenant, logReg, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorderTenant.AddNode(regTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// ========================================
 	// Verify that the recorder exports metrics for tenants as text.
@@ -151,10 +147,6 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	g2 := metric.NewGauge(metric.Metadata{Name: "some_metric"})
 	regTenant.AddMetric(g2)
 	g2.Update(456)
-
-	c1 := metric.NewCounter(metric.Metadata{Name: "some_log_metric"})
-	logReg.AddMetric(c1)
-	c1.Inc(2)
 
 	recorder.AddTenantRegistry(tenantID, regTenant)
 
@@ -216,16 +208,6 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				},
 			},
 		},
-		{
-			Name:   "cr.node.some_log_metric",
-			Source: "7",
-			Datapoints: []tspb.TimeSeriesDatapoint{
-				{
-					TimestampNanos: manual.Now().UnixNano(),
-					Value:          float64(2),
-				},
-			},
-		},
 		// App tenant metrics
 		{
 			Name:   "cr.node.node-id",
@@ -256,148 +238,6 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	sort.Sort(byTimeAndName(expectedData))
 	if a, e := actualData, expectedData; !reflect.DeepEqual(a, e) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
-	}
-}
-
-func TestRegistryRecorder_RecordChild(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	store1 := fakeStore{
-		storeID: roachpb.StoreID(1),
-		desc: roachpb.StoreDescriptor{
-			StoreID: roachpb.StoreID(1),
-			Capacity: roachpb.StoreCapacity{
-				Capacity:  100,
-				Available: 50,
-				Used:      50,
-			},
-		},
-		registry: metric.NewRegistry(),
-	}
-	store2 := fakeStore{
-		storeID: roachpb.StoreID(2),
-		desc: roachpb.StoreDescriptor{
-			StoreID: roachpb.StoreID(2),
-			Capacity: roachpb.StoreCapacity{
-				Capacity:  200,
-				Available: 75,
-				Used:      125,
-			},
-		},
-		registry: metric.NewRegistry(),
-	}
-	systemTenantNameContainer := roachpb.NewTenantNameContainer(catconstants.SystemTenantName)
-	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
-	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(roachpb.SystemTenantID, systemTenantNameContainer, nil, nil, manual, st)
-	recorder.AddStore(store1)
-	recorder.AddStore(store2)
-
-	tenantIDs := []string{"2", "3"}
-	type childMetric struct {
-		tenantID string
-		value    int64
-	}
-	type testMetric struct {
-		name     string
-		typ      string
-		children []childMetric
-	}
-	// Each registry will have a copy of the following metrics.
-	metrics := []testMetric{
-		{
-			name: "testAggGauge",
-			typ:  "agggauge",
-			children: []childMetric{
-				{
-					tenantID: "2",
-					value:    2,
-				},
-				{
-					tenantID: "3",
-					value:    5,
-				},
-			},
-		},
-		{
-			name: "testAggCounter",
-			typ:  "aggcounter",
-			children: []childMetric{
-				{
-					tenantID: "2",
-					value:    10,
-				},
-				{
-					tenantID: "3",
-					value:    17,
-				},
-			},
-		},
-	}
-
-	var expected []tspb.TimeSeriesData
-	// addExpected generates expected TimeSeriesData for all child metrics.
-	addExpected := func(storeID string, metric *testMetric) {
-		for _, child := range metric.children {
-			expect := tspb.TimeSeriesData{
-				Name:   "cr.store." + metric.name,
-				Source: tsutil.MakeTenantSource(storeID, child.tenantID),
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					{
-						TimestampNanos: 100,
-						Value:          float64(child.value),
-					},
-				},
-			}
-			expected = append(expected, expect)
-		}
-	}
-
-	tIDLabel := multitenant.TenantIDLabel
-	for _, store := range []fakeStore{store1, store2} {
-		for _, m := range metrics {
-			switch m.typ {
-			case "aggcounter":
-				ac := aggmetric.NewCounter(metric.Metadata{Name: m.name}, tIDLabel)
-				store.registry.AddMetric(ac)
-				for _, cm := range m.children {
-					c := ac.AddChild(cm.tenantID)
-					c.Inc(cm.value)
-				}
-				addExpected(store.storeID.String(), &m)
-			case "agggauge":
-				ag := aggmetric.NewGauge(metric.Metadata{Name: m.name}, tIDLabel)
-				store.registry.AddMetric(ag)
-				for _, cm := range m.children {
-					c := ag.AddChild(cm.tenantID)
-					c.Inc(cm.value)
-				}
-				addExpected(store.storeID.String(), &m)
-			}
-		}
-	}
-	metricFilter := map[string]struct{}{
-		"testAggGauge":   {},
-		"testAggCounter": {},
-	}
-	actual := make([]tspb.TimeSeriesData, 0)
-	for _, store := range []fakeStore{store1, store2} {
-		for _, tID := range tenantIDs {
-			tenantStoreRecorder := registryRecorder{
-				registry:       store.registry,
-				format:         storeTimeSeriesPrefix,
-				source:         tsutil.MakeTenantSource(store.storeID.String(), tID),
-				timestampNanos: 100,
-			}
-			tenantStoreRecorder.recordChild(&actual, metricFilter, &prometheusgo.LabelPair{
-				Name:  &tIDLabel,
-				Value: &tID,
-			})
-		}
-	}
-	sort.Sort(byTimeAndName(actual))
-	sort.Sort(byTimeAndName(expected))
-	if !reflect.DeepEqual(actual, expected) {
-		t.Errorf("registryRecorder did not yield expected time series collection for child metrics; diff:\n %v", pretty.Diff(actual, expected))
 	}
 }
 
@@ -450,8 +290,7 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, manual, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	logReg := metric.NewRegistry()
-	recorder.AddNode(reg1, logReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
@@ -480,12 +319,6 @@ func TestMetricsRecorder(t *testing.T) {
 		{
 			reg:    reg1,
 			prefix: "two.",
-			source: 1,
-			isNode: true,
-		},
-		{
-			reg:    logReg,
-			prefix: "log.",
 			source: 1,
 			isNode: true,
 		},
@@ -605,8 +438,8 @@ func TestMetricsRecorder(t *testing.T) {
 				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
-				for _, q := range metric.RecordHistogramQuantiles {
-					addExpected(reg.prefix, data.name+q.Suffix, reg.source, 100, 10, reg.isNode)
+				for _, q := range recordHistogramQuantiles {
+					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, 10, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 9, reg.isNode)

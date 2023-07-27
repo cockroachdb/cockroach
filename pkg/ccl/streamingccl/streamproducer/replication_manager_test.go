@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,20 +45,16 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
 	}
 
-	var m sessiondatapb.MigratableSession
+	var sessionData sessiondatapb.SessionData
 	var sessionSerialized []byte
 	tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &m))
-	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
-	require.NoError(t, err)
-	sd.SessionData = m.SessionData
-	sd.LocalOnlySessionData = m.LocalOnlySessionData
+	require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 
 	getManagerForUser := func(u string) (eval.ReplicationStreamManager, error) {
 		sqlUser, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 		require.NoError(t, err)
 		txn := kvDB.NewTxn(ctx, "test")
-		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sd)
+		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sessionData)
 
 		// Extract
 		pi := p.(interface {

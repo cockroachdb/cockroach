@@ -413,7 +413,7 @@ var NewReadImportDataProcessor func(context.Context, *execinfra.FlowCtx, int32, 
 // NewCloudStorageTestProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CloudStorageTestSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
-// NewIngestStoppedProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+// NewIngestStoppedProcessor is implemented in pkg/job/ingeststopped injected here via runtime initialization.
 var NewIngestStoppedProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestStoppedSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.

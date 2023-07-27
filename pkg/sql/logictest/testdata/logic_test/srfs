@@ -4,7 +4,7 @@ query I
 SELECT * FROM generate_series(1, NULL)
 ----
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM generate_series(1, 3)
 ----
 generate_series
@@ -12,7 +12,7 @@ generate_series
 2
 3
 
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '1 hour')
 ----
 generate_series
@@ -21,7 +21,7 @@ generate_series
 2017-11-11 02:00:00 +0000 +0000
 2017-11-11 03:00:00 +0000 +0000
 
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2017-11-11 03:00:00'::TIMESTAMP, '2017-11-11 00:00:00'::TIMESTAMP, '-1 hour')
 ----
 generate_series
@@ -30,7 +30,7 @@ generate_series
 2017-11-11 01:00:00 +0000 +0000
 2017-11-11 00:00:00 +0000 +0000
 
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2017-11-11 03:00:00'::TIMESTAMP, '2017-11-15 00:00:00'::TIMESTAMP, '1 day')
 ----
 generate_series
@@ -39,7 +39,7 @@ generate_series
 2017-11-13 03:00:00 +0000 +0000
 2017-11-14 03:00:00 +0000 +0000
 
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2017-01-15 03:00:00'::TIMESTAMP, '2017-12-15 00:00:00'::TIMESTAMP, '1 month')
 ----
 generate_series
@@ -57,7 +57,7 @@ generate_series
 
 # Check what happens when we step through February in a leap year, starting on Jan 31.
 # This output is consistent with PostgreSQL 10.
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2016-01-31 03:00:00'::TIMESTAMP, '2016-12-31 00:00:00'::TIMESTAMP, '1 month')
 ----
 generate_series
@@ -75,7 +75,7 @@ generate_series
 2016-12-29 03:00:00 +0000 +0000
 
 # Similar to the previous, but we don't hit a 30-day month until July.
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2016-01-31 03:00:00'::TIMESTAMP, '2016-12-31 00:00:00'::TIMESTAMP, '2 month')
 ----
 generate_series
@@ -87,7 +87,7 @@ generate_series
 2016-11-30 03:00:00 +0000 +0000
 
 # Verify rollover when we're adding by months, days, and hours
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('2016-01-30 22:00:00'::TIMESTAMP, '2016-12-31 00:00:00'::TIMESTAMP, '1 month 1 day 1 hour')
 ----
 generate_series
@@ -103,7 +103,7 @@ generate_series
 2016-11-10 07:00:00 +0000 +0000
 2016-12-11 08:00:00 +0000 +0000
 
-query T colnames,nosort
+query T colnames
 SELECT * FROM generate_series('1996-02-29 22:00:00'::TIMESTAMP, '2004-03-01 00:00:00'::TIMESTAMP, '4 year')
 ----
 generate_series
@@ -125,7 +125,7 @@ generate_series  generate_series
 2                1
 2                2
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM generate_series(3, 1, -1)
 ----
 generate_series
@@ -141,7 +141,7 @@ generate_series
 query error step cannot be 0
 SELECT * FROM generate_series(1, 3, 0)
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM PG_CATALOG.generate_series(1, 3)
 ----
 generate_series
@@ -167,10 +167,10 @@ SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
 x y
 1 1
 
-query error set-returning functions are not allowed in LIMIT
+query error generator functions are not allowed in LIMIT
 SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
 
-query I colnames,nosort
+query I colnames
 SELECT generate_series(1, 2)
 ----
 generate_series
@@ -179,14 +179,14 @@ generate_series
 
 subtest multiple_SRFs
 
-query II colnames,nosort
+query II colnames
 SELECT generate_series(1, 2), generate_series(3, 4)
 ----
 generate_series             generate_series
 1                           3
 2                           4
 
-query II nosort
+query II
 SELECT generate_series(1, 2), generate_series(3, 4)
 ----
 1  3
@@ -220,21 +220,21 @@ cat  bird  1  4
 cat  bird  2  3
 cat  bird  2  4
 
-query I colnames,nosort
+query I colnames
 SELECT 3 + x AS r FROM generate_series(1,2) AS a(x)
 ----
 r
 4
 5
 
-query I colnames,nosort
+query I colnames
 SELECT 3 + generate_series(1,2) AS r
 ----
 r
 4
 5
 
-query I colnames,nosort
+query I colnames
 SELECT 3 + (3 * generate_series(1,3)) AS r
 ----
 r
@@ -268,40 +268,40 @@ SELECT * FROM unnest(NULL)
 statement error could not determine polymorphic type
 SELECT unnest(NULL)
 
-query I colnames,nosort
+query I colnames
 SELECT * from unnest(ARRAY[1,2])
 ----
 unnest
 1
 2
 
-query IT nosort
+query IT
 SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
 ----
 1  a
 2  b
 
-query I colnames,nosort
+query I colnames
 SELECT unnest(ARRAY[3,4]) - 2 AS r
 ----
 r
 1
 2
 
-query II colnames,nosort
+query II colnames
 SELECT 1 + generate_series(0, 1) AS r, unnest(ARRAY[2, 4]) - 1 AS t
 ----
 r t
 1 1
 2 3
 
-query II nosort
+query II
 SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
 ----
 1  1
 2  3
 
-query I colnames,nosort
+query I colnames
 SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
 ----
 ascii
@@ -315,7 +315,7 @@ subtest nested_SRF
 query error unimplemented: nested set-returning functions
 SELECT generate_series(generate_series(1, 3), 3)
 
-query I rowsort
+query I
 SELECT generate_series(1, 3) + generate_series(1, 3)
 ----
 2
@@ -346,7 +346,7 @@ SELECT information_schema._pg_expandarray((SELECT current_schemas((SELECT isnan(
 information_schema._pg_expandarray
 
 # Regression for #18021.
-query I colnames,nosort
+query I colnames
 SELECT generate_series(9223372036854775807::int, -9223372036854775807::int, -9223372036854775807::int)
 ----
 generate_series
@@ -375,7 +375,7 @@ a  b  word  catcode  catdesc
 
 # Regression for #36501: the column from a single-column SRF should not be
 # renamed because of a higher-level table alias.
-query I colnames,nosort
+query I colnames
 SELECT * FROM (SELECT * FROM generate_series(1, 2)) AS a
 ----
 generate_series
@@ -483,21 +483,21 @@ SELECT * FROM information_schema._pg_expandarray(ARRAY[100])
 x   n
 100 1
 
-query T colnames,nosort
+query T colnames
 SELECT information_schema._pg_expandarray(ARRAY[2, 1])
 ----
 information_schema._pg_expandarray
 (2,1)
 (1,2)
 
-query II colnames,nosort
+query II colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY[2, 1])
 ----
 x n
 2 1
 1 2
 
-query T colnames,nosort
+query T colnames
 SELECT information_schema._pg_expandarray(ARRAY[3, 2, 1])
 ----
 information_schema._pg_expandarray
@@ -505,7 +505,7 @@ information_schema._pg_expandarray
 (2,2)
 (1,3)
 
-query II colnames,nosort
+query II colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY[3, 2, 1])
 ----
 x n
@@ -525,21 +525,21 @@ SELECT * FROM information_schema._pg_expandarray(ARRAY['a'])
 x n
 a 1
 
-query T colnames,nosort
+query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
 information_schema._pg_expandarray
 (b,1)
 (a,2)
 
-query TI colnames,nosort
+query TI colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
 x n
 b 1
 a 2
 
-query T colnames,nosort
+query T colnames
 SELECT information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
 ----
 information_schema._pg_expandarray
@@ -547,7 +547,7 @@ information_schema._pg_expandarray
 (b,2)
 (a,3)
 
-query TI colnames,nosort
+query TI colnames
 SELECT * FROM information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
 ----
 x n
@@ -589,7 +589,7 @@ SELECT (unnest(ARRAY[]:::INT[])).*
 
 subtest multi_column
 
-query TI colnames,nosort
+query TI colnames
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).*
 ----
 x  n
@@ -597,7 +597,7 @@ c  1
 b  2
 a  3
 
-query T colnames,nosort
+query T colnames
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).x
 ----
 x
@@ -605,7 +605,7 @@ c
 b
 a
 
-query I colnames,nosort
+query I colnames
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).n
 ----
 n
@@ -616,7 +616,7 @@ n
 query error pq: could not identify column "other" in tuple{string AS x, int AS n}
 SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
 
-query T colnames,nosort
+query T colnames
 SELECT temp.x from information_schema._pg_expandarray(array['c','b','a']) AS temp;
 ----
 x
@@ -624,7 +624,7 @@ c
 b
 a
 
-query I colnames,nosort
+query I colnames
 SELECT temp.n from information_schema._pg_expandarray(array['c','b','a']) AS temp;
 ----
 n
@@ -635,7 +635,7 @@ n
 query error pq: column "temp.other" does not exist
 SELECT temp.other from information_schema._pg_expandarray(array['c','b','a']) AS temp;
 
-query TI colnames,nosort
+query TI colnames
 SELECT temp.* from information_schema._pg_expandarray(array['c','b','a']) AS temp;
 ----
 x n
@@ -643,7 +643,7 @@ c 1
 b 2
 a 3
 
-query TI colnames,nosort
+query TI colnames
 SELECT * from information_schema._pg_expandarray(array['c','b','a']) AS temp;
 ----
 x n
@@ -651,7 +651,7 @@ c 1
 b 2
 a 3
 
-query I colnames,nosort
+query I colnames
 SELECT (i.keys).n FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i
 ----
 n
@@ -659,7 +659,7 @@ n
 2
 3
 
-query II colnames,nosort
+query II colnames
 SELECT (i.keys).* FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i
 ----
 x  n
@@ -667,7 +667,7 @@ x  n
 2  2
 1  3
 
-query T nosort
+query T
 SELECT ((i.keys).*, 123) FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i
 ----
 ("(3,1)",123)
@@ -678,7 +678,7 @@ subtest generate_subscripts
 
 # Basic use cases
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM generate_subscripts(ARRAY[3,2,1])
 ----
 generate_subscripts
@@ -686,7 +686,7 @@ generate_subscripts
 2
 3
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1)
 ----
 generate_subscripts
@@ -694,7 +694,7 @@ generate_subscripts
 2
 3
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1, false)
 ----
 generate_subscripts
@@ -702,7 +702,7 @@ generate_subscripts
 2
 3
 
-query I colnames,nosort
+query I colnames
 SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1, true)
 ----
 generate_subscripts
@@ -710,7 +710,7 @@ generate_subscripts
 2
 1
 
-query I colnames,nosort
+query I colnames
 SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1) AS s
 ----
 s
@@ -719,7 +719,7 @@ s
 3
 4
 
-query I colnames,nosort
+query I colnames
 SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1, true) AS s
 ----
 s
@@ -838,31 +838,31 @@ generate_subscripts
 
 subtest srf_errors
 
-query error set-returning functions are not allowed in ORDER BY
+query error generator functions are not allowed in ORDER BY
 SELECT * FROM t ORDER BY generate_series(1, 3)
 
-query error set-returning functions are not allowed in WHERE
+query error generator functions are not allowed in WHERE
 SELECT * FROM t WHERE generate_series(1, 3) < 3
 
-query error set-returning functions are not allowed in HAVING
+query error generator functions are not allowed in HAVING
 SELECT * FROM t HAVING generate_series(1, 3) < 3
 
-query error set-returning functions are not allowed in LIMIT
+query error generator functions are not allowed in LIMIT
 SELECT * FROM t LIMIT generate_series(1, 3)
 
-query error set-returning functions are not allowed in OFFSET
+query error generator functions are not allowed in OFFSET
 SELECT * FROM t OFFSET generate_series(1, 3)
 
-query error set-returning functions are not allowed in VALUES
+query error generator functions are not allowed in VALUES
 VALUES (generate_series(1,3))
 
-statement error set-returning functions are not allowed in DEFAULT
+statement error generator functions are not allowed in DEFAULT
 CREATE TABLE uu (x INT DEFAULT generate_series(1, 3))
 
-statement error set-returning functions are not allowed in CHECK
+statement error generator functions are not allowed in CHECK
 CREATE TABLE uu (x INT CHECK (generate_series(1, 3) < 3))
 
-statement error generate_series\(\): set-returning functions are not allowed in STORED COMPUTED COLUMN
+statement error generate_series\(\): generator functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE uu (x INT AS (generate_series(1, 3)) STORED)
 
 subtest correlated_srf
@@ -1076,28 +1076,28 @@ subtest liquibase_example_query
 
 subtest unnest_with_tuple_types
 
-query T colnames,nosort
+query T colnames
 SELECT unnest(ARRAY[(1,2),(3,4)])
 ----
 unnest
 (1,2)
 (3,4)
 
-query II colnames,nosort
+query II colnames
 SELECT (unnest(ARRAY[(1,2),(3,4)])).*
 ----
 ?column?  ?column?
 1         2
 3         4
 
-query T colnames,nosort
+query T colnames
 SELECT * FROM unnest(ARRAY[(1,2),(3,4)])
 ----
 unnest
 (1,2)
 (3,4)
 
-query T colnames,nosort
+query T colnames
 SELECT t.* FROM unnest(ARRAY[(1,2),(3,4)]) AS t
 ----
 t
@@ -1107,27 +1107,27 @@ t
 
 subtest variadic_unnest
 
-query T nosort
+query T
 SELECT unnest(ARRAY[1,2], ARRAY['a','b'])
 ----
 (1,a)
 (2,b)
 
-query T nosort
+query T
 SELECT unnest(ARRAY[1,2], ARRAY['a'], ARRAY[1.1, 2.2, 3.3])
 ----
 (1,a,1.1)
-(2,,2.2)
+(2,,2.2)  
 (,,3.3)
 
-query IT colnames,nosort
+query IT colnames
 SELECT * FROM unnest(ARRAY[1,2], ARRAY['a', 'b'])
 ----
 unnest unnest
 1  a
 2  b
 
-query ITT colnames,nosort
+query ITT colnames
 SELECT * FROM unnest(ARRAY[1,2], ARRAY['a'], ARRAY[1.1, 2.2, 3.3])
 ----
 unnest unnest unnest
@@ -1135,12 +1135,12 @@ unnest unnest unnest
 2    NULL 2.2
 NULL NULL 3.3
 
-query II colnames,nosort
+query II colnames
 SELECT * FROM unnest(array[1,2], array[3,4,5]) AS t(a, b);
 ----
 a    b
-1    3
-2    4
+1    3  
+2    4  
 NULL 5
 
 query I rowsort
@@ -1301,108 +1301,3 @@ SELECT * FROM t95615, LATERAL ROWS FROM (f95615(), f95615()) WITH ORDINALITY
 
 statement ok
 RESET testing_optimizer_disable_rule_probability
-
-# Regression test for issue #95315.
-statement ok
-CREATE TABLE t95315 (c1 INT, c2 FLOAT);
-
-statement ok
-INSERT INTO t95315 VALUES (1, 4.3), (2, 5.4), (3, 6), (4, 7);
-
-# Regression test for issue #95315.
-# A query which uses a project set involving simple column expressions does
-# not error out. Results verified on postgres.
-query IIF
-SELECT 1,c1,c2 FROM t95315 JOIN ROWS FROM (CAST(c1 AS INT), CAST(c2 AS INT)) USING (c1, c2) ORDER BY 1,2,3;
-----
-1  3  6
-1  4  7
-
-subtest generator-syntax
-
-# Regression test for #97119 and #94890 - return syntax error when CASE or
-# COALESCE is used with a set-generating function as argument.
-statement error pq: set-returning functions are not allowed in CASE
-SELECT CASE generate_series(1, 3) WHEN 3 THEN 0 ELSE 1 END;
-
-statement error pq: set-returning functions are not allowed in CASE
-SELECT CASE WHEN true THEN generate_series(1, 3) ELSE 1 END;
-
-statement error pq: set-returning functions are not allowed in CASE
-SELECT CASE WHEN false THEN 1 ELSE generate_series(1, 3) END;
-
-statement error pq: set-returning functions are not allowed in COALESCE
-SELECT COALESCE(generate_series(1, 10));
-
-# A subquery with a generator function is allowed within CASE and COALESCE.
-query I rowsort
-SELECT CASE WHEN true THEN (SELECT * FROM generate_series(1, 3) LIMIT 1) ELSE 1 END;
-----
-1
-
-query I rowsort
-SELECT COALESCE((SELECT * FROM generate_series(1, 3) LIMIT 1));
-----
-1
-
-# Aggregate functions within CASE and COALESCE are allowed.
-query R rowsort
-SELECT CASE WHEN true THEN sum(x) ELSE 1 END FROM xy;
-----
-15
-
-query R rowsort
-SELECT COALESCE(sum(x)) FROM xy;
-----
-15
-
-# Window functions within CASE and COALESCE are allowed.
-query R rowsort
-SELECT CASE WHEN true THEN sum(x) OVER () ELSE 1 END FROM xy;
-----
-15
-15
-15
-15
-15
-
-query R rowsort
-SELECT COALESCE(sum(x) OVER ()) FROM xy;
-----
-15
-15
-15
-15
-15
-
-# IF does not allow generator functions.
-statement error pq: set-returning functions are not allowed in IF
-SELECT IF(x > y, generate_series(1, 3), 0) FROM xy;
-
-# IFNULL does not allow generator functions. Note that the error mentions
-# COALESCE because IFNULL is parsed directly as a COALESCE expression.
-statement error pq: set-returning functions are not allowed in COALESCE
-SELECT IFNULL(1, generate_series(1, 2));
-
-# NULLIF allows generator functions.
-query I rowsort
-SELECT NULLIF(generate_series(1, x), generate_series(1, 3)) from xy;
-----
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-NULL
-4
-NULL
-NULL
-NULL
-4
-5

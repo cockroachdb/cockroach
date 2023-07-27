@@ -15,8 +15,9 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { createSelector } from "reselect";
 import {
-  createSelectorForKeyedCachedDataField,
+  CachedDataReducerState,
   jobsKey,
   refreshJobs,
 } from "src/redux/apiReducers";
@@ -54,35 +55,45 @@ export const columnsLocalSetting = new LocalSetting<AdminUIState, string[]>(
   null,
 );
 
-const selectJobsState =
-  createSelectorForKeyedCachedDataField<JobsResponseMessage>(
-    "jobs",
-    (state: AdminUIState, _props) => {
-      const type = typeSetting.selector(state);
-      const status = statusSetting.selector(state);
-      const show = showSetting.selector(state);
-      const showAsNum = parseInt(show, 10);
-      return jobsKey(status, type, isNaN(showAsNum) ? 0 : showAsNum);
-    },
-  );
+const selectJobsState = createSelector(
+  [
+    (state: AdminUIState) => state.cachedData.jobs,
+    (_state: AdminUIState, key: string) => key,
+  ],
+  (jobs, key): CachedDataReducerState<JobsResponseMessage> => {
+    if (!jobs) {
+      return null;
+    }
+    return jobs[key];
+  },
+);
 
 const mapStateToProps = (
   state: AdminUIState,
-  props: RouteComponentProps,
+  _: RouteComponentProps,
 ): JobsPageStateProps => {
   const sort = sortSetting.selector(state);
   const status = statusSetting.selector(state);
   const show = showSetting.selector(state);
   const type = typeSetting.selector(state);
   const columns = columnsLocalSetting.selectorToArray(state);
-  const jobsResponse = selectJobsState(state, props);
+  const showAsNum = parseInt(show, 10);
+  const key = jobsKey(status, type, isNaN(showAsNum) ? 0 : showAsNum);
+  const jobsState = selectJobsState(state, key);
+  const jobs = jobsState ? jobsState.data : null;
+  const jobsError = jobsState ? jobsState.lastError : null;
+  const lastUpdated = jobsError ? jobsState.requestedAt : jobsState?.setAt;
   return {
     sort,
     status,
     show,
     type,
+    jobs,
+    reqInFlight: jobsState?.inFlight,
+    isDataValid: jobsState?.valid,
+    jobsError,
     columns,
-    jobsResponse,
+    lastUpdated,
   };
 };
 

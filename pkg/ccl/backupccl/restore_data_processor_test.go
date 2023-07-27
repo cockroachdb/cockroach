@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -47,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble/sstable"
@@ -151,7 +149,6 @@ func clientKVsToEngineKVs(kvs []kv.KeyValue) []storage.MVCCKeyValue {
 
 func TestIngest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 	t.Run("batch=default", func(t *testing.T) {
 		runTestIngest(t, func(_ *cluster.Settings) {})
@@ -168,7 +165,6 @@ func TestIngest(t *testing.T) {
 
 func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -396,11 +392,10 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			}
 			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, srcPrefix, newPrefix)
 
-			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx, mockRestoreDataSpec)
+			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(&evalCtx, &flowCtx, mockRestoreDataSpec)
 			require.NoError(t, err)
-			sst, res, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, nil)
+			sst, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry)
 			require.NoError(t, err)
-			require.Equal(t, resumeEntry{done: true, idx: len(restoreSpanEntry.Files)}, *res)
 			rewriter, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.TableRekeys,
 				mockRestoreDataSpec.TenantRekeys, false /* restoreTenantFromStream */)
 			require.NoError(t, err)
@@ -438,10 +433,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 }
 
 func newTestingRestoreDataProcessor(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	flowCtx *execinfra.FlowCtx,
-	spec execinfrapb.RestoreDataSpec,
+	evalCtx *eval.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.RestoreDataSpec,
 ) (*restoreDataProcessor, error) {
 	rd := &restoreDataProcessor{
 		ProcessorBase: execinfra.ProcessorBase{
@@ -451,7 +443,6 @@ func newTestingRestoreDataProcessor(
 		},
 		flowCtx: flowCtx,
 		spec:    spec,
-		qp:      backuputils.NewMemoryBackedQuotaPool(ctx, nil, "restore-mon", 0),
 	}
 	return rd, nil
 }

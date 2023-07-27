@@ -22,8 +22,7 @@ import {
 import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
 import Long from "long";
 
-const statements =
-  statementsPagePropsFixture.statementsResponse.data.statements;
+const { statements } = statementsPagePropsFixture;
 
 const withinColumn =
   (width = "150px"): DecoratorFn =>

@@ -10,7 +10,7 @@
 
 import { assert } from "chai";
 
-import { filterBySearchQuery } from "src/sqlActivity/util";
+import { filterBySearchQuery } from "src/statementsPage";
 import { AggregateStatistics } from "../statementsTable";
 import { FlatPlanNode } from "../statementDetails";
 

@@ -51,12 +51,11 @@ func registerPebbleYCSB(r registry.Registry) {
 
 			d := dur
 			r.Add(registry.TestSpec{
-				Name:      name,
-				Owner:     registry.OwnerStorage,
-				Benchmark: true,
-				Timeout:   12 * time.Hour,
-				Cluster:   r.MakeClusterSpec(5, spec.CPU(16)),
-				Tags:      registry.Tags(tag),
+				Name:    name,
+				Owner:   registry.OwnerStorage,
+				Timeout: 12 * time.Hour,
+				Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
+				Tags:    []string{tag},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runPebbleYCSB(ctx, t, c, size, pebble, d, nil, true /* artifacts */)
 				},
@@ -66,13 +65,12 @@ func registerPebbleYCSB(r registry.Registry) {
 
 	// Add the race build.
 	r.Add(registry.TestSpec{
-		Name:      "pebble/ycsb/A/race/duration=30",
-		Owner:     registry.OwnerStorage,
-		Benchmark: true,
-		Timeout:   12 * time.Hour,
-		Cluster:   r.MakeClusterSpec(5, spec.CPU(16)),
-		Leases:    registry.MetamorphicLeases,
-		Tags:      registry.Tags("pebble_nightly_ycsb_race"),
+		Name:    "pebble/ycsb/A/race/duration=30",
+		Owner:   registry.OwnerStorage,
+		Timeout: 12 * time.Hour,
+		Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
+		Leases:  registry.MetamorphicLeases,
+		Tags:    []string{"pebble_nightly_ycsb_race"},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPebbleYCSB(ctx, t, c, 64, pebble, 30, []string{"A"}, false /* artifacts */)
 		},

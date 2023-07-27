@@ -16,7 +16,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -409,7 +408,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	{
-		var msg kvserverpb.RaftReplicaID
+		var msg roachpb.RaftReplicaID
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftReplicaIDKey(rangeID)
 		}, &msg, func(rangeID roachpb.RangeID) error {
@@ -504,7 +503,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			// TODO(tbg): if clearRangeData were in this package we could destroy more
 			// effectively even if for some reason we had in the past written state
 			// other than the HardState here (not supposed to happen, but still).
-			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey(), storage.ClearOptions{}); err != nil {
+			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey()); err != nil {
 				return nil, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
 			}
 			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)

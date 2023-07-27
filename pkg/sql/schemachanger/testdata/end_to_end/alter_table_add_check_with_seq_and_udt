@@ -1,0 +1,347 @@
+setup
+CREATE SEQUENCE s;
+CREATE TYPE typ AS ENUM ('a', 'b');
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+----
+...
++object {100 101 s} -> 104
++object {100 101 typ} -> 105
++object {100 101 _typ} -> 106
++object {100 101 t} -> 107
+
+test
+ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a')
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_constraint
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 107
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›))
+      OR (‹j›::‹typ› = ‹'a'›))
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dependedOnBy:
+  +  - byId: true
+  +    id: 107
+     families:
+     - columnIds:
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  version: "1"
+  +  referencingDescriptorIds:
+  +  - 107
+  +  version: "2"
+upsert descriptor #106
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  version: "1"
+  +  referencingDescriptorIds:
+  +  - 107
+  +  version: "2"
+upsert descriptor #107
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    constraintId: 2
+  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+     id: 107
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        constraintId: 2
+  +        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    revertible: true
+  +  dependedOnBy:
+  +  - byId: true
+  +    id: 107
+     families:
+     - columnIds:
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+   type:
+     arrayTypeId: 106
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    revertible: true
+     enumMembers:
+     - logicalRepresentation: a
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  version: "1"
+  +  referencingDescriptorIds:
+  +  - 107
+  +  version: "2"
+upsert descriptor #106
+  ...
+       family: ArrayFamily
+       oid: 100106
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    revertible: true
+     id: 106
+     kind: ALIAS
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  version: "1"
+  +  referencingDescriptorIds:
+  +  - 107
+  +  version: "2"
+upsert descriptor #107
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    constraintId: 2
+  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
+  +          nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
+  +        statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 107
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        constraintId: 2
+  +        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))"
+  descriptor IDs: [104 105 106 107]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 2 with 1 ValidationType op
+validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #107
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 2 with 7 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    revertible: true
+     dependedOnBy:
+     - byId: true
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   type:
+     arrayTypeId: 106
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    revertible: true
+     enumMembers:
+     - logicalRepresentation: a
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+       family: ArrayFamily
+       oid: 100106
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    revertible: true
+     id: 106
+     kind: ALIAS
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #107
+  ...
+       constraintId: 2
+       expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Validating
+  +    name: check_i_j
+     columns:
+     - id: 1
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
+  -          nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
+  -        statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
+  -        statementTag: ALTER TABLE
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 107
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        - 2
+  -        constraintId: 2
+  -        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 107
+commit transaction #4
+# end PostCommitPhase

@@ -28,10 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/maruel/panicparse/v2/stack"
 	"github.com/petermattis/goid"
 )
@@ -60,8 +57,8 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [priority] [uncertainty-limit=<int>[,<int>]]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
 //	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 //
@@ -75,7 +72,7 @@ import (
 // check-opt-no-conflicts            req=<req-name>
 // is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
 //
-// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [strength=<strength>]
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
@@ -116,7 +113,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.ScanArgs(t, "epoch", &epoch)
 				}
 
-				iso := concurrency.ScanIsoLevel(t, d)
 				priority := scanTxnPriority(t, d)
 
 				uncertaintyLimit := ts
@@ -134,7 +130,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txn = &roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{
 						ID:             id,
-						IsoLevel:       iso,
 						Epoch:          enginepb.TxnEpoch(epoch),
 						WriteTimestamp: ts,
 						MinTimestamp:   ts,
@@ -399,26 +394,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				seqNum := enginepb.TxnSeq(seq)
 
-				// Consider locks to be unreplicated if unspecified.
 				dur := lock.Unreplicated
 				if d.HasArg("dur") {
 					dur = scanLockDurability(t, d)
 				}
-				var str lock.Strength
-				if d.HasArg("str") {
-					str = concurrency.ScanLockStrength(t, d)
-				} else {
-					// If no lock strength is provided in the test, infer it from the
-					// durability.
-					switch dur {
-					case lock.Unreplicated:
-						str = lock.Exclusive
-					case lock.Replicated:
-						str = lock.Intent
-					default:
-						t.Fatal("unknown durability")
-					}
-				}
+
 				// Confirm that the request has a corresponding write request.
 				found := false
 				for _, ru := range guard.Req.Requests {
@@ -439,8 +419,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnAcquire.Sequence = seqNum
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
-					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur, str)
+					log.Eventf(ctx, "txn %s @ %s", txn.ID.Short(), key)
+					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur)
 					m.OnLockAcquired(ctx, &acq)
 				})
 				return c.waitAndCollect(t, mon)
@@ -489,7 +469,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnUpdate.WriteTimestamp.Forward(ts)
 
 				mon.runSync("update lock", func(ctx context.Context) {
-					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.Short(), key)
+					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.ID.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
 					up := roachpb.MakeLockUpdate(txnUpdate, span)
 					m.OnLockUpdated(ctx, &up)
@@ -511,7 +491,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 
 				mon.runSync("update txn", func(ctx context.Context) {
-					log.Eventf(ctx, "%s %s", verb, redact.Safe(txnName))
+					log.Eventf(ctx, "%s %s", verb, txnName)
 					if err := c.updateTxnRecord(txn.ID, status, ts); err != nil {
 						d.Fatalf(t, err.Error())
 					}
@@ -732,21 +712,16 @@ func (c *cluster) PushTransaction(
 		}
 		defer c.unregisterPush(push)
 	}
-	var pusherIso isolation.Level
-	var pusherPri enginepb.TxnPriority
+	var pusherPriority enginepb.TxnPriority
 	if h.Txn != nil {
-		pusherIso = h.Txn.IsoLevel
-		pusherPri = h.Txn.Priority
+		pusherPriority = h.Txn.Priority
 	} else {
-		pusherIso = isolation.Serializable
-		pusherPri = roachpb.MakePriority(h.UserPriority)
+		pusherPriority = roachpb.MakePriority(h.UserPriority)
 	}
 	pushTo := h.Timestamp.Next()
 	for {
 		// Is the pushee pushed?
 		pusheeTxn, pusheeRecordSig := pusheeRecord.asTxn()
-		pusheeIso := pusheeTxn.IsoLevel
-		pusheePri := pusheeTxn.Priority
 		// NOTE: this logic is adapted from cmd_push_txn.go.
 		var pusherWins bool
 		switch {
@@ -758,7 +733,7 @@ func (c *cluster) PushTransaction(
 			return pusheeTxn, nil
 		case pushType == kvpb.PUSH_TOUCH:
 			pusherWins = false
-		case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri):
+		case txnwait.CanPushWithPriority(pusherPriority, pusheeTxn.Priority):
 			pusherWins = true
 		default:
 			pusherWins = false
@@ -957,7 +932,7 @@ func (c *cluster) detectDeadlocks() {
 						}
 						chainBuf.WriteString(id.Short())
 					}
-					log.Eventf(origPush.ctx, "dependency cycle detected %s", redact.Safe(chainBuf.String()))
+					log.Eventf(origPush.ctx, "dependency cycle detected %s", chainBuf.String())
 				}
 				break
 			}
@@ -1028,8 +1003,8 @@ func (c *cluster) resetNamespace() {
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
 	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []kvpb.Request,
-) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet) {
-	latchSpans, lockSpans = &spanset.SpanSet{}, &lockspanset.LockSpanSet{}
+) (latchSpans, lockSpans *spanset.SpanSet) {
+	latchSpans, lockSpans = &spanset.SpanSet{}, &spanset.SpanSet{}
 	h := kvpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
@@ -1040,14 +1015,12 @@ func (c *cluster) collectSpans(
 	}
 
 	// Commands may create a large number of duplicate spans. De-duplicate
-	// them to reduce the number of spans we pass to the {spanlatch,Lock}Manager.
-	latchSpans.SortAndDedup()
-	lockSpans.SortAndDeDup()
-	if err := latchSpans.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	if err := lockSpans.Validate(); err != nil {
-		t.Fatal(err)
+	// them to reduce the number of spans we pass to the spanlatch manager.
+	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
+		s.SortAndDedup()
+		if err := s.Validate(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return latchSpans, lockSpans
 }
@@ -1083,10 +1056,8 @@ type monitoredGoroutine struct {
 }
 
 func newMonitor() *monitor {
-	tr := tracing.NewTracer()
-	tr.SetRedactable(true)
 	return &monitor{
-		tr: tr,
+		tr: tracing.NewTracer(),
 		gs: make(map[*monitoredGoroutine]struct{}),
 	}
 }
@@ -1153,7 +1124,7 @@ func (m *monitor) collectRecordings() string {
 					continue
 				}
 				logs = append(logs, logRecord{
-					g: g, value: string(log.Msg()),
+					g: g, value: log.Msg().StripMarkers(),
 				})
 				g.prevEvents++
 			}
@@ -1273,7 +1244,7 @@ func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 		}
 		stalledCall := firstNonStdlib(stat.Stack.Calls)
 		log.Eventf(g.ctx, "blocked on %s in %s.%s",
-			redact.Safe(stat.State), redact.Safe(stalledCall.Func.DirName), redact.Safe(stalledCall.Func.Name))
+			stat.State, stalledCall.Func.DirName, stalledCall.Func.Name)
 	}
 }
 

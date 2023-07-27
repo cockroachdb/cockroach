@@ -42,34 +42,23 @@ type PrettyScanner struct {
 // pretty-printed keys from the table part of the keys space (i.e. inputs
 // starting with "/Table"). The supplied function needs to parse the part that
 // comes after "/Table".
-//
-// If tenantParser is not nil, it will replace the default function for scanning
-// pretty-printed keys from the tenant part of the keys space (i.e. inputs
-// starting with "/Tenant"). The supplied function needs to parse the part that
-// comes after "/Tenant".
-//
-// At most one function can be non-nil.
-func MakePrettyScanner(tableParser, tenantParser keys.KeyParserFunc) PrettyScanner {
+func MakePrettyScanner(tableParser keys.KeyParserFunc) PrettyScanner {
 	dict := keys.KeyDict
-	if tableParser != nil && tenantParser != nil {
-		panic("both tableParser and tenantParser are non-nil")
-	}
-	if tableParser != nil || tenantParser != nil {
-		dict = customizeKeyComprehension(dict, tableParser, tenantParser)
+	if tableParser != nil {
+		dict = customizeKeyComprehension(dict, tableParser)
 	}
 	return PrettyScanner{
 		keyComprehension: dict,
 		// If we specified a custom parser, forget about the roundtrip.
-		validateRoundTrip: tableParser == nil && tenantParser == nil,
+		validateRoundTrip: tableParser == nil,
 	}
 }
 
 // customizeKeyComprehension takes as input a KeyComprehensionTable and
 // overwrites the "pretty scanner" function for the tables key space (i.e. for
-// keys starting with "/Table") or for the tenant keys space (i.e. for keys
-// starting with "/Tenant"). The modified table is returned.
+// keys starting with "/Table"). The modified table is returned.
 func customizeKeyComprehension(
-	table keys.KeyComprehensionTable, tableParser, tenantParser keys.KeyParserFunc,
+	table keys.KeyComprehensionTable, tableParser keys.KeyParserFunc,
 ) keys.KeyComprehensionTable {
 	// Make a deep copy of the table.
 	cpy := make(keys.KeyComprehensionTable, len(table))
@@ -80,28 +69,20 @@ func customizeKeyComprehension(
 	}
 	table = cpy
 
-	// Find the part of the table that deals with parsing table / tenant data.
-	// We'll perform surgery on it to apply `tableParser` or 'tenantParser'.
+	// Find the part of the table that deals with parsing table data.
+	// We'll perform surgery on it to apply `tableParser`.
 	for i := range table {
 		region := &table[i]
-		if region.Name == "/Table" && tableParser != nil {
+		if region.Name == "/Table" {
 			if len(region.Entries) != 1 {
-				panic(fmt.Sprintf(`expected a single entry under "/Table", got: %d`, len(region.Entries)))
+				panic(fmt.Sprintf("expected a single entry under \"/Table\", got: %d", len(region.Entries)))
 			}
 			subRegion := &region.Entries[0]
 			subRegion.PSFunc = tableParser
 			return table
 		}
-		if region.Name == "/Tenant" && tenantParser != nil {
-			if len(region.Entries) != 1 {
-				panic(fmt.Sprintf(`expected a single entry under "/Tenant", got: %d`, len(region.Entries)))
-			}
-			subRegion := &region.Entries[0]
-			subRegion.PSFunc = tenantParser
-			return table
-		}
 	}
-	panic(`failed to find required "/Table" and / or "/Tenant" entry`)
+	panic("failed to find required \"/Table\" entry")
 }
 
 // Scan is a partial right inverse to PrettyPrint: it takes a key formatted for

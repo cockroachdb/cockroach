@@ -9,13 +9,11 @@
 package changefeedccl
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"math"
 	"net/url"
 	"strings"
@@ -143,8 +141,6 @@ func (s *kafkaSink) getConcreteType() sinkType {
 	return sinkTypeKafka
 }
 
-type compressionCodec sarama.CompressionCodec
-
 var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
 	"NONE":   sarama.CompressionNone,
 	"GZIP":   sarama.CompressionGZIP,
@@ -153,22 +149,26 @@ var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
 	"ZSTD":   sarama.CompressionZSTD,
 }
 
-func getValidCompressionCodecs() (codecs string) {
-	for codec := range saramaCompressionCodecOptions {
-		if codecs != "" {
-			codecs += ", "
-		}
-		codecs += codec
+func validateCompressionCodec(s string) (sarama.CompressionCodec, error) {
+	codec, ok := saramaCompressionCodecOptions[s]
+	if !ok {
+		return -1, errors.Newf("could not validate compression codec '%s'", s)
 	}
-	return codecs
+	return codec, nil
 }
 
-func (j *compressionCodec) UnmarshalText(b []byte) error {
-	var c sarama.CompressionCodec
-	if err := c.UnmarshalText(bytes.ToLower(b)); err != nil {
-		return errors.WithHintf(err, "supported compression codecs are %s", getValidCompressionCodecs())
+type compressionCodec sarama.CompressionCodec
+
+func (j *compressionCodec) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
 	}
-	*j = compressionCodec(c)
+	codec, err := validateCompressionCodec(s)
+	if err != nil {
+		return err
+	}
+	*j = compressionCodec(codec)
 	return nil
 }
 
@@ -712,7 +712,9 @@ var _ sarama.Partitioner = &changefeedPartitioner{}
 var _ sarama.PartitionerConstructor = newChangefeedPartitioner
 
 func newChangefeedPartitioner(topic string) sarama.Partitioner {
-	return sarama.NewCustomHashPartitioner(fnv.New32a)(topic)
+	return &changefeedPartitioner{
+		hash: sarama.NewHashPartitioner(topic),
+	}
 }
 
 func (p *changefeedPartitioner) RequiresConsistency() bool { return true }
@@ -823,7 +825,7 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 }
 
 func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
-	switch strings.ToUpper(a) {
+	switch a {
 	case "0", "NONE":
 		return sarama.NoResponse, nil
 	case "1", "ONE":

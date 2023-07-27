@@ -79,13 +79,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // access to r.mu.stateLoader.
 //
 // Entries can return log entries that are not yet stable in durable storage.
-func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
-	return r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
-}
-
-func (r *replicaRaftStorage) TypedEntries(
-	lo, hi kvpb.RaftIndex, maxBytes uint64,
-) ([]raftpb.Entry, error) {
+func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
@@ -97,10 +91,8 @@ func (r *replicaRaftStorage) TypedEntries(
 }
 
 // raftEntriesLocked requires that r.mu is held for writing.
-func (r *Replica) raftEntriesLocked(
-	lo, hi kvpb.RaftIndex, maxBytes uint64,
-) ([]raftpb.Entry, error) {
-	return (*replicaRaftStorage)(r).TypedEntries(lo, hi, maxBytes)
+func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
 }
 
 // invalidLastTerm is an out-of-band value for r.mu.lastTermNotDurable that
@@ -109,14 +101,9 @@ func (r *Replica) raftEntriesLocked(
 const invalidLastTerm = 0
 
 // Term implements the raft.Storage interface.
-func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
-	term, err := r.TypedTerm(kvpb.RaftIndex(i))
-	return uint64(term), err
-}
-
-// TypedTerm requires that r.mu is held for writing because it requires exclusive
+// Term requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
-func (r *replicaRaftStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	// TODO(nvanbenschoten): should we set r.mu.lastTermNotDurable when
 	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
 	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
@@ -128,43 +115,38 @@ func (r *replicaRaftStorage) TypedTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 }
 
 // raftTermLocked requires that r.mu is locked for writing.
-func (r *Replica) raftTermLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return (*replicaRaftStorage)(r).TypedTerm(i)
+func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
+	return (*replicaRaftStorage)(r).Term(i)
 }
 
 // GetTerm returns the term of the given index in the raft log. It requires that
 // r.mu is not held.
-func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+func (r *Replica) GetTerm(i uint64) (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftTermLocked(i)
 }
 
 // raftLastIndexRLocked requires that r.mu is held for reading.
-func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
+func (r *Replica) raftLastIndexRLocked() uint64 {
 	return r.mu.lastIndexNotDurable
 }
 
 // LastIndex implements the raft.Storage interface.
 // LastIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) LastIndex() (uint64, error) {
-	index, err := r.TypedLastIndex()
-	return uint64(index), err
-}
-
-func (r *replicaRaftStorage) TypedLastIndex() (kvpb.RaftIndex, error) {
 	return (*Replica)(r).raftLastIndexRLocked(), nil
 }
 
 // GetLastIndex returns the index of the last entry in the replica's Raft log.
-func (r *Replica) GetLastIndex() kvpb.RaftIndex {
+func (r *Replica) GetLastIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.raftLastIndexRLocked()
 }
 
 // raftFirstIndexRLocked requires that r.mu is held for reading.
-func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
+func (r *Replica) raftFirstIndexRLocked() uint64 {
 	// TruncatedState is guaranteed to be non-nil.
 	return r.mu.state.TruncatedState.Index + 1
 }
@@ -172,23 +154,18 @@ func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 // FirstIndex implements the raft.Storage interface.
 // FirstIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
-	index, err := r.TypedFirstIndex()
-	return uint64(index), err
-}
-
-func (r *replicaRaftStorage) TypedFirstIndex() (kvpb.RaftIndex, error) {
 	return (*Replica)(r).raftFirstIndexRLocked(), nil
 }
 
 // GetFirstIndex returns the index of the first entry in the replica's Raft log.
-func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
+func (r *Replica) GetFirstIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.raftFirstIndexRLocked()
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
-func (r *Replica) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
+func (r *Replica) GetLeaseAppliedIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.LeaseAppliedIndex
@@ -214,8 +191,8 @@ func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
 	return raftpb.Snapshot{
 		Metadata: raftpb.SnapshotMetadata{
-			Index: uint64(r.mu.state.RaftAppliedIndex),
-			Term:  uint64(r.mu.state.RaftAppliedIndexTerm),
+			Index: r.mu.state.RaftAppliedIndex,
+			Term:  r.mu.state.RaftAppliedIndexTerm,
 		},
 	}, nil
 }
@@ -313,8 +290,7 @@ type IncomingSnapshot struct {
 	DataSize         int64
 	snapType         kvserverpb.SnapshotRequest_Type
 	placeholder      *ReplicaPlaceholder
-	raftAppliedIndex kvpb.RaftIndex      // logging only
-	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	raftAppliedIndex uint64 // logging only
 }
 
 func (s IncomingSnapshot) String() string {
@@ -362,8 +338,8 @@ func snapshot(
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
-				Index: uint64(state.RaftAppliedIndex),
-				Term:  uint64(state.RaftAppliedIndexTerm),
+				Index: state.RaftAppliedIndex,
+				Term:  state.RaftAppliedIndexTerm,
 				// Synthesize our raftpb.ConfState from desc.
 				ConfState: desc.Replicas().ConfState(),
 			},
@@ -595,11 +571,11 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
 
-	if uint64(state.RaftAppliedIndex) != nonemptySnap.Metadata.Index {
+	if state.RaftAppliedIndex != nonemptySnap.Metadata.Index {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			state.RaftAppliedIndex, nonemptySnap.Metadata.Index)
 	}
-	if uint64(state.RaftAppliedIndexTerm) != nonemptySnap.Metadata.Term {
+	if state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
 	}
@@ -776,9 +752,9 @@ func writeUnreplicatedSST(
 
 	if err := sl.SetRaftTruncatedState(
 		ctx, &unreplicatedSST,
-		&kvserverpb.RaftTruncatedState{
-			Index: kvpb.RaftIndex(meta.Index),
-			Term:  kvpb.RaftTerm(meta.Term),
+		&roachpb.RaftTruncatedState{
+			Index: meta.Index,
+			Term:  meta.Term,
 		},
 	); err != nil {
 		return nil, false, errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")

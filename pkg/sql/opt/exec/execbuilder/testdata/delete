@@ -23,7 +23,7 @@ INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 statement count 2
 DELETE FROM kv WHERE k=3 OR v=6
 
-query II rowsort
+query II
 DELETE FROM kv RETURNING k, v
 ----
 1 2
@@ -226,7 +226,7 @@ statement ok
 SET tracing = on,kv; DELETE FROM a; SET tracing = off
 
 # Ensure that DelRange requests are chunked for DELETE FROM...
-query TT nosort
+query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
 ----
@@ -247,7 +247,7 @@ SET tracing = on,kv; DELETE FROM a WHERE a = 5;
 statement ok
 SET tracing = off
 
-query TT nosort
+query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
@@ -266,7 +266,7 @@ SELECT * FROM multicf
 statement ok
 SET tracing = on,kv; DELETE FROM multicf WHERE a = 5; SET tracing = off
 
-query TT nosort
+query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----

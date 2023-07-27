@@ -227,7 +227,7 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~44KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~43KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
@@ -335,7 +335,7 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~39KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~38KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
@@ -429,7 +429,7 @@ INNER JOIN LATERAL (
 )
 ON a = v
 ----
-memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10])
+memo (optimized, ~15KB, required=[presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10])
  ├── G1: (inner-join-apply G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10]
  │         ├── best: (inner-join-apply G2 G3 G4)
@@ -1269,7 +1269,7 @@ memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
 memo expect=ReorderJoins
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (full-join G2 G3 G4) (full-join G3 G2 G4) (merge-join G2 G3 G5 full-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (full-join G2 G3 G4)
@@ -1438,7 +1438,7 @@ New expression 1 of 1:
 memo
 SELECT * FROM abc LEFT OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (left-join G2 G3 G4) (right-join G3 G2 G4) (merge-join G2 G3 G5 left-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (left-join G2 G3 G4)
@@ -1911,7 +1911,7 @@ inner-join (lookup xyz@xy)
       └── y:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
 
 # Verify case where we generate multiple merge-joins.
-memo disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
 memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
@@ -1951,7 +1951,7 @@ memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G13: (variable l.u)
  └── G14: (variable r.u)
 
-exploretrace rule=GenerateMergeJoins disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+exploretrace rule=GenerateMergeJoins
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
 ----
@@ -2121,7 +2121,7 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized, ~17KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G3 G2 G4)
@@ -2159,7 +2159,7 @@ CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
 memo
 SELECT * FROM abc JOIN kfloat ON a=k
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,k:7])
+memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,k:7])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,k:7]
  │         ├── best: (inner-join G3 G2 G4)
@@ -2656,7 +2656,7 @@ No new expressions.
 memo expect-not=GenerateLookupJoins
 SELECT a,b,n,m FROM small INNER HASH JOIN abcd ON a=m
 ----
-memo (optimized, ~10KB, required=[presentation: a:6,b:7,n:2,m:1])
+memo (optimized, ~9KB, required=[presentation: a:6,b:7,n:2,m:1])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:6,b:7,n:2,m:1]
  │         ├── best: (inner-join G2 G3 G4)
@@ -7181,7 +7181,7 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~35KB, required=[presentation: name:16,popn_per_sqkm:22])
+memo (optimized, ~34KB, required=[presentation: name:16,popn_per_sqkm:22])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:16,popn_per_sqkm:22]
  │         ├── best: (project G2 G3 name)
@@ -10134,7 +10134,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~22KB, required=[presentation: ?column?:7])
+memo (optimized, ~21KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
@@ -12924,16 +12924,7 @@ CREATE TABLE t85353 (a INT, b INT)
 ----
 
 exec-ddl
-CREATE TABLE u85353 (
-  a INT,
-  b INT,
-  a_b_hash INT NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a, b)), 8)) VIRTUAL,
-  b_hash INT NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)) VIRTUAL,
-  INDEX a_b_idx (a_b_hash, a, b),
-  INDEX b_idx (b_hash, b),
-  CHECK (a_b_hash IN (0, 1, 2, 3, 4, 5, 6, 7)),
-  CHECK (b_hash IN (0, 1, 2, 3, 4, 5, 6, 7))
-)
+CREATE TABLE u85353 (a INT, b INT, INDEX (a,b) USING HASH, INDEX (b) USING HASH)
 ----
 
 exec-ddl
@@ -13003,91 +12994,71 @@ ALTER TABLE u85353 INJECT STATISTICS
 # should not reduce join selectivity and cause the following to
 # choose lookup join.
 opt
-EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@b_idx USING (b) WHERE u85353.a < 10;
+EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@u85353_b_idx USING (b) WHERE u85353.a < 10;
 ----
 explain
- ├── columns: info:13
+ ├── columns: info:11
  ├── mode: opt
- ├── immutable
  └── project
-      ├── columns: b:2!null a:1 a:6!null a_b_hash:8 b_hash:9
-      ├── immutable
-      ├── fd: (2,6)-->(8), (2)-->(9)
-      └── inner-join (hash)
-           ├── columns: t85353.a:1 t85353.b:2!null u85353.a:6!null u85353.b:7!null a_b_hash:8 b_hash:9
-           ├── immutable
-           ├── fd: (6,7)-->(8), (7)-->(9), (2)==(7), (7)==(2)
-           ├── project
-           │    ├── columns: a_b_hash:8 b_hash:9 u85353.a:6!null u85353.b:7
-           │    ├── immutable
-           │    ├── fd: (6,7)-->(8), (7)-->(9)
-           │    ├── select
-           │    │    ├── columns: u85353.a:6!null u85353.b:7
-           │    │    ├── index-join u85353
-           │    │    │    ├── columns: u85353.a:6 u85353.b:7
-           │    │    │    └── scan u85353@b_idx
-           │    │    │         ├── columns: u85353.b:7 u85353.rowid:10!null
-           │    │    │         ├── constraint: /9/7/10: [/0 - /7]
-           │    │    │         ├── flags: force-index=b_idx
-           │    │    │         ├── key: (10)
-           │    │    │         └── fd: (10)-->(7)
-           │    │    └── filters
-           │    │         └── u85353.a:6 < 10 [outer=(6), constraints=(/6: (/NULL - /9]; tight)]
-           │    └── projections
-           │         ├── mod(fnv32(crdb_internal.datums_to_bytes(u85353.a:6, u85353.b:7)), 8) [as=a_b_hash:8, outer=(6,7), immutable]
-           │         └── mod(fnv32(crdb_internal.datums_to_bytes(u85353.b:7)), 8) [as=b_hash:9, outer=(7), immutable]
-           ├── scan t85353
-           │    └── columns: t85353.a:1 t85353.b:2
-           └── filters
-                └── t85353.b:2 = u85353.b:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      ├── columns: b:2!null a:1 a:6!null
+      └── inner-join (merge)
+           ├── columns: t85353.a:1 t85353.b:2!null u85353.a:6!null u85353.b:7!null
+           ├── left ordering: +7
+           ├── right ordering: +2
+           ├── fd: (2)==(7), (7)==(2)
+           ├── select
+           │    ├── columns: u85353.a:6!null u85353.b:7
+           │    ├── ordering: +7
+           │    ├── index-join u85353
+           │    │    ├── columns: u85353.a:6 u85353.b:7
+           │    │    ├── ordering: +7
+           │    │    └── scan u85353@u85353_b_idx
+           │    │         ├── columns: u85353.b:7 u85353.rowid:8!null
+           │    │         ├── flags: force-index=u85353_b_idx
+           │    │         ├── key: (8)
+           │    │         ├── fd: (8)-->(7)
+           │    │         └── ordering: +7
+           │    └── filters
+           │         └── u85353.a:6 < 10 [outer=(6), constraints=(/6: (/NULL - /9]; tight)]
+           ├── sort
+           │    ├── columns: t85353.a:1 t85353.b:2
+           │    ├── ordering: +2
+           │    └── scan t85353
+           │         └── columns: t85353.a:1 t85353.b:2
+           └── filters (true)
 
 # The derived equijoin condition between the hash bucket column in
 # u85353@u85353_a_b_idx and a similar hash bucket function expression on t85353.b
 # should not reduce join selectivity and cause the following to
 # choose lookup join.
 opt
-EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@a_b_idx USING (a,b) WHERE u85353.a < 10;
+EXPLAIN (OPT) SELECT * FROM t85353 INNER JOIN u85353@u85353_a_b_idx USING (a,b) WHERE u85353.a < 10;
 ----
 explain
- ├── columns: info:13
+ ├── columns: info:11
  ├── mode: opt
- ├── immutable
  └── project
-      ├── columns: a:1!null b:2!null a_b_hash:8 b_hash:9
-      ├── immutable
-      ├── fd: (1,2)-->(8), (2)-->(9)
-      └── inner-join (hash)
-           ├── columns: t85353.a:1!null t85353.b:2!null u85353.a:6!null u85353.b:7!null a_b_hash:8 b_hash:9
-           ├── immutable
-           ├── fd: (6,7)-->(8), (7)-->(9), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
-           ├── project
-           │    ├── columns: a_b_hash:8 b_hash:9 u85353.a:6!null u85353.b:7
-           │    ├── immutable
-           │    ├── fd: (6,7)-->(8), (7)-->(9)
-           │    ├── scan u85353@a_b_idx
-           │    │    ├── columns: u85353.a:6!null u85353.b:7
-           │    │    ├── constraint: /8/6/7/10
-           │    │    │    ├── (/0/NULL - /0/9]
-           │    │    │    ├── (/1/NULL - /1/9]
-           │    │    │    ├── (/2/NULL - /2/9]
-           │    │    │    ├── (/3/NULL - /3/9]
-           │    │    │    ├── (/4/NULL - /4/9]
-           │    │    │    ├── (/5/NULL - /5/9]
-           │    │    │    ├── (/6/NULL - /6/9]
-           │    │    │    └── (/7/NULL - /7/9]
-           │    │    └── flags: force-index=a_b_idx
-           │    └── projections
-           │         ├── mod(fnv32(crdb_internal.datums_to_bytes(u85353.a:6, u85353.b:7)), 8) [as=a_b_hash:8, outer=(6,7), immutable]
-           │         └── mod(fnv32(crdb_internal.datums_to_bytes(u85353.b:7)), 8) [as=b_hash:9, outer=(7), immutable]
-           ├── select
+      ├── columns: a:1!null b:2!null
+      └── inner-join (merge)
+           ├── columns: t85353.a:1!null t85353.b:2!null u85353.a:6!null u85353.b:7!null
+           ├── left ordering: +6,+7
+           ├── right ordering: +1,+2
+           ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+           ├── scan u85353@u85353_a_b_idx
+           │    ├── columns: u85353.a:6!null u85353.b:7
+           │    ├── constraint: /6/7/8: (/NULL - /9]
+           │    ├── flags: force-index=u85353_a_b_idx
+           │    └── ordering: +6,+7
+           ├── sort
            │    ├── columns: t85353.a:1!null t85353.b:2
-           │    ├── scan t85353
-           │    │    └── columns: t85353.a:1 t85353.b:2
-           │    └── filters
-           │         └── t85353.a:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
-           └── filters
-                ├── t85353.a:1 = u85353.a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                └── t85353.b:2 = u85353.b:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           │    ├── ordering: +1,+2
+           │    └── select
+           │         ├── columns: t85353.a:1!null t85353.b:2
+           │         ├── scan t85353
+           │         │    └── columns: t85353.a:1 t85353.b:2
+           │         └── filters
+           │              └── t85353.a:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+           └── filters (true)
 
 ### BEGIN Regression tests for issue #69617
 

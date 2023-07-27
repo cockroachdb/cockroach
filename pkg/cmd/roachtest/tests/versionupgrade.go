@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/stretchr/testify/require"
 )
 
 type versionFeatureTest struct {
@@ -136,10 +137,40 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			if c.IsLocal() {
+				l.Printf("skipping step in bors builds while failures are handled -- #99115")
+				return nil
+			}
 			l.Printf("running schema workload step")
 			runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
 			randomNode := h.RandomNode(rng, c.All())
 			return c.RunE(ctx, option.NodeListOption{randomNode}, runCmd.String())
+		},
+	)
+	mvt.AfterUpgradeFinalized(
+		"check if GC TTL is pinned",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// TODO(irfansharif): This can be removed when the predecessor version
+			// in this test is v23.1, where the default is 4h. This test was only to
+			// make sure that existing clusters that upgrade to 23.1 retained their
+			// existing GC TTL.
+			l.Printf("checking if GC TTL is pinned to 24h")
+			var ttlSeconds int
+			query := `
+	SELECT
+		(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', raw_config_protobuf)->'gc'->'ttlSeconds')::INT
+	FROM crdb_internal.zones
+	WHERE target = 'RANGE default'
+	LIMIT 1
+`
+			if err := h.QueryRow(rng, query).Scan(&ttlSeconds); err != nil {
+				return fmt.Errorf("error querying GC TTL: %w", err)
+			}
+			expectedTTL := 24 * 60 * 60 // NB: 24h is what's used in the fixture
+			if ttlSeconds != expectedTTL {
+				return fmt.Errorf("unexpected GC TTL: actual (%d) != expected (%d)", ttlSeconds, expectedTTL)
+			}
+			return nil
 		},
 	)
 
@@ -334,13 +365,30 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 func makeVersionFixtureAndFatal(
 	ctx context.Context, t test.Test, c cluster.Cluster, makeFixtureVersion string,
 ) {
+	var useLocalBinary bool
+	if makeFixtureVersion == "" {
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+		require.NoError(t, c.Conn(ctx, t.L(), 1).QueryRowContext(
+			ctx,
+			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
+		).Scan(&makeFixtureVersion))
+		c.Wipe(ctx, false /* preserveCerts */, c.Node(1))
+		useLocalBinary = true
+	}
+
 	predecessorVersion, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.L().Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
-	fixtureVersion := makeFixtureVersion[1:] // drop the leading v
+
+	if useLocalBinary {
+		// Make steps below use the main cockroach binary (in particular, don't try
+		// to download the released version for makeFixtureVersion which may not yet
+		// exist)
+		makeFixtureVersion = ""
+	}
 
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
@@ -356,7 +404,7 @@ func makeVersionFixtureAndFatal(
 		// NB: at this point, cluster and binary version equal predecessorVersion,
 		// and auto-upgrades are on.
 
-		binaryUpgradeStep(c.All(), fixtureVersion),
+		binaryUpgradeStep(c.All(), makeFixtureVersion),
 		waitForUpgradeStep(c.All()),
 
 		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
@@ -379,7 +427,7 @@ func makeVersionFixtureAndFatal(
 			name := clusterupgrade.CheckpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-			binaryPath := clusterupgrade.BinaryPathForVersion(t, fixtureVersion)
+			binaryPath := clusterupgrade.BinaryPathForVersion(t, makeFixtureVersion)
 			c.Run(ctx, c.All(), binaryPath, "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
@@ -389,7 +437,7 @@ func makeVersionFixtureAndFatal(
 			// #54761.
 			c.Run(ctx, c.Node(1), "cp", "{store-dir}/cluster-bootstrapped", "{store-dir}/"+name)
 			// Similar to the above - newer versions require the min version file to open a store.
-			c.Run(ctx, c.All(), "cp", fmt.Sprintf("{store-dir}/%s", storage.MinVersionFilename), "{store-dir}/"+name)
+			c.Run(ctx, c.Node(1), "cp", fmt.Sprintf("{store-dir}/%s", storage.MinVersionFilename), "{store-dir}/"+name)
 			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 			t.Fatalf(`successfully created checkpoints; failing test on purpose.
 

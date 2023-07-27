@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/docker/distribution/reference"
@@ -386,7 +386,7 @@ func (cli resilientDockerClient) ContainerStart(
 	clientCtx context.Context, id string, opts types.ContainerStartOptions,
 ) error {
 	for {
-		err := timeutil.RunWithTimeout(clientCtx, "start container", 20*time.Second, func(ctx context.Context) error {
+		err := contextutil.RunWithTimeout(clientCtx, "start container", 20*time.Second, func(ctx context.Context) error {
 			return cli.APIClient.ContainerStart(ctx, id, opts)
 		})
 

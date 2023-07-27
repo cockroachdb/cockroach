@@ -66,92 +66,7 @@ message PingRequest {
   // gossip being available, so it is included here also.
   repeated cockroach.roachpb.LocalityAddress locality_address = 9 [(gogoproto.nullable) = false];
 
-  // Dialback is used to turn asymmetric partitions between KV nodes into
-  // symmetric partitions. In addition to all the other criteria for making a
-  // connection, this check adds an additional criterion that the node receiving
-  // a connection needs to be able to initiate a reverse connection to the
-  // sender. If this check is not done, then higher-level assumptions in the
-  // code can break. Raft can normally handle asymmetric partitions with
-  // CheckQuorom and PreVote enabled, however, Lease transfers and other Batch
-  // requests will not always work correctly. Rather than fixing all the places
-  // in the code above the network layer, it is easier to handle this scenario
-  // by preventing asymmetric partitions from happening. Note that by breaking
-  // the reverse connection, the asymmetric partition is converted into a
-  // partial partition. Partial partitions are handled better by higher layers
-  // in the code.
-  //
-  // In practice, asymmetric partitions can arise from any of the following
-  // scenarios:
-  //
-  //  * Bad/expired certificate on one side
-  //  * Incorrect NAT rules
-  //  * Incorrect IP address configuration
-  //  * Incorrect network routing
-  //  * DNS misconfigurations
-  //
-  // Dialback is only enabled for connections between KV nodes, not between SQL
-  // pods or other KV clients. It is enabled by setting the NeedsDialback flag
-  // in the construction of an rpc.Context object. Currently, the only place
-  // this flag is set is during Server construction. If the flag is not
-  // explicitly set, then the NeedsDialback parameter on the PingRequest is left
-  // as NONE which disables any checks.
-  //
-  // If the flag is set, there are two different types of dialback verification
-  // the server can do, blocking or non-blocking. This is controlled by the
-  // NeedsDialback parameter PingRequest. Long-lived clients normally send
-  // PingRequests to servers every few seconds. When a server receives the
-  // PingRequest, it will check the NeedsDialback flag, and respond based on the
-  // description below.
-  //
-  // BLOCKING mode requires the receiving server to verify that it can open a
-  // connection to the client before it will allow the connection to proceed. It
-  // delays responding to the PingRequest until the verification is complete. If
-  // there is already an established reverse connection, it can use the
-  // existence of that connection to assume dialback is successful. Otherwise,
-  // it creates a throw-away connection which it uses to validate the reverse
-  // connection. This connection does not send PingRequests, and is closed as
-  // soon as validation is complete. It needs to use a throw-away connection to
-  // avoid creating a cycle where each node is waiting for the other to finish a
-  // BLOCKING connection, and neither one can.
-  //
-  // NON_BLOCKING mode allows the receiving server to respond to a PingRequest
-  // immediately even if there is no reverse connection. If there is an
-  // established reverse connection it returns immediately, similar to blocking
-  // mode. However if there is not a connection, it asynchronously attempts to
-  // create one. Once the outcome of the reverse connection is established, it
-  // will apply that result to future PingResponses. The reverse connection for
-  // non-blocking mode is not a throw-away connection since it can send
-  // PingRequests on it.
-  //
-  // There are four possible ways that a client can connect to a server and use
-  // the NeedsDialback parameger.
-  //
-  // - NeedsDialback set to NONE on all requests,
-  // - NeedsDialback set to BLOCKING on all requests,
-  // - NeedsDialback set to NON_BLOCKING on all requests, and
-  // - NeedsDialback set to BLOCKING for the first request and NON_BLOCKING for
-  //   subsequent requests.
-  //
-  // As mentioned, non-KV nodes always use option 1.
-  //
-  // The drawback of always using BLOCKING mode (option 2) is it can add a delay
-  // in the middle of an open connection if there is a temporary network
-  // disconnection. This happens for instance if the reverse connection times
-  // out or has to be restarted. This adds an unnecessary delay to responding.
-  //
-  // The drawback of always using NON_BLOCKING mode (option 3)  is it allows
-  // communication between the client and the server prior to the server detects
-  // that it can’t establish a connection back. In practice, this can take a few
-  // seconds and during that time, all the problems of not having Dialback in
-  // place can occur.
-  //
-  // Using BLOCKING for only the first connection and NON_BLOCKING for the
-  // remainder (option 4) works around these problems. If a reverse connection
-  // can’t be established, then it will never allow any traffic in either
-  // direction. If the reverse connection breaks later, it will detect it within
-  // a few seconds and stop the traffic. There is a possibility that there will
-  // be a few seconds outage during this network break, but that would have
-  // happened regardless. This is the mode that KV clients use.
+
   enum DialbackType {
     // The recipient should send a PingResponse without checking if there is a
     // reverse connection.
@@ -162,13 +77,8 @@ message PingRequest {
     BLOCKING = 1;
     // If there is already an established reverse connection, respond
     // immediately, otherwise if there is no reverse connection, attempt to
-    // create one asynchronously. If that fails to connect, then respond with
-    // failure to the next PingRequest on this connection. This failure is
-    // then permanent (even if a redial would succeed) until the caller
-    // uses a BLOCKING heartbeat to kick off another attempt.
-    //
-    // Due to the above, NON_BLOCKING must only be used following a successful
-    // BLOCKING heartbeat.
+    // create one asynchronously.  If that fails to connect, then respond with
+    // failure to the next PingRequest on this connection.
     NON_BLOCKING = 2;
   }
   // What type of dialback is requested for the recipient of this PingRequest

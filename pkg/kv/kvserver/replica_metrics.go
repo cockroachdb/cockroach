@@ -28,12 +28,14 @@ import (
 
 // ReplicaMetrics contains details on the current status of the replica.
 type ReplicaMetrics struct {
-	Leader        bool
-	LeaseValid    bool
-	Leaseholder   bool
-	LeaseType     roachpb.LeaseType
-	LeaseStatus   kvserverpb.LeaseStatus
-	LivenessLease bool
+	Leader                    bool
+	LeaseValid                bool
+	Leaseholder               bool
+	LeaseType                 roachpb.LeaseType
+	LeaseStatus               kvserverpb.LeaseStatus
+	LivenessLease             bool
+	ViolatingLeasePreferences bool
+	LessPreferredLease        bool
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
@@ -62,10 +64,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context,
-	now hlc.ClockTimestamp,
-	vitalityMap livenesspb.NodeVitalityMap,
-	clusterNodes int,
+	ctx context.Context, now hlc.ClockTimestamp, livenessMap livenesspb.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
@@ -73,6 +72,10 @@ func (r *Replica) Metrics(
 
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
+
+	storeAttrs := r.store.Attrs()
+	nodeAttrs := r.store.nodeDesc.Attrs
+	nodeLocality := r.store.nodeDesc.Locality
 
 	r.mu.RLock()
 
@@ -86,12 +89,15 @@ func (r *Replica) Metrics(
 	input := calcReplicaMetricsInput{
 		raftCfg:               &r.store.cfg.RaftConfig,
 		conf:                  r.mu.conf,
-		vitalityMap:           vitalityMap,
+		livenessMap:           livenessMap,
 		clusterNodes:          clusterNodes,
 		desc:                  r.mu.state.Desc,
 		raftStatus:            r.raftSparseStatusRLocked(),
 		leaseStatus:           r.leaseStatusAtRLocked(ctx, now),
 		storeID:               r.store.StoreID(),
+		storeAttrs:            storeAttrs,
+		nodeAttrs:             nodeAttrs,
+		nodeLocality:          nodeLocality,
 		quiescent:             r.mu.quiescent,
 		ticking:               ticking,
 		latchMetrics:          latchMetrics,
@@ -112,12 +118,14 @@ func (r *Replica) Metrics(
 type calcReplicaMetricsInput struct {
 	raftCfg               *base.RaftConfig
 	conf                  roachpb.SpanConfig
-	vitalityMap           livenesspb.NodeVitalityMap
+	livenessMap           livenesspb.IsLiveMap
 	clusterNodes          int
 	desc                  *roachpb.RangeDescriptor
 	raftStatus            *raftSparseStatus
 	leaseStatus           kvserverpb.LeaseStatus
 	storeID               roachpb.StoreID
+	storeAttrs, nodeAttrs roachpb.Attributes
+	nodeLocality          roachpb.Locality
 	quiescent             bool
 	ticking               bool
 	latchMetrics          concurrency.LatchMetrics
@@ -130,42 +138,53 @@ type calcReplicaMetricsInput struct {
 }
 
 func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
-	var validLease, validLeaseOwner, livenessLease bool
+	var validLease, validLeaseOwner, livenessLease, violatingLeasePreferences, lessPreferredLease bool
 	var validLeaseType roachpb.LeaseType
 	if d.leaseStatus.IsValid() {
 		validLease = true
 		validLeaseOwner = d.leaseStatus.Lease.OwnedBy(d.storeID)
 		validLeaseType = d.leaseStatus.Lease.Type()
-		livenessLease = validLeaseOwner &&
-			keys.NodeLivenessSpan.Overlaps(d.desc.RSpan().AsRawSpanWithNoLocals())
+		if validLeaseOwner {
+			livenessLease = keys.NodeLivenessSpan.Overlaps(d.desc.RSpan().AsRawSpanWithNoLocals())
+			switch makeLeasePreferenceStatus(
+				d.leaseStatus, d.storeID, d.storeAttrs, d.nodeAttrs,
+				d.nodeLocality, d.conf.LeasePreferences) {
+			case leasePreferencesViolating:
+				violatingLeasePreferences = true
+			case leasePreferencesLessPreferred:
+				lessPreferredLease = true
+			}
+		}
 	}
 
 	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
-		d.storeID, d.desc, d.leaseStatus, d.vitalityMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
+		d.storeID, d.desc, d.leaseStatus, d.livenessMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
 	leader := d.raftStatus != nil && d.raftStatus.RaftState == raft.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
 	if leader {
-		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
+		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
 	}
 
 	const raftLogTooLargeMultiple = 4
 	return ReplicaMetrics{
-		Leader:          leader,
-		LeaseValid:      validLease,
-		Leaseholder:     validLeaseOwner,
-		LeaseType:       validLeaseType,
-		LeaseStatus:     d.leaseStatus,
-		LivenessLease:   livenessLease,
-		Quiescent:       d.quiescent,
-		Ticking:         d.ticking,
-		RangeCounter:    rangeCounter,
-		Unavailable:     unavailable,
-		Underreplicated: underreplicated,
-		Overreplicated:  overreplicated,
+		Leader:                    leader,
+		LeaseValid:                validLease,
+		Leaseholder:               validLeaseOwner,
+		LeaseType:                 validLeaseType,
+		LeaseStatus:               d.leaseStatus,
+		LivenessLease:             livenessLease,
+		ViolatingLeasePreferences: violatingLeasePreferences,
+		LessPreferredLease:        lessPreferredLease,
+		Quiescent:                 d.quiescent,
+		Ticking:                   d.ticking,
+		RangeCounter:              rangeCounter,
+		Unavailable:               unavailable,
+		Underreplicated:           underreplicated,
+		Overreplicated:            overreplicated,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		BehindCount:           leaderBehindCount,
@@ -202,18 +221,18 @@ func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	leaseStatus kvserverpb.LeaseStatus,
-	vitalityMap livenesspb.NodeVitalityMap,
+	livenessMap livenesspb.IsLiveMap,
 	numVoters, numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
 	// If there is a live leaseholder (regardless of whether the lease is still
 	// valid) that leaseholder is responsible for range-level metrics.
-	if vitalityMap[leaseStatus.Lease.Replica.NodeID].IsLive(livenesspb.Metrics) {
+	if livenessMap[leaseStatus.Lease.Replica.NodeID].IsLive {
 		rangeCounter = leaseStatus.OwnedBy(storeID)
 	} else {
 		// Otherwise, use the first live replica.
 		for _, rd := range desc.Replicas().Descriptors() {
-			if vitalityMap[rd.NodeID].IsLive(livenesspb.Metrics) {
+			if livenessMap[rd.NodeID].IsLive {
 				rangeCounter = rd.StoreID == storeID
 				break
 			}
@@ -226,15 +245,15 @@ func calcRangeCounter(
 		neededVoters := allocatorimpl.GetNeededVoters(numVoters, clusterNodes)
 		neededNonVoters := allocatorimpl.GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
 		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
-			return vitalityMap[rDesc.NodeID].IsLive(livenesspb.Metrics)
+			return livenessMap[rDesc.NodeID].IsLive
 		},
 			// needed{Voters,NonVoters} - we don't care about the
 			// under/over-replication determinations from the report because
 			// it's too magic. We'll do our own determination below.
 			0, -1)
 		unavailable = !status.Available
-		liveVoters := calcLiveVoterReplicas(desc, vitalityMap)
-		liveNonVoters := calcLiveNonVoterReplicas(desc, vitalityMap)
+		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
+		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
 		if neededVoters > liveVoters || neededNonVoters > liveNonVoters {
 			underreplicated = true
 		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
@@ -248,26 +267,20 @@ func calcRangeCounter(
 // replica is determined by checking its node in the provided liveness map. This
 // method is used when indicating under-replication so only voter replicas are
 // considered.
-func calcLiveVoterReplicas(
-	desc *roachpb.RangeDescriptor, vitalityMap livenesspb.NodeVitalityMap,
-) int {
-	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), vitalityMap)
+func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
+	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), livenessMap)
 }
 
 // calcLiveNonVoterReplicas returns a count of the live non-voter replicas; a live
 // replica is determined by checking its node in the provided liveness map.
-func calcLiveNonVoterReplicas(
-	desc *roachpb.RangeDescriptor, vitalityMap livenesspb.NodeVitalityMap,
-) int {
-	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), vitalityMap)
+func calcLiveNonVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
+	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), livenessMap)
 }
 
-func calcLiveReplicas(
-	repls []roachpb.ReplicaDescriptor, vitalityMap livenesspb.NodeVitalityMap,
-) int {
+func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap livenesspb.IsLiveMap) int {
 	var live int
 	for _, rd := range repls {
-		if vitalityMap[rd.NodeID].IsLive(livenesspb.Metrics) {
+		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}
 	}
@@ -277,9 +290,7 @@ func calcLiveReplicas(
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raftSparseStatus,
-	desc *roachpb.RangeDescriptor,
-	vitalityMap livenesspb.NodeVitalityMap,
+	raftStatus *raftSparseStatus, desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {

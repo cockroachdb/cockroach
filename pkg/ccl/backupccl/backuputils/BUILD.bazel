@@ -1,35 +1,9 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "backuputils",
-    srcs = [
-        "memory_backed_quota_pool.go",
-        "utils.go",
-    ],
+    srcs = ["utils.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cloud",
-        "//pkg/util/mon",
-        "//pkg/util/quotapool",
-        "//pkg/util/syncutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-    ],
-)
-
-go_test(
-    name = "backuputils_test",
-    srcs = ["memory_backed_quota_pool_test.go"],
-    args = ["-test.timeout=295s"],
-    embed = [":backuputils"],
-    tags = ["ccl_test"],
-    deps = [
-        "//pkg/settings/cluster",
-        "//pkg/util/leaktest",
-        "//pkg/util/mon",
-        "//pkg/util/quotapool",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = ["//pkg/cloud"],
 )

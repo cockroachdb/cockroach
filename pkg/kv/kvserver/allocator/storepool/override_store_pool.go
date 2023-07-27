@@ -12,6 +12,7 @@ package storepool
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -49,11 +50,12 @@ var _ AllocatorStorePool = &OverrideStorePool{}
 func OverrideNodeLivenessFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
 ) NodeLivenessFunc {
-	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
+	return func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
 		if override, ok := overrides[nid]; ok {
 			return override
 		}
-		return realNodeLivenessFunc(nid)
+
+		return realNodeLivenessFunc(nid, now, timeUntilStoreDead)
 	}
 }
 
@@ -64,17 +66,7 @@ func OverrideNodeCountFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, nodeLiveness *liveness.NodeLiveness,
 ) NodeCountFunc {
 	return func() int {
-		var count int
-		for id, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
-			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
-				if overrideStatus, ok := overrides[id]; !ok ||
-					(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
-						overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
-					count++
-				}
-			}
-		}
-		return count
+		return nodeLiveness.GetNodeCountWithOverrides(overrides)
 	}
 }
 

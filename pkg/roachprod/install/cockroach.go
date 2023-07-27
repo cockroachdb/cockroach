@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"text/template"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -517,7 +515,7 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	listenHost := ""
-	if c.IsLocal() && runtime.GOOS == "darwin " {
+	if c.IsLocal() {
 		// This avoids annoying firewall prompts on Mac OS X.
 		listenHost = "127.0.0.1"
 	}
@@ -820,7 +818,7 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
 ) error {
-	externalStoragePath := fmt.Sprintf("gs://%s", testutils.BackupTestingBucket())
+	externalStoragePath := `gs://cockroachdb-backup-testing`
 	for _, cloud := range c.Clouds() {
 		if !strings.Contains(cloud, gce.ProviderName) {
 			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)

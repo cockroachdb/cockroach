@@ -13,7 +13,6 @@ package bootstrap
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -27,51 +26,56 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSupportedReleases checks that the GenerateInitialValues method
-// of InitialValuesOpts works for all currently-supported releases.
-//
-// If this test fails because a new release has come into existence that is
-// not yet supported by that method, consider adding new hard-coded values
-// for this release.
-// These can be obtained from the test output file for the data-driven
-// TestInitialValuesToString test in the corresponding release branch.
-func TestSupportedReleases(t *testing.T) {
+func TestGetInitialValuesCheckForOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
-	expected := make(map[roachpb.Version]struct{})
-	earliest := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
-	latest := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	var incumbent roachpb.Version
-	for _, v := range clusterversion.ListBetween(earliest, latest) {
-		if v.Major != incumbent.Major && v.Minor != incumbent.Minor {
-			incumbent = roachpb.Version{
-				Major: v.Major,
-				Minor: v.Minor,
-			}
-			expected[incumbent] = struct{}{}
-		}
+	// Test normal bootstrap using current binary's initial values.
+	tc1InitialValuesOpts := InitialValuesOpts{
+		DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+		Codec:                   keys.SystemSQLCodec,
 	}
-	expected[latest] = struct{}{}
-	actual := make(map[roachpb.Version]struct{})
-	for k := range initialValuesFactoryByKey {
-		actual[clusterversion.ByKey(k)] = struct{}{}
-		opts := InitialValuesOpts{
-			DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
-			DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
-			OverrideKey:             k,
-			Codec:                   keys.SystemSQLCodec,
-		}
-		_, _, err := opts.GenerateInitialValues()
-		require.NoErrorf(t, err, "error generating initial values for system codec in version %s", k)
-		opts.Codec = keys.MakeSQLCodec(roachpb.TenantID{InternalValue: 123})
-		_, _, err = opts.GenerateInitialValues()
-		require.NoErrorf(t, err, "error generating initial values for non-system codec in version %s", k)
+	tc1ExpectedKVs, tc1ExpectedSplits := MakeMetadataSchema(
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef()).GetInitialValues()
+
+	tc1ActualKVs, tc1ActualSplits, err := tc1InitialValuesOpts.GetInitialValuesCheckForOverrides()
+	require.NoError(t, err)
+	require.Equal(t, tc1ExpectedKVs, tc1ActualKVs)
+	require.Equal(t, tc1ExpectedSplits, tc1ActualSplits)
+
+	// Test system tenant override.
+	tc2InitialValuesOpts := InitialValuesOpts{
+		DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+		OverrideKey:             clusterversion.V22_2,
+		Codec:                   keys.SystemSQLCodec,
 	}
-	require.Truef(t, reflect.DeepEqual(actual, expected),
-		"expected supported releases %v, actual %v\n"+
-			"see comments in test definition if this message appears",
-		expected, actual)
+	fn, err := GetInitialValuesFn(tc2InitialValuesOpts.OverrideKey, SystemTenant)
+	require.NoError(t, err)
+	tc2ExpectedKVs, tc2ExpectedSplits, _ := fn(
+		tc2InitialValuesOpts.Codec, tc2InitialValuesOpts.DefaultZoneConfig, tc2InitialValuesOpts.DefaultSystemZoneConfig,
+	)
+	tc2ActualKVs, tc2ActualSplits, err := tc2InitialValuesOpts.GetInitialValuesCheckForOverrides()
+	require.NoError(t, err)
+	require.Equal(t, tc2ExpectedKVs, tc2ActualKVs)
+	require.Equal(t, tc2ExpectedSplits, tc2ActualSplits)
+
+	// Test secondary tenant override.
+	tc3InitialValuesOpts := InitialValuesOpts{
+		DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
+		OverrideKey:             clusterversion.V22_2,
+		Codec:                   keys.MakeSQLCodec(roachpb.TenantID{InternalValue: 123}),
+	}
+	fn, err = GetInitialValuesFn(tc3InitialValuesOpts.OverrideKey, SecondaryTenant)
+	require.NoError(t, err)
+	tc3ExpectedKVs, tc3ExpectedSplits, _ := fn(
+		tc3InitialValuesOpts.Codec, tc3InitialValuesOpts.DefaultZoneConfig, tc3InitialValuesOpts.DefaultSystemZoneConfig,
+	)
+	tc3ActualKVs, tc3ActualSplits, err := tc3InitialValuesOpts.GetInitialValuesCheckForOverrides()
+	require.NoError(t, err)
+	require.Equal(t, tc3ExpectedKVs, tc3ActualKVs)
+	require.Equal(t, tc3ExpectedSplits, tc3ActualSplits)
 }
 
 func TestInitialValuesToString(t *testing.T) {

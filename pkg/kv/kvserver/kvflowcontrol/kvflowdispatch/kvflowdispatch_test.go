@@ -11,22 +11,18 @@
 package kvflowdispatch
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -35,23 +31,17 @@ func TestDispatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
+	reverseWorkPriorityDict := make(map[string]admissionpb.WorkPriority)
+	for k, v := range admissionpb.WorkPriorityDict {
+		reverseWorkPriorityDict[v] = k
+	}
+
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		var dispatch *Dispatch
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				nodeIDContainer := &base.NodeIDContainer{}
-				if d.HasArg("node") {
-					// Parse node=n<int>.
-					var arg string
-					d.ScanArgs(t, "node", &arg)
-					ni, err := strconv.Atoi(strings.TrimPrefix(arg, "n"))
-					require.NoError(t, err)
-					nodeID := roachpb.NodeID(ni)
-					nodeIDContainer.Set(ctx, nodeID)
-				}
-				dispatch = New(metric.NewRegistry(), dummyHandles{}, nodeIDContainer)
+				dispatch = New()
 				return ""
 
 			case "dispatch":
@@ -92,7 +82,7 @@ func TestDispatch(t *testing.T) {
 
 						case strings.HasPrefix(parts[i], "pri="):
 							// Parse pri=<string>.
-							pri, found := admissionpb.TestingReverseWorkPriorityDict[arg]
+							pri, found := reverseWorkPriorityDict[arg]
 							require.True(t, found)
 							entries.AdmissionPriority = int32(pri)
 
@@ -104,7 +94,7 @@ func TestDispatch(t *testing.T) {
 							t.Fatalf("unrecognized prefix: %s", parts[i])
 						}
 					}
-					dispatch.Dispatch(ctx, nodeID, entries)
+					dispatch.Dispatch(nodeID, entries)
 				}
 				return ""
 
@@ -158,9 +148,6 @@ func TestDispatch(t *testing.T) {
 				}
 				return buf.String()
 
-			case "metrics":
-				return printMetrics(dispatch)
-
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -180,37 +167,3 @@ func parseLogPosition(t *testing.T, input string) kvflowcontrolpb.RaftLogPositio
 		Index: uint64(index),
 	}
 }
-
-func printMetrics(d *Dispatch) string {
-	metrics := d.testingMetrics()
-	var buf strings.Builder
-	buf.WriteString(fmt.Sprintf(`pending-nodes=%d
-[regular] pending=%d coalesced=%d dispatch{local=%d remote=%d}
-[elastic] pending=%d coalesced=%d dispatch{local=%d remote=%d}
-`,
-		metrics.PendingNodes.Value(),
-		metrics.PendingDispatches[admissionpb.RegularWorkClass].Value(),
-		metrics.CoalescedDispatches[admissionpb.RegularWorkClass].Count(),
-		metrics.LocalDispatch[admissionpb.RegularWorkClass].Count(),
-		metrics.RemoteDispatch[admissionpb.RegularWorkClass].Count(),
-		metrics.PendingDispatches[admissionpb.ElasticWorkClass].Value(),
-		metrics.CoalescedDispatches[admissionpb.ElasticWorkClass].Count(),
-		metrics.LocalDispatch[admissionpb.ElasticWorkClass].Count(),
-		metrics.RemoteDispatch[admissionpb.ElasticWorkClass].Count(),
-	))
-	return buf.String()
-}
-
-type dummyHandles struct{}
-
-func (d dummyHandles) Lookup(id roachpb.RangeID) (kvflowcontrol.Handle, bool) {
-	return nil, false
-}
-
-func (d dummyHandles) ResetStreams(ctx context.Context) {}
-
-func (d dummyHandles) Inspect() []roachpb.RangeID {
-	return nil
-}
-
-var _ kvflowcontrol.Handles = dummyHandles{}

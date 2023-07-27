@@ -7,7 +7,8 @@ init
 
 # For two tenants t1 and t2, try to admit two requests of 1B each at
 # incrementing log positions. We specify create-times in log-position order for
-# work within a given range, similar to what we do at the StoreWorkQueue level.
+# work within a given range, similar to what we do at the issuing client
+# (kvflowcontrol.Handle).
 admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 origin=n1 log-position=4/20
 ----
 [regular] try-get=1B available=0B => insufficient tokens

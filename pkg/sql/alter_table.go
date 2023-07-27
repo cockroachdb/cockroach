@@ -296,17 +296,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-
-				activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-				if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-					d.Invisibility > 0.0 && d.Invisibility < 1.0 {
-					return unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
-				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
-					NotVisible:       d.Invisibility != 0.0,
-					Invisibility:     d.Invisibility,
+					NotVisible:       d.NotVisible,
 					StoreColumnNames: d.Storing.ToStrings(),
 					CreatedAtNanos:   params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 				}

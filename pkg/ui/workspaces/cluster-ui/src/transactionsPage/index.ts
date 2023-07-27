@@ -10,5 +10,5 @@
 
 export * from "./transactionsPage";
 export * from "./transactionsPageConnected";
-export * from "./activeTransactionsView";
+export * from "./recentTransactionsView";
 export * from "./transactionsPageRoot";

@@ -15,7 +15,7 @@ new-txn txn=txn2 ts=9,1 epoch=0
 #  e: unlocked
 #  f: reservation by txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@b,d
+new-request r=req1 txn=txn1 ts=10,1 spans=w@b,d
 ----
 
 scan r=req1
@@ -26,29 +26,32 @@ should-wait r=req1
 ----
 false
 
-acquire r=req1 k=b durability=u strength=exclusive
+acquire r=req1 k=b durability=u
 ----
-num=1
+global: num=1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
-acquire r=req1 k=d durability=u strength=exclusive
+acquire r=req1 k=d durability=u
 ----
-num=2
+global: num=2
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 dequeue r=req1
 ----
-num=2
+global: num=2
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
-new-request r=req2 txn=txn2 ts=9,1 spans=exclusive@c+exclusive@f
+new-request r=req2 txn=txn2 ts=9,1 spans=w@c+w@f
 ----
 
 scan r=req2
@@ -59,41 +62,44 @@ should-wait r=req2
 ----
 false
 
-acquire r=req2 k=c durability=u strength=exclusive
+acquire r=req2 k=c durability=u
 ----
-num=3
+global: num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
-acquire r=req2 k=f durability=u strength=exclusive
+acquire r=req2 k=f durability=u
 ----
-num=4
+global: num=4
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 dequeue r=req2
 ----
-num=4
+global: num=4
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
-new-request r=req3 txn=txn1 ts=10,1 spans=intent@f
+new-request r=req3 txn=txn1 ts=10,1 spans=w@f
 ----
 
 scan r=req3
@@ -106,16 +112,16 @@ true
 
 release txn=txn2 span=f
 ----
-num=4
+global: num=4
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-   queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+local: num=0
 
 # ---------------------------------------------------------------------------------
 # req4 will scan the lock table with a Skip wait policy. It will not need to wait.
@@ -123,7 +129,7 @@ num=4
 # keys to skip.
 # ---------------------------------------------------------------------------------
 
-new-request r=req4 txn=txn2 ts=9,1 spans=none@a,g skip-locked
+new-request r=req4 txn=txn2 ts=9,1 spans=r@a,g skip-locked
 ----
 
 scan r=req4
@@ -184,23 +190,23 @@ locked: true, holder: <nil>
 
 dequeue r=req4
 ----
-num=4
+global: num=4
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-   queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+local: num=0
 
 # ---------------------------------------------------------------------------------
 # req5 is the same as req4, except is has a timestamp equal to txn1's to
 # exercise the strength=none cases again.
 # ---------------------------------------------------------------------------------
 
-new-request r=req5 txn=txn2 ts=10,1 spans=none@a,g skip-locked
+new-request r=req5 txn=txn2 ts=10,1 spans=r@a,g skip-locked
 ----
 
 scan r=req5
@@ -237,13 +243,13 @@ locked: false
 
 dequeue r=req5
 ----
-num=4
+global: num=4
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-   queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+local: num=0

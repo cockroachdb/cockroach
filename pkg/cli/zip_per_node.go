@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -102,7 +104,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			}
 
 			var pd profData
-			err := timeutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
+			err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
 				resp, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
 					NodeId:  fmt.Sprintf("%d", nodeID),
 					Type:    serverpb.ProfileRequest_CPU,
@@ -238,17 +240,23 @@ func (zc *debugZipContext) collectPerNodeData(
 
 	var stacksDataWithLabels []byte
 	s = nodePrinter.start("requesting stacks with labels")
-	requestErr = zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-				NodeId: id,
-				Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+	// This condition is added to workaround https://github.com/cockroachdb/cockroach/issues/74133.
+	// Please make the call to retrieve stacks unconditional after the issue is fixed.
+	if util.RaceEnabled {
+		stacksDataWithLabels = []byte("disabled in race mode, see 74133")
+	} else {
+		requestErr = zc.runZipFn(ctx, s,
+			func(ctx context.Context) error {
+				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+					NodeId: id,
+					Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+				})
+				if err == nil {
+					stacksDataWithLabels = stacks.Data
+				}
+				return err
 			})
-			if err == nil {
-				stacksDataWithLabels = stacks.Data
-			}
-			return err
-		})
+	}
 	if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
 		return err
 	}

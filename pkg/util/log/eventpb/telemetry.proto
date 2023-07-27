@@ -156,9 +156,6 @@ message SampledQuery {
   // The number of bytes read at the KV layer for this query.
   int64 kv_bytes_read = 42 [(gogoproto.customname) = "KVBytesRead", (gogoproto.jsontag) = ',omitempty'];
 
-  // The number of key-value pairs read at the KV layer for this query.
-  int64 kv_pairs_read = 75 [(gogoproto.customname) = "KVPairsRead", (gogoproto.jsontag) = ',omitempty'];
-
   // The number of rows read at the KV layer for this query.
   int64 kv_rows_read = 43 [(gogoproto.customname) = "KVRowsRead", (gogoproto.jsontag) = ',omitempty'];
 
@@ -288,12 +285,9 @@ message SampledQuery {
   // if any.
   string schema_changer_mode = 76 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // SQLInstanceIDs is a list of all the SQL instance id used in this statements execution.
-  repeated int32 sql_instance_ids = 77 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "SQLInstanceIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
-
   reserved 12;
 
-  // Next available ID: 78.
+  // Next available ID: 77.
 }
 
 

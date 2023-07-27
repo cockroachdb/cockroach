@@ -15,7 +15,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -543,7 +543,7 @@ func CalcReplicaDigest(
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
@@ -585,7 +585,7 @@ func CalcReplicaDigest(
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
@@ -701,7 +701,7 @@ func (r *Replica) computeChecksumPostApply(
 
 		// Wait until the CollectChecksum request handler joins in and learns about
 		// the starting computation, and then start it.
-		if err := timeutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
+		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
 			func(ctx context.Context) error {
 				// There is only one writer to c.started (this task), buf if by mistake
 				// there is another writer, one of us closes the channel eventually, and
@@ -741,7 +741,7 @@ func (r *Replica) computeChecksumPostApply(
 		// certain of completing the check. Since we're already in a goroutine
 		// that's about to end, just sleep for a few seconds and then terminate.
 		auxDir := r.store.TODOEngine().GetAuxiliaryDir()
-		_ = r.store.TODOEngine().MkdirAll(auxDir, os.ModePerm)
+		_ = r.store.TODOEngine().MkdirAll(auxDir)
 		path := base.PreventedStartupFile(auxDir)
 
 		const attentionFmt = `ATTENTION:

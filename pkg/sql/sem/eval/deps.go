@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -439,12 +438,6 @@ type CompactEngineSpanFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) error
 
-// GetTableMetrics is used to retrieve sstable metrics on a key span
-// (end-exclusive) at the given (nodeID, storeID).
-type GetTableMetricsFunc func(
-	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
-) ([]enginepb.SSTableMetricsInfo, error)
-
 // SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
 // store.
 type SetCompactionConcurrencyFunc func(
@@ -499,19 +492,6 @@ type ClientNoticeSender interface {
 	// BufferClientNotice buffers the notice to send to the client.
 	// This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-	// SendClientNotice immediately flushes the notice to the client. This is used
-	// to implement PLpgSQL RAISE statements; most cases should use
-	// BufferClientNotice.
-	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
-}
-
-// DeferredRoutineSender allows a nested routine to send the information needed
-// for its own evaluation to a parent routine. This is used to defer execution
-// for tail-call optimization. It can only be used during local execution.
-type DeferredRoutineSender interface {
-	// SendDeferredRoutine sends a local nested routine and its arguments to its
-	// parent routine.
-	SendDeferredRoutine(expr *tree.RoutineExpr, args tree.Datums)
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise
@@ -581,11 +561,6 @@ type SequenceOperators interface {
 	// `newVal + seqOpts.Increment`.
 	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
 	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
-
-	// GetLastSequenceValueByID returns the last value returned by the sequence,
-	// not specific to any session. It also returns a flag to indicate if the
-	// sequence has been called before.
-	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
 // ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
@@ -593,7 +568,7 @@ type SequenceOperators interface {
 // over the SQL connection, this state belongs in the EvalCtx.
 type ChangefeedState interface {
 	// SetHighwater sets the frontier timestamp for the changefeed.
-	SetHighwater(frontier hlc.Timestamp)
+	SetHighwater(frontier *hlc.Timestamp)
 
 	// SetCheckpoint sets the checkpoint for the changefeed.
 	SetCheckpoint(spans []roachpb.Span, timestamp hlc.Timestamp)

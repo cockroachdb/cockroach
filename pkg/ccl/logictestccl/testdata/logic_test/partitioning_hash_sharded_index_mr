@@ -31,7 +31,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   FAMILY fam_0 (a, b)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
@@ -59,7 +59,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   FAMILY fam_0 (a, b, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
@@ -101,7 +101,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   FAMILY fam_0 (a, b, crdb_region)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
@@ -129,7 +129,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   FAMILY fam_0 (a, b, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
@@ -205,7 +205,7 @@ ca-central-1  4   3  4
 ca-central-1  6   1  2
 ca-central-1  14  9  10
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
 ----
 descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                column_direction  implicit
@@ -236,7 +236,7 @@ CREATE TABLE public.t_parent (
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
 ----
 descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit
@@ -264,7 +264,7 @@ CREATE TABLE public.t_parent (
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
-query ITITTITTB colnames,rowsort
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
 ----
 descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit

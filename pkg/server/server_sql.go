@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -41,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -87,7 +85,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -247,10 +244,6 @@ type sqlServerOptionalKVArgs struct {
 	// kvStores is used by crdb_internal builtins to access the stores on this
 	// node.
 	kvStoresIterator kvserverbase.StoresIterator
-
-	// inspectzServer is used to power various crdb_internal vtables, exposing
-	// the equivalent of /inspectz but through SQL.
-	inspectzServer inspectzpb.InspectzServer
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -640,10 +633,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.sqlLivenessProvider,
 			cfg.Settings,
 			cfg.HistogramWindowInterval(),
-			func(ctx context.Context, opName string, user username.SQLUsername) (interface{}, func()) {
+			func(opName string, user username.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
-				return sql.MakeJobExecContext(ctx, opName, user, &sql.MemoryMetrics{}, execCfg)
+				return sql.MakeJobExecContext(opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			jobAdoptionStopFile,
 			td,
@@ -845,7 +838,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeStatsFetcher:        rangeStatsFetcher,
 		AdmissionPacerFactory:    cfg.admissionPacerFactory,
 		ExecutorConfig:           execCfg,
-		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
@@ -891,8 +883,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
 	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
 	if hasNodeLiveness {
+		// TODO(erikgrinaker): We may want to use IsAvailableNotDraining instead, to
+		// avoid scheduling long-running flows (e.g. rangefeeds or backups) on nodes
+		// that are being drained/decommissioned. However, these nodes can still be
+		// leaseholders, and preventing processor scheduling on them can cause a
+		// performance cliff for e.g. table reads that then hit the network.
 		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
-			return nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(sqlInstanceID)).IsLive(livenesspb.DistSQL)
+			return nodeLiveness.IsAvailable(roachpb.NodeID(sqlInstanceID))
 		}
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
@@ -904,7 +901,40 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Setup the trace collector that is used to fetch inflight trace spans from
 	// all nodes in the cluster.
-	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.podNodeDialer)
+	// The collector requires nodeliveness to get a list of all the nodes in the
+	// cluster.
+	var getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
+	if isMixedSQLAndKVNode && hasNodeLiveness {
+		// TODO(dt): any reason not to just always use the instance reader? And just
+		// pass it directly instead of making a new closure here?
+		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
+			var ns []roachpb.NodeID
+			ls, err := nodeLiveness.GetLivenessesFromKV(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, l := range ls {
+				if l.Membership.Decommissioned() {
+					continue
+				}
+				ns = append(ns, l.NodeID)
+			}
+			return ns, nil
+		}
+	} else {
+		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
+			instances, err := cfg.sqlInstanceReader.GetAllInstances(ctx)
+			if err != nil {
+				return nil, err
+			}
+			instanceIDs := make([]roachpb.NodeID, len(instances))
+			for i, instance := range instances {
+				instanceIDs[i] = roachpb.NodeID(instance.InstanceID)
+			}
+			return instanceIDs, err
+		}
+	}
+	traceCollector := collector.New(cfg.Tracer, getNodes, cfg.podNodeDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 
@@ -956,11 +986,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TestingKnobs:              sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
 		CompactionConcurrencyFunc: storageEngineClient.SetCompactionConcurrency,
-		GetTableMetricsFunc:       storageEngineClient.GetTableMetrics,
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
-		InspectzServer:            cfg.inspectzServer,
 		RangeDescIteratorFactory:  cfg.rangeDescIteratorFactory,
 		SyntheticPrivilegeCache: syntheticprivilegecache.New(
 			cfg.Settings, cfg.stopper, cfg.db,
@@ -1169,7 +1197,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.ValidateConstraint,
-		sql.NewInternalSessionData,
+		sql.NewFakeSessionData,
 	)
 
 	jobsInternalDB := sql.NewInternalDBWithSessionDataOverrides(internalDB, func(sd *sessiondata.SessionData) {
@@ -1633,7 +1661,7 @@ func (s *SQLServer) preStart(
 			Settings:     s.execCfg.Settings,
 			DB:           s.execCfg.InternalDB,
 			TestingKnobs: knobs.JobsTestingKnobs,
-			PlanHookMaker: func(ctx context.Context, opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
+			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
 				return sql.NewInternalPlanner(
@@ -1642,7 +1670,7 @@ func (s *SQLServer) preStart(
 					user,
 					&sql.MemoryMetrics{},
 					s.execCfg,
-					sql.NewInternalSessionData(ctx, s.execCfg.Settings, opName),
+					sessiondatapb.SessionData{},
 				)
 			},
 		},
@@ -1889,14 +1917,4 @@ func (s *SQLServer) LogicalClusterID() uuid.UUID {
 // the server to be shut down.
 func (s *SQLServer) ShutdownRequested() <-chan ShutdownRequest {
 	return s.stopTrigger.C()
-}
-
-// ExecutorConfig is an accessor for the executor config.
-func (s *SQLServer) ExecutorConfig() *sql.ExecutorConfig {
-	return s.execCfg
-}
-
-// InternalExecutor returns an executor for internal SQL queries.
-func (s *SQLServer) InternalExecutor() isql.Executor {
-	return s.internalExecutor
 }

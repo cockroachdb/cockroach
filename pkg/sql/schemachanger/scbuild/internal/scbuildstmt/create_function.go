@@ -30,7 +30,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
 
-	dbElts, scElts := b.ResolveTargetObject(n.FuncName.ToUnresolvedObjectName(), privilege.CREATE)
+	dbElts, scElts := b.ResolvePrefix(n.FuncName.ObjectNamePrefix, privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)
 	_, _, db := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)
@@ -137,7 +137,6 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		sc,
 		fnID,
 		privilege.Functions,
-		b.CurrentUser(),
 	)
 	b.Add(owner)
 	for _, up := range ups {
@@ -147,7 +146,6 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	validateTypeReferences(b, refProvider, db.DatabaseID)
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
-	b.LogEventForExistingTarget(&fn)
 }
 
 func validateParameters(n *tree.CreateFunction) {

@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -68,15 +68,13 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		// The test needs to be refactored to work with the secondary tenants.
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107289),
-		// We want fast scan.
-		ScanInterval:       time.Millisecond,
-		ScanMinIdleTime:    time.Millisecond,
-		ScanMaxIdleTime:    time.Millisecond,
-		DisableSpanConfigs: true,
-	})
+	params, _ := tests.CreateTestServerParams()
+	// We want fast scan.
+	params.ScanInterval = time.Millisecond
+	params.ScanMinIdleTime = time.Millisecond
+	params.ScanMaxIdleTime = time.Millisecond
+	params.DisableSpanConfigs = true
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	expectedInitialRanges, err := server.ExpectedInitialRangeCount(

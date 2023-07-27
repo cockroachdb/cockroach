@@ -144,9 +144,9 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 							client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 						}
 
-						transport.EXPECT().IsExhausted().Return(false).AnyTimes()
-						transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0]).AnyTimes()
-						transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil).AnyTimes()
+						transport.EXPECT().IsExhausted().Return(false)
+						transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])
+						transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil)
 						transport.EXPECT().Release().AnyTimes()
 					}
 

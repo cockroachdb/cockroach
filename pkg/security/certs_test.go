@@ -410,7 +410,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -528,7 +528,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -630,7 +630,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -656,7 +656,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}

@@ -82,7 +82,7 @@ func init() {
 		opt.SubqueryOp: (*Builder).buildSubquery,
 
 		// User-defined functions.
-		opt.UDFCallOp: (*Builder).buildUDF,
+		opt.UDFOp: (*Builder).buildUDF,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -665,8 +665,12 @@ func (b *Builder) buildExistsSubquery(
 			Alias: b.mem.Metadata().ColumnMeta(existsCol).Alias,
 			ID:    existsCol,
 		}
-		stmts := []memo.RelExpr{input}
-		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
+		stmts := memo.RelListExpr{memo.RelRequiredPropsExpr{
+			RelExpr: input,
+			PhysProps: &physical.Required{
+				Presentation: physical.Presentation{aliasedCol},
+			},
+		}}
 
 		// Create an wrapRootExprFn that wraps input in a Limit and a Project.
 		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) opt.Expr {
@@ -686,7 +690,6 @@ func (b *Builder) buildExistsSubquery(
 		planGen := b.buildRoutinePlanGenerator(
 			params,
 			stmts,
-			stmtProps,
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 		)
@@ -700,7 +703,6 @@ func (b *Builder) buildExistsSubquery(
 				true,  /* calledOnNullInput */
 				false, /* multiColOutput */
 				false, /* generator */
-				false, /* tailCall */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -795,15 +797,18 @@ func (b *Builder) buildSubquery(
 			Alias: b.mem.Metadata().ColumnMeta(outputCol).Alias,
 			ID:    outputCol,
 		}
-		stmts := []memo.RelExpr{input}
-		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
+		stmts := memo.RelListExpr{memo.RelRequiredPropsExpr{
+			RelExpr: input,
+			PhysProps: &physical.Required{
+				Presentation: physical.Presentation{aliasedCol},
+			},
+		}}
 
 		// Create a tree.RoutinePlanFn that can plan the single statement
 		// representing the subquery.
 		planGen := b.buildRoutinePlanGenerator(
 			params,
 			stmts,
-			stmtProps,
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 		)
@@ -816,7 +821,6 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
-			false, /* tailCall */
 		), nil
 	}
 
@@ -871,7 +875,6 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
-			false, /* tailCall */
 		), nil
 	}
 
@@ -915,13 +918,10 @@ func (b *Builder) addSubquery(
 	return exprNode
 }
 
-// buildUDF builds a UDFCall expression into a typed expression that can be
+// buildUDF builds a UDF expression into a typed expression that can be
 // evaluated.
 func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	udf := scalar.(*memo.UDFCallExpr)
-	if udf.Def == nil {
-		return nil, errors.AssertionFailedf("expected non-nil UDF definition")
-	}
+	udf := scalar.(*memo.UDFExpr)
 
 	// Build the argument expressions.
 	var err error
@@ -936,19 +936,11 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.ContainsMutation = true
-			break
-		}
-	}
-
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
-		udf.Def.Params,
-		udf.Def.Body,
-		udf.Def.BodyProps,
+		udf.Params,
+		udf.Body,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 	)
@@ -956,18 +948,17 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Enable stepping for volatile functions so that statements within the UDF
 	// see mutations made by the invoking statement and by previous executed
 	// statements.
-	enableStepping := udf.Def.Volatility == volatility.Volatile
+	enableStepping := udf.Volatility == volatility.Volatile
 
 	return tree.NewTypedRoutineExpr(
-		udf.Def.Name,
+		udf.Name,
 		args,
 		planGen,
 		udf.Typ,
 		enableStepping,
-		udf.Def.CalledOnNullInput,
-		udf.Def.MultiColDataSource,
-		udf.Def.SetReturning,
-		udf.TailCall,
+		udf.CalledOnNullInput,
+		udf.MultiColDataSource,
+		udf.SetReturning,
 	), nil
 }
 
@@ -984,11 +975,7 @@ type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
 // wrapRootExpr allows the root expression of all statements to be replaced with
 // an arbitrary expression.
 func (b *Builder) buildRoutinePlanGenerator(
-	params opt.ColList,
-	stmts []memo.RelExpr,
-	stmtProps []*physical.Required,
-	allowOuterWithRefs bool,
-	wrapRootExpr wrapRootExprFn,
+	params opt.ColList, stmts memo.RelListExpr, allowOuterWithRefs bool, wrapRootExpr wrapRootExprFn,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1046,7 +1033,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 		for i := range stmts {
 			stmt := stmts[i]
-			props := stmtProps[i]
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1088,11 +1074,11 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 				return f.CopyAndReplaceDefault(e, replaceFn)
 			}
-			f.CopyAndReplace(stmt, props, replaceFn)
+			f.CopyAndReplace(stmt.RelExpr, stmt.PhysProps, replaceFn)
 
 			if wrapRootExpr != nil {
 				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)
-				f.Memo().SetRoot(wrapped, props)
+				f.Memo().SetRoot(wrapped, stmt.PhysProps)
 			}
 
 			// Optimize the memo.

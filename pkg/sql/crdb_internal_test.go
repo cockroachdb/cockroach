@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -633,10 +632,14 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	})
 
 	t.Log("checking the virtual tables")
-	const clusterScope = "cluster"
-	const nodeScope = "node"
-	getNum := func(db *sqlutils.SQLRunner, scope string) int {
-		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows", scope)
+	const (
+		clusterScope  = "cluster"
+		nodeScope     = "node"
+		runningStatus = "running"
+		queuedStatus  = "queued"
+	)
+	getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
+		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)
 		// Check that all remote flows (if any) correspond to the expected
 		// statement.
 		stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
@@ -652,20 +655,28 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(conn)
 
 		// Check cluster level table.
-		actual := getNum(db, clusterScope)
-		if actual != 2 {
-			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (found %d)", nodeID+1, actual)
+		expRunning, expQueued := 2, 0
+		gotRunning, gotQueued := getNum(db, clusterScope, runningStatus), getNum(db, clusterScope, queuedStatus)
+		if gotRunning != expRunning {
+			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+		}
+		if gotQueued != expQueued {
+			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
 		}
 
 		// Check node level table.
 		if nodeID == gatewayNodeID {
-			if getNum(db, nodeScope) != 0 {
+			if getNum(db, nodeScope, runningStatus) != 0 || getNum(db, nodeScope, queuedStatus) != 0 {
 				t.Fatal("unexpectedly non empty output from node_distsql_flows on the gateway")
 			}
 		} else {
-			actual = getNum(db, nodeScope)
-			if actual != 1 {
-				t.Fatalf("unexpected output from node_distsql_flows on node %d (found %d)", nodeID+1, actual)
+			expRunning, expQueued = 1, 0
+			gotRunning, gotQueued = getNum(db, nodeScope, runningStatus), getNum(db, nodeScope, queuedStatus)
+			if gotRunning != expRunning {
+				t.Fatalf("unexpected output from node_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+			}
+			if gotQueued != expQueued {
+				t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
 			}
 		}
 	}
@@ -779,12 +790,7 @@ func TestClusterInflightTracesVirtualTable(t *testing.T) {
 			},
 		}
 		var rowIdx int
-		rows := sqlDB.Query(t, `
-                  SELECT trace_id, node_id, trace_str, jaeger_json
-                  FROM crdb_internal.cluster_inflight_traces
-                  WHERE trace_id = $1
-                  ORDER BY node_id;`, // sort by node_id in case instances are returned out of order
-			traceID)
+		rows := sqlDB.Query(t, `SELECT trace_id, node_id, trace_str, jaeger_json from crdb_internal.cluster_inflight_traces WHERE trace_id=$1`, traceID)
 		defer rows.Close()
 		for rows.Next() {
 			var traceID, nodeID int
@@ -978,16 +984,27 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Test is designed to run with explicit tenants. No need to
+				// implicitly create a tenant.
+				DisableDefaultTestTenant: true,
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID: roachpb.MustMakeTenantID(10),
 	})
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	testTxnContentionEventsTableHelper(t, ctx, db, sqlDB)
+	conn, err := tSQL.Conn(ctx)
+	require.NoError(t, err)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer tSQL.Close()
+
+	testTxnContentionEventsTableHelper(t, ctx, tSQL, sqlDB)
 }
 
 func causeContention(
@@ -1510,16 +1527,17 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	// do not disable background job creation nor job adoption. This is because creating
 	// users requires jobs to be created and run. Thus, this test only creates jobs of type
 	// jobspb.TypeImport and overrides the import resumer.
-	registry := s.TenantOrServer().JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeImport, func(r jobs.Resumer) jobs.Resumer {
+	registry := s.JobRegistry().(*jobs.Registry)
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{}
+	registry.TestingResumerCreationKnobs[jobspb.TypeImport] = func(r jobs.Resumer) jobs.Resumer {
 		return &fakeResumer{}
-	})
+	}
 
 	asUser := func(user string, f func(userDB *sqlutils.SQLRunner)) {
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(user, "test"),
-			Host:   s.ServingSQLAddr(),
+			Host:   s.SQLAddr(),
 		}
 		db2, err := gosql.Open("postgres", pgURL.String())
 		assert.NoError(t, err)

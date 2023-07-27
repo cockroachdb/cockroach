@@ -34,7 +34,6 @@ import {
   statementAttr,
   tabAttr,
   tableNameAttr,
-  tenantNameAttr,
   txnFingerprintIdAttr,
   viewAttr,
   idAttr,
@@ -78,8 +77,8 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import HotRangesPage from "src/views/hotRanges/index";
-import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
-import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
+import RecentStatementDetails from "./views/statements/recentStatementDetailsConnected";
+import RecentTransactionDetails from "./views/transactions/recentTransactionDetailsConnected";
 import "styl/app.styl";
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
@@ -147,18 +146,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                       to={`/metrics/:${dashboardNameAttr}/cluster`}
                     />
                     <Route
-                      exact
                       path={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
-                      component={NodeGraphs}
-                    />
-                    <Route
-                      exact
-                      path={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}/tenant/:${tenantNameAttr}`}
-                      component={NodeGraphs}
-                    />
-                    <Route
-                      exact
-                      path={`/metrics/:${dashboardNameAttr}/cluster/tenant/:${tenantNameAttr}`}
                       component={NodeGraphs}
                     />
 
@@ -240,13 +228,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     <Route
                       exact
                       path={`/execution/statement/:${executionIdAttr}`}
-                      component={ActiveStatementDetails}
+                      component={RecentStatementDetails}
                     />
 
                     <Route
                       exact
                       path={`/execution/transaction/:${executionIdAttr}`}
-                      component={ActiveTransactionDetails}
+                      component={RecentTransactionDetails}
                     />
 
                     {/* statement statistics */}

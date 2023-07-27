@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -35,8 +34,7 @@ func declareKeysDeleteRange(
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	lockSpans *lockspanset.LockSpanSet,
+	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
 	args := req.(*kvpb.DeleteRangeRequest)
@@ -195,9 +193,6 @@ func DeleteRange(
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
 			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
 			defaultRangeTombstoneThreshold, maxIntents)
-		if err != nil {
-			return result.Result{}, err
-		}
 
 		if resumeSpan != nil {
 			reply.ResumeSpan = resumeSpan
@@ -216,7 +211,7 @@ func DeleteRange(
 		}
 		// Return result is always empty, since the reply is populated into the
 		// passed in resp pointer.
-		return result.Result{}, nil
+		return result.Result{}, err
 	}
 
 	var timestamp hlc.Timestamp
@@ -230,10 +225,7 @@ func DeleteRange(
 	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
 		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
 		h.MaxSpanRequestKeys, timestamp, cArgs.Now, h.Txn, returnKeys)
-	if err != nil {
-		return result.Result{}, err
-	}
-	if args.ReturnKeys {
+	if err == nil && args.ReturnKeys {
 		reply.Keys = deleted
 	}
 	reply.NumKeys = num
@@ -243,7 +235,7 @@ func DeleteRange(
 	}
 
 	// If requested, replace point tombstones with range tombstones.
-	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes && h.Txn == nil {
+	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes && err == nil && h.Txn == nil {
 		if err := storage.ReplacePointTombstonesWithRangeTombstones(
 			ctx, spanset.DisableReadWriterAssertions(readWriter),
 			cArgs.Stats, args.Key, args.EndKey); err != nil {
@@ -251,5 +243,11 @@ func DeleteRange(
 		}
 	}
 
-	return result.FromAcquiredLocks(h.Txn, deleted...), nil
+	// NB: even if MVCC returns an error, it may still have written an intent
+	// into the batch. This allows callers to consume errors like WriteTooOld
+	// without re-evaluating the batch. This behavior isn't particularly
+	// desirable, but while it remains, we need to assume that an intent could
+	// have been written even when an error is returned. This is harmless if the
+	// error is not consumed by the caller because the result will be discarded.
+	return result.FromAcquiredLocks(h.Txn, deleted...), err
 }

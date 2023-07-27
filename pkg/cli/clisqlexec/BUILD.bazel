@@ -5,13 +5,6 @@ go_library(
     srcs = [
         "context.go",
         "doc.go",
-        "format_ascii_table.go",
-        "format_csv_tsv.go",
-        "format_html.go",
-        "format_json.go",
-        "format_raw.go",
-        "format_record.go",
-        "format_sql.go",
         "format_table.go",
         "format_value.go",
         "row_strings.go",

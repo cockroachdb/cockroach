@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
@@ -477,11 +478,7 @@ func TestLint(t *testing.T) {
 			re       string
 			excludes []string
 		}{
-			{re: `\bos\.(Getenv|LookupEnv)\("COCKROACH`,
-				excludes: []string{
-					":!cmd/bazci/githubpost",
-				},
-			},
+			{re: `\bos\.(Getenv|LookupEnv)\("COCKROACH`},
 			{
 				re: `\bos\.(Getenv|LookupEnv)\(`,
 				excludes: []string{
@@ -504,16 +501,12 @@ func TestLint(t *testing.T) {
 					":!testutils/data_path.go",
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
-					":!util/grpcutil",                        // GRPC_GO_* variables
-					":!roachprod",                            // roachprod requires AWS environment variables
-					":!cli/env.go",                           // The CLI needs the PGHOST variable.
-					":!cli/start.go",                         // The CLI needs the GOMEMLIMIT variable.
-					":!internal/codeowners/codeowners.go",    // For BAZEL_TEST.
-					":!internal/team/team.go",                // For BAZEL_TEST.
-					":!util/log/test_log_scope.go",           // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
-					":!testutils/datapathutils/data_path.go", // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
-					":!testutils/backup.go",                  // For BACKUP_TESTING_BUCKET
-					":!compose/compose_test.go",              // For PATH.
+					":!util/grpcutil",                     // GRPC_GO_* variables
+					":!roachprod",                         // roachprod requires AWS environment variables
+					":!cli/env.go",                        // The CLI needs the PGHOST variable.
+					":!cli/start.go",                      // The CLI needs the GOMEMLIMIT variable.
+					":!internal/codeowners/codeowners.go", // For BAZEL_TEST.
+					":!internal/team/team.go",             // For BAZEL_TEST.
 				},
 			},
 		} {
@@ -916,14 +909,14 @@ func TestLint(t *testing.T) {
 			`\bcontext\.With(Deadline|Timeout)\(`,
 			"--",
 			"*.go",
-			":!util/timeutil/context.go",
+			":!util/contextutil/context.go",
 			// TODO(jordan): ban these too?
 			":!server/debug/**",
 			":!workload/**",
 			":!*_test.go",
 			":!cli/debug_synctest.go",
 			":!cmd/**",
-			":!roachprod", // TODO: switch to timeutil
+			":!roachprod", // TODO: switch to contextutil
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -937,7 +930,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`nolint:context`),
 		), func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'timeutil.RunWithTimeout' instead", s)
+			t.Errorf("\n%s <- forbidden; use 'contextutil.RunWithTimeout' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1285,7 +1278,6 @@ func TestLint(t *testing.T) {
 			":!spanconfig/errors.go",
 			":!kv/kvpb/replica_unavailable_error.go",
 			":!kv/kvpb/ambiguous_result_error.go",
-			":!kv/kvpb/errors.go",
 			":!sql/flowinfra/flow_registry.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
@@ -1293,7 +1285,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgwirebase/too_big_error.go",
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
-			":!util/timeutil/timeout_error.go",
+			":!util/contextutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1793,6 +1785,8 @@ func TestLint(t *testing.T) {
 			// times and merging the results: https://staticcheck.io/docs/running-staticcheck/cli/build-tags/
 			// This is more trouble than it's worth right now.
 			stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
+			stream.GrepNot(`pkg/roachprod/vm/aws/embedded.go:.*"io/ioutil" has been deprecated`),
+			stream.GrepNot(`pkg/security/securitytest/embedded.go:.*"io/ioutil" has been deprecated`),
 		}
 		for analyzerName, config := range nogoConfig {
 			if !staticcheckCheckNameRe.MatchString(analyzerName) {
@@ -2025,6 +2019,40 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestVectorizedTypeSchemaCopy", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			// We prohibit appending to the type schema and require allocating
+			// a new slice. See the comment in execplan.go file.
+			`(yps|ypes) = append\(`,
+			"--",
+			"sql/colexec/execplan.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; allocate a new []*types.T slice", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.UnderShort(t)
 
@@ -2170,106 +2198,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	// TODO(yuzefovich): remove this linter when #76378 is resolved.
-	t.Run("TestTODOTestTenantDisabled", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkgDir,
-			"git",
-			"grep",
-			"-nE",
-			`base\.TODOTestTenantDisabled`,
-			"--",
-			"*",
-			":!ccl/backupccl/backup_test.go",
-			":!ccl/backupccl/backuprand/backup_rand_test.go",
-			":!ccl/backupccl/backuptestutils/testutils.go",
-			":!ccl/backupccl/create_scheduled_backup_test.go",
-			":!ccl/backupccl/datadriven_test.go",
-			":!ccl/backupccl/full_cluster_backup_restore_test.go",
-			":!ccl/backupccl/restore_old_versions_test.go",
-			":!ccl/backupccl/utils_test.go",
-			":!ccl/changefeedccl/alter_changefeed_test.go",
-			":!ccl/changefeedccl/changefeed_test.go",
-			":!ccl/changefeedccl/helpers_test.go",
-			":!ccl/changefeedccl/parquet_test.go",
-			":!ccl/changefeedccl/scheduled_changefeed_test.go",
-			":!ccl/changefeedccl/schemafeed/table_event_filter_datadriven_test.go",
-			":!ccl/importerccl/ccl_test.go",
-			":!ccl/kvccl/kvfollowerreadsccl/boundedstaleness_test.go",
-			":!ccl/kvccl/kvfollowerreadsccl/followerreads_test.go",
-			":!ccl/kvccl/kvtenantccl/upgradeccl/tenant_upgrade_test.go",
-			":!ccl/multiregionccl/cold_start_latency_test.go",
-			":!ccl/multiregionccl/datadriven_test.go",
-			":!ccl/multiregionccl/multiregionccltestutils/testutils.go",
-			":!ccl/multiregionccl/regional_by_row_test.go",
-			":!ccl/multiregionccl/unique_test.go",
-			":!ccl/partitionccl/drop_test.go",
-			":!ccl/partitionccl/partition_test.go",
-			":!ccl/partitionccl/zone_test.go",
-			":!ccl/serverccl/admin_test.go",
-			":!ccl/streamingccl/replicationtestutils/testutils.go",
-			":!ccl/streamingccl/streamclient/partitioned_stream_client_test.go",
-			":!ccl/streamingccl/streamingest/replication_random_client_test.go",
-			":!ccl/streamingccl/streamingest/stream_ingestion_job_test.go",
-			":!ccl/streamingccl/streamingest/stream_ingestion_processor_test.go",
-			":!ccl/streamingccl/streamproducer/producer_job_test.go",
-			":!ccl/streamingccl/streamproducer/replication_stream_test.go",
-			":!ccl/testccl/sqlccl/run_control_test.go",
-			":!ccl/testccl/sqlccl/temp_table_clean_test.go",
-			":!ccl/testccl/sqlccl/tenant_gc_test.go",
-			":!ccl/testccl/sqlstatsccl/sql_stats_test.go",
-			":!ccl/workloadccl/allccl/all_test.go",
-			":!cli/democluster/demo_cluster.go",
-			":!cli/democluster/demo_cluster_test.go",
-			":!server/application_api/config_test.go",
-			":!server/application_api/dbconsole_test.go",
-			":!server/application_api/events_test.go",
-			":!server/application_api/insights_test.go",
-			":!server/application_api/jobs_test.go",
-			":!server/application_api/query_plan_test.go",
-			":!server/application_api/schema_inspection_test.go",
-			":!server/application_api/security_test.go",
-			":!server/application_api/zcfg_test.go",
-			":!server/grpc_gateway_test.go",
-			":!server/multi_store_test.go",
-			":!server/storage_api/decommission_test.go",
-			":!server/storage_api/health_test.go",
-			":!server/storage_api/rangelog_test.go",
-			":!sql/catalog/internal/catkv/catalog_reader_test.go",
-			":!sql/importer/import_processor_test.go",
-			":!sql/importer/import_stmt_test.go",
-			":!sql/importer/read_import_mysql_test.go",
-			":!sql/schemachanger/sctest/test_server_factory.go",
-			":!sql/sqlinstance/instancestorage/instancecache_test.go",
-			":!sql/sqltestutils/telemetry.go",
-			":!sql/tests/server_params.go",
-			":!sql/ttl/ttljob/ttljob_test.go",
-			":!testutils/lint/lint_test.go",
-			":!ts/server_test.go",
-			":!upgrade/upgrademanager/manager_external_test.go",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- new usages of base.TODOTestTenantDisabled are forbidden", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
@@ -2361,9 +2289,7 @@ func TestLint(t *testing.T) {
 			// of the exception.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
 			// Cast in decode handler.
-			stream.GrepNot(`pkg/util/timeutil/timeout_error\.go:.*invalid direct cast on error object`),
-			// Direct error cast OK in this case for a low-dependency helper binary.
-			stream.GrepNot(`pkg/cmd/github-pull-request-make/main\.go:.*invalid direct cast on error object`),
+			stream.GrepNot(`pkg/util/contextutil/timeout_error\.go:.*invalid direct cast on error object`),
 			// The logging package translates log.Fatal calls into errors.
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},

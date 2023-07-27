@@ -38,7 +38,8 @@ func TestCommitTSIntervals(t *testing.T) {
 
 	var i interceptor
 	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		// Manually starts a tenant below. No need to start one here.
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,

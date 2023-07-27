@@ -18,23 +18,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -50,8 +46,8 @@ type testProposer struct {
 	syncutil.RWMutex
 	clock      *hlc.Clock
 	ds         destroyStatus
-	fi         kvpb.RaftIndex
-	lai        kvpb.LeaseAppliedIndex
+	fi         uint64
+	lai        uint64
 	enqueued   int
 	registered int
 
@@ -65,9 +61,6 @@ type testProposer struct {
 	// If nil, rejectProposalWithLeaseTransferRejectedLocked() panics.
 	onRejectProposalWithLeaseTransferRejectedLocked func(
 		lease *roachpb.Lease, reason raftutil.ReplicaNeedsSnapshotStatus)
-	onProposalsDropped func(
-		ents []raftpb.Entry, proposalData []*ProposalData, stateType raft.StateType,
-	)
 	// validLease is returned by ownsValidLease()
 	validLease bool
 	// leaderNotLive is returned from shouldCampaignOnRedirect().
@@ -94,7 +87,6 @@ type testProposerRaft struct {
 	// proposals are the commands that the propBuf flushed (i.e. passed to the
 	// Raft group) and have not yet been consumed with consumeProposals().
 	proposals  []kvserverpb.RaftCommand
-	onProp     func(raftpb.Message) error // invoked on Step with MsgProp
 	campaigned bool
 }
 
@@ -103,11 +95,6 @@ var _ proposerRaft = &testProposerRaft{}
 func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	if msg.Type != raftpb.MsgProp {
 		return nil
-	}
-	if t.onProp != nil {
-		if err := t.onProp(msg); err != nil {
-			return err
-		}
 	}
 	// Decode and save all the commands.
 	for _, e := range msg.Entries {
@@ -135,6 +122,11 @@ func (t testProposerRaft) BasicStatus() raft.BasicStatus {
 	return t.status.BasicStatus
 }
 
+func (t testProposerRaft) ProposeConfChange(i raftpb.ConfChangeI) error {
+	// TODO(andrei, nvanbenschoten): Capture the message and test against it.
+	return nil
+}
+
 func (t *testProposerRaft) Campaign() error {
 	t.campaigned = true
 	return nil
@@ -147,9 +139,6 @@ func (t *testProposer) locker() sync.Locker {
 func (t *testProposer) rlocker() sync.Locker {
 	return t.RWMutex.RLocker()
 }
-func (t *testProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
-	return &testFlowTokenHandle{}
-}
 
 func (t *testProposer) getReplicaID() roachpb.ReplicaID {
 	return 1
@@ -159,11 +148,11 @@ func (t *testProposer) destroyed() destroyStatus {
 	return t.ds
 }
 
-func (t *testProposer) firstIndex() kvpb.RaftIndex {
+func (t *testProposer) firstIndex() uint64 {
 	return t.fi
 }
 
-func (t *testProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
+func (t *testProposer) leaseAppliedIndex() uint64 {
 	return t.lai
 }
 
@@ -188,15 +177,6 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 	// Note that t.raftGroup can be nil, which FlushLockedWithRaftGroup supports.
 	return fn(t.raftGroup)
-}
-
-func (rp *testProposer) onErrProposalDropped(
-	ents []raftpb.Entry, props []*ProposalData, typ raft.StateType,
-) {
-	if rp.onProposalsDropped == nil {
-		return
-	}
-	rp.onProposalsDropped(ents, props, typ)
 }
 
 func (t *testProposer) leaseDebugRLocked() string {
@@ -249,12 +229,6 @@ func (t *testProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
 	return t.leaderNotLive
 }
 
-func (t *testProposer) campaignLocked(ctx context.Context) {
-	if err := t.raftGroup.Campaign(); err != nil {
-		panic(err)
-	}
-}
-
 func (t *testProposer) rejectProposalWithRedirectLocked(
 	_ context.Context, _ *ProposalData, redirectTo roachpb.ReplicaID,
 ) {
@@ -303,19 +277,12 @@ func (pc proposalCreator) newLeaseTransferProposal(lease roachpb.Lease) *Proposa
 func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 	var lease *roachpb.Lease
 	var isLeaseRequest bool
-	var cr *kvserverpb.ChangeReplicas
 	switch v := ba.Requests[0].GetInner().(type) {
 	case *kvpb.RequestLeaseRequest:
 		lease = &v.Lease
 		isLeaseRequest = true
 	case *kvpb.TransferLeaseRequest:
 		lease = &v.Lease
-	case *kvpb.EndTxnRequest:
-		if crt := v.InternalCommitTrigger.GetChangeReplicasTrigger(); crt != nil {
-			cr = &kvserverpb.ChangeReplicas{
-				ChangeReplicasTrigger: *crt,
-			}
-		}
 	}
 	p := &ProposalData{
 		ctx:   context.Background(),
@@ -324,7 +291,6 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 			ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 				IsLeaseRequest: isLeaseRequest,
 				State:          &kvserverpb.ReplicaState{Lease: lease},
-				ChangeReplicas: cr,
 			},
 		},
 		Request:     ba,
@@ -335,11 +301,15 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 }
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
-	b, err := raftlog.EncodeCommand(context.Background(), p.command, p.idKey, nil /* raftAdmissionMeta */)
-	if err != nil {
+	cmdLen := p.command.Size()
+	needed := raftlog.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
+	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
+	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardWithoutAC, p.idKey)
+	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
+	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
 	}
-	return b
+	return data
 }
 
 // TestProposalBuffer tests the basic behavior of the Raft proposal buffer.
@@ -387,12 +357,12 @@ func TestProposalBuffer(t *testing.T) {
 	require.Equal(t, num, p.registered)
 	// We've flushed num requests, out of which one is a lease request (so that
 	// one did not increment the MLAI).
-	require.Equal(t, kvpb.LeaseAppliedIndex(num-1), b.assignedLAI)
+	require.Equal(t, uint64(num)-1, b.assignedLAI)
 	require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
 	require.Equal(t, 1, b.evalTracker.Count())
 	proposals := r.consumeProposals()
 	require.Len(t, proposals, propBufArrayMinSize)
-	var lai kvpb.LeaseAppliedIndex
+	var lai uint64
 	for i, p := range proposals {
 		if i != leaseReqIdx {
 			lai++
@@ -679,7 +649,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	ctx := context.Background()
 
 	proposer := uint64(1)
-	proposerFirstIndex := kvpb.RaftIndex(5)
+	proposerFirstIndex := uint64(5)
 	target := uint64(2)
 
 	// Each subtest will try to propose a lease transfer in a different Raft
@@ -689,7 +659,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		proposerState raft.StateType
 		// math.MaxUint64 if the target is not in the raft group.
 		targetState rafttracker.StateType
-		targetMatch kvpb.RaftIndex
+		targetMatch uint64
 
 		expRejection       bool
 		expRejectionReason raftutil.ReplicaNeedsSnapshotStatus
@@ -777,11 +747,11 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			if tc.proposerState == raft.StateLeader {
 				raftStatus.Lead = proposer
 				raftStatus.Progress = map[uint64]rafttracker.Progress{
-					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerFirstIndex)},
+					proposer: {State: rafttracker.StateReplicate, Match: proposerFirstIndex},
 				}
 				if tc.targetState != math.MaxUint64 {
 					raftStatus.Progress[target] = rafttracker.Progress{
-						State: tc.targetState, Match: uint64(tc.targetMatch),
+						State: tc.targetState, Match: tc.targetMatch,
 					}
 				}
 			}
@@ -820,88 +790,6 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			require.Zero(t, tracker.Count())
 		})
 	}
-}
-
-func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	proposer := uint64(1)
-	proposerFirstIndex := kvpb.RaftIndex(5)
-
-	var matchingDroppedProposalsSeen int
-	p := testProposer{
-		onProposalsDropped: func(ents []raftpb.Entry, props []*ProposalData, _ raft.StateType) {
-			require.Equal(t, len(ents), len(props))
-			for i := range ents {
-				if ents[i].Type == raftpb.EntryNormal {
-					require.Nil(t, props[i].command.ReplicatedEvalResult.ChangeReplicas)
-				} else {
-					require.NotNil(t, props[i].command.ReplicatedEvalResult.ChangeReplicas)
-				}
-				matchingDroppedProposalsSeen++
-			}
-		},
-	}
-	var pc proposalCreator
-	require.Equal(t, proposer, uint64(p.getReplicaID()))
-
-	// Drop all proposals, since then we'll see the (ents,props) pair in
-	// onErrProposalDropped.
-	r := &testProposerRaft{onProp: func(msg raftpb.Message) error {
-		return raft.ErrProposalDropped
-	}}
-	p.raftGroup = r
-	p.fi = proposerFirstIndex
-
-	var b propBuf
-	// Make the proposal buffer large so that all the proposals we're putting in
-	// get flushed together. (At the time of writing, default size is 4).
-	b.arr.adjustSize(100)
-	clock := hlc.NewClockForTesting(nil)
-	tr := tracker.NewLockfreeTracker()
-	b.Init(&p, tr, clock, cluster.MakeTestingClusterSettings())
-
-	now := clock.Now()
-
-	// Make seven proposals:
-	// [put, put, put, confchange, put, put, put].
-	var pds []*ProposalData
-
-	for i := 0; i < 3; i++ {
-		pds = append(pds, pc.newPutProposal(now))
-	}
-
-	{
-		k := keys.LocalMax // unimportant
-		var ba kvpb.BatchRequest
-		ba.Add(&kvpb.EndTxnRequest{
-			RequestHeader: kvpb.RequestHeader{
-				Key: k,
-			},
-			Commit: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-					Desc: roachpb.NewRangeDescriptor(1, roachpb.RKeyMin, roachpb.RKeyMax,
-						roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{{NodeID: 1, StoreID: 1, ReplicaID: 1}}),
-					),
-				},
-			},
-		})
-		pds = append(pds, pc.newProposal(&ba))
-	}
-
-	for i := 0; i < 3; i++ {
-		pds = append(pds, pc.newPutProposal(now))
-	}
-
-	for _, pd := range pds {
-		_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		require.NoError(t, b.Insert(ctx, pd, tok.Move(ctx)))
-	}
-	require.NoError(t, b.flushLocked(ctx))
-	require.Equal(t, len(pds), matchingDroppedProposalsSeen)
 }
 
 // Test that the propBuf properly assigns closed timestamps to proposals being
@@ -1159,47 +1047,3 @@ func (t mockTracker) Count() int {
 }
 
 var _ tracker.Tracker = mockTracker{}
-
-type testFlowTokenHandle struct{}
-
-var _ kvflowcontrol.Handle = &testFlowTokenHandle{}
-
-func (t *testFlowTokenHandle) Admit(
-	ctx context.Context, priority admissionpb.WorkPriority, t2 time.Time,
-) error {
-	return nil
-}
-
-func (t *testFlowTokenHandle) DeductTokensFor(
-	ctx context.Context,
-	priority admissionpb.WorkPriority,
-	position kvflowcontrolpb.RaftLogPosition,
-	tokens kvflowcontrol.Tokens,
-) {
-}
-
-func (t *testFlowTokenHandle) ReturnTokensUpto(
-	ctx context.Context,
-	priority admissionpb.WorkPriority,
-	position kvflowcontrolpb.RaftLogPosition,
-	stream kvflowcontrol.Stream,
-) {
-}
-
-func (t *testFlowTokenHandle) ConnectStream(
-	ctx context.Context, position kvflowcontrolpb.RaftLogPosition, stream kvflowcontrol.Stream,
-) {
-}
-
-func (t *testFlowTokenHandle) DisconnectStream(ctx context.Context, stream kvflowcontrol.Stream) {
-}
-
-func (t *testFlowTokenHandle) ResetStreams(ctx context.Context) {
-}
-
-func (t *testFlowTokenHandle) Inspect(context.Context) kvflowinspectpb.Handle {
-	return kvflowinspectpb.Handle{}
-}
-
-func (t *testFlowTokenHandle) Close(ctx context.Context) {
-}

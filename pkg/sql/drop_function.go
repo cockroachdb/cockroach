@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -86,8 +85,8 @@ func (p *planner) DropFunction(
 			}
 			return nil, pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"cannot drop function %q because other objects ([%v]) still depend on it",
-				mut.Name, strings.Join(depNames, ", "),
+				"cannot drop function %q because other objects (%v) still depend on it",
+				mut.Name, depNames,
 			)
 		}
 		dropNode.toDrop = append(dropNode.toDrop, mut)

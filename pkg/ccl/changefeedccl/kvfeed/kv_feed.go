@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -39,6 +40,7 @@ type Config struct {
 	DB                      *kv.DB
 	Codec                   keys.SQLCodec
 	Clock                   *hlc.Clock
+	Gossip                  gossip.OptionalGossip
 	Spans                   []roachpb.Span
 	CheckpointSpans         []roachpb.Span
 	CheckpointTimestamp     hlc.Timestamp
@@ -52,10 +54,6 @@ type Config struct {
 	SchemaChangeEvents      changefeedbase.SchemaChangeEventClass
 	SchemaChangePolicy      changefeedbase.SchemaChangePolicy
 	SchemaFeed              schemafeed.SchemaFeed
-
-	// FeedWatcher function is invoked along with the kv/schema feed.
-	// It may return an error which will cause kv feed to exit.
-	FeedWatcher func(ctx context.Context) error
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -87,6 +85,7 @@ func Run(ctx context.Context, cfg Config) error {
 	{
 		sc = &scanRequestScanner{
 			settings:                cfg.Settings,
+			gossip:                  cfg.Gossip,
 			db:                      cfg.DB,
 			onBackfillRangeCallback: cfg.OnBackfillRangeCallback,
 		}
@@ -115,9 +114,6 @@ func Run(ctx context.Context, cfg Config) error {
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
-	if cfg.FeedWatcher != nil {
-		g.GoCtx(cfg.FeedWatcher)
-	}
 	err := g.Wait()
 
 	// NB: The higher layers of the changefeed should detect the boundary and the
@@ -413,8 +409,8 @@ func (f *kvFeed) scanIfShould(
 				}
 			}
 			if !scanTime.Equal(ev.After.GetModificationTime()) {
-				return nil, hlc.Timestamp{}, errors.Newf(
-					"found event in scanIfShould which did not occur at the scan time %v: %v",
+				return nil, hlc.Timestamp{}, errors.AssertionFailedf(
+					"found event in shouldScan which did not occur at the scan time %v: %v",
 					scanTime, ev)
 			}
 		}

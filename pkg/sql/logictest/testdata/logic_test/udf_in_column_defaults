@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-22.2-23.1
-
 statement ok
 CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
@@ -74,7 +72,7 @@ CREATE TABLE t1(
 let $tbl_id
 SELECT id FROM system.namespace WHERE name = 't1';
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -112,7 +110,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -147,7 +145,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT NULL;
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -169,7 +167,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT NULL;
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -185,7 +183,7 @@ NULL
 statement ok
 ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -207,7 +205,7 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 DROP COLUMN c;
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -222,7 +220,7 @@ NULL
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
 (111,1,,)
@@ -349,23 +347,16 @@ CREATE TABLE t1(
   b INT DEFAULT f1(),
   FAMILY fam_0 (a, b)
 );
-CREATE TABLE t2(
-  a INT PRIMARY KEY,
-  b INT DEFAULT f1(),
-  FAMILY fam_0 (a, b)
-);
 
-statement error pgcode 2BP01 cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
+statement error cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
 
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT NULL;
-ALTER TABLE t2 ALTER COLUMN b SET DEFAULT NULL;
 
 statement ok
 DROP FUNCTION f1;
 DROP TABLE t1;
-DROP TABLE t2;
 
 # Make sure that CREATE FUNCTION and CREATE TABLE works in one txn.
 statement ok
@@ -384,11 +375,11 @@ SELECT id FROM system.namespace WHERE name = 't1';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
-(119,1,,)
-(119,2,"""[FUNCTION 100118]()""",[118])
+(118,1,,)
+(118,2,"""[FUNCTION 100117]()""",[117])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -398,7 +389,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "columnIds": [
             2
         ],
-        "id": 119
+        "id": 118
     }
 ]
 
@@ -426,11 +417,11 @@ SELECT id FROM system.namespace WHERE name = 't1';
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
-query T rowsort
+query T
 SELECT get_col_fn_ids($tbl_id);
 ----
-(120,1,,)
-(120,2,"""[FUNCTION 100121]()""",[121])
+(119,1,,)
+(119,2,"""[FUNCTION 100120]()""",[120])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -440,7 +431,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "columnIds": [
             2
         ],
-        "id": 120
+        "id": 119
     }
 ]
 
@@ -508,5 +499,5 @@ statement ok
 CREATE TABLE t_circle(a INT PRIMARY KEY, b INT);
 CREATE FUNCTION f_circle() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_circle $$;
 
-statement error pgcode XXUUU pq: cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
+statement error pq: cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
 ALTER TABLE t_circle ALTER COLUMN b SET DEFAULT f_circle();

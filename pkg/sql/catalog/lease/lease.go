@@ -483,15 +483,15 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	// If we are to join an in-progress acquisition, it needs to be an acquisition
 	// initiated after this point.
 	// So, we handle two cases:
-	// 1. The first acquireNodeLease(..) call tells us that we didn't join an
-	//    in-progress acquisition but rather initiated one. Great, the lease
-	//    that's being acquired is good.
-	// 2. The first acquireNodeLease(..) call tells us that we did join an
-	//    in-progress acquisition;
-	//    We have to wait this acquisition out; it's not good for us. But any
-	//    future acquisition is good, so the next time around the loop it doesn't
-	//    matter if we initiate a request or join an in-progress one (because
-	//    either way, it's an acquisition performed after this call).
+	// 1. The first DoChan() call tells us that we didn't join an in-progress
+	//     acquisition. Great, the lease that's being acquired is good.
+	// 2. The first DoChan() call tells us that we did join an in-progress acq.
+	//     We have to wait this acquisition out; it's not good for us. But any
+	//     future acquisition is good, so the next time around the loop it doesn't
+	//     matter if we initiate a request or join an in-progress one.
+	// In both cases, we need to check if the lease we want is still valid because
+	// lease acquisition is done without holding the descriptorState lock, so anything
+	// can happen in between lease acquisition and us getting control again.
 	attemptsMade := 0
 	for {
 		// Acquire a fresh lease.
@@ -501,11 +501,12 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 		}
 
 		if didAcquire {
-			// Case 1: we initiated a lease acquisition call.
+			// Case 1: we didn't join an in-progress call and the lease is still
+			// valid.
 			break
-		} else if attemptsMade > 0 {
-			// Case 2: we joined an in-progress lease acquisition call but that call
-			//         was initiated after we entered this function.
+		} else if attemptsMade > 1 {
+			// Case 2: more than one acquisition has happened and the lease is still
+			// valid.
 			break
 		}
 		attemptsMade++
@@ -1116,7 +1117,7 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // rangefeeds. This function must be passed a non-nil gossip if
 // RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
-	descUpdateCh := make(chan catalog.Descriptor)
+	descUpdateCh := make(chan *descpb.Descriptor)
 	m.watchForUpdates(ctx, descUpdateCh)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
@@ -1129,49 +1130,28 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 				}
 
 				if evFunc := m.testingKnobs.TestingDescriptorUpdateEvent; evFunc != nil {
-					if err := evFunc(desc.DescriptorProto()); err != nil {
+					if err := evFunc(desc); err != nil {
 						log.Infof(ctx, "skipping update of %v due to knob: %v",
 							desc, err)
 						continue
 					}
 				}
 
-				dropped := desc.Dropped()
+				id, version, name, state, err := descpb.GetDescriptorMetadata(desc)
+				if err != nil {
+					log.Fatalf(ctx, "invalid descriptor %v: %v", desc, err)
+				}
+				dropped := state == descpb.DescriptorState_DROP
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (dropped %v)",
-					desc.GetID(), desc.GetVersion(), dropped)
-				purge := func(ctx context.Context) {
-					if err := purgeOldVersions(ctx, db, desc.GetID(), dropped, desc.GetVersion(), m); err != nil {
-						log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
-							desc.GetID(), desc.GetName(), err)
-					}
-				}
-				// New descriptors may appear in the future if the descriptor table is
-				// global or if the transaction which performed the schema change wrote
-				// to a global table. Attempts to acquire a lease after that new
-				// version has appeared won't acquire the latest version, they'll
-				// acquire the previous version because they'll occur at "now".
-				//
-				// That, in and of itself, is not a problem. The problem is that we
-				// may release the lease on the current version before we can start
-				// acquiring the lease on the new version. This could lead to periods
-				// of increased latency right as the descriptor has been committed.
-				if now := db.Clock().Now(); now.Less(desc.GetModificationTime()) {
-					_ = s.RunAsyncTask(ctx, "wait to purge", func(ctx context.Context) {
-						toWait := time.Duration(desc.GetModificationTime().WallTime - now.WallTime)
-						select {
-						case <-time.After(toWait):
-							purge(ctx)
-						case <-ctx.Done():
-						case <-s.ShouldQuiesce():
-						}
-					})
-				} else {
-					purge(ctx)
+					id, version, dropped)
+				if err := purgeOldVersions(ctx, db, id, dropped, version, m); err != nil {
+					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
+						id, name, err)
 				}
 
 				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
-					evFunc(desc.DescriptorProto())
+					evFunc(desc)
 				}
 
 			case <-s.ShouldQuiesce():
@@ -1183,7 +1163,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
-func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catalog.Descriptor) {
+func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- *descpb.Descriptor) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1213,7 +1193,7 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 		}
 		select {
 		case <-ctx.Done():
-		case descUpdateCh <- mut:
+		case descUpdateCh <- mut.DescriptorProto():
 		}
 	}
 	// Ignore errors here because they indicate that the server is shutting down.
@@ -1312,7 +1292,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 				}
 
 				if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
-					log.Errorf(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
+					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
 						// Lease renewal failed due to removed descriptor; Remove this descriptor from cache.

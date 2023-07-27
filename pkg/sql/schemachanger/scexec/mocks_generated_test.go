@@ -43,20 +43,6 @@ func (m *MockCatalog) EXPECT() *MockCatalogMockRecorder {
 	return m.recorder
 }
 
-// AddName mocks base method.
-func (m *MockCatalog) AddName(arg0 context.Context, arg1 descpb.NameInfo, arg2 catid.DescID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddName", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddName indicates an expected call of AddName.
-func (mr *MockCatalogMockRecorder) AddName(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddName", reflect.TypeOf((*MockCatalog)(nil).AddName), arg0, arg1, arg2)
-}
-
 // CreateOrUpdateDescriptor mocks base method.
 func (m *MockCatalog) CreateOrUpdateDescriptor(arg0 context.Context, arg1 catalog.MutableDescriptor) error {
 	m.ctrl.T.Helper()
@@ -140,18 +126,6 @@ func (m *MockCatalog) GetFullyQualifiedName(arg0 context.Context, arg1 catid.Des
 func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFullyQualifiedName", reflect.TypeOf((*MockCatalog)(nil).GetFullyQualifiedName), arg0, arg1)
-}
-
-// InitializeSequence mocks base method.
-func (m *MockCatalog) InitializeSequence(arg0 catid.DescID, arg1 int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "InitializeSequence", arg0, arg1)
-}
-
-// InitializeSequence indicates an expected call of InitializeSequence.
-func (mr *MockCatalogMockRecorder) InitializeSequence(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSequence", reflect.TypeOf((*MockCatalog)(nil).InitializeSequence), arg0, arg1)
 }
 
 // MustReadImmutableDescriptors mocks base method.

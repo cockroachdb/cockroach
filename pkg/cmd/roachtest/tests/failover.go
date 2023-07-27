@@ -23,11 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,9 +75,8 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                "failover/chaos" + suffix,
 				Owner:               registry.OwnerKV,
-				Benchmark:           true,
 				Timeout:             60 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false)), // uses disk stalls
+				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false)),
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -123,11 +119,13 @@ func registerFailover(r registry.Registry) {
 			failureMode := failureMode // pin loop variable
 
 			var usePD bool
-			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
 				// Use PDs in an attempt to work around flakes encountered when using
 				// SSDs. See #97968.
 				usePD = true
+			}
+			var postValidation registry.PostValidation = 0
+			if failureMode == failureModeDiskStall {
 				postValidation = registry.PostValidationNoDeadNodes
 			}
 			r.Add(registry.TestSpec{
@@ -135,9 +133,9 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
-				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
+				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode)
 				},
@@ -145,12 +143,12 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
-				Tags:                registry.Tags("weekly"),
+				Tags:                []string{"weekly"},
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
-				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(5, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
+				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode)
 				},
@@ -158,12 +156,12 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
-				Tags:                registry.Tags("weekly"),
+				Tags:                []string{"weekly"},
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
-				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
+				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode)
 				},
@@ -193,9 +191,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 9))
 
@@ -295,10 +290,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 						}
 					}
 				}
-				if d, ok := failer.(*deadlockFailer); ok { // randomize deadlockFailer
-					d.numReplicas = 1 + rng.Intn(5)
-					d.onlyLeaseholders = rng.Float64() < 0.5
-				}
 				failer.Ready(ctx, node)
 				nodeFailers[node] = failer
 			}
@@ -374,9 +365,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
@@ -514,9 +502,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -652,9 +637,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
@@ -772,11 +754,7 @@ func runFailoverNonSystem(
 	opts := option.DefaultStartOpts()
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -885,11 +863,7 @@ func runFailoverLiveness(
 	opts := option.DefaultStartOpts()
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 4))
 
@@ -1004,11 +978,7 @@ func runFailoverSystemNonLiveness(
 	opts := option.DefaultStartOpts()
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -1103,7 +1073,6 @@ const (
 	failureModeBlackholeRecv failureMode = "blackhole-recv"
 	failureModeBlackholeSend failureMode = "blackhole-send"
 	failureModeCrash         failureMode = "crash"
-	failureModeDeadlock      failureMode = "deadlock"
 	failureModeDiskStall     failureMode = "disk-stall"
 	failureModePause         failureMode = "pause"
 	failureModeNoop          failureMode = "noop"
@@ -1114,7 +1083,6 @@ var allFailureModes = []failureMode{
 	failureModeBlackholeRecv,
 	failureModeBlackholeSend,
 	failureModeCrash,
-	failureModeDeadlock,
 	failureModeDiskStall,
 	failureModePause,
 	// failureModeNoop intentionally omitted
@@ -1177,17 +1145,6 @@ func makeFailerWithoutLocalNoop(
 			m:             m,
 			startOpts:     opts,
 			startSettings: settings,
-		}
-	case failureModeDeadlock:
-		return &deadlockFailer{
-			t:                t,
-			c:                c,
-			m:                m,
-			rng:              rng,
-			startOpts:        opts,
-			startSettings:    settings,
-			onlyLeaseholders: true,
-			numReplicas:      5,
 		}
 	case failureModeDiskStall:
 		return &diskStallFailer{
@@ -1388,134 +1345,6 @@ func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
 
 func (f *crashFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
-}
-
-// deadlockFailer deadlocks replicas. In addition to deadlocks, this failure
-// mode is representative of all failure modes that leave a replica unresponsive
-// while the node is otherwise still functional.
-type deadlockFailer struct {
-	t                test.Test
-	c                cluster.Cluster
-	m                cluster.Monitor
-	rng              *rand.Rand
-	startOpts        option.StartOpts
-	startSettings    install.ClusterSettings
-	onlyLeaseholders bool
-	numReplicas      int
-
-	locks  map[int][]roachpb.RangeID // track locks by node
-	ranges map[int][]roachpb.RangeID // ranges present on nodes
-	leases map[int][]roachpb.RangeID // range leases present on nodes
-}
-
-func (f *deadlockFailer) Mode() failureMode             { return failureModeDeadlock }
-func (f *deadlockFailer) String() string                { return string(f.Mode()) }
-func (f *deadlockFailer) CanUseLocal() bool             { return true }
-func (f *deadlockFailer) CanRunWith(m failureMode) bool { return true }
-func (f *deadlockFailer) Setup(context.Context)         {}
-func (f *deadlockFailer) Cleanup(context.Context)       {}
-
-func (f *deadlockFailer) Ready(ctx context.Context, nodeID int) {
-	// In chaos tests, other nodes will be failing concurrently. We therefore
-	// can't run SHOW CLUSTER RANGES WITH DETAILS in Fail(), since it needs to
-	// read from all ranges. Instead, we fetch a snapshot of replicas and leases
-	// now, and if any replicas should move we'll skip them later.
-	//
-	// We also have to ensure we have an active connection to the node in the
-	// pool, since we may be unable to create one during concurrent failures.
-	conn := f.c.Conn(ctx, f.t.L(), nodeID)
-	rows, err := conn.QueryContext(ctx,
-		`SELECT range_id, replicas, lease_holder FROM [SHOW CLUSTER RANGES WITH DETAILS]`)
-	require.NoError(f.t, err)
-
-	f.ranges = map[int][]roachpb.RangeID{}
-	f.leases = map[int][]roachpb.RangeID{}
-	for rows.Next() {
-		var rangeID roachpb.RangeID
-		var replicas []int64
-		var leaseHolder int
-		require.NoError(f.t, rows.Scan(&rangeID, (*pq.Int64Array)(&replicas), &leaseHolder))
-		f.leases[leaseHolder] = append(f.leases[leaseHolder], rangeID)
-		for _, nodeID := range replicas {
-			f.ranges[int(nodeID)] = append(f.ranges[int(nodeID)], rangeID)
-		}
-	}
-	require.NoError(f.t, rows.Err())
-}
-
-func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
-	require.NotZero(f.t, f.numReplicas)
-	if f.locks == nil {
-		f.locks = map[int][]roachpb.RangeID{}
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
-	defer cancel()
-
-	var ranges []roachpb.RangeID
-	if f.onlyLeaseholders {
-		ranges = append(ranges, f.leases[nodeID]...)
-	} else {
-		ranges = append(ranges, f.ranges[nodeID]...)
-	}
-	f.rng.Shuffle(len(ranges), func(i, j int) {
-		ranges[i], ranges[j] = ranges[j], ranges[i]
-	})
-
-	conn := f.c.Conn(ctx, f.t.L(), nodeID)
-
-	for i := 0; i < len(ranges) && len(f.locks[nodeID]) < f.numReplicas; i++ {
-		rangeID := ranges[i]
-		var locked bool
-		require.NoError(f.t, conn.QueryRowContext(ctx,
-			`SELECT crdb_internal.unsafe_lock_replica($1::int, true)`, rangeID).Scan(&locked))
-		if locked {
-			f.locks[nodeID] = append(f.locks[nodeID], rangeID)
-			f.t.L().Printf("locked r%d on n%d", rangeID, nodeID)
-		}
-	}
-	// Some nodes may have fewer ranges than the requested numReplicas locks, and
-	// replicas may also have moved in the meanwhile. Just assert that we were able
-	// to lock at least 1 replica.
-	require.NotEmpty(f.t, f.locks[nodeID], "didn't lock any replicas")
-}
-
-func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
-	if f.locks == nil || len(f.locks[nodeID]) == 0 {
-		return
-	}
-
-	err := func() error {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		conn, err := f.c.ConnE(ctx, f.t.L(), nodeID)
-		if err != nil {
-			return err
-		}
-		for _, rangeID := range f.locks[nodeID] {
-			var unlocked bool
-			err := conn.QueryRowContext(ctx,
-				`SELECT crdb_internal.unsafe_lock_replica($1, false)`, rangeID).Scan(&unlocked)
-			if err != nil {
-				return err
-			} else if !unlocked {
-				return errors.Errorf("r%d was not unlocked", rangeID)
-			} else {
-				f.t.L().Printf("unlocked r%d on n%d", rangeID, nodeID)
-			}
-		}
-		return nil
-	}()
-	// We may have locked replicas that prevent us from connecting to the node
-	// again, so we fall back to restarting the node.
-	if err != nil {
-		f.t.L().Printf("failed to unlock replicas on n%d, restarting node: %s", nodeID, err)
-		f.m.ExpectDeath()
-		f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
-		f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
-	}
-	delete(f.locks, nodeID)
 }
 
 // diskStallFailer stalls the disk indefinitely. This should cause the node to

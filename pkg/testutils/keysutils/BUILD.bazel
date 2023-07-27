@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "keysutils",
-    testonly = 1,
     srcs = ["pretty_scanner.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/keysutils",
     visibility = ["//visibility:public"],

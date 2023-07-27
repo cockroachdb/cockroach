@@ -77,9 +77,6 @@ type Watcher struct {
 
 	lastFrontierTS hlc.Timestamp // used to assert monotonicity across rangefeed attempts
 
-	// Used to force a restart during testing.
-	restartErrCh chan error
-
 	knobs TestingKnobs
 }
 
@@ -180,7 +177,6 @@ func NewWatcher(
 		withPrevValue:    withPrevValue,
 		translateEvent:   translateEvent,
 		onUpdate:         onUpdate,
-		restartErrCh:     make(chan error),
 	}
 	if knobs != nil {
 		w.knobs = *knobs
@@ -357,22 +353,10 @@ func (s *Watcher) Run(ctx context.Context) error {
 
 		case err := <-errCh:
 			return err
-		case err := <-s.restartErrCh:
-			return err
 		case err := <-s.knobs.ErrorInjectionCh:
 			return err
 		}
 	}
-}
-
-var restartErr = errors.New("testing restart requested")
-
-// TestingRestart injects an error into the rangefeed cache, forcing
-// it to restart. This is separate from the testing knob so that we
-// can force a restart from test infrastructure without overriding the
-// user-provided testing knobs.
-func (s *Watcher) TestingRestart() {
-	s.restartErrCh <- restartErr
 }
 
 func (s *Watcher) handleUpdate(

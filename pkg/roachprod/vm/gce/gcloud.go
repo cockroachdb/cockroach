@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
-	cloudbilling "google.golang.org/api/cloudbilling/v1beta"
 )
 
 const (
@@ -99,7 +97,7 @@ func runJSONCommand(args []string, parsed interface{}) error {
 	}
 
 	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s: %v", rawJSON, rawJSON)
+		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
 	}
 
 	return nil
@@ -148,6 +146,16 @@ func (jsonVM *jsonVM) toVM(
 		vmErrors = append(vmErrors, vm.ErrNoExpiration)
 	}
 
+	// lastComponent splits a url path and returns only the last part. This is
+	// used because some of the fields in jsonVM are defined using URLs like:
+	//  "https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
+	// We want to strip this down to "n1-standard-16", so we only want the last
+	// component.
+	lastComponent := func(url string) string {
+		s := strings.Split(url, "/")
+		return s[len(s)-1]
+	}
+
 	// Extract network information
 	var publicIP, privateIP, vpc string
 	if len(jsonVM.NetworkInterfaces) == 0 {
@@ -179,41 +187,22 @@ func (jsonVM *jsonVM) toVM(
 	}
 
 	var volumes []vm.Volume
-	var localDisks []vm.Volume
-
-	parseDiskSize := func(size string) int {
-		if val, err := strconv.Atoi(size); err == nil {
-			return val
-		} else {
-			vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", size))
-		}
-		return 0
-	}
 
 	for _, jsonVMDisk := range jsonVM.Disks {
-		if jsonVMDisk.Source == "" && jsonVMDisk.Type == "SCRATCH" {
-			// This is a scratch disk.
-			localDisks = append(localDisks, vm.Volume{
-				Size:               parseDiskSize(jsonVMDisk.DiskSizeGB),
-				ProviderVolumeType: "local-ssd",
-			})
-			continue
-		}
-		if !jsonVMDisk.Boot {
-			// Find a persistent volume (detailedDisk) matching the attached non-boot disk.
+		if jsonVMDisk.Source != "" && !jsonVMDisk.Boot {
 			for _, detailedDisk := range disks {
 				if detailedDisk.SelfLink == jsonVMDisk.Source {
 					vol := vm.Volume{
-						// NB: See TODO in toDescribeVolumeCommandResponse. We
-						// should be able to "just" use detailedDisk.Name here,
-						// but we're abusing that field elsewhere, and
-						// incorrectly. Using SelfLink is correct.
-						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
-						ProviderVolumeType: detailedDisk.Type,
-						Zone:               lastComponent(detailedDisk.Zone),
+						ProviderResourceID: detailedDisk.Name,
+						ProviderVolumeType: jsonVMDisk.Type,
+						Zone:               jsonVM.Zone,
 						Name:               detailedDisk.Name,
 						Labels:             detailedDisk.Labels,
-						Size:               parseDiskSize(detailedDisk.SizeGB),
+					}
+					if val, err := strconv.Atoi(jsonVMDisk.DiskSizeGB); err == nil {
+						vol.Size = val
+					} else {
+						vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", jsonVMDisk.DiskSizeGB))
 					}
 					volumes = append(volumes, vol)
 				}
@@ -241,7 +230,6 @@ func (jsonVM *jsonVM) toVM(
 		SQLPort:                config.DefaultSQLPort,
 		AdminUIPort:            config.DefaultAdminUIPort,
 		NonBootAttachedVolumes: volumes,
-		LocalDisks:             localDisks,
 	}
 }
 
@@ -306,13 +294,13 @@ type Provider struct {
 	ServiceAccount string
 }
 
-type snapshotJson struct {
+type snapshotCreateJson struct {
 	CreationSizeBytes  string    `json:"creationSizeBytes"`
 	CreationTimestamp  time.Time `json:"creationTimestamp"`
 	Description        string    `json:"description"`
 	DiskSizeGb         string    `json:"diskSizeGb"`
 	DownloadBytes      string    `json:"downloadBytes"`
-	ID                 string    `json:"id"`
+	Id                 string    `json:"id"`
 	Kind               string    `json:"kind"`
 	LabelFingerprint   string    `json:"labelFingerprint"`
 	Name               string    `json:"name"`
@@ -325,110 +313,44 @@ type snapshotJson struct {
 	StorageLocations   []string  `json:"storageLocations"`
 }
 
-func (p *Provider) CreateVolumeSnapshot(
-	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
-) (vm.VolumeSnapshot, error) {
+func (p *Provider) SnapshotVolume(
+	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
 	args := []string{
 		"compute",
-		"--project", p.GetProject(),
 		"snapshots",
-		"create", vsco.Name,
+		"create", name,
 		"--source-disk", volume.ProviderResourceID,
 		"--source-disk-zone", volume.Zone,
-		"--description", vsco.Description,
+		"--description", description,
 		"--format", "json",
 	}
 
-	var createJsonResponse snapshotJson
-	if err := runJSONCommand(args, &createJsonResponse); err != nil {
-		return vm.VolumeSnapshot{}, err
+	var createJsonResponse snapshotCreateJson
+	err := runJSONCommand(args, &createJsonResponse)
+	if err != nil {
+		return "", err
 	}
 
 	sb := strings.Builder{}
-	for k, v := range vsco.Labels {
+	for k, v := range labels {
 		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
 	}
 	s := sb.String()
 
 	args = []string{
 		"compute",
-		"--project", p.GetProject(),
 		"snapshots",
-		"add-labels", vsco.Name,
+		"add-labels", name,
 		"--labels", s[:len(s)-1],
 	}
 	cmd := exec.Command("gcloud", args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		return vm.VolumeSnapshot{}, err
-	}
-	return vm.VolumeSnapshot{
-		ID:   createJsonResponse.ID,
-		Name: createJsonResponse.Name,
-	}, nil
-}
+	_, err = cmd.CombinedOutput()
 
-func (p *Provider) ListVolumeSnapshots(
-	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
-) ([]vm.VolumeSnapshot, error) {
-	args := []string{
-		"compute",
-		"--project", p.GetProject(),
-		"snapshots",
-		"list",
-		"--format", "json(name,id)",
+	if err != nil {
+		return "", err
 	}
-	var filters []string
-	if vslo.NamePrefix != "" {
-		filters = append(filters, fmt.Sprintf("name:%s", vslo.NamePrefix))
-	}
-	if !vslo.CreatedBefore.IsZero() {
-		filters = append(filters, fmt.Sprintf("creationTimestamp<'%s'", vslo.CreatedBefore.Format("2006-01-02")))
-	}
-	for k, v := range vslo.Labels {
-		filters = append(filters, fmt.Sprintf("labels.%s=%s", k, v))
-	}
-	if len(filters) > 0 {
-		args = append(args, "--filter", strings.Join(filters, " AND "))
-	}
-
-	var snapshotsJSONResponse []snapshotJson
-	if err := runJSONCommand(args, &snapshotsJSONResponse); err != nil {
-		return nil, err
-	}
-
-	var snapshots []vm.VolumeSnapshot
-	for _, snapshotJson := range snapshotsJSONResponse {
-		if !strings.HasPrefix(snapshotJson.Name, vslo.NamePrefix) {
-			continue
-		}
-		snapshots = append(snapshots, vm.VolumeSnapshot{
-			ID:   snapshotJson.ID,
-			Name: snapshotJson.Name,
-		})
-	}
-	sort.Sort(vm.VolumeSnapshots(snapshots))
-	return snapshots, nil
-}
-
-func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	if len(snapshots) == 0 {
-		return nil
-	}
-	args := []string{
-		"compute",
-		"--project", p.GetProject(),
-		"snapshots",
-		"delete",
-	}
-	for _, snapshot := range snapshots {
-		args = append(args, snapshot.Name)
-	}
-
-	cmd := exec.Command("gcloud", args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		return err
-	}
-	return nil
+	return createJsonResponse.Name, nil
 }
 
 type describeVolumeCommandResponse struct {
@@ -450,22 +372,18 @@ type describeVolumeCommandResponse struct {
 func (p *Provider) CreateVolume(
 	l *logger.Logger, vco vm.VolumeCreateOpts,
 ) (vol vm.Volume, err error) {
-	// TODO(leon): IOPS is not handled.
-	if vco.IOPS != 0 {
-		err = errors.New("Creating a volume with IOPS is not supported at this time.")
+	// TODO(leon): SourceSnapshotID and IOPS, are not handled
+	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
+		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
 		return vol, err
 	}
 	args := []string{
 		"compute",
-		"--project", p.GetProject(),
 		"disks",
 		"create", vco.Name,
 		"--size", strconv.Itoa(vco.Size),
 		"--zone", vco.Zone,
 		"--format", "json",
-	}
-	if vco.SourceSnapshotID != "" {
-		args = append(args, "--source-snapshot", vco.SourceSnapshotID)
 	}
 
 	if vco.Size == 0 {
@@ -478,7 +396,7 @@ func (p *Provider) CreateVolume(
 
 	if vco.Architecture != "" {
 		if vco.Architecture == "ARM64" || vco.Architecture == "X86_64" {
-			args = append(args, "--architecture", vco.Architecture)
+			args = append(args, "--architecture=", vco.Architecture)
 		} else {
 			return vol, errors.Newf("Expected architecture to be one of ARM64, X86_64 got %s\n", vco.Architecture)
 		}
@@ -486,7 +404,7 @@ func (p *Provider) CreateVolume(
 
 	switch vco.Type {
 	case "local-ssd", "pd-balanced", "pd-extreme", "pd-ssd", "pd-standard":
-		args = append(args, "--type", vco.Type)
+		args = append(args, "--type=", vco.Type)
 	case "":
 	// use the default
 	default:
@@ -508,148 +426,37 @@ func (p *Provider) CreateVolume(
 	if err != nil {
 		return vol, err
 	}
-	if len(vco.Labels) > 0 {
-		sb := strings.Builder{}
-		for k, v := range vco.Labels {
-			fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
-		}
-		s := sb.String()
-		args = []string{
-			"compute",
-			"--project", p.GetProject(),
-			"disks",
-			"add-labels", vco.Name,
-			"--labels", s[:len(s)-1],
-			"--zone", vco.Zone,
-		}
-		cmd := exec.Command("gcloud", args...)
-		if _, err := cmd.CombinedOutput(); err != nil {
-			return vm.Volume{}, err
-		}
+	sb := strings.Builder{}
+	for k, v := range vco.Labels {
+		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
+	}
+	s := sb.String()
+
+	args = []string{
+		"compute",
+		"disks",
+		"add-labels", vco.Name,
+		"--labels", s[:len(s)-1],
+		"--zone", vco.Zone,
+	}
+	cmd := exec.Command("gcloud", args...)
+	_, err = cmd.CombinedOutput()
+
+	if err != nil {
+		return vol, err
 	}
 
 	return vm.Volume{
 		ProviderResourceID: createdVolume.Name,
-		ProviderVolumeType: lastComponent(createdVolume.Type),
-		Zone:               lastComponent(createdVolume.Zone),
-		Encrypted:          false, // only used for aws
 		Name:               createdVolume.Name,
-		Labels:             createdVolume.Labels,
+		ProviderVolumeType: createdVolume.Type,
+		Zone:               vco.Zone,
 		Size:               size,
-	}, nil
-}
-
-func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	{ // Detach disks.
-		args := []string{
-			"compute",
-			"--project", p.GetProject(),
-			"instances",
-			"detach-disk", vm.Name,
-			"--disk", volume.ProviderResourceID,
-			"--zone", volume.Zone,
-		}
-		cmd := exec.Command("gcloud", args...)
-		if _, err := cmd.CombinedOutput(); err != nil {
-			return err
-		}
-	}
-	{ // Delete disks.
-		args := []string{
-			"compute",
-			"--project", p.GetProject(),
-			"disks",
-			"delete",
-			volume.ProviderResourceID,
-			"--zone", volume.Zone,
-			"--quiet",
-		}
-		cmd := exec.Command("gcloud", args...)
-		if _, err := cmd.CombinedOutput(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) {
-	var attachedDisks []attachDiskCmdDisk
-	var describedVolumes []describeVolumeCommandResponse
-
-	{
-		// We're running the equivalent of:
-		//  	gcloud compute instances describe irfansharif-snapshot-0001 \
-		//  		--project cockroach-ephemeral --zone us-east1-b \
-		// 			--format json(disks)
-		//
-		// We'll use this data to filter out boot disks.
-		var commandResponse instanceDisksResponse
-		args := []string{
-			"compute",
-			"instances",
-			"describe",
-			v.Name,
-			"--project", p.GetProject(),
-			"--zone", v.Zone,
-			"--format", "json(disks)",
-		}
-		if err := runJSONCommand(args, &commandResponse); err != nil {
-			return nil, err
-		}
-		attachedDisks = commandResponse.Disks
-	}
-
-	{
-		// We're running the equivalent of
-		// 		gcloud compute disks list --project cockroach-ephemeral \
-		//			--filter "users:(irfansharif-snapshot-0001)" --format json
-		//
-		// This contains more per-disk metadata than the command above, but
-		// annoyingly does not contain whether the disk is a boot volume.
-		args := []string{
-			"compute",
-			"disks",
-			"list",
-			"--project", p.GetProject(),
-			"--filter", fmt.Sprintf("users:(%s)", v.Name),
-			"--format", "json",
-		}
-		if err := runJSONCommand(args, &describedVolumes); err != nil {
-			return nil, err
-		}
-	}
-
-	var volumes []vm.Volume
-	for idx := range attachedDisks {
-		attachedDisk := attachedDisks[idx]
-		if attachedDisk.Boot {
-			continue
-		}
-		describedVolume := describedVolumes[idx]
-		size, err := strconv.Atoi(describedVolume.SizeGB)
-		if err != nil {
-			return nil, err
-		}
-		volumes = append(volumes, vm.Volume{
-			ProviderResourceID: describedVolume.Name,
-			ProviderVolumeType: lastComponent(describedVolume.Type),
-			Zone:               lastComponent(describedVolume.Zone),
-			Encrypted:          false, // only used for aws
-			Name:               describedVolume.Name,
-			Labels:             describedVolume.Labels,
-			Size:               size,
-		})
-	}
-
-	// TODO(irfansharif): Update v.NonBootAttachedVolumes? It's awkward to have
-	// that field at all.
-	return volumes, nil
+		Labels:             vco.Labels,
+	}, err
 }
 
 type instanceDisksResponse struct {
-	// Disks that are attached to the instance.
-	// N.B. Unattached disks can be enumerated via,
-	//	gcloud compute --project $project disks list --filter="-users:*"
 	Disks []attachDiskCmdDisk `json:"disks"`
 }
 type attachDiskCmdDisk struct {
@@ -665,11 +472,10 @@ type attachDiskCmdDisk struct {
 	Type       string `json:"type"`
 }
 
-func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
-	// Volume attach.
+func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
+	// Volume attach
 	args := []string{
 		"compute",
-		"--project", p.GetProject(),
 		"instances",
 		"attach-disk",
 		vm.ProviderID,
@@ -696,10 +502,9 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 			volume.ProviderResourceID, vm.ProviderID)
 	}
 
-	// Volume auto delete.
+	// Volume auto delete
 	args = []string{
 		"compute",
-		"--project", p.GetProject(),
 		"instances",
 		"set-disk-auto-delete", vm.ProviderID,
 		"--auto-delete",
@@ -1337,10 +1142,6 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 
 // List queries gcloud to produce a list of VM info objects.
 func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
-	if opts.IncludeVolumes {
-		l.Printf("WARN: --include-volumes is disabled; attached disks info will be partial")
-	}
-
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
@@ -1382,163 +1183,11 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		for _, jsonVM := range jsonVMS {
 			defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
 			disks := userVMToDetailedDisk[jsonVM.SelfLink]
-
-			if len(disks) == 0 {
-				// Since `--include-volumes` is disabled, we convert attachDiskCmdDisk to describeVolumeCommandResponse.
-				// The former is a subset of the latter. Some information like `Labels` will be missing.
-				disks = toDescribeVolumeCommandResponse(jsonVM.Disks, jsonVM.Zone)
-			}
 			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts))
 		}
 	}
 
-	if opts.ComputeEstimatedCost {
-		if err := populateCostPerHour(l, vms); err != nil {
-			// N.B. We continue despite the error since it doesn't prevent 'List' and other commands which may depend on it.
-
-			l.Errorf("Error during cost estimation (will continue without): %v", err)
-			if strings.Contains(err.Error(), "could not find default credentials") {
-				l.Printf("To fix this, run `gcloud auth application-default login`")
-			}
-		}
-	}
-
 	return vms, nil
-}
-
-// Convert attachDiskCmdDisk to describeVolumeCommandResponse and link via SelfLink, Source.
-func toDescribeVolumeCommandResponse(
-	disks []attachDiskCmdDisk, zone string,
-) []describeVolumeCommandResponse {
-	res := make([]describeVolumeCommandResponse, 0, len(disks))
-
-	diskType := func(s string) string {
-		if s == "PERSISTENT" {
-			// Unfortunately, we don't know if it's a pd-ssd or pd-standard. We assume pd_ssd since those are common.
-			return "pd-ssd"
-		}
-		return "unknown"
-	}
-
-	for _, d := range disks {
-		if d.Source == "" && d.Type == "SCRATCH" {
-			// Skip scratch disks.
-			continue
-		}
-		res = append(res, describeVolumeCommandResponse{
-			// TODO(irfansharif): Use of the device name here is wrong -- it's
-			// ends up being things like "persistent-disk-1" but in other, more
-			// correct uses, it's "irfansharif-snapshot-0001-1". In fact, this
-			// whole transformation from attachDiskCmdDisk to
-			// describeVolumeCommandResponse if funky. Use something like
-			// (Provider).ListVolumes instead.
-			Name:     d.DeviceName,
-			SelfLink: d.Source,
-			SizeGB:   d.DiskSizeGB,
-			Type:     diskType(d.Type),
-			Zone:     zone,
-		})
-	}
-	return res
-}
-
-// populateCostPerHour adds an approximate cost per hour to each VM in the list,
-// using a basic estimation method.
-//  1. Compute and attached disks are estimated at the list prices, ignoring
-//     all discounts, but including any automatically applied credits.
-//  2. Boot disk costs are completely ignored.
-//  3. Network egress costs are completely ignored.
-//  4. Blob storage costs are completely ignored.
-func populateCostPerHour(l *logger.Logger, vms vm.List) error {
-	// Construct cost estimation service
-	ctx := context.Background()
-	service, err := cloudbilling.NewService(ctx)
-	if err != nil {
-		return err
-	}
-	beta := cloudbilling.NewV1betaService(service)
-	scenario := cloudbilling.EstimateCostScenarioWithListPriceRequest{
-		CostScenario: &cloudbilling.CostScenario{
-			ScenarioConfig: &cloudbilling.ScenarioConfig{
-				EstimateDuration: "3600s",
-			},
-			Workloads: []*cloudbilling.Workload{},
-		},
-	}
-	// Workload estimation service can handle 100 workloads at a time, so page
-	// 100 VMs at a time.
-	for len(vms) > 0 {
-		scenario.CostScenario.Workloads = scenario.CostScenario.Workloads[:0]
-		var page vm.List
-		if len(vms) <= 100 {
-			page, vms = vms, nil
-		} else {
-			page, vms = vms[:100], vms[100:]
-		}
-		for _, vm := range page {
-			machineType := vm.MachineType
-			zone := vm.Zone
-
-			workload := cloudbilling.Workload{
-				Name: vm.Name,
-				ComputeVmWorkload: &cloudbilling.ComputeVmWorkload{
-					InstancesRunning: &cloudbilling.Usage{
-						UsageRateTimeline: &cloudbilling.UsageRateTimeline{
-							UsageRateTimelineEntries: []*cloudbilling.UsageRateTimelineEntry{
-								{
-									// We're estimating the cost of 1 vm at a time.
-									UsageRate: 1,
-								},
-							},
-						},
-					},
-					Preemptible: vm.Preemptible,
-					MachineType: &cloudbilling.MachineType{
-						PredefinedMachineType: &cloudbilling.PredefinedMachineType{
-							MachineType: machineType,
-						},
-					},
-					PersistentDisks: []*cloudbilling.PersistentDisk{},
-					Region:          zone[:len(zone)-2],
-				},
-			}
-			for _, v := range vm.NonBootAttachedVolumes {
-				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
-					DiskSize: &cloudbilling.Usage{
-						UsageRateTimeline: &cloudbilling.UsageRateTimeline{
-							Unit: "GiBy",
-							UsageRateTimelineEntries: []*cloudbilling.UsageRateTimelineEntry{
-								{
-									UsageRate: float64(v.Size),
-								},
-							},
-						},
-					},
-					DiskType: v.ProviderVolumeType,
-					Scope:    "SCOPE_ZONAL",
-				})
-			}
-			scenario.CostScenario.Workloads = append(scenario.CostScenario.Workloads, &workload)
-		}
-		estimate, err := beta.EstimateCostScenario(&scenario).Do()
-		if err != nil {
-			l.Errorf("Error estimating VM costs (will continue without): %v", err)
-			continue
-		}
-		workloadEstimates := estimate.CostEstimationResult.SegmentCostEstimates[0].WorkloadCostEstimates
-		for i := range workloadEstimates {
-			workloadEstimate := workloadEstimates[i].WorkloadTotalCostEstimate.NetCostEstimate
-			page[i].CostPerHour = float64(workloadEstimate.Units) + float64(workloadEstimate.Nanos)/1e9
-			// Add the estimated cost of local disks since the billing API only supports persistent disks.
-			for _, v := range page[i].LocalDisks {
-				// "For example, in the Iowa, Oregon, Taiwan, and Belgium regions, local SSDs cost $0.080 per GB per month."
-				// Normalized to per hour billing, 0.08 / 730 = 0.0001095890410958904
-				// https://cloud.google.com/compute/disks-image-pricing#disk
-				page[i].CostPerHour += float64(v.Size) * 0.00011
-			}
-		}
-	}
-	return nil
 }
 
 func serializeLabel(s string) string {
@@ -1571,16 +1220,4 @@ func (p *Provider) ProjectActive(project string) bool {
 		}
 	}
 	return false
-}
-
-// lastComponent splits a url path and returns only the last part. This is
-// used because some fields in GCE APIs are defined using URLs like:
-//
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
-//
-// We want to strip this down to "n2-standard-16", so we only want the last
-// component.
-func lastComponent(url string) string {
-	s := strings.Split(url, "/")
-	return s[len(s)-1]
 }

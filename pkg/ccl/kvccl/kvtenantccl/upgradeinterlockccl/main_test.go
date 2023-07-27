@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package upgradeinterlockccl
+package upgradeinterlockccl_test
 
 import (
 	"os"

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
@@ -39,10 +38,6 @@ type Store interface {
 
 	// SetQueueActive disables/enables the named queue.
 	SetQueueActive(active bool, queue string) error
-
-	// GetReplicaMutexForTesting returns the mutex of the replica with the given
-	// range ID, or nil if no replica was found. This is used for testing.
-	GetReplicaMutexForTesting(rangeID roachpb.RangeID) *syncutil.RWMutex
 }
 
 // UnsupportedStoresIterator is a StoresIterator that only returns "unsupported"

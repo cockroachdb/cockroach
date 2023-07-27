@@ -852,7 +852,6 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-
 						}
 
 						a.numNonNull++
@@ -890,7 +889,6 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-
 						}
 
 						a.numNonNull++
@@ -930,7 +928,6 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-
 						}
 
 						a.numNonNull++
@@ -966,7 +963,6 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
-
 						}
 
 						a.numNonNull++

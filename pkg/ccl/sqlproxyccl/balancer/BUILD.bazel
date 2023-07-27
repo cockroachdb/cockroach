@@ -37,7 +37,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":balancer"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",

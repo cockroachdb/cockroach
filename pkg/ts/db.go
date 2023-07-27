@@ -21,9 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -58,6 +59,24 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
 ).WithPublic()
+
+// deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
+var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
+	s := settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
+		resolution30mDefaultPruneThreshold,
+	)
+	s.SetRetired()
+	return s
+}()
+
+func init() {
+	// The setting is not used any more, but we need to keep its
+	// definition for backward compatibility until the next release
+	// cycle.
+	_ = deprecatedResolution30StoreDuration
+}
 
 // Resolution30mStorageTTL defines the maximum age of data that will be
 // retained at he 30 minute resolution. Data older than this is subject to
@@ -130,7 +149,7 @@ func (db *DB) PollSource(
 	frequency time.Duration,
 	r Resolution,
 	stopper *stop.Stopper,
-) (firstDone <-chan struct{}) {
+) {
 	ambient.AddLogTag("ts-poll", nil)
 	p := &poller{
 		AmbientContext: ambient,
@@ -140,38 +159,29 @@ func (db *DB) PollSource(
 		r:              r,
 		stopper:        stopper,
 	}
-	return p.start()
+	p.start()
 }
 
 // start begins the goroutine for this poller, which will periodically request
 // time series data from the DataSource and store it.
-func (p *poller) start() (firstDone <-chan struct{}) {
-	ch := make(chan struct{})
+func (p *poller) start() {
 	// Poll once immediately and synchronously.
+	// Wrap context as a startup context to enable access to kv on startup path
+	// without retries.
+	p.poll(p.AnnotateCtx(startup.WithoutChecks(context.Background())))
 	bgCtx := p.AnnotateCtx(context.Background())
-	if p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(ctx context.Context) {
-		ch := ch // goroutine-local copy
-		ticker := timeutil.NewTimer()
-		ticker.Reset(0)
+	_ = p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(ctx context.Context) {
+		ticker := time.NewTicker(p.frequency)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				ticker.Read = true
-				ticker.Reset(p.frequency)
 				p.poll(ctx)
-				if ch != nil {
-					close(ch)
-					ch = nil
-				}
 			case <-p.stopper.ShouldQuiesce():
 				return
 			}
 		}
-	}) != nil {
-		close(ch)
-	}
-	return ch
+	})
 }
 
 // poll retrieves data from the underlying DataSource a single time, storing any
@@ -190,7 +200,7 @@ func (p *poller) poll(ctx context.Context) {
 		const opName = "ts-poll"
 		ctx, span := p.AnnotateCtxWithSpan(ctx, opName)
 		defer span.Finish()
-		if err := timeutil.RunWithTimeout(ctx, opName, storeDataTimeout,
+		if err := contextutil.RunWithTimeout(ctx, opName, storeDataTimeout,
 			func(ctx context.Context) error {
 				return p.db.StoreData(ctx, p.r, data)
 			},

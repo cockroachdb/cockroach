@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -70,8 +69,8 @@ func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
 
 // RaftState stores information about the last entry and the size of the log.
 type RaftState struct {
-	LastIndex kvpb.RaftIndex
-	LastTerm  kvpb.RaftTerm
+	LastIndex uint64
+	LastTerm  uint64
 	ByteSize  int64
 }
 
@@ -167,7 +166,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	prevLastIndex := state.LastIndex
 	overwriting := false
 	if len(m.Entries) > 0 {
-		firstPurge := kvpb.RaftIndex(m.Entries[0].Index) // first new entry written
+		firstPurge := m.Entries[0].Index // first new entry written
 		overwriting = firstPurge <= prevLastIndex
 		stats.Begin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
@@ -291,8 +290,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// entries that we didn't overwrite). Remove any such leftover on-disk
 		// payloads (we can do that now because we've committed the deletion
 		// just above).
-		firstPurge := kvpb.RaftIndex(m.Entries[0].Index) // first new entry written
-		purgeTerm := kvpb.RaftTerm(m.Entries[0].Term - 1)
+		firstPurge := m.Entries[0].Index // first new entry written
+		purgeTerm := m.Entries[0].Term - 1
 		lastPurge := prevLastIndex // old end of the log, include in deletion
 		purgedSize, err := maybePurgeSideloaded(ctx, s.Sideload, firstPurge, lastPurge, purgeTerm)
 		if err != nil {
@@ -385,14 +384,14 @@ func logAppend(
 	defer valPool.Put(value)
 	for i := range entries {
 		ent := &entries[i]
-		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
+		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, ent.Index)
 
 		if err := value.SetProto(ent); err != nil {
 			return RaftState{}, err
 		}
 		value.InitChecksum(key)
 		var err error
-		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
+		if ent.Index > prev.LastIndex {
 			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
 		} else {
 			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
@@ -402,7 +401,7 @@ func logAppend(
 		}
 	}
 
-	newLastIndex := kvpb.RaftIndex(entries[len(entries)-1].Index)
+	newLastIndex := entries[len(entries)-1].Index
 	// Delete any previously appended log entries which never committed.
 	if prev.LastIndex > 0 {
 		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
@@ -417,7 +416,7 @@ func logAppend(
 	}
 	return RaftState{
 		LastIndex: newLastIndex,
-		LastTerm:  kvpb.RaftTerm(entries[len(entries)-1].Term),
+		LastTerm:  entries[len(entries)-1].Term,
 		ByteSize:  prev.ByteSize + diff.SysBytes,
 	}, nil
 }
@@ -430,11 +429,11 @@ func LoadTerm(
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	index kvpb.RaftIndex,
-) (kvpb.RaftTerm, error) {
+	index uint64,
+) (uint64, error) {
 	entry, found := eCache.Get(rangeID, index)
 	if found {
-		return kvpb.RaftTerm(entry.Term), nil
+		return entry.Term, nil
 	}
 
 	reader := eng.NewReadOnly(storage.StandardDurability)
@@ -453,7 +452,7 @@ func LoadTerm(
 
 	if found {
 		// Found an entry. Double-check that it has a correct index.
-		if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
+		if got, want := entry.Index, index; got != want {
 			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
 		}
 		// Cache the entry except if it is sideloaded. We don't load/inline the
@@ -467,7 +466,7 @@ func LoadTerm(
 		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
-		return kvpb.RaftTerm(entry.Term), nil
+		return entry.Term, nil
 	}
 	// Otherwise, the entry at the given index is not found. This can happen if
 	// the index is ahead of lastIndex, or it has been compacted away.
@@ -506,8 +505,7 @@ func LoadEntries(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
-	lo, hi kvpb.RaftIndex,
-	maxBytes uint64,
+	lo, hi, maxBytes uint64,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -523,7 +521,7 @@ func LoadEntries(
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
-	if kvpb.RaftIndex(len(ents)) == hi-lo || exceededMaxBytes {
+	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
 		return ents, cachedSize, 0, nil
 	}
 
@@ -535,7 +533,7 @@ func LoadEntries(
 
 	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
-		if kvpb.RaftIndex(ent.Index) != expectedIndex {
+		if ent.Index != expectedIndex {
 			return iterutil.StopIteration()
 		}
 		expectedIndex++
@@ -578,7 +576,7 @@ func LoadEntries(
 	eCache.Add(rangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
-	if kvpb.RaftIndex(len(ents)) == hi-lo {
+	if uint64(len(ents)) == hi-lo {
 		return ents, cachedSize, combinedSize - cachedSize, nil
 	}
 

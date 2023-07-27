@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	grpcpeer "google.golang.org/grpc/peer"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -192,7 +192,7 @@ type authnResult interface {
 }
 
 func getClientCert(ctx context.Context) (*x509.Certificate, error) {
-	p, ok := grpcpeer.FromContext(ctx)
+	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return nil, errTLSInfoMissing
 	}

@@ -54,12 +54,6 @@ func (t Timestamp) LessEq(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical <= s.Logical)
 }
 
-// After returns whether the provided timestamp is after our timestamp.
-// This matches the behavior of time.After.
-func (t Timestamp) After(s Timestamp) bool {
-	return !t.LessEq(s)
-}
-
 // Compare returns -1 if this timestamp is lesser than the given timestamp, 1 if
 // it is greater, and 0 if they are equal.
 func (t Timestamp) Compare(s Timestamp) int {
@@ -209,14 +203,6 @@ func (t Timestamp) IsEmpty() bool {
 // gcassert:inline
 func (t Timestamp) IsSet() bool {
 	return !t.IsEmpty()
-}
-
-// AddDuration adds a given duration to this Timestamp. The resulting timestamp
-// is Synthetic. Normally if you want to bump your clock to  the higher of two
-// timestamps, use Forward, however this method is here to create a
-// hlc.Timestamp in the future (or past).
-func (t Timestamp) AddDuration(duration time.Duration) Timestamp {
-	return t.Add(duration.Nanoseconds(), t.Logical)
 }
 
 // Add returns a timestamp with the WallTime and Logical components increased.
@@ -410,6 +396,18 @@ func (LegacyTimestamp) SafeValue() {}
 // ClockTimestamp is the statically typed version of a Timestamp with its
 // Synthetic flag set to false.
 type ClockTimestamp Timestamp
+
+// DeprecatedTryToClockTimestamp attempts to downcast a Timestamp into a
+// ClockTimestamp. Returns the result and a boolean indicating whether the cast
+// succeeded.
+// TODO(nvanbenschoten): remove this in v23.1 when we remove the synthetic
+// timestamp bit.
+func (t Timestamp) DeprecatedTryToClockTimestamp() (ClockTimestamp, bool) {
+	if t.Synthetic {
+		return ClockTimestamp{}, false
+	}
+	return ClockTimestamp(t), true
+}
 
 // UnsafeToClockTimestamp converts a Timestamp to a ClockTimestamp, regardless
 // of whether such a cast would be legal according to the Synthetic flag. The

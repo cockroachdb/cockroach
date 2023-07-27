@@ -12,7 +12,6 @@ import React from "react";
 import moment from "moment-timezone";
 import { createSelector } from "reselect";
 
-import * as protos from "src/js/protos";
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
@@ -48,12 +47,6 @@ import {
   WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
-import { isSecondaryTenant } from "src/redux/tenants";
-import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
-import { MonitoringIcon } from "src/views/shared/components/icons/monitoring";
-
-type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 export interface OwnProps extends MetricsDataComponentProps {
   isKvGraph?: boolean;
@@ -240,6 +233,13 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     }
     this.props.setMetricsFixedWindow(newTimeWindow);
     this.props.setTimeScale(newTimeScale);
+    const { pathname, search } = this.props.history.location;
+    const urlParams = new URLSearchParams(search);
+
+    this.props.history.push({
+      pathname,
+      search: urlParams.toString(),
+    });
   }
 
   u: uPlot;
@@ -278,16 +278,6 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     return false;
   }
 
-  hasDataPoints = (data: TSResponse): boolean => {
-    let hasData = false;
-    data?.results?.map(result => {
-      if (result?.datapoints?.length > 0) {
-        hasData = true;
-      }
-    });
-    return hasData;
-  };
-
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
       !this.props.data?.results ||
@@ -310,8 +300,8 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     // and are called when recomputing certain axis and
     // series options. This lets us use updated domains
     // when redrawing the uPlot chart on data change.
-    const resultDatapoints = _.flatMap(fData, result =>
-      result.values.map(dp => dp.value),
+    const resultDatapoints = _.flatMap(data.results, result =>
+      result.datapoints.map(dp => dp.value),
     );
     this.yAxisDomain = calculateYAxisDomain(axis.props.units, resultDatapoints);
     this.xAxisDomain = calculateXAxisDomain(
@@ -371,25 +361,8 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data, tenantSource, preCalcGraphSize } =
-      this.props;
-    if (!this.hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
-      return (
-        <div className="linegraph-empty">
-          <div className="header-empty">
-            <Tooltip placement="bottom" title={tooltip}>
-              <span className="title-empty">{title}</span>
-            </Tooltip>
-          </div>
-          <div className="body-empty">
-            <MonitoringIcon />
-            <span className="body-text-empty">
-              {"Metric is not currently available for this tenant."}
-            </span>
-          </div>
-        </div>
-      );
-    }
+    const { title, subtitle, tooltip, data, preCalcGraphSize } = this.props;
+
     return (
       <Visualization
         title={title}

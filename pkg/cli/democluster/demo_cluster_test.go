@@ -39,8 +39,8 @@ import (
 func newDemoCtx() *Context {
 	return &Context{
 		NumNodes:            1,
-		SQLPoolMemorySize:   256 << 20, // 256MiB, chosen to fit 9 nodes on 4GB machine.
-		CacheSize:           64 << 20,  // 64MiB, chosen to fit 9 nodes on 4GB machine.
+		SQLPoolMemorySize:   128 << 20, // 128MB, chosen to fit 9 nodes on 2GB machine.
+		CacheSize:           64 << 20,  // 64MB, chosen to fit 9 nodes on 2GB machine.
 		DefaultKeySize:      1024,
 		DefaultCALifetime:   24 * time.Hour,
 		DefaultCertLifetime: 2 * time.Hour,
@@ -67,7 +67,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
+				DisableDefaultTestTenant:  true,
 				PartOfCluster:             true,
 				JoinAddr:                  "127.0.0.1",
 				DisableTLSForHTTP:         true,
@@ -92,7 +92,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
+				DisableDefaultTestTenant:  true,
 				PartOfCluster:             true,
 				JoinAddr:                  "127.0.0.1",
 				Addr:                      "127.0.0.1:1336",

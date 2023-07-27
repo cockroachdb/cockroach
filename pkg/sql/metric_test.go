@@ -65,9 +65,8 @@ func TestQueryCounts(t *testing.T) {
 			DisableDeleteOrphanedLeases: true,
 		},
 	}
-	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
-	s := srv.TenantOrServer()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -119,7 +118,7 @@ func TestQueryCounts(t *testing.T) {
 			}
 
 			// Force metric snapshot refresh.
-			if err := srv.WriteSummaries(); err != nil {
+			if err := s.WriteSummaries(); err != nil {
 				t.Fatal(err)
 			}
 

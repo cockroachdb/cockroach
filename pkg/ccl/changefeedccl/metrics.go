@@ -383,7 +383,7 @@ var (
 	// for now.
 	metaChangefeedMaxBehindNanos = metric.Metadata{
 		Name:        "changefeed.max_behind_nanos",
-		Help:        "The most any changefeed's persisted checkpoint is behind the present",
+		Help:        "Largest commit-to-emit duration of any running feed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -392,6 +392,13 @@ var (
 		Name:        "changefeed.frontier_updates",
 		Help:        "Number of change frontier updates across all feeds",
 		Measurement: "Updates",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaChangefeedReplanCount = metric.Metadata{
+		Name:        "changefeed.replan_count",
+		Help:        "Number of replans triggered across all feeds",
+		Measurement: "Replans",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedEventConsumerFlushNanos = metric.Metadata{
@@ -682,6 +689,7 @@ type Metrics struct {
 	CheckpointHistNanos            metric.IHistogram
 	FrontierUpdates                *metric.Counter
 	ThrottleMetrics                cdcutils.Metrics
+	ReplanCount                    *metric.Counter
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
@@ -720,6 +728,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		}),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
 		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
+		ReplanCount:     metric.NewCounter(metaChangefeedReplanCount),
 		// Below two metrics were never implemented using the hdr histogram. Set ForceUsePrometheus
 		// to true.
 		ParallelConsumerFlushNanos: metric.NewHistogram(metric.HistogramOptions{

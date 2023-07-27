@@ -26,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -493,7 +493,7 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 	}
 	now := ir.clock.Now()
 	return ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
-		err := timeutil.RunWithTimeout(ctx, "async intent resolution",
+		err := contextutil.RunWithTimeout(ctx, "async intent resolution",
 			asyncIntentResolutionTimeout, func(ctx context.Context) error {
 				_, err := ir.CleanupIntents(ctx, intents, now, kvpb.PUSH_TOUCH)
 				return err
@@ -814,7 +814,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: cleanup txn records",
 		func(ctx context.Context) {
-			err := timeutil.RunWithTimeout(ctx, "cleanup txn record",
+			err := contextutil.RunWithTimeout(ctx, "cleanup txn record",
 				gcTxnRecordTimeout, func(ctx context.Context) error {
 					return ir.gcTxnRecord(ctx, rangeID, txn)
 				})
@@ -845,23 +845,6 @@ type ResolveOptions struct {
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
 	MinTimestamp hlc.Timestamp
-	// If set, instructs the IntentResolver to send the intent resolution requests
-	// immediately, instead of adding them to a batch and waiting for that batch
-	// to fill up with other intent resolution requests. This can be used to avoid
-	// any batching-induced latency, and should be used only by foreground traffic
-	// that is willing to trade off some throughput for lower latency.
-	//
-	// In addition to disabling batching, the option will also disable key count
-	// and byte size pagination. All requests will be sent in the same batch
-	// (subject to splitting on range boundaries) and no MaxSpanRequestKeys or
-	// TargetBytes limits will be assigned to limit the number or size of intents
-	// resolved by multi-point or ranged intent resolution. Users of the flag
-	// should be conscious of this.
-	//
-	// Because of these limitations, the flag is kept internal to this package. If
-	// we want to expose the flag and use it in more cases, we will first need to
-	// support key count and byte size pagination when bypassing the batcher.
-	sendImmediately bool
 }
 
 // lookupRangeID maps a key to a RangeID for best effort batching of intent
@@ -890,79 +873,45 @@ type lockUpdates interface {
 	Index(i int) roachpb.LockUpdate
 }
 
-var _ lockUpdates = (*txnLockUpdates)(nil)
-var _ lockUpdates = (*singleLockUpdate)(nil)
-var _ lockUpdates = (*sliceLockUpdates)(nil)
-
 type txnLockUpdates roachpb.Transaction
 
-// Len implements the lockUpdates interface.
+// Len returns the number of LockSpans in a txnLockUpdates,
+// as part of the lockUpdates interface implementation.
 func (t *txnLockUpdates) Len() int {
 	return len(t.LockSpans)
 }
 
-// Index implements the lockUpdates interface.
+// Index produces a LockUpdate from the respective LockSpan, when called on
+// txnLockUpdates. txnLockUpdates implements the lockUpdates interface.
 func (t *txnLockUpdates) Index(i int) roachpb.LockUpdate {
 	return roachpb.MakeLockUpdate((*roachpb.Transaction)(t), t.LockSpans[i])
 }
 
-type singleLockUpdate roachpb.LockUpdate
-
-// Len implements the lockUpdates interface.
-func (s *singleLockUpdate) Len() int {
-	return 1
-}
-
-// Index implements the lockUpdates interface.
-func (s *singleLockUpdate) Index(i int) roachpb.LockUpdate {
-	if i != 0 {
-		panic("index out of bounds")
-	}
-	return roachpb.LockUpdate(*s)
-}
-
 type sliceLockUpdates []roachpb.LockUpdate
 
-// Len implements the lockUpdates interface.
+// Len returns the number of LockUpdates in sliceLockUpdates,
+// as part of the lockUpdates interface implementation.
 func (s *sliceLockUpdates) Len() int {
 	return len(*s)
 }
 
-// Index implements the lockUpdates interface.
+// Index trivially produces a LockUpdate when called on sliceLockUpdates.
+// sliceLockUpdates implements the lockUpdates interface.
 func (s *sliceLockUpdates) Index(i int) roachpb.LockUpdate {
 	return (*s)[i]
 }
 
-// ResolveIntent synchronously resolves an intent according to opts. The method
-// is expected to be run on behalf of a user request, as opposed to a background
-// task.
+// ResolveIntent synchronously resolves an intent according to opts.
 func (ir *IntentResolver) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, opts ResolveOptions,
 ) *kvpb.Error {
-	if len(intent.EndKey) == 0 {
-		// If the caller wants to resolve a single point intent, let it send the
-		// request immediately. This is a performance optimization to resolve
-		// conflicting intents immediately for latency-sensitive requests.
-		//
-		// We don't set this flag when resolving a range of keys or when resolving
-		// multiple point intents (in ResolveIntents) due to the limitations around
-		// pagination described in the comment on ResolveOptions.sendImmediately.
-		opts.sendImmediately = true
-	}
-	return ir.resolveIntents(ctx, (*singleLockUpdate)(&intent), opts)
+	return ir.ResolveIntents(ctx, []roachpb.LockUpdate{intent}, opts)
 }
 
-// ResolveIntents synchronously resolves intents according to opts. The method
-// is expected to be run on behalf of a user request, as opposed to a background
-// task.
+// ResolveIntents synchronously resolves intents according to opts.
 func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
 ) (pErr *kvpb.Error) {
-	// TODO(nvanbenschoten): unlike IntentResolver.ResolveIntent, we don't set
-	// sendImmediately on the ResolveOptions here. This is because we don't
-	// support pagination when sending intent resolution immediately and not
-	// through the batcher. If this becomes important, we'll need to lift this
-	// limitation.
 	return ir.resolveIntents(ctx, (*sliceLockUpdates)(&intents), opts)
 }
 
@@ -986,43 +935,43 @@ func (ir *IntentResolver) resolveIntents(
 	if err := ctx.Err(); err != nil {
 		return kvpb.NewError(err)
 	}
-	log.Eventf(ctx, "resolving %d intents", intents.Len())
+	log.Eventf(ctx, "resolving intents")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Construct a slice of requests to send.
-	var singleReq [1]kvpb.Request //gcassert:noescape
-	reqs := resolveIntentReqs(intents, opts, singleReq[:])
-
-	// Send the requests ...
-	if opts.sendImmediately {
-		// ... using a single batch.
-		b := &kv.Batch{}
-		b.AddRawRequest(reqs...)
-		if err := ir.db.Run(ctx, b); err != nil {
-			return b.MustPErr()
-		}
-		return nil
-	}
-	// ... using their corresponding request batcher.
-	respChan := make(chan requestbatcher.Response, len(reqs))
-	for _, req := range reqs {
+	respChan := make(chan requestbatcher.Response, intents.Len())
+	for i := 0; i < intents.Len(); i++ {
+		intent := intents.Index(i)
+		rangeID := ir.lookupRangeID(ctx, intent.Key)
+		var req kvpb.Request
 		var batcher *requestbatcher.RequestBatcher
-		switch req.Method() {
-		case kvpb.ResolveIntent:
+		if len(intent.EndKey) == 0 {
+			req = &kvpb.ResolveIntentRequest{
+				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				Poison:            opts.Poison,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
+			}
 			batcher = ir.irBatcher
-		case kvpb.ResolveIntentRange:
+		} else {
+			req = &kvpb.ResolveIntentRangeRequest{
+				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				Poison:            opts.Poison,
+				MinTimestamp:      opts.MinTimestamp,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
+			}
 			batcher = ir.irRangeBatcher
-		default:
-			panic("unexpected")
 		}
-		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
 		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
 			return kvpb.NewError(err)
 		}
 	}
-	// Collect responses.
-	for range reqs {
+	for seen := 0; seen < intents.Len(); seen++ {
 		select {
 		case resp := <-respChan:
 			if resp.Err != nil {
@@ -1036,49 +985,6 @@ func (ir *IntentResolver) resolveIntents(
 		}
 	}
 	return nil
-}
-
-func resolveIntentReqs(
-	intents lockUpdates, opts ResolveOptions, alloc []kvpb.Request,
-) []kvpb.Request {
-	var pointReqs []kvpb.ResolveIntentRequest
-	var rangeReqs []kvpb.ResolveIntentRangeRequest
-	for i := 0; i < intents.Len(); i++ {
-		intent := intents.Index(i)
-		if len(intent.EndKey) == 0 {
-			pointReqs = append(pointReqs, kvpb.ResolveIntentRequest{
-				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:         intent.Txn,
-				Status:            intent.Status,
-				Poison:            opts.Poison,
-				IgnoredSeqNums:    intent.IgnoredSeqNums,
-				ClockWhilePending: intent.ClockWhilePending,
-			})
-		} else {
-			rangeReqs = append(rangeReqs, kvpb.ResolveIntentRangeRequest{
-				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:         intent.Txn,
-				Status:            intent.Status,
-				Poison:            opts.Poison,
-				MinTimestamp:      opts.MinTimestamp,
-				IgnoredSeqNums:    intent.IgnoredSeqNums,
-				ClockWhilePending: intent.ClockWhilePending,
-			})
-		}
-	}
-	var reqs []kvpb.Request
-	if cap(alloc) >= intents.Len() {
-		reqs = alloc[:0]
-	} else {
-		reqs = make([]kvpb.Request, 0, intents.Len())
-	}
-	for i := range pointReqs {
-		reqs = append(reqs, &pointReqs[i])
-	}
-	for i := range rangeReqs {
-		reqs = append(reqs, &rangeReqs[i])
-	}
-	return reqs
 }
 
 // intentsByTxn implements sort.Interface to sort intents based on txnID.

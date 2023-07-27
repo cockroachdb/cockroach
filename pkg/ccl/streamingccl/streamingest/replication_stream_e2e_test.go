@@ -11,7 +11,6 @@ package streamingest
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -708,79 +707,6 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
-	require.Greater(t, len(clientAddresses), 1)
-}
-
-// TestStreamingAutoReplan asserts that if a new node can participate in the
-// replication job, it will trigger distSQL replanning.
-func TestStreamingAutoReplan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.MultitenantSingleClusterNumNodes = 1
-
-	retryErrorChan := make(chan error)
-	turnOffReplanning := make(chan struct{})
-	var alreadyReplanned atomic.Bool
-
-	// Track the number of unique addresses that we're connected to.
-	clientAddresses := make(map[string]struct{})
-	var addressesMu syncutil.Mutex
-	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			addressesMu.Lock()
-			defer addressesMu.Unlock()
-			clientAddresses[addr] = struct{}{}
-		},
-		AfterRetryIteration: func(err error) {
-
-			if err != nil && !alreadyReplanned.Load() {
-				retryErrorChan <- err
-				<-turnOffReplanning
-				alreadyReplanned.Swap(true)
-			}
-		},
-	}
-	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
-	defer cleanup()
-	// Don't allow for replanning until the new nodes and scattered table have been created.
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
-
-	// Begin the job on a single source node.
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
-	require.Equal(t, len(clientAddresses), 1)
-
-	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
-	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
-	require.NoError(t, c.SrcCluster.WaitForFullReplication())
-
-	replicationtestutils.CreateScatteredTable(t, c, 3)
-
-	// Configure the ingestion job to replan eagerly.
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
-
-	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
-	require.Error(t, <-retryErrorChan, sql.ErrPlanChanged)
-
-	// Prevent continuous replanning to reduce test runtime. dsp.PartitionSpans()
-	// on the src cluster may return a different set of src nodes that can
-	// participate in the replication job (especially under stress), so if we
-	// repeatedly replan the job, we will repeatedly restart the job, preventing
-	// job progress.
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
-	close(turnOffReplanning)
-
-	cutoverTime := c.DestSysServer.Clock().Now()
-	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
-
 	require.Greater(t, len(clientAddresses), 1)
 }
 

@@ -31,6 +31,7 @@ go_library(
         "lexer.go",
         "parse.go",
         "plpgsql.go",
+        "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser",
     visibility = ["//visibility:public"],

@@ -2,12 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "floatcmp",
-    testonly = 1,
     srcs = ["floatcmp.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/floatcmp",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_go_cmp//cmp",
         "@com_github_google_go_cmp//cmp/cmpopts",
     ],
@@ -19,5 +17,4 @@ go_test(
     srcs = ["floatcmp_test.go"],
     args = ["-test.timeout=55s"],
     embed = [":floatcmp"],
-    deps = ["//pkg/util/leaktest"],
 )

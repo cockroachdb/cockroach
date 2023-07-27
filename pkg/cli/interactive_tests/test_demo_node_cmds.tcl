@@ -11,8 +11,7 @@ eexpect "defaultdb>"
 
 # Wrong number of args
 send "\\demo node\r"
-eexpect "invalid syntax: \\\\demo node"
-eexpect "Try \\\\? for help."
+eexpect "invalid syntax: \\\\demo node. Try \\\\? for help."
 eexpect "defaultdb>"
 
 # Cannot shutdown node 1

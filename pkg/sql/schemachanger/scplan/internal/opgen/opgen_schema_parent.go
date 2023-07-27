@@ -21,10 +21,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SchemaParent) *scop.AddSchemaParent {
-					return &scop.AddSchemaParent{
-						Parent: *protoutil.Clone(this).(*scpb.SchemaParent),
-					}
+				emit(func(this *scpb.SchemaParent) *scop.NotImplemented {
+					return notImplemented(this)
 				}),
 			),
 		),

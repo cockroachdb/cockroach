@@ -5,14 +5,16 @@ put k=k v=v ts=1,1
 data: "k"/1.000000000,1 -> /BYTES/v
 
 # Earlier wall time.
-# Note: a WriteTooOld "error" is returned and no write is completed.
+# Note: a WriteTooOld "error" is returned, but really the write completed,
+# just with a different timestamp.
 
 run error
 put k=k v=v2 ts=0,1
 ----
 >> at end:
+data: "k"/1.000000000,2 -> /BYTES/v2
 data: "k"/1.000000000,1 -> /BYTES/v
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 0,1 too old; must write at or above 1.000000000,2
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 0,1 too old; wrote at 1.000000000,2
 
 # Earlier logical time.
 
@@ -20,5 +22,7 @@ run error
 put k=k v=v2 ts=1,0
 ----
 >> at end:
+data: "k"/1.000000000,3 -> /BYTES/v2
+data: "k"/1.000000000,2 -> /BYTES/v2
 data: "k"/1.000000000,1 -> /BYTES/v
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; must write at or above 1.000000000,2
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; wrote at 1.000000000,3

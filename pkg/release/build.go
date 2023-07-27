@@ -131,14 +131,14 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 }
 
 // MakeWorkload makes the bin/workload binary. It is only ever built in the
-// crosslinux and crosslinuxarm configurations.
-func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
+// crosslinux configuration.
+func MakeWorkload(opts BuildOptions, pkgDir string) error {
 	if opts.Release {
 		return errors.Newf("cannot build workload in Release mode")
 	}
-	crossConfig := CrossConfigFromPlatform(platform)
-	configArg := fmt.Sprintf("--config=%s", crossConfig)
-	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "-c", "opt", configArg, "--config=ci")
+	// NB: workload doesn't need anything stamped so we can use `crosslinux`
+	// rather than `crosslinuxbase`.
+	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "-c", "opt", "--config=crosslinux", "--config=ci")
 	cmd.Dir = pkgDir
 	cmd.Stderr = os.Stderr
 	log.Printf("%s", cmd.Args)
@@ -147,11 +147,11 @@ func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 		return errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
 	}
 
-	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, []string{"-c", "opt", configArg, "--config=ci"})
+	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, []string{"-c", "opt", "--config=crosslinux", "--config=ci"})
 	if err != nil {
 		return err
 	}
-	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), platform == PlatformLinuxArm)
+	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"), false)
 }
 
 // MakeRelease makes the release binary and associated files.
@@ -160,7 +160,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return errors.Newf("cannot set the telemetry channel to %s, supported channels: %s and %s", opts.Channel, build.DefaultTelemetryChannel, build.FIPSTelemetryChannel)
 	}
 	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//pkg/cmd/cockroach-sql"}
-	if platform != PlatformMacOSArm && platform != PlatformWindows {
+	if platform != PlatformMacOSArm {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
@@ -340,7 +340,7 @@ func stageBinary(
 }
 
 func stageLibraries(platform Platform, bazelBin string, dir string) error {
-	if platform == PlatformMacOSArm || platform == PlatformWindows {
+	if platform == PlatformMacOSArm {
 		return nil
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -348,7 +348,12 @@ func stageLibraries(platform Platform, bazelBin string, dir string) error {
 	}
 	ext := SharedLibraryExtensionFromPlatform(platform)
 	for _, lib := range CRDBSharedLibraries {
-		src := filepath.Join(bazelBin, "c-deps", "libgeos_foreign", "lib", lib+ext)
+		libDir := "lib"
+		if platform == PlatformWindows {
+			// NB: On Windows these libs end up in the `bin` subdir.
+			libDir = "bin"
+		}
+		src := filepath.Join(bazelBin, "c-deps", "libgeos_foreign", libDir, lib+ext)
 		srcF, err := os.Open(src)
 		if err != nil {
 			return err

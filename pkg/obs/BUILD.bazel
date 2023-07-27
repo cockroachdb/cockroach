@@ -10,7 +10,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/obsservice/obslib",
         "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",

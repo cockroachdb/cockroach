@@ -44,35 +44,6 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
 	short := mustGetFlagBool(cmd, shortFlag)
 
-	// It's quite easy to _mistype_ "dev lint short" instead of "dev lint --short". In that case, 'short'
-	// is parsed as a package name, which results in skipping a number of linters. Since 'short' is not a valid
-	// package, we bail out.
-	for _, pkg := range pkgs {
-		if pkg == "short" {
-			return fmt.Errorf("invalid package name: %q; did you mean to type '--short'?", pkg)
-		}
-	}
-
-	lintEnv := os.Environ()
-
-	if !short {
-		// First, generate code to make sure GCAssert and any other
-		// tests that depend on generated code still work.
-		if err := d.generateGo(cmd); err != nil {
-			return err
-		}
-		// We also need `CC` and `CXX` set appropriately.
-		cc, err := d.exec.LookPath("cc")
-		if err != nil {
-			return fmt.Errorf("`cc` is not installed; needed for `TestGCAssert` (%w)", err)
-		}
-		cc = strings.TrimSpace(cc)
-		d.log.Printf("export CC=%s", cc)
-		d.log.Printf("export CXX=%s", cc)
-		envWithCc := []string{"CC=" + cc, "CXX=" + cc}
-		lintEnv = append(envWithCc, lintEnv...)
-	}
-
 	var args []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
@@ -100,11 +71,13 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		if !strings.HasPrefix(pkg, "./") {
 			pkg = "./" + pkg
 		}
+		env := os.Environ()
 		envvar := fmt.Sprintf("PKG=%s", pkg)
 		d.log.Printf("export %s", envvar)
-		lintEnv = append(lintEnv, envvar)
+		env = append(env, envvar)
+		return d.exec.CommandContextWithEnv(ctx, env, "bazel", args...)
 	}
-	err := d.exec.CommandContextWithEnv(ctx, lintEnv, "bazel", args...)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		return err
 	}

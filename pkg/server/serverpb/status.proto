@@ -753,7 +753,7 @@ message GetFilesResponse {
 }
 
 message ProfileRequest {
-  // node_id is a string so that "local" or "all" can be used to specify that no
+  // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary. node_id translates to a KV node ID on a storage
   // server and SQL instance ID on a SQL only server.
   string node_id = 1;
@@ -771,27 +771,7 @@ message ProfileRequest {
   Type type = 5;
 
   int32 seconds = 6; // applies only to Type=CPU, defaults to 30
-
-  // Labels can be specified for Type=CPU or Type=GOROUTINE.
-  //
-  // - If true for CPU profiles, we request a CPU profile with pprof labels.
-  //
-  // - If true for GOROUTINE profiles, we request an aggregated goroutine
-  // profile with debug=1.
-  bool labels = 7;
-
-  // LabelFilter only applies to Type=GOROUTINE. Only goroutines with a pprof
-  // label matching the filter will be returned.
-  string label_filter = 9;
-
-  // SenderServerVersion is the server version of the node sending the Profile
-  // request. If this field is set then the node processing the request will
-  // only collect the profile if its server version is equal to the sender's
-  // server version.
-  //
-  // Currently, this is only used when collecting profiles that will be merged
-  // using pprof.Merge as all the samples must be from the same binary version.
-  cockroach.roachpb.Version sender_server_version = 8;
+  bool labels = 7; // applies only to Type=CPU, defaults to false
 }
 
 message MetricsRequest {
@@ -891,9 +871,6 @@ message TxnInfo {
   // Time elapsed since this transaction started execution.
   google.protobuf.Duration elapsed_time = 16
   [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
-
-  // The isolation level of the transaction.
-  string isolation_level = 17;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -1159,6 +1136,11 @@ message ListDistSQLFlowsRequest {}
 // same physical plan. The gateway node that initiated the execution of the plan
 // isn't included.
 message DistSQLRemoteFlows {
+  enum Status {
+    RUNNING = 0;
+    QUEUED = 1;
+  }
+
   // Info contains an information about a single DistSQL remote flow.
   message Info {
     // NodeID is the node on which this remote flow is either running or queued.
@@ -1170,7 +1152,9 @@ message DistSQLRemoteFlows {
       (gogoproto.nullable) = false, (gogoproto.stdtime) = true
     ];
 
-    reserved 3;
+    // Status is the current status of this remote flow.
+    // TODO(yuzefovich): remove this in 23.2.
+    Status status = 3;
 
     // Stmt is the SQL statement for which this flow is executing.
     string stmt = 4;
@@ -2006,73 +1990,6 @@ message CriticalNodesResponse {
   roachpb.SpanConfigConformanceReport report = 2 [(gogoproto.nullable) = false];
 }
 
-message NetworkConnectivityRequest {
-  string node_id = 1 [
-    (gogoproto.customname) = "NodeID"
-  ];
-}
-
-message NetworkConnectivityResponse {
-  enum ConnectionStatus {
-    // Indicates that system couldn't get information about nodes connection.
-    UNKNOWN = 0;
-    // Source node established connection to target node.
-    ESTABLISHED = 1;
-    // Indicates that node is attempting to establish connection to target node for the first time.
-    ESTABLISHING = 2;
-    // Indicates that connection state is unhealthy.
-    ERROR = 3;
-  }
-
-  message Peer {
-    google.protobuf.Duration latency = 1 [
-      (gogoproto.nullable) = false,
-      (gogoproto.stdduration) = true
-    ];
-    ConnectionStatus status = 2;
-    string address = 4;
-    roachpb.Locality locality = 5;
-    string error = 6;
-  }
-
-  message Connectivity {
-    map<int32, Peer> peers = 1 [
-      (gogoproto.nullable) = false,
-      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-    ];
-  }
-
-  map<int32, Connectivity> connections = 1 [
-    (gogoproto.nullable) = false,
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-  ];
-
-  // errors contains any errors that occurred during fan-out calls to other nodes.
-  map<int32, string> errors_by_node_id = 2 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
-    (gogoproto.customname) = "ErrorsByNodeID",
-    (gogoproto.nullable) = false
-  ];
-}
-
- message GetJobProfilerExecutionDetailRequest {
-   int64 job_id = 1;
-   string filename = 2;
- }
-
- message GetJobProfilerExecutionDetailResponse {
-   bytes data = 1;
- }
-
- message ListJobProfilerExecutionDetailsRequest {
-  int64 job_id = 1;
- }
-
- message ListJobProfilerExecutionDetailsResponse {
-   repeated string files = 1;
- }
-
-
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2535,24 +2452,4 @@ service Status {
   // ListExecutionInsights returns potentially problematic statements cluster-wide,
   // along with actions we suggest the application developer might take to remedy them.
   rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
-
-  rpc NetworkConnectivity(NetworkConnectivityRequest) returns (NetworkConnectivityResponse) {
-    option (google.api.http) = {
-      get: "/_status/connectivity"
-    };
-  }
-
-
-  rpc GetJobProfilerExecutionDetails(GetJobProfilerExecutionDetailRequest) returns (GetJobProfilerExecutionDetailResponse) {
-    option (google.api.http) = {
-      get: "/_status/job_profiler_execution_details/{job_id}/{filename}"
-    };
-  }
-
-  rpc ListJobProfilerExecutionDetails(ListJobProfilerExecutionDetailsRequest) returns
-    (ListJobProfilerExecutionDetailsResponse) {
-    option (google.api.http) = {
-      get: "/_status/list_job_profiler_execution_details/{job_id}"
-    };
-  }
 }

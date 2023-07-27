@@ -7,19 +7,7 @@ END
 ----
 DECLARE
 BEGIN
-EXIT some_label;
-EXIT some_label WHEN some_condition;
-END
-
-parse
-DECLARE
-BEGIN
-  CONTINUE some_label;
-  CONTINUE some_label WHEN some_condition;
-END
-----
-DECLARE
-BEGIN
-CONTINUE some_label;
-CONTINUE some_label WHEN some_condition;
-END
+EXIT
+<NOT DONE YET>EXIT
+<NOT DONE YET>END
+<NOT DONE YET>

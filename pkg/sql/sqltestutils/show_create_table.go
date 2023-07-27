@@ -15,9 +15,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/stretchr/testify/require"
 )
@@ -36,22 +35,17 @@ type ShowCreateTableTestCase struct {
 }
 
 // ShowCreateTableTest tests the output for SHOW CREATE TABLE matches
-// the expected values. Furthermore, it round trips SHOW CREATE TABLE
-// statements to ensure they produce an identical SHOW CREATE TABLE.
+// the expect values. Furthermore, it round trips SHOW CREATE TABLE
+// statements to ensure they produces an identical SHOW CREATE TABLE.
 func ShowCreateTableTest(
 	t *testing.T, extraQuerySetup string, testCases []ShowCreateTableTestCase,
 ) {
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Locality: roachpb.Locality{
-			Tiers: []roachpb.Tier{
-				{Key: "region", Value: "us-west1"},
-			},
-		},
-	})
+	params, _ := tests.CreateTestServerParams()
+	params.Locality.Tiers = []roachpb.Tier{
+		{Key: "region", Value: "us-west1"},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	tenantSettings := s.TenantOrServer().ClusterSettings()
-	// In case we're with multi region abstractions against the test tenant.
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &tenantSettings.SV, true)
 
 	if _, err := sqlDB.Exec(`
     SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;

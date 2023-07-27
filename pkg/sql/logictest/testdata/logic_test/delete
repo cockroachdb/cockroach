@@ -61,7 +61,7 @@ SELECT * FROM kv
 statement count 0
 DELETE FROM kv WHERE k=5
 
-query II rowsort
+query II
 DELETE FROM kv RETURNING k, v
 ----
 1 2
@@ -83,7 +83,7 @@ SELECT * FROM unindexed
 1 2
 7 8
 
-query II rowsort
+query II
 DELETE FROM unindexed RETURNING k, v
 ----
 1 2
@@ -96,14 +96,14 @@ SELECT * FROM unindexed
 statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-query II colnames,rowsort
+query II colnames
 DELETE FROM unindexed WHERE k=3 or v=6 RETURNING *
 ----
 k v
 3 4
 5 6
 
-query II colnames,rowsort
+query II colnames
 DELETE FROM unindexed RETURNING unindexed.*
 ----
 k v

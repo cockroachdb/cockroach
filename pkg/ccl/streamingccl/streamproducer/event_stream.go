@@ -361,56 +361,84 @@ func (p *checkpointPacer) shouldCheckpoint(
 	return false
 }
 
-// Add a RangeFeedSSTable into current batch.
+// Add a RangeFeedSSTable into current batch and return number of bytes added.
 func (s *eventStream) addSST(
-	sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span, seb *streamEventBatcher,
-) error {
+	sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span, batch *streampb.StreamEvent_Batch,
+) (int, error) {
 	// We send over the whole SSTable if the sst span is within
 	// the registered span boundaries.
 	if registeredSpan.Contains(sst.Span) {
-		seb.addSST(sst)
-		return nil
+		batch.Ssts = append(batch.Ssts, *sst)
+		return sst.Size(), nil
 	}
 	// If the sst span exceeds boundaries of the watched spans,
 	// we trim the sst data to avoid sending unnecessary data.
 	// TODO(casper): add metrics to track number of SSTs, and number of ssts
 	// that are not inside the boundaries (and possible count+size of kvs in such ssts).
-	//
+	size := 0
 	// Extract the received SST to only contain data within the boundaries of
 	// matching registered span. Execute the specified operations on each MVCC
 	// key value and each MVCCRangeKey value in the trimmed SSTable.
-	return replicationutils.ScanSST(sst, registeredSpan,
+	if err := replicationutils.ScanSST(sst, registeredSpan,
 		func(mvccKV storage.MVCCKeyValue) error {
-			seb.addKV(&roachpb.KeyValue{
+			batch.KeyValues = append(batch.KeyValues, roachpb.KeyValue{
 				Key: mvccKV.Key.Key,
 				Value: roachpb.Value{
 					RawBytes:  mvccKV.Value,
-					Timestamp: mvccKV.Key.Timestamp}})
+					Timestamp: mvccKV.Key.Timestamp,
+				},
+			})
+			size += batch.KeyValues[len(batch.KeyValues)-1].Size()
 			return nil
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
-			seb.addDelRange(&kvpb.RangeFeedDeleteRange{
+			batch.DelRanges = append(batch.DelRanges, kvpb.RangeFeedDeleteRange{
 				Span: roachpb.Span{
 					Key:    rangeKeyVal.RangeKey.StartKey,
 					EndKey: rangeKeyVal.RangeKey.EndKey,
 				},
 				Timestamp: rangeKeyVal.RangeKey.Timestamp,
 			})
+			size += batch.DelRanges[len(batch.DelRanges)-1].Size()
 			return nil
-		})
+		}); err != nil {
+		return 0, err
+	}
+	return size, nil
 }
 
 // streamLoop is the main processing loop responsible for reading rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
 func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) error {
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
-	seb := makeStreamEventBatcher()
+
+	var batch streampb.StreamEvent_Batch
+	batchSize := 0
+	addValue := func(v *kvpb.RangeFeedValue) {
+		keyValue := roachpb.KeyValue{
+			Key:   v.Key,
+			Value: v.Value,
+		}
+		batch.KeyValues = append(batch.KeyValues, keyValue)
+		batchSize += keyValue.Size()
+	}
+
+	addDelRange := func(delRange *kvpb.RangeFeedDeleteRange) error {
+		// DelRange's span is already trimmed to enclosed within
+		// the subscribed span, just emit it.
+		batch.DelRanges = append(batch.DelRanges, *delRange)
+		batchSize += delRange.Size()
+		return nil
+	}
 
 	maybeFlushBatch := func(force bool) error {
-		if (force && seb.getSize() > 0) || seb.getSize() > int(s.spec.Config.BatchByteSize) {
+		if (force && batchSize > 0) || batchSize > int(s.spec.Config.BatchByteSize) {
 			defer func() {
-				seb.reset()
+				batchSize = 0
+				batch.KeyValues = batch.KeyValues[:0]
+				batch.Ssts = batch.Ssts[:0]
+				batch.DelRanges = batch.DelRanges[:0]
 			}()
-			return s.flushEvent(ctx, &streampb.StreamEvent{Batch: &seb.batch})
+			return s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batch})
 		}
 		return nil
 	}
@@ -431,10 +459,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		case ev := <-s.eventsCh:
 			switch {
 			case ev.Val != nil:
-				seb.addKV(&roachpb.KeyValue{
-					Key:   ev.Val.Key,
-					Value: ev.Val.Value,
-				})
+				addValue(ev.Val)
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
 				}
@@ -454,15 +479,18 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					}
 				}
 			case ev.SST != nil:
-				err := s.addSST(ev.SST, ev.RegisteredSpan, seb)
+				size, err := s.addSST(ev.SST, ev.RegisteredSpan, &batch)
 				if err != nil {
 					return err
 				}
+				batchSize += size
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
 				}
 			case ev.DeleteRange != nil:
-				seb.addDelRange(ev.DeleteRange)
+				if err := addDelRange(ev.DeleteRange); err != nil {
+					return err
+				}
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
 				}

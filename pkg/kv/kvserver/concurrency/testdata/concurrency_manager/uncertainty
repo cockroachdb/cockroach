@@ -25,13 +25,14 @@ sequence req=req1
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn1 key=k
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
 
 sequence req=req1
 ----
@@ -39,7 +40,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -47,9 +48,9 @@ sequence req=req1
 on-txn-updated txn=txn1 status=pending ts=15,2
 ----
 [-] update txn: increasing timestamp of txn1
-[3] sequence req1: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,1}
+[3] sequence req1: resolving intent "k" for txn 00000001 with PENDING status and clock observation {1 123.000000000,1}
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -91,13 +92,14 @@ sequence req=req1
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn1 key=k
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 100.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 100.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
 
 sequence req=req1
 ----
@@ -105,7 +107,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 135.000000000,0
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -113,9 +115,9 @@ sequence req=req1
 on-txn-updated txn=txn1 status=pending ts=135,1
 ----
 [-] update txn: increasing timestamp of txn1
-[3] sequence req1: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,1}
+[3] sequence req1: resolving intent "k" for txn 00000001 with PENDING status and clock observation {1 135.000000000,1}
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -160,13 +162,14 @@ sequence req=req1
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn1 key=k
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 100.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 100.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
 
 sequence req=req1
 ----
@@ -174,7 +177,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 150.000000000,1?
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -182,9 +185,9 @@ sequence req=req1
 on-txn-updated txn=txn1 status=pending ts=150,2?
 ----
 [-] update txn: increasing timestamp of txn1
-[3] sequence req1: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,2}
+[3] sequence req1: resolving intent "k" for txn 00000001 with PENDING status and clock observation {1 135.000000000,2}
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -235,13 +238,14 @@ sequence req=req1
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn1 key=k
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle write intent error req1: handled conflicting intents on "k", released latches
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 14.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 14.000000000,1, info: repl epoch: 0, seqs: [0]
+local: num=0
 
 sequence req=req1
 ----
@@ -249,7 +253,7 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
 [3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -288,7 +292,7 @@ sequence req=req2-retry
 [5] sequence req2-retry: acquiring latches
 [5] sequence req2-retry: scanning lock table for conflicting locks
 [5] sequence req2-retry: waiting in lock wait-queues
-[5] sequence req2-retry: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 2)
+[5] sequence req2-retry: lock wait-queue event: wait for txn 00000001 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 2)
 [5] sequence req2-retry: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req2-retry: pushing timestamp of txn 00000001 above 15.000000000,1
 [5] sequence req2-retry: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -297,15 +301,15 @@ sequence req=req2-retry
 on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
-[3] sequence req1: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
+[3] sequence req1: resolving intent "k" for txn 00000001 with COMMITTED status
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
-[5] sequence req2-retry: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
+[5] sequence req2-retry: resolving intent "k" for txn 00000001 with COMMITTED status
 [5] sequence req2-retry: lock wait-queue event: done waiting
-[5] sequence req2-retry: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[5] sequence req2-retry: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 0.000s
 [5] sequence req2-retry: acquiring latches
 [5] sequence req2-retry: scanning lock table for conflicting locks
 [5] sequence req2-retry: sequencing complete, returned guard

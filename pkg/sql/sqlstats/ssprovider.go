@@ -56,16 +56,16 @@ type Reader interface {
 	// as ordering, through IteratorOptions argument. StatementVisitor can return
 	// error, if an error is returned after the execution of the visitor, the
 	// iteration is aborted.
-	IterateStatementStats(context.Context, IteratorOptions, StatementVisitor) error
+	IterateStatementStats(context.Context, *IteratorOptions, StatementVisitor) error
 
 	// IterateTransactionStats iterates through all the collected transaction
 	// statistics by using TransactionVisitor. It behaves similarly to
 	// IterateStatementStats.
-	IterateTransactionStats(context.Context, IteratorOptions, TransactionVisitor) error
+	IterateTransactionStats(context.Context, *IteratorOptions, TransactionVisitor) error
 
 	// IterateAggregatedTransactionStats iterates through all the collected app-level
 	// transactions statistics. It behaves similarly to IterateStatementStats.
-	IterateAggregatedTransactionStats(context.Context, IteratorOptions, AggregatedTransactionVisitor) error
+	IterateAggregatedTransactionStats(context.Context, *IteratorOptions, AggregatedTransactionVisitor) error
 }
 
 // ApplicationStats is an interface to read from or write to the statistics

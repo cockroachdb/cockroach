@@ -1,7 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "roachpb",
@@ -26,7 +26,6 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/keysbase",
         "//pkg/kv/kvserver/allocator/load",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/settings",
         "//pkg/storage/enginepb",
@@ -69,11 +68,10 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":roachpb"],
-    tags = ["no-remote-exec"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/testutils/zerofields",
@@ -108,6 +106,7 @@ proto_library(
         "data.proto",
         "index_usage_stats.proto",
         "internal.proto",
+        "internal_raft.proto",
         "io-formats.proto",
         "metadata.proto",
         "span_config.proto",

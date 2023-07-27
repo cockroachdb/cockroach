@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -49,8 +48,7 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 			continue
 		}
 		t.Run(method.String(), func(t *testing.T) {
-			var otherLatchSpans spanset.SpanSet
-			var otherLockSpans lockspanset.LockSpanSet
+			var otherLatchSpans, otherLockSpans spanset.SpanSet
 
 			startKey := []byte(`a`)
 			endKey := []byte(`b`)

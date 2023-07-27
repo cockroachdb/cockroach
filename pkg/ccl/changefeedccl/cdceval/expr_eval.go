@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,7 +40,7 @@ type Evaluator struct {
 	// Execution context.
 	execCfg     *sql.ExecutorConfig
 	user        username.SQLUsername
-	sessionData *sessiondata.SessionData
+	sessionData sessiondatapb.SessionData
 	withDiff    bool
 	familyEval  map[descpb.FamilyID]*familyEvaluator
 }
@@ -64,7 +64,7 @@ type familyEvaluator struct {
 	// Execution context.
 	execCfg     *sql.ExecutorConfig
 	user        username.SQLUsername
-	sessionData *sessiondata.SessionData
+	sessionData sessiondatapb.SessionData
 
 	// rowCh receives projection datums.
 	rowCh      chan tree.Datums
@@ -80,7 +80,7 @@ func NewEvaluator(
 	sc *tree.SelectClause,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
-	sd *sessiondata.SessionData,
+	sd sessiondatapb.SessionData,
 	statementTS hlc.Timestamp,
 	withDiff bool,
 ) *Evaluator {
@@ -101,7 +101,7 @@ func newFamilyEvaluator(
 	targetFamilyID descpb.FamilyID,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
-	sd *sessiondata.SessionData,
+	sd sessiondatapb.SessionData,
 	statementTS hlc.Timestamp,
 	withDiff bool,
 ) *familyEvaluator {

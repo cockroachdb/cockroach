@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -540,7 +539,9 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				// Test fails with the default tenant. Disabling and
+				// tracking with #76378.
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					SpanConfig: &spanconfig.TestingKnobs{
 						ConfigureScratchRange: true,
@@ -635,9 +636,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
-								DisableReplicaRebalancing: true,
-							},
+							DisableReplicaRebalancing: true,
 						},
 						SpanConfig: &spanconfig.TestingKnobs{
 							ConfigureScratchRange: true,
@@ -839,7 +838,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -966,7 +965,7 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 		t, 4, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+				ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
 					if atomic.LoadInt64(&rejectSnapshots) == 1 {
 						return errors.Newf("boom")
 					}
@@ -1050,15 +1049,15 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 					ScanMaxIdleTime: time.Millisecond,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
-								DisableReplicaRebalancing: true,
-							},
+							DisableReplicaRebalancing: true,
 						},
 						SpanConfig: &spanconfig.TestingKnobs{
 							ConfigureScratchRange: true,
 						},
 						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
-							StorePoolNodeLivenessFn: func(id roachpb.NodeID) livenesspb.NodeLivenessStatus {
+							StorePoolNodeLivenessFn: func(
+								id roachpb.NodeID, now time.Time, duration time.Duration,
+							) livenesspb.NodeLivenessStatus {
 								val := livenessTrap.Load()
 								if val == nil {
 									return livenesspb.NodeLivenessStatus_LIVE
@@ -1267,9 +1266,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
-						DisableReplicaRebalancing: true,
-					},
+					DisableReplicaRebalancing: true,
 				},
 			},
 		},
@@ -1764,7 +1761,8 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	skip.UnderDeadlockWithIssue(t, 38565)
 	ctx := context.Background()
 
-	const rangeMaxSize = 64 << 20
+	// Create a cluster with really small ranges.
+	const rangeMaxSize = base.MinRangeMaxBytes
 	zcfg := zonepb.DefaultZoneConfig()
 	zcfg.RangeMinBytes = proto.Int64(rangeMaxSize / 2)
 	zcfg.RangeMaxBytes = proto.Int64(rangeMaxSize)
@@ -1784,13 +1782,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	// We're going to create a table with many versions of a big row and a small
-	// row. We'll split the table in between the rows, to produce a large range
-	// and a small one. Then we'll increase the replication factor to 5 and check
-	// that both ranges behave the same - i.e. they both get up-replicated. For
-	// the purposes of this test we're only worried about the large one
-	// up-replicating, but we test the small one as a control so that we don't
-	// fool ourselves.
+	// We're going to create a table with a big row and a small row. We'll split
+	// the table in between the rows, to produce a large range and a small one.
+	// Then we'll increase the replication factor to 5 and check that both ranges
+	// behave the same - i.e. they both get up-replicated. For the purposes of
+	// this test we're only worried about the large one up-replicating, but we
+	// test the small one as a control so that we don't fool ourselves.
 
 	// Disable the queues so they don't mess with our manual relocation. We'll
 	// re-enable them later.
@@ -1809,20 +1806,14 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	toggleReplicationQueues(tc, true /* active */)
 	toggleSplitQueues(tc, true /* active */)
 
-	// We're going to create a large row, but now large enough that write
-	// back-pressuring kicks in and refuses it.
+	// We're going to create a row that's larger than range_max_bytes, but not
+	// large enough that write back-pressuring kicks in and refuses it.
 	var sb strings.Builder
-	for i := 0; i < rangeMaxSize/8; i++ {
+	for i := 0; i < 1.5*rangeMaxSize; i++ {
 		sb.WriteRune('a')
 	}
-
-	// Write 16 versions of the same row. This way the range won't be able to split.
-	for i := 0; i < 16; i++ {
-		_, err = db.Exec("UPSERT INTO t(i,s) VALUES (1, $1)", sb.String())
-		require.NoError(t, err)
-	}
-
-	// Write a small row into the second range.
+	_, err = db.Exec("INSERT INTO t(i,s) VALUES (1, $1)", sb.String())
+	require.NoError(t, err)
 	_, err = db.Exec("INSERT INTO t(i,s) VALUES (2, 'b')")
 	require.NoError(t, err)
 
@@ -1873,7 +1864,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 }
 
 type delayingRaftMessageHandler struct {
-	kvserver.IncomingRaftMessageHandler
+	kvserver.RaftMessageHandler
 	leaseHolderNodeID uint64
 	rangeID           roachpb.RangeID
 }
@@ -1889,11 +1880,11 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 	respStream kvserver.RaftMessageResponseStream,
 ) *kvpb.Error {
 	if h.rangeID != req.RangeID {
-		return h.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 	}
 	go func() {
 		time.Sleep(raftDelay)
-		err := h.IncomingRaftMessageHandler.HandleRaftRequest(context.Background(), req, respStream)
+		err := h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 		if err != nil {
 			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}
@@ -1970,7 +1961,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteStore.Transport().ListenIncomingRaftMessages(
+	remoteStore.Transport().Listen(
 		remoteStoreID,
 		delayingRaftMessageHandler{remoteStore, leaseHolderNodeID, rangeID},
 	)
@@ -2102,10 +2093,10 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
-				Settings:          st,
-				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-				ScanMinIdleTime:   time.Millisecond,
-				ScanMaxIdleTime:   time.Millisecond,
+				Settings:                 st,
+				DisableDefaultTestTenant: true,
+				ScanMinIdleTime:          time.Millisecond,
+				ScanMaxIdleTime:          time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyEngineRegistry:      stickyEngineRegistry,

@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",

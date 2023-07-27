@@ -32,33 +32,25 @@ type StmtStatsIterator struct {
 
 // NewStmtStatsIterator returns a StmtStatsIterator.
 func NewStmtStatsIterator(
-	container *Container, options sqlstats.IteratorOptions,
-) StmtStatsIterator {
+	container *Container, options *sqlstats.IteratorOptions,
+) *StmtStatsIterator {
 	var stmtKeys stmtList
-	func() {
-		container.mu.RLock()
-		defer container.mu.RUnlock()
-		for k := range container.mu.stmts {
-			stmtKeys = append(stmtKeys, k)
-		}
-	}()
-
+	container.mu.Lock()
+	for k := range container.mu.stmts {
+		stmtKeys = append(stmtKeys, k)
+	}
+	container.mu.Unlock()
 	if options.SortedKey {
 		sort.Sort(stmtKeys)
 	}
 
-	return StmtStatsIterator{
+	return &StmtStatsIterator{
 		baseIterator: baseIterator{
 			container: container,
 			idx:       -1,
 		},
 		stmtKeys: stmtKeys,
 	}
-}
-
-// Initialized returns true if the iterator has been initialized, false otherwise.
-func (s *StmtStatsIterator) Initialized() bool {
-	return s.container != nil
 }
 
 // Next updates the current value returned by the subsequent Cur() call. Next()
@@ -127,7 +119,9 @@ type TxnStatsIterator struct {
 }
 
 // NewTxnStatsIterator returns a new instance of TxnStatsIterator.
-func NewTxnStatsIterator(container *Container, options sqlstats.IteratorOptions) TxnStatsIterator {
+func NewTxnStatsIterator(
+	container *Container, options *sqlstats.IteratorOptions,
+) *TxnStatsIterator {
 	var txnKeys txnList
 	container.mu.Lock()
 	for k := range container.mu.txns {
@@ -138,18 +132,13 @@ func NewTxnStatsIterator(container *Container, options sqlstats.IteratorOptions)
 		sort.Sort(txnKeys)
 	}
 
-	return TxnStatsIterator{
+	return &TxnStatsIterator{
 		baseIterator: baseIterator{
 			container: container,
 			idx:       -1,
 		},
 		txnKeys: txnKeys,
 	}
-}
-
-// Initialized returns true if the iterator has been initialized, false otherwise.
-func (t *TxnStatsIterator) Initialized() bool {
-	return t.container != nil
 }
 
 // Next updates the current value returned by the subsequent Cur() call. Next()

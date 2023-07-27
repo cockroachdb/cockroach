@@ -26,9 +26,9 @@ type leaseHistory struct {
 	history []roachpb.Lease // A circular buffer with index.
 }
 
-func newLeaseHistory(maxEntries int) *leaseHistory {
+func newLeaseHistory() *leaseHistory {
 	lh := &leaseHistory{
-		history: make([]roachpb.Lease, 0, maxEntries),
+		history: make([]roachpb.Lease, 0, leaseHistoryMaxEntries),
 	}
 	return lh
 }
@@ -44,7 +44,7 @@ func (lh *leaseHistory) add(lease roachpb.Lease) {
 		lh.history[lh.index] = lease
 	}
 	lh.index++
-	if lh.index >= cap(lh.history) {
+	if lh.index >= leaseHistoryMaxEntries {
 		lh.index = 0
 	}
 }
@@ -55,7 +55,7 @@ func (lh *leaseHistory) get() []roachpb.Lease {
 	if len(lh.history) == 0 {
 		return nil
 	}
-	if len(lh.history) < cap(lh.history) || lh.index == 0 {
+	if len(lh.history) < leaseHistoryMaxEntries || lh.index == 0 {
 		result := make([]roachpb.Lease, len(lh.history))
 		copy(result, lh.history)
 		return result

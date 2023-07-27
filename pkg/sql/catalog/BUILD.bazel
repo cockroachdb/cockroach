@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "catalog",
@@ -60,7 +60,7 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":catalog"],
-    tags = ["no-remote-exec"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",

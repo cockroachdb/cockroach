@@ -20,19 +20,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SequenceOwner) *scop.AddSequenceOwner {
-					return &scop.AddSequenceOwner{
-						OwnedSequenceID: this.SequenceID,
-						TableID:         this.TableID,
-						ColumnID:        this.ColumnID,
-					}
-				}),
-				emit(func(this *scpb.SequenceOwner) *scop.AddOwnerBackReferenceInSequence {
-					return &scop.AddOwnerBackReferenceInSequence{
-						SequenceID: this.SequenceID,
-						TableID:    this.TableID,
-						ColumnID:   this.ColumnID,
-					}
+				emit(func(this *scpb.SequenceOwner) *scop.NotImplemented {
+					return notImplemented(this)
 				}),
 			),
 		),

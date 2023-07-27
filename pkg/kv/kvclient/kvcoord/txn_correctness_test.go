@@ -26,17 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 type retryError struct {
@@ -230,11 +228,6 @@ func commitCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	return txn.Commit(ctx)
 }
 
-// abortCmd aborts the transaction.
-func abortCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
-	return txn.Rollback(ctx)
-}
-
 type cmdSpec struct {
 	fn func(ctx context.Context, c *cmd, txn *kv.Txn) error
 	re *regexp.Regexp
@@ -253,6 +246,7 @@ var cmdSpecs = []*cmdSpec{
 		deleteCmd,
 		regexp.MustCompile(`(D)\(([A-Z]+)\)`),
 	},
+
 	{
 		deleteRngCmd,
 		regexp.MustCompile(`(DR)\(([A-Z]+)-([A-Z]+)\)`),
@@ -268,10 +262,6 @@ var cmdSpecs = []*cmdSpec{
 	{
 		commitCmd,
 		regexp.MustCompile(`(C)`),
-	},
-	{
-		abortCmd,
-		regexp.MustCompile(`(A)`),
 	},
 }
 
@@ -325,89 +315,6 @@ func parseHistories(histories []string, t *testing.T) [][]*cmd {
 		results = append(results, parseHistory(i, history, t))
 	}
 	return results
-}
-
-// Easily accessible slices of transaction isolation variations.
-var (
-	allLevels               = []isolation.Level{isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted}
-	serializableAndSnapshot = []isolation.Level{isolation.Serializable, isolation.Snapshot}
-	onlySerializable        = []isolation.Level{isolation.Serializable}
-)
-
-// enumerateIsolations returns a slice enumerating all combinations of
-// isolation types across the transactions. The inner slice describes
-// the isolation level for each transaction. The outer slice contains
-// each possible combination of such transaction isolations.
-func enumerateIsolations(numTxns int, isoLevels []isolation.Level) [][]isolation.Level {
-	// Use a count from 0 to pow(# isolations, numTxns)-1 and examine
-	// n-ary digits to get all possible combinations of txn isolations.
-	n := len(isoLevels)
-	var result [][]isolation.Level
-	for i := 0; i < int(math.Pow(float64(n), float64(numTxns))); i++ {
-		desc := make([]isolation.Level, numTxns)
-		val := i
-		for j := 0; j < numTxns; j++ {
-			desc[j] = isoLevels[val%n]
-			val /= n
-		}
-		result = append(result, desc)
-	}
-	return result
-}
-
-func TestEnumerateIsolations(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	SSI := isolation.Serializable
-	SI := isolation.Snapshot
-	RC := isolation.ReadCommitted
-
-	expAll := [][]isolation.Level{
-		{SSI, SSI, SSI},
-		{SI, SSI, SSI},
-		{RC, SSI, SSI},
-		{SSI, SI, SSI},
-		{SI, SI, SSI},
-		{RC, SI, SSI},
-		{SSI, RC, SSI},
-		{SI, RC, SSI},
-		{RC, RC, SSI},
-		{SSI, SSI, SI},
-		{SI, SSI, SI},
-		{RC, SSI, SI},
-		{SSI, SI, SI},
-		{SI, SI, SI},
-		{RC, SI, SI},
-		{SSI, RC, SI},
-		{SI, RC, SI},
-		{RC, RC, SI},
-		{SSI, SSI, RC},
-		{SI, SSI, RC},
-		{RC, SSI, RC},
-		{SSI, SI, RC},
-		{SI, SI, RC},
-		{RC, SI, RC},
-		{SSI, RC, RC},
-		{SI, RC, RC},
-		{RC, RC, RC},
-	}
-	require.Equal(t, expAll, enumerateIsolations(3, allLevels))
-
-	expSSIAndSI := [][]isolation.Level{
-		{SSI, SSI, SSI},
-		{SI, SSI, SSI},
-		{SSI, SI, SSI},
-		{SI, SI, SSI},
-		{SSI, SSI, SI},
-		{SI, SSI, SI},
-		{SSI, SI, SI},
-		{SI, SI, SI},
-	}
-	require.Equal(t, expSSIAndSI, enumerateIsolations(3, serializableAndSnapshot))
-
-	expSSI := [][]isolation.Level{
-		{SSI, SSI, SSI},
-	}
-	require.Equal(t, expSSI, enumerateIsolations(3, onlySerializable))
 }
 
 // enumeratePriorities returns a slice enumerating all combinations of
@@ -680,20 +587,17 @@ func newHistoryVerifier(
 	}
 }
 
-func (hv *historyVerifier) run(isoLevels []isolation.Level, db *kv.DB, t *testing.T) {
+func (hv *historyVerifier) run(db *kv.DB, t *testing.T) {
 	log.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
-	enumIso := enumerateIsolations(len(hv.txns), isoLevels)
 	enumPri := enumeratePriorities(len(hv.txns), []enginepb.TxnPriority{1, enginepb.MaxTxnPriority})
 	enumHis := enumerateHistories(hv.txns, hv.equal)
 
-	for _, i := range enumIso {
-		for _, p := range enumPri {
-			for _, h := range enumHis {
-				hv.retriedTxns = map[int]struct{}{} // always reset the retried txns set
-				if err := hv.runHistoryWithRetry(i, p, h, db, t); err != nil {
-					t.Errorf("expected success, experienced %s", err)
-					return
-				}
+	for _, p := range enumPri {
+		for _, h := range enumHis {
+			hv.retriedTxns = map[int]struct{}{} // always reset the retried txns set
+			if err := hv.runHistoryWithRetry(p, h, db, t); err != nil {
+				t.Errorf("expected success, experienced %s", err)
+				return
 			}
 		}
 	}
@@ -707,13 +611,9 @@ func (hv *historyVerifier) run(isoLevels []isolation.Level, db *kv.DB, t *testin
 //
 // This process continues recursively if there are further retries.
 func (hv *historyVerifier) runHistoryWithRetry(
-	isoLevels []isolation.Level,
-	priorities []enginepb.TxnPriority,
-	cmds []*cmd,
-	db *kv.DB,
-	t *testing.T,
+	priorities []enginepb.TxnPriority, cmds []*cmd, db *kv.DB, t *testing.T,
 ) error {
-	if err := hv.runHistory(isoLevels, priorities, cmds, db, t); err != nil {
+	if err := hv.runHistory(priorities, cmds, db, t); err != nil {
 		if log.V(1) {
 			log.Infof(context.Background(), "got an error running history %s: %s", historyString(cmds), err)
 		}
@@ -736,7 +636,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 			if log.V(1) {
 				log.Infof(context.Background(), "after retry, running alternate history %d of %d", i, len(enumHis))
 			}
-			if err := hv.runHistoryWithRetry(isoLevels, priorities, h, db, t); err != nil {
+			if err := hv.runHistoryWithRetry(priorities, h, db, t); err != nil {
 				return err
 			}
 		}
@@ -745,11 +645,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 }
 
 func (hv *historyVerifier) runHistory(
-	isoLevels []isolation.Level,
-	priorities []enginepb.TxnPriority,
-	cmds []*cmd,
-	db *kv.DB,
-	t *testing.T,
+	priorities []enginepb.TxnPriority, cmds []*cmd, db *kv.DB, t *testing.T,
 ) error {
 	hv.idx++
 	if t.Failed() {
@@ -765,7 +661,7 @@ func (hv *historyVerifier) runHistory(
 	plannedStr := historyString(cmds)
 
 	if log.V(1) {
-		log.Infof(context.Background(), "iso=%s pri=%d history=%s", isoLevels, priorities, plannedStr)
+		log.Infof(context.Background(), "pri=%d history=%s", priorities, plannedStr)
 	}
 
 	hv.mu.actual = []string{}
@@ -785,7 +681,7 @@ func (hv *historyVerifier) runHistory(
 
 	for i, txnCmds := range txnMap {
 		go func(i int, txnCmds []*cmd) {
-			if err := hv.runTxn(i, isoLevels[i], priorities[i], txnCmds, db, t); err != nil {
+			if err := hv.runTxn(i, priorities[i], txnCmds, db, t); err != nil {
 				if re := (*retryError)(nil); !errors.As(err, &re) {
 					reportErr := errors.Wrapf(err, "(%s): unexpected failure", cmds)
 					select {
@@ -827,12 +723,12 @@ func (hv *historyVerifier) runHistory(
 	err = hv.verify.checkFn(verifyEnv)
 	if err == nil {
 		if log.V(1) {
-			log.Infof(context.Background(), "PASSED: iso=%s pri=%d, history=%q", isoLevels, priorities, actualStr)
+			log.Infof(context.Background(), "PASSED: pri=%d, history=%q", priorities, actualStr)
 		}
 	}
 	if err != nil {
-		t.Errorf("%d: iso=%s, pri=%d, history=%q: actual=%q, verify=%q: %s",
-			hv.idx, isoLevels, priorities, plannedStr, actualStr, verifyStr, err)
+		t.Errorf("%d: pri=%d, history=%q: actual=%q, verify=%q: %s",
+			hv.idx, priorities, plannedStr, actualStr, verifyStr, err)
 	}
 	return err
 }
@@ -860,12 +756,7 @@ func (hv *historyVerifier) runCmds(
 }
 
 func (hv *historyVerifier) runTxn(
-	txnIdx int,
-	isoLevel isolation.Level,
-	priority enginepb.TxnPriority,
-	cmds []*cmd,
-	db *kv.DB,
-	t *testing.T,
+	txnIdx int, priority enginepb.TxnPriority, cmds []*cmd, db *kv.DB, t *testing.T,
 ) error {
 	var retry int
 	txnName := fmt.Sprintf("txn %d", txnIdx+1)
@@ -893,9 +784,6 @@ func (hv *historyVerifier) runTxn(
 		}
 
 		txn.SetDebugName(txnName)
-		if err := txn.SetIsoLevel(isoLevel); err != nil {
-			return err
-		}
 		txn.TestingSetPriority(priority)
 
 		env := map[string]int64{}
@@ -933,9 +821,7 @@ func (hv *historyVerifier) runCmd(
 
 // checkConcurrency creates a history verifier, starts a new database
 // and runs the verifier.
-func checkConcurrency(
-	name string, isoLevels []isolation.Level, txns []string, verify *verifier, t *testing.T,
-) {
+func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, t)
 	s := &localtestcluster.LocalTestCluster{
 		StoreTestingKnobs: &kvserver.StoreTestingKnobs{
@@ -954,10 +840,7 @@ func checkConcurrency(
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 	defer s.Stop()
-	// Reduce the deadlock detection push delay so that txns that encounter locks
-	// begin deadlock detection immediately. This speeds up tests significantly.
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &s.Cfg.Settings.SV, 0)
-	verifier.run(isoLevels, s.DB, t)
+	verifier.run(s.DB, t)
 }
 
 // The following tests for concurrency anomalies include documentation
@@ -973,7 +856,6 @@ func checkConcurrency(
 //   W(x,y+z+...) - writes sum of values y+z+... to x
 //   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   C - commit
-//   A - abort ("rollback")
 //
 // Notation for actual histories:
 //   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
@@ -983,114 +865,12 @@ func checkConcurrency(
 //   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
 //   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
 //   Cn.m - commit of txn "n" ("m"th retry)
-//   An.m - abort of txn "n" ("m"th retry)
 
-// TestTxnDBDirtyWriteAnomaly verifies that none of RC, SI, or SSI
-// isolation are subject to the dirty write anomaly.
-//
-// With dirty writes, two transactions concurrently write to the same
-// key(s). If one transaction then rolls back, the final state must
-// reflect the write performed by the committing transaction. Crucially,
-// the rollback must not interfere with the write from the committing
-// transaction.
-//
-// Two closely related cases are when both transactions roll back and
-// when both transactions commit. In the first case, the final state
-// must reflect neither write. In the second case, the final state must
-// reflect a consistent commit order across keys, such that all written
-// keys reflect writes from the second transaction to commit.
-//
-// Dirty writes would typically fail with a history such as:
-//
-//	W1(A) W2(A) (C1 or A1) (C2 or A2)
-func TestTxnDBDirtyWriteAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	t.Run("one abort, one commit", testTxnDBDirtyWriteAnomalyOneAbortOneCommit)
-	t.Run("both abort", testTxnDBDirtyWriteAnomalyBothAbort)
-	t.Run("both commit", testTxnDBDirtyWriteAnomalyBothCommit)
-}
-
-func testTxnDBDirtyWriteAnomalyOneAbortOneCommit(t *testing.T) {
-	txn1 := "W(A,1) W(B,1) A"
-	txn2 := "W(A,2) W(B,2) C"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 2 || env["B"] != 2 {
-				return errors.Errorf("expected A=2 and B=2, got A=%d and B=%d", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-func testTxnDBDirtyWriteAnomalyBothAbort(t *testing.T) {
-	txn1 := "W(A,1) W(B,1) A"
-	txn2 := "W(A,2) W(B,2) A"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 0 || env["B"] != 0 {
-				return errors.Errorf("expected A=0 and B=0, got A=%d and B=%d", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-func testTxnDBDirtyWriteAnomalyBothCommit(t *testing.T) {
-	txn1 := "W(A,1) W(B,1) C"
-	txn2 := "W(A,2) W(B,2) C"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["A"] != 1 && env["A"] != 2 {
-				return errors.Errorf("expected A=1 or A=2, got %d", env["A"])
-			}
-			if env["A"] != env["B"] {
-				return errors.Errorf("expected A == B (%d != %d)", env["A"], env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBDirtyReadAnomaly verifies that none of RC, SI, or SSI
-// isolation are subject to the dirty read anomaly.
-//
-// With dirty reads, a transaction writes to a key while a concurrent
-// transaction reads from that key. The writing transaction then rolls
-// back. If the reading transaction observes the write, either before or
-// after the rollback, it has experienced a dirty read.
-//
-// Dirty reads would typically fail with a history such as:
-//
-//	W1(A) R2(A) A1 C2
-func TestTxnDBDirtyReadAnomaly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	txn1 := "W(A,1) A"
-	txn2 := "R(A) W(B,A) C"
-	verify := &verifier{
-		history: "R(B)",
-		checkFn: func(env map[string]int64) error {
-			if env["B"] != 0 {
-				return errors.Errorf("expected B=0, got %d", env["B"])
-			}
-			return nil
-		},
-	}
-	checkConcurrency("dirty read", allLevels, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBReadSkewAnomaly verifies that neither SI nor SSI isolation
-// are subject to the read skew anomaly, an example of a database
-// constraint violation known as inconsistent analysis[^1]. This
-// anomaly is prevented by REPEATABLE_READ.
+// TestTxnDBReadSkewAnomaly verifies that transactions are not
+// subject to the read skew anomaly, an example of a database
+// constraint violation known as inconsistent analysis (see
+// http://research.microsoft.com/pubs/69541/tr-95-51.pdf). This anomaly
+// is prevented by REPEATABLE_READ.
 //
 // With read skew, there are two concurrent txns. One
 // reads keys A & B, the other reads and then writes keys A & B. The
@@ -1099,11 +879,12 @@ func TestTxnDBDirtyReadAnomaly(t *testing.T) {
 // Read skew would typically fail with a history such as:
 //
 //	R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
-//
-// [^1]: 1995, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf
 func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"
 	verify := &verifier{
@@ -1115,11 +896,11 @@ func TestTxnDBReadSkewAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("read skew", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
+	checkConcurrency("read skew", []string{txn1, txn2}, verify, t)
 }
 
-// TestTxnDBLostUpdateAnomaly verifies that neither SI nor SSI isolation
-// are subject to the lost update anomaly. This anomaly is prevented
+// TestTxnDBLostUpdateAnomaly verifies that transactions are not
+// subject to the lost update anomaly. This anomaly is prevented
 // in most cases by using the READ_COMMITTED ANSI isolation level.
 // However, only REPEATABLE_READ fully protects against it.
 //
@@ -1149,11 +930,11 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("lost update", serializableAndSnapshot, []string{txn, txn}, verify, t)
+	checkConcurrency("lost update", []string{txn, txn}, verify, t)
 }
 
-// TestTxnDBLostDeleteAnomaly verifies that neither SI nor SSI
-// isolation are subject to the lost delete anomaly. See #6240.
+// TestTxnDBLostDeleteAnomaly verifies that transactions are not
+// subject to the lost delete anomaly. See #6240.
 //
 // With lost delete, the two deletions from txn2 are interleaved
 // with a read and write from txn1, allowing txn1 to read a pre-
@@ -1183,19 +964,22 @@ func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("lost update (delete)", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
+	checkConcurrency("lost update (delete)", []string{txn1, txn2}, verify, t)
 }
 
-// TestTxnDBLostDeleteRangeAnomaly verifies that SSI isolation is not
+// TestTxnDBLostDeleteRangeAnomaly verifies that transactions are not
 // subject to the lost delete range anomaly. See #6240.
 //
 // With lost delete range, the delete range for keys B-C leave no
 // deletion tombstones (as there are an infinite number of keys in the
 // range [B,C)). Without deletion tombstones, the anomaly manifests in
 // snapshot mode when txn1 pushes txn2 to commit at a higher timestamp
-// and then txn1 writes B and commits at an earlier timestamp. The
+// and then txn1 writes B and commits an an earlier timestamp. The
 // delete range request therefore committed but failed to delete the
 // value written to key B.
+//
+// Note that the snapshot isolation level is no longer supported. This
+// test is retained for good measure.
 //
 // Lost delete range would typically fail with a history such as:
 //
@@ -1217,11 +1001,11 @@ func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("lost update (range delete)", onlySerializable, []string{txn1, txn2}, verify, t)
+	checkConcurrency("lost update (range delete)", []string{txn1, txn2}, verify, t)
 }
 
-// TestTxnDBPhantomReadAnomaly verifies that neither SI nor SSI isolation
-// are subject to the phantom reads anomaly. This anomaly is prevented by
+// TestTxnDBPhantomReadAnomaly verifies that transactions are not subject
+// to the phantom reads anomaly. This anomaly is prevented by
 // the SQL ANSI SERIALIZABLE isolation level, though it's also prevented
 // by snapshot isolation (i.e. Oracle's traditional "serializable").
 //
@@ -1247,11 +1031,11 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("phantom read", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
+	checkConcurrency("phantom read", []string{txn1, txn2}, verify, t)
 }
 
-// TestTxnDBPhantomDeleteAnomaly verifies that neither SI nor SSI
-// isolation are subject to the phantom deletion anomaly; this is
+// TestTxnDBPhantomDeleteAnomaly verifies that transactions are not
+// subject to the phantom deletion anomaly; this is
 // similar to phantom reads, but verifies the delete range
 // functionality causes read/write conflicts.
 //
@@ -1272,41 +1056,18 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 			return nil
 		},
 	}
-	checkConcurrency("phantom delete", serializableAndSnapshot, []string{txn1, txn2}, verify, t)
+	checkConcurrency("phantom delete", []string{txn1, txn2}, verify, t)
 }
 
-func runWriteSkewTest(t *testing.T, iso isolation.Level) {
-	checks := make(map[isolation.Level]func(map[string]int64) error)
-	checks[isolation.Serializable] = func(env map[string]int64) error {
-		if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
-			return errors.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
-		}
-		return nil
-	}
-	checks[isolation.Snapshot] = func(env map[string]int64) error {
-		if env["A"] == 1 && env["B"] == 1 {
-			return nil
-		}
-		return checks[isolation.Serializable](env)
-	}
-
-	txn1 := "SC(A-C) W(A,A+B+1) C"
-	txn2 := "SC(A-C) W(B,A+B+1) C"
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: checks[iso],
-	}
-	checkConcurrency("write skew", []isolation.Level{iso}, []string{txn1, txn2}, verify, t)
-}
-
-// TestTxnDBWriteSkewAnomaly verifies that SI suffers from the write
-// skew anomaly but not SSI. The write skew anomaly is a condition which
-// illustrates that snapshot isolation is not serializable in practice.
+// TestTxnDBWriteSkewAnomaly verifies that transactions are not
+// subject to the write skew anomaly. Write skew is only possible
+// at the weaker, snapshot isolation level, which is no longer
+// supported.
 //
 // With write skew, two transactions both read values from A and B
 // respectively, but each writes to either A or B only. Thus there are
 // no write/write conflicts but a cycle of dependencies which result in
-// "skew". Only serializable isolation prevents this anomaly.
+// "skew".
 //
 // Write skew would typically fail with a history such as:
 //
@@ -1322,6 +1083,16 @@ func runWriteSkewTest(t *testing.T, iso isolation.Level) {
 func TestTxnDBWriteSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	runWriteSkewTest(t, isolation.Serializable)
-	runWriteSkewTest(t, isolation.Snapshot)
+	txn1 := "SC(A-C) W(A,A+B+1) C"
+	txn2 := "SC(A-C) W(B,A+B+1) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
+				return errors.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
+			}
+			return nil
+		},
+	}
+	checkConcurrency("write skew", []string{txn1, txn2}, verify, t)
 }

@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
@@ -101,7 +101,6 @@ type ycsb struct {
 	recordCount int
 	json        bool
 	families    bool
-	rmwInTxn    bool
 	sfu         bool
 	splits      int
 
@@ -135,8 +134,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
 		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data.`)
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family.`)
-		g.flags.BoolVar(&g.rmwInTxn, `read-modify-write-in-txn`, true, `Run workload F's read-modify-write operation in an explicit transaction.`)
-		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write operation, if run in an explicit transactions.`)
+		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write transactions.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations.`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
 		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, and F is zipfian, and the default for workload D is latest.`)
@@ -389,7 +387,7 @@ func (g *ycsb) Ops(
 		} else {
 			q = fmt.Sprintf(`SELECT field%d FROM usertable WHERE ycsb_key = $1`, i)
 		}
-		if g.rmwInTxn && g.sfu {
+		if g.sfu {
 			q = fmt.Sprintf(`%s FOR UPDATE`, q)
 		}
 		readFieldForUpdateStmtStrs[i] = q
@@ -813,26 +811,18 @@ func execute(fn func() error) error {
 }
 
 func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
-	type conn interface {
-		QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-		Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error)
-	}
-	run := func(db conn) error {
-		key := yw.nextReadKey()
-		fieldIdx := yw.rng.Intn(numTableFields)
-		// Read.
+	key := yw.nextReadKey()
+	newValue := yw.randString(fieldLength)
+	fieldIdx := yw.rng.Intn(numTableFields)
+	var args [2]interface{}
+	args[0] = key
+	err := crdbpgx.ExecuteTx(ctx, yw.conn, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var oldValue []byte
 		readStmt := yw.readFieldForUpdateStmts[fieldIdx]
-		if err := db.QueryRow(ctx, readStmt, key).Scan(&oldValue); err != nil {
+		if err := tx.QueryRow(ctx, readStmt, key).Scan(&oldValue); err != nil {
 			return err
 		}
-		// Modify.
-		_ = oldValue
-		newValue := yw.randString(fieldLength)
-		// Write.
 		var updateStmt stmtKey
-		var args [2]interface{}
-		args[0] = key
 		if yw.config.json {
 			updateStmt = yw.updateStmts[0]
 			args[1] = fmt.Sprintf(`{"field%d": "%s"}`, fieldIdx, newValue)
@@ -840,18 +830,9 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 			updateStmt = yw.updateStmts[fieldIdx]
 			args[1] = newValue
 		}
-		_, err := db.Exec(ctx, updateStmt, args[:]...)
+		_, err := tx.Exec(ctx, updateStmt, args[:]...)
 		return err
-	}
-
-	var err error
-	if yw.config.rmwInTxn {
-		err = crdbpgx.ExecuteTx(ctx, yw.conn, pgx.TxOptions{}, func(tx pgx.Tx) error {
-			return run(tx)
-		})
-	} else {
-		err = run(yw.conn)
-	}
+	})
 	if errors.Is(err, pgx.ErrNoRows) && ctx.Err() != nil {
 		// Sometimes a context cancellation during a transaction can result in
 		// sql.ErrNoRows instead of the appropriate context.DeadlineExceeded. In

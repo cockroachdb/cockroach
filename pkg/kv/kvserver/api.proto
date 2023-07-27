@@ -15,7 +15,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver";
 import "roachpb/data.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
-import "storage/enginepb/rocksdb.proto";
 import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
@@ -56,7 +55,7 @@ message WaitForApplicationRequest {
   StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int64 range_id = 2 [(gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  uint64 lease_index = 3  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
+  uint64 lease_index = 3;
 }
 
 message WaitForApplicationResponse {
@@ -76,17 +75,6 @@ message WaitForReplicaInitResponse {
 message CompactEngineSpanRequest {
   StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
-}
-
-// GetTableMetricsRequest retrieves sstable metrics for the provided key span
-// (end-exclusive).
-message GetTableMetricsRequest {
-  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  roachpb.Span span = 2 [(gogoproto.nullable) = false];
-}
-
-message GetTableMetricsResponse{
-  repeated storage.enginepb.SSTableMetricsInfo table_metrics = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableMetrics"];
 }
 
 message CompactEngineSpanResponse {

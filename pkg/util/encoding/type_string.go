@@ -37,20 +37,6 @@ func _() {
 	_ = x[Void-25]
 	_ = x[TSQuery-26]
 	_ = x[TSVector-27]
-	_ = x[JSONNull-28]
-	_ = x[JSONNullDesc-29]
-	_ = x[JSONString-30]
-	_ = x[JSONStringDesc-31]
-	_ = x[JSONNumber-32]
-	_ = x[JSONNumberDesc-33]
-	_ = x[JSONFalse-34]
-	_ = x[JSONFalseDesc-35]
-	_ = x[JSONTrue-36]
-	_ = x[JSONTrueDesc-37]
-	_ = x[JSONArray-38]
-	_ = x[JSONArrayDesc-39]
-	_ = x[JSONObject-40]
-	_ = x[JSONObjectDesc-41]
 }
 
 func (i Type) String() string {
@@ -111,34 +97,6 @@ func (i Type) String() string {
 		return "TSQuery"
 	case TSVector:
 		return "TSVector"
-	case JSONNull:
-		return "JSONNull"
-	case JSONNullDesc:
-		return "JSONNullDesc"
-	case JSONString:
-		return "JSONString"
-	case JSONStringDesc:
-		return "JSONStringDesc"
-	case JSONNumber:
-		return "JSONNumber"
-	case JSONNumberDesc:
-		return "JSONNumberDesc"
-	case JSONFalse:
-		return "JSONFalse"
-	case JSONFalseDesc:
-		return "JSONFalseDesc"
-	case JSONTrue:
-		return "JSONTrue"
-	case JSONTrueDesc:
-		return "JSONTrueDesc"
-	case JSONArray:
-		return "JSONArray"
-	case JSONArrayDesc:
-		return "JSONArrayDesc"
-	case JSONObject:
-		return "JSONObject"
-	case JSONObjectDesc:
-		return "JSONObjectDesc"
 	default:
 		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

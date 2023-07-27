@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -38,10 +39,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
+)
+
+// jobDumpTraceMode is the type that represents the mode in which a traceable
+// job will dump a trace zip.
+type jobDumpTraceMode int64
+
+const (
+	// A Traceable job will not dump a trace zip.
+	noDump jobDumpTraceMode = iota
+	// A Traceable job will dump a trace zip on failure.
+	dumpOnFail
+	// A Traceable job will dump a trace zip in any of paused, canceled, failed,
+	// succeeded states.
+	dumpOnStop
+)
+
+var traceableJobDumpTraceMode = settings.RegisterEnumSetting(
+	settings.TenantWritable,
+	"jobs.trace.force_dump_mode",
+	"determines the state in which all traceable jobs will dump their cluster wide, inflight, "+
+		"trace recordings. Traces may be dumped never, on fail, "+
+		"or on any status change i.e paused, canceled, failed, succeeded.",
+	"never",
+	map[int64]string{
+		int64(noDump):     "never",
+		int64(dumpOnFail): "onFail",
+		int64(dumpOnStop): "onStop",
+	},
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -131,9 +159,6 @@ type TraceableJob interface {
 	// ForceRealSpan forces the registry to create a real Span instead of a
 	// low-overhead non-recordable noop span.
 	ForceRealSpan() bool
-	// DumpTraceAfterRun determines whether the job's trace is dumped to disk at
-	// the end of every adoption.
-	DumpTraceAfterRun() bool
 }
 
 func init() {
@@ -461,7 +486,7 @@ func (u Updater) PauseRequestedWithFunc(
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
-			execCtx, cleanup := u.j.registry.execCtx(ctx, "pause request", md.Payload.UsernameProto.Decode())
+			execCtx, cleanup := u.j.registry.execCtx("pause request", md.Payload.UsernameProto.Decode())
 			defer cleanup()
 			if err := fn(ctx, execCtx, txn, md.Progress); err != nil {
 				return err
@@ -1121,29 +1146,4 @@ func FormatRetriableExecutionErrorLogToStringArray(
 		_ = arr.Append(tree.NewDString(msg))
 	}
 	return arr
-}
-
-// GetJobTraceID returns the current trace ID of the job from the job progress.
-func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracingpb.TraceID, error) {
-	var traceID tracingpb.TraceID
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jobInfo := InfoStorageForJob(txn, jobID)
-		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			return errors.New("progress not found")
-		}
-		var progress jobspb.Progress
-		if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
-			return errors.Wrap(err, "failed to unmarshal progress bytes")
-		}
-		traceID = progress.TraceID
-		return nil
-	}); err != nil {
-		return 0, errors.Wrapf(err, "failed to fetch trace ID for job %d", jobID)
-	}
-
-	return traceID, nil
 }

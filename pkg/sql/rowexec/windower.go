@@ -114,9 +114,17 @@ func newWindower(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// windower will overflow to disk if this limit is not enough.
-	limitedMon := execinfra.NewLimitedMonitorWithLowerBound(
-		ctx, flowCtx, "windower-limited", memRequiredByWindower,
-	)
+	limit := execinfra.GetWorkMemLimit(flowCtx)
+	if limit < memRequiredByWindower {
+		// The limit is set very low (likely by the tests in order to improve
+		// the test coverage), but the windower requires some amount of RAM, so
+		// we override the limit. This behavior is acceptable given that we
+		// don't expect anyone to lower the setting to less than 100KiB in
+		// production.
+		limit = memRequiredByWindower
+	}
+	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, flowCtx.Mon)
+	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
 	w.acc = limitedMon.MakeBoundAccount()
 	// If we have aggregate builtins that aggregate a single datum, we want
 	// them to reuse the same shared memory account with the windower. Notably,

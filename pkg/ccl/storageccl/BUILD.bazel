@@ -34,7 +34,6 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     embed = [":storageccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

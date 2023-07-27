@@ -41,7 +41,9 @@ func TestScrubUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: false,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and row entries.
@@ -234,18 +236,11 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 		t.Fatalf("expected 1 index entry, got %d", len(primaryIndexKey))
 	}
 
-	// Add the primary key via the KV API. This will overwrite the old primary
-	// index KV, so no need to perform a Del.
+	// Add the primary key via the KV API.
 	if err := kvDB.Put(context.Background(), primaryIndexKey[0].Key, &primaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	oldValues := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexDelKey, err := rowenc.EncodeSecondaryIndex(
-		codec, tableDesc, secondaryIndex, colIDtoRowIndex, oldValues, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
 		codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
@@ -253,10 +248,6 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 	}
 	if len(secondaryIndexKey) != 1 {
 		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-	// Delete the old secondary index KV before inserting the new one.
-	if _, err := kvDB.Del(context.Background(), secondaryIndexDelKey[0].Key); err != nil {
-		t.Fatalf("unexpected error: %s", err)
 	}
 	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)

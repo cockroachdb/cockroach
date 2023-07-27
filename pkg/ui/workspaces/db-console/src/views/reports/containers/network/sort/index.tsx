@@ -21,7 +21,7 @@ import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";
 import "./sort.styl";
 
-interface ISortProps {
+export interface ISortProps {
   onChangeFilter: (key: string, value: string) => void;
   onChangeCollapse: (checked: boolean) => void;
   deselectFilterByKey: (key: string) => void;
@@ -30,7 +30,10 @@ interface ISortProps {
   filter: NetworkFilter;
 }
 
-class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
+export class Sort extends React.Component<
+  ISortProps & RouteComponentProps,
+  {}
+> {
   onChange = ({ target }: any) => this.props.onChangeCollapse(target.checked);
 
   pageView = () => {

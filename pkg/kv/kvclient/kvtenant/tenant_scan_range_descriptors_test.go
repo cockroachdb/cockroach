@@ -30,7 +30,7 @@ func setup(
 ) (*testcluster.TestCluster, serverutils.TestTenantInterface, rangedesc.IteratorFactory) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			DisableDefaultTestTenant: true, // we're going to manually add tenants
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue: true,

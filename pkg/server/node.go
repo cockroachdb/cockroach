@@ -37,10 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -147,54 +144,6 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
 	}
-
-	metaBatchRequestsBytes = metric.Metadata{
-		Name:        "batch_requests.bytes",
-		Help:        `Total byte count of batch requests processed`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaBatchResponsesBytes = metric.Metadata{
-		Name:        "batch_responses.bytes",
-		Help:        `Total byte count of batch responses received`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossRegionBatchRequest = metric.Metadata{
-		Name: "batch_requests.cross_region.bytes",
-		Help: `Total byte count of batch requests processed cross region when region
-		tiers are configured`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossRegionBatchResponse = metric.Metadata{
-		Name: "batch_responses.cross_region.bytes",
-		Help: `Total byte count of batch responses received cross region when region
-		tiers are configured`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossZoneBatchRequest = metric.Metadata{
-		Name: "batch_requests.cross_zone.bytes",
-		Help: `Total byte count of batch requests processed cross zone within
-		the same region when region and zone tiers are configured. However, if the
-		region tiers are not configured, this count may also include batch data sent
-		between different regions. Ensuring consistent configuration of region and
-		zone tiers across nodes helps to accurately monitor the data transmitted.`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossZoneBatchResponse = metric.Metadata{
-		Name: "batch_responses.cross_zone.bytes",
-		Help: `Total byte count of batch responses received cross zone within the
-		same region when region and zone tiers are configured. However, if the
-		region tiers are not configured, this count may also include batch data
-		received between different regions. Ensuring consistent configuration of
-		region and zone tiers across nodes helps to accurately monitor the data
-		transmitted.`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
 )
 
 // Cluster settings.
@@ -235,14 +184,8 @@ type nodeMetrics struct {
 	Err        *metric.Counter
 	DiskStalls *metric.Counter
 
-	BatchCount                    *metric.Counter
-	MethodCounts                  [kvpb.NumMethods]*metric.Counter
-	BatchRequestsBytes            *metric.Counter
-	BatchResponsesBytes           *metric.Counter
-	CrossRegionBatchRequestBytes  *metric.Counter
-	CrossRegionBatchResponseBytes *metric.Counter
-	CrossZoneBatchRequestBytes    *metric.Counter
-	CrossZoneBatchResponseBytes   *metric.Counter
+	BatchCount   *metric.Counter
+	MethodCounts [kvpb.NumMethods]*metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -253,16 +196,10 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
-		Success:                       metric.NewCounter(metaExecSuccess),
-		Err:                           metric.NewCounter(metaExecError),
-		DiskStalls:                    metric.NewCounter(metaDiskStalls),
-		BatchCount:                    metric.NewCounter(metaInternalBatchRPCCount),
-		BatchRequestsBytes:            metric.NewCounter(metaBatchRequestsBytes),
-		BatchResponsesBytes:           metric.NewCounter(metaBatchResponsesBytes),
-		CrossRegionBatchRequestBytes:  metric.NewCounter(metaCrossRegionBatchRequest),
-		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
-		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
-		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
+		Success:    metric.NewCounter(metaExecSuccess),
+		Err:        metric.NewCounter(metaExecError),
+		DiskStalls: metric.NewCounter(metaDiskStalls),
+		BatchCount: metric.NewCounter(metaInternalBatchRPCCount),
 	}
 
 	for i := range nm.MethodCounts {
@@ -287,42 +224,6 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 		nm.Success.Inc(1)
 	}
 	nm.Latency.RecordValue(d.Nanoseconds())
-}
-
-// updateCrossLocalityMetricsOnBatchRequest updates nodeMetrics for batch
-// requests processed on the node. The metrics being updated include 1. total
-// byte count of batch requests processed 2. cross-region metrics, which monitor
-// activities across different regions, and 3. cross-zone metrics, which monitor
-// activities across different zones within the same region or in cases where
-// region tiers are not configured. These metrics may include batches that were
-// not successfully sent but were terminated at an early stage.
-func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
-	comparisonResult roachpb.LocalityComparisonType, inc int64,
-) {
-	nm.BatchRequestsBytes.Inc(inc)
-	switch comparisonResult {
-	case roachpb.LocalityComparisonType_CROSS_REGION:
-		nm.CrossRegionBatchRequestBytes.Inc(inc)
-	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		nm.CrossZoneBatchRequestBytes.Inc(inc)
-	}
-}
-
-// updateCrossLocalityMetricsOnBatchResponse updates nodeMetrics for batch
-// responses that are received back. It updates based on the comparisonResult
-// parameter determined during the initial batch requests check. The underlying
-// assumption is that the response should match the cross-region or cross-zone
-// nature of the requests.
-func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
-	comparisonResult roachpb.LocalityComparisonType, inc int64,
-) {
-	nm.BatchResponsesBytes.Inc(inc)
-	switch comparisonResult {
-	case roachpb.LocalityComparisonType_CROSS_REGION:
-		nm.CrossRegionBatchResponseBytes.Inc(inc)
-	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		nm.CrossZoneBatchResponseBytes.Inc(inc)
-	}
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -356,7 +257,6 @@ type Node struct {
 	tenantUsage multitenant.TenantUsageServer
 
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher
-	tenantInfoWatcher     *tenantcapabilitieswatcher.Watcher
 
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
@@ -481,7 +381,7 @@ func bootstrapCluster(
 					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
 				}
 			}
-			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
+			initialValues, tableSplits, err := initialValuesOpts.GetInitialValuesCheckForOverrides()
 			if err != nil {
 				return nil, err
 			}
@@ -524,7 +424,6 @@ func NewNode(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
-	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
 ) *Node {
@@ -539,12 +438,15 @@ func NewNode(
 		clusterID:             clusterID,
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
-		tenantInfoWatcher:     tenantInfoWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 	}
+	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
+		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
+	)
+	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -1290,7 +1192,9 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
-	ctx = handle.AnnotateCtx(ctx)
+	if handle.ElasticCPUWorkHandle != nil {
+		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
+	}
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
@@ -1350,36 +1254,6 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
-// getLocalityComparison takes gatewayNodeID as input and returns the locality
-// comparison result between the gateway node and the current node. This result
-// indicates whether the two nodes are located in different regions or zones.
-func (n *Node) getLocalityComparison(
-	ctx context.Context, gatewayNodeID roachpb.NodeID,
-) roachpb.LocalityComparisonType {
-	gossip := n.storeCfg.Gossip
-	if gossip == nil {
-		log.VEventf(ctx, 2, "gossip is not configured")
-		return roachpb.LocalityComparisonType_UNDEFINED
-	}
-
-	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
-	if err != nil {
-		log.VEventf(ctx, 2,
-			"failed to perform look up for node descriptor %v", err)
-		return roachpb.LocalityComparisonType_UNDEFINED
-	}
-
-	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
-	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
-	}
-	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
-	}
-
-	return comparisonResult
-}
-
 // incrementBatchCounters increments counters to track the batch and composite
 // request methods.
 func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
@@ -1398,9 +1272,6 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
-
-	comparisonResult := n.getLocalityComparison(ctx, args.GatewayNodeID)
-	n.metrics.updateCrossLocalityMetricsOnBatchRequest(comparisonResult, int64(args.Size()))
 
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
@@ -1445,8 +1316,6 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		}
 		br.Error = kvpb.NewError(err)
 	}
-
-	n.metrics.updateCrossLocalityMetricsOnBatchResponse(comparisonResult, int64(br.Size()))
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
@@ -1786,11 +1655,12 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		f := n.stores.RangeFeed(req, &sink)
 		f.WhenReady(func(err error) {
 			if err == nil {
-				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
-				if !n.storeCfg.Settings.Version.IsActive(stream.Context(), clusterversion.V23_2) {
-					cause = kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED
-				}
-				err = kvpb.NewRangeFeedRetryError(cause)
+				// RangeFeed usually finishes with an error.  However, if future
+				// completes with nil error (which could happen e.g. during processor
+				// shutdown), treat it as a normal stream termination so that the caller
+				// restarts.
+				// TODO(101330): Add an explicit retry reason instead of REPLICA_REMOVED.
+				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 			}
 
 			e := &kvpb.MuxRangeFeedEvent{
@@ -1853,8 +1723,9 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "retrieved original range descriptor %s", desc)
 
 	// Check that we've actually lost quorum.
+	livenessMap := n.storeCfg.NodeLiveness.GetIsLiveMap()
 	available := desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-		return n.storeCfg.NodeLiveness.GetNodeVitalityFromCache(rDesc.NodeID).IsLive(livenesspb.ReplicaProgress)
+		return livenessMap[rDesc.NodeID].IsLive
 	})
 	if available {
 		return nil, errors.Errorf("targeted range to recover has not lost quorum.")
@@ -2033,22 +1904,6 @@ func (n *Node) GossipSubscription(
 	}
 }
 
-func (n *Node) waitForTenantWatcherReadiness(
-	ctx context.Context,
-) (*tenantsettingswatcher.Watcher, *tenantcapabilitieswatcher.Watcher, error) {
-	settingsWatcher := n.tenantSettingsWatcher
-	if err := settingsWatcher.WaitForStart(ctx); err != nil {
-		return nil, nil, err
-	}
-
-	infoWatcher := n.tenantInfoWatcher
-	if err := infoWatcher.WaitForStart(ctx); err != nil {
-		return nil, nil, err
-	}
-
-	return settingsWatcher, infoWatcher, nil
-}
-
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
@@ -2056,58 +1911,19 @@ func (n *Node) TenantSettings(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	settingsWatcher, infoWatcher, err := n.waitForTenantWatcherReadiness(ctx)
-	if err != nil {
+	w := n.tenantSettingsWatcher
+	if err := w.WaitForStart(ctx); err != nil {
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Error: errors.EncodeError(ctx, err),
 		})
 	}
 
-	// Do we even have a record for this tenant?
-	tInfo, infoCh, found := infoWatcher.GetInfo(args.TenantID)
-	if !found {
-		return stream.Send(&kvpb.TenantSettingsEvent{
-			Error: errors.EncodeError(ctx, &kvpb.MissingRecordError{}),
-		})
-	}
-
-	sendSettings := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
+	send := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
 		log.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
 		return stream.Send(&kvpb.TenantSettingsEvent{
-			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  precedence,
 			Incremental: incremental,
 			Overrides:   overrides,
-		})
-	}
-
-	sendTenantInfo := func(
-		fakePrecedence kvpb.TenantSettingsEvent_Precedence,
-		tInfo tenantcapabilities.Entry,
-	) error {
-		log.VInfof(ctx, 1, "sending tenant info: %+v", tInfo)
-		// Note: we are piggy-backing on the TenantSetting streaming RPC
-		// to send non-setting data. This must be careful to work on
-		// SQL servers running previous versions of the CockroachDB code.
-		// To that end, we make the TenantSettingEvent "look like"
-		// a no-op setting change.
-		return stream.Send(&kvpb.TenantSettingsEvent{
-			EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
-			// IMPORTANT: setting Incremental to true ensures existing
-			// settings are preserved client-side in previous-version
-			// clients that do not know about the EventType field.
-			Incremental: true,
-			// An empty Overrides slice results in no-op client-side.
-			Overrides:  nil,
-			Precedence: fakePrecedence,
-
-			// These are the actual fields for our update.
-			Name:         tInfo.Name,
-			Capabilities: tInfo.TenantCapabilities,
-			// TODO(knz): remove the cast after we fix the dependency cycle
-			// between the protobufs.
-			ServiceMode: uint32(tInfo.ServiceMode),
-			DataState:   uint32(tInfo.DataState),
 		})
 	}
 
@@ -2120,61 +1936,24 @@ func (n *Node) TenantSettings(
 	}
 
 	// Send the initial state.
+	//
+	// The protocol defines that there is one initial response per
+	// precedence value, with Incremental set to false. This is important:
+	// the client waits for at least one non-incremental message
+	// for each precedence before continuing.
 
-	// Note: for compatibility with pre-23.1 tenant clients, it is
-	// important that all event types that convey data about the
-	// initial state of a tenant service be sent after the first
-	// SETTING_EVENT message that communicates overrides (for one of
-	// the two precedence levels), and before the second one (for the
-	// other precedence level).
-	//
-	// This is necessary because of a combination of factors:
-	//
-	// - For compatibility with older version tenant clients,
-	//   all non-setting event types must fake being a no-op
-	//   setting event (see the docstring on the EventType field).
-	//   A no-op fake setting event must have `Incremental` set to
-	//   `true`.
-	// - Meanwhile, older version tenant clients also assert that the
-	//   very first message sent by the server must have `Incremental`
-	//   set to `false`.
-	//
-	//   This means we can only send events of other types after the
-	//   first setting overrides event.
-	//
-	// - Then, separately, newer version tenant clients also
-	//   synchronize their startup on the reception of a tenant
-	//   setting event for each precedence level. This is because
-	//   these tenant clients must, in turn, remain compatible with
-	//   older version *KV servers* that do not send other event types
-	//   and send just 2 setting overrides events initially.
-	//
-	//   This means we cannot send other event types after the second
-	//   setting overrides event.
-
-	// Send the setting overrides for one precedence level.
-	const firstPrecedenceLevel = kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES
-	allOverrides, allCh := settingsWatcher.GetAllTenantOverrides()
+	allOverrides, allCh := w.GetAllTenantOverrides()
 
 	// Inject the current storage logical version as an override; as the
 	// tenant server needs this to start up.
 	verSetting, versionUpdateCh := n.getVersionSettingWithUpdateCh(ctx)
 	allOverrides = append(allOverrides, verSetting)
-	if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
+	if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 		return err
 	}
 
-	// Send the initial tenant metadata. See the explanatory comment
-	// above for details.
-	if err := sendTenantInfo(firstPrecedenceLevel, tInfo); err != nil {
-		return err
-	}
-
-	// Then send the initial setting overrides for the other precedence
-	// level. This is the payload that will let the tenant client
-	// connector signal readiness.
-	tenantOverrides, tenantCh := settingsWatcher.GetTenantOverrides(args.TenantID)
-	if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
+	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
+	if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 		return err
 	}
 
@@ -2183,17 +1962,9 @@ func (n *Node) TenantSettings(
 		case <-versionUpdateCh:
 			// The storage version has changed, send it again.
 			verSetting, versionUpdateCh = n.getVersionSettingWithUpdateCh(ctx)
-			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
+			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 				[]kvpb.TenantSetting{verSetting},
 				true /* incremental */); err != nil {
-				return err
-			}
-
-		case <-infoCh:
-			// Tenant metadata has changed, send it again.
-			tInfo, infoCh, _ = infoWatcher.GetInfo(args.TenantID)
-			const anyPrecedenceLevel = kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES
-			if err := sendTenantInfo(anyPrecedenceLevel, tInfo); err != nil {
 				return err
 			}
 
@@ -2201,8 +1972,8 @@ func (n *Node) TenantSettings(
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
-			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides()
-			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
+			allOverrides, allCh = w.GetAllTenantOverrides()
+			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 				return err
 			}
 
@@ -2210,8 +1981,8 @@ func (n *Node) TenantSettings(
 			// Tenant-specific overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
-			tenantOverrides, tenantCh = settingsWatcher.GetTenantOverrides(args.TenantID)
-			if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
+			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
+			if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 				return err
 			}
 

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -94,7 +95,8 @@ func randStr(fill []byte, rng *rand.Rand) {
 func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeTestingClusterSettings()
+	version := clusterversion.ByKey(clusterversion.V22_2)
+	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	var f bytes.Buffer

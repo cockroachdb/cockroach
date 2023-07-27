@@ -94,7 +94,6 @@ function formatNanosAsMillis(n: number) {
  */
 export interface ClusterSummaryProps {
   nodeSources: string[];
-  tenantSource?: string;
 }
 
 export default function (props: ClusterSummaryProps) {
@@ -152,28 +151,24 @@ export default function (props: ClusterSummaryProps) {
             sources={props.nodeSources}
             name="cr.node.sql.select.count"
             title="Queries/Sec"
-            tenantSource={props.tenantSource}
             nonNegativeRate
           />
           <Metric
             sources={props.nodeSources}
             name="cr.node.sql.insert.count"
             title="Queries/Sec"
-            tenantSource={props.tenantSource}
             nonNegativeRate
           />
           <Metric
             sources={props.nodeSources}
             name="cr.node.sql.update.count"
             title="Queries/Sec"
-            tenantSource={props.tenantSource}
             nonNegativeRate
           />
           <Metric
             sources={props.nodeSources}
             name="cr.node.sql.delete.count"
             title="Queries/Sec"
-            tenantSource={props.tenantSource}
             nonNegativeRate
           />
         </SummaryMetricStat>
@@ -185,7 +180,6 @@ export default function (props: ClusterSummaryProps) {
           <Metric
             sources={props.nodeSources}
             name="cr.node.sql.service.latency-p99"
-            tenantSource={props.tenantSource}
             aggregateMax
             downsampleMax
           />

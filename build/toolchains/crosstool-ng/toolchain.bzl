@@ -9,6 +9,8 @@ def _impl(rctx):
         stripPrefix = "x-tools/{}/".format(rctx.attr.target),
     )
 
+    repo_path = str(rctx.path(""))
+
     rctx.template(
         "BUILD",
         Label("@com_github_cockroachdb_cockroach//build:toolchains/crosstool-ng/BUILD.tmpl"),
@@ -24,7 +26,7 @@ def _impl(rctx):
         substitutions = {
             "%{target}": rctx.attr.target,
             "%{host}": rctx.attr.host,
-            "%{repo_name}": rctx.name,
+            "%{repo_path}": repo_path,
         },
         executable = False,
     )

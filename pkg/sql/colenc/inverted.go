@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,7 +32,7 @@ func invertedColToDatum(vec coldata.Vec, row int) tree.Datum {
 		return tree.NewDJSON(vec.JSON().Get(row))
 	case types.StringFamily:
 		b := vec.Bytes().Get(row)
-		s := encoding.UnsafeConvertBytesToString(b)
+		s := unsafeConvertBytesToString(b)
 		return tree.NewDString(s)
 	}
 	// This handles arrays, geo etc.

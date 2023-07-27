@@ -111,10 +111,6 @@ const (
 	// state was modified.
 	UpgradedDeclarativeSchemaChangerState
 
-	// SetIndexInvisibility indicates that the invisibility of at least one index
-	// descriptor was updated to a non-zero value.
-	SetIndexInvisibility
-
 	// StrippedDanglingBackReferences indicates that at least one dangling
 	// back-reference was removed from the descriptor.
 	StrippedDanglingBackReferences

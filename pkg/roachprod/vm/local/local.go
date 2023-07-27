@@ -120,35 +120,17 @@ type Provider struct {
 	storage VMStorage
 }
 
-func (p *Provider) CreateVolumeSnapshot(
-	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
-) (vm.VolumeSnapshot, error) {
-	return vm.VolumeSnapshot{}, nil
+func (p *Provider) SnapshotVolume(
+	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
+	return "", nil
 }
 
 func (p *Provider) CreateVolume(*logger.Logger, vm.VolumeCreateOpts) (vm.Volume, error) {
 	return vm.Volume{}, nil
 }
 
-func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	return nil
-}
-
-func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
-	return vm.NonBootAttachedVolumes, nil
-}
-
-func (p *Provider) ListVolumeSnapshots(
-	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
-) ([]vm.VolumeSnapshot, error) {
-	return nil, nil
-}
-
-func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	return nil
-}
-
-func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
+func (p *Provider) AttachVolumeToVM(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
 	return "", nil
 }
 

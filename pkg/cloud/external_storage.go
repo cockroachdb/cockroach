@@ -60,12 +60,15 @@ type ExternalStorage interface {
 	// ExternalStorage implementation.
 	Settings() *cluster.Settings
 
-	// ReadFile returns a Reader for requested name reading at opts.Offset, along
-	// with the total size of the file (unless opts.NoFileSize is true).
-	//
+	// ReadFile is shorthand for ReadFileAt with offset 0.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string, opts ReadOptions) (_ ioctx.ReadCloserCtx, fileSize int64, _ error)
+	ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error)
+
+	// ReadFileAt returns a Reader for requested name reading at offset.
+	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
+	// This can be leveraged for an existence check.
+	ReadFileAt(ctx context.Context, basename string, offset int64) (ioctx.ReadCloserCtx, int64, error)
 
 	// Writer returns a writer for the requested name.
 	//
@@ -90,22 +93,6 @@ type ExternalStorage interface {
 
 	// Size returns the length of the named file in bytes.
 	Size(ctx context.Context, basename string) (int64, error)
-}
-
-type ReadOptions struct {
-	Offset int64
-
-	// LengthHint is set when the caller will not read more than this many bytes
-	// from the returned ReadCloserCtx. This allows backend implementation to make
-	// more efficient limited requests.
-	//
-	// There is no guarantee that the reader won't produce more bytes; backends
-	// are free to ignore this value.
-	LengthHint int64
-
-	// NoFileSize is set if the ReadFile caller is not interested in the fileSize
-	// return value (potentially making the call more efficient).
-	NoFileSize bool
 }
 
 // ListingFn describes functions passed to ExternalStorage.ListFiles.
@@ -183,43 +170,3 @@ type ExternalStorageOptions struct {
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, cloudpb.ExternalStorage,
 ) (ExternalStorage, error)
-
-// NewExternalStorageAccessor creates an uninitialized ExternalStorageAccessor.
-func NewExternalStorageAccessor() *ExternalStorageAccessor {
-	return &ExternalStorageAccessor{ready: make(chan struct{})}
-}
-
-// ExternalStorageAccessor is a container for accessing the ExternalStorage
-// factory methods once they are initialized. Attempts to access them prior to
-// initialization will block.
-type ExternalStorageAccessor struct {
-	ready   chan struct{}
-	factory ExternalStorageFactory
-	byURI   ExternalStorageFromURIFactory
-}
-
-// Init initializes the ExternalStorageAccessor with the passed factories.
-func (a *ExternalStorageAccessor) Init(
-	factory ExternalStorageFactory, uriFactory ExternalStorageFromURIFactory,
-) error {
-	a.factory = factory
-	a.byURI = uriFactory
-	close(a.ready)
-	return nil
-}
-
-// Open opens an ExternalStorage.
-func (a *ExternalStorageAccessor) Open(
-	ctx context.Context, dest cloudpb.ExternalStorage, opts ...ExternalStorageOption,
-) (ExternalStorage, error) {
-	<-a.ready
-	return a.factory(ctx, dest, opts...)
-}
-
-// OpenURL opens an ExternalStorage using a URI spec.
-func (a *ExternalStorageAccessor) OpenURL(
-	ctx context.Context, uri string, user username.SQLUsername, opts ...ExternalStorageOption,
-) (ExternalStorage, error) {
-	<-a.ready
-	return a.byURI(ctx, uri, user, opts...)
-}

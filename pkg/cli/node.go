@@ -35,6 +35,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	localTimeFormat = "2006-01-02 15:04:05.999999-07:00"
+)
+
 var lsNodesColumnHeaders = []string{
 	"id",
 }

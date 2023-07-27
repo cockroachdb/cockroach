@@ -42,7 +42,7 @@ SELECT * FROM t
 
 # Check sql instance locality in the secondary tenant.
 query IT
-SELECT id, locality FROM system.sql_instances WHERE locality IS NOT NULL ORDER BY id
+SELECT id, locality FROM system.sql_instances WHERE locality IS NOT NULL
 ----
 1  {"Tiers": "region=test"}
 2  {"Tiers": "region=test1"}
@@ -64,7 +64,7 @@ vectorized: true
   table: t@t_pkey
   spans: [/1 - /1] [/3 - /3] [/5 - /5]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQgN_5FdY9MeQqdsJ48BNoDSJS142mEkiomkx8K1HTONgOY6ry35FdYG3IUBs_RDrf5btPd96B_V6BgPTz7exdNicvp1m-zD_OLkieztKrJXlF3i9urokjnz6ki5RsiC_ilCSUXF4AhVornMstWhBfgAOFGCgksKLQGF2gtdr41C4UZuonCEahrJvW-esVhUIbBLEDV7oKQcBSfq1wgVKhiTxLoZNlFfDurbtrNvgIFK501W5rK8iGkh9AIW-kjyLO3kQ8uowYrDoKunVPjayTawTBD8yyKYi4o8_IPTm1tTYKDaojn1U3oD_XE91ESa9wWCXuqSRHKvz0ObGRc-JnzIkdycWny_GRcskZcvzZJQ7ILdA2urZ40o5Yr9OE-62jWuP-iVjdmgJvjS5C7T68CaBwodC6fZbvg6wOKe47GJTbv2_wkMT_S3p9RGKHJNYnxWOd_iElY0lhYveVfrgrFQhgv89k4PPngP9Brq1fW_5NPwTs8rHxQ7-XlUUK13KDU3RotmVdWlcWIJxpsete_AoAAP__yB-H8A==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkU9Lw0AQxe9-imVOVkaSTayHnJQaMVDbmhQUJEjMDqU0zcbdjSgl312yOdSWKrEe58-b9-PNBvRbAQGET7PxdTRhpzdRMk8exgOWhONwNGdn7Dae3jPDHu_COGQr1i5xZD6y4QAQSilokq1JQ_AMHBA8QPAhRaiUzElrqdrRxi5G4gMCF2FZVrVp2ylCLhVBsAGzNAVBAPPstaCYMkHKaW8JMtmysOfNlXmpVvQJCCNZ1OtSB2yF7B0QkiprK4e7lw53ho4LaYMga7M10iZbEAS8wR9gtgx1KZUgRWLHP20O4E7kuawcf2_xsLW3Y8375-AemQPvnYPXH4YfCeMf9ZQDMDHpSpaaemXutk8jsaDuw1rWKqeZkrm16cqp1dmGIG26Ke-KqLQjC_hdzH8VX-yI3X2x9x9n_0_itDn5CgAA__-lhT3K
 
 # Ensure that a single scan that touches multiple ranges is represented by a
 # single span after physical planning. We expect to only have a single
@@ -80,7 +80,7 @@ vectorized: true
   table: t@t_pkey
   spans: [/3 - /4]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUe9r2zAQ_b6_QrxPzVCw1NB9EAxWGo8Z0rSLDRtspmj2NTP-IU-S15Xg_33Ybrs0bFnvg9C9u3vv6bSD-1FBIfx8vTqP1uxkGcVJ_HE1Y3G4Ci8S9pq931xdMs8-fQg3ITsp2ddOiAW9ZYsZO18vn5CMnc3A0Zic1romB_UFEhwLpBytNRk5Z-wA78amKP8FJTiKpu38AKccmbEEtYMvfEVQWJu5aYOBJSevi2ps6zlM5_8MOa-3BHW6pxItoWTP94TkcaFEf6toQzonG4hncvDv_E1b0j04LkzV1Y1TrOTsJzjiVg9ZIMWbQAaL-cPlDP_yKA88imce_7OMDbnWNI5etA1xoDSXfcpB-ZamH3CmsxldW5ONvVN6NRKNQE7OT9XTKYmax5LzlnT9ZH-fSR5lEseYUo7bytzdFDkUxEPM_3I8BoYBvXXDiuLv5m6kTe7b4YG3unLEcalLWpInWxdN4XyRQXnbUd-_-h0AAP__pWPszQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkNFK80AUhO__p1jmqv3Zkk1DvVgQLG3EQE1rUlDQIDE5lNI0G7MbUULeXZKItoLVu8yc803mbA39nEHCvVstpp7PBnMvXIc3iyEL3YU7W7P_7DJYXjPDbq_cwGWDHXuohHDonDlDNvXnn07CJkNw5ColP96ThryHDQ4HEUdRqoS0VmVr192Sl75CCo5tXlSmtSOORJUEWcNsTUaQ8NVIFVabkpKJt1m31nCoynxB2sQbghw3_CDYPh28jp8yCihOqbTEUTzMhXksdvQGjpnKqn2uJdtx9gKOsIhbZdnizLItZ_TxMcFPneyjTr8cG5AuVK7pT9eKJuKgdEP9g2pVlQmtSpV0v-nlsuM6IyVt-um4F17ej9qCh7B9Ehbf4Kj59x4AAP__gJu1Iw==
 
 # Ensure that a query with a LIMIT is planned on the instance that is the
 # "leaseholder" of the first range touched by the scan. We expect to only have a
@@ -97,7 +97,7 @@ vectorized: true
   spans: [/1 - ]
   limit: 10
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUV2L1DAUffdXhPOkkqHJCD4EBGWnYqEzu04LCjossb07hmmbmqSuy9D_Lum4OjvouPch5H6dc3Kyh__WQCH9eJW_yVbs6SIryuJ9_owVaZ5elOw5e7u-XLLAPrxL1ynbsc-DEC_oFZMsz5ZZyaQAR2drWumWPNQnSHDMseHona3Ie-tieT8NZfUPKMFhun4IsbzhqKwjqD2CCQ1BYWVntk8iSk1Bm2YaGznsEP4s-aC3BDU_YskWUHLkR0TyPFGpvzS0Jl2TS8QDOoTX4brf0R04LmwztJ1XbMfZd3AUvY5ZIsXLRCZyNl3m4MhNa0L0419i5YlY8UDsf1xZk-9t5-lRtogTppkcNxxUb-nwFd4OrqIrZ6tp9pBeTkBToSYfDt35Icm6-5YPjnT7W_4xkjyLJM4hbThuGnt7bWooiF8x-8txH4gLeuujRcVXezvBlnd9fOCNbjxxLPWOFhTItaYzPpgKKriBxvHJzwAAAP__psbtGQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUF9LvEAUff99iuE8_YpZnDHoYSAoNiPB_ZMKBSVhellkXcecMQrxu4f60G7Q1tucc-85c87tYF5LKHgP6-DKX7L_134UR3fBCYu8wJvH7JTdhKsFs-z-1gs9tmVPrRBndMEkC_yFHzMpwFHpnJbpjgzUIyQ4XCQcdaMzMkY3A92NS37-DiU4iqpu7UAnHJluCKqDLWxJUFjqma6dwSUnmxbluNZz6NZ-iYxNNwTl9nzPWB43jtOXkkJKc2occWAPe2mf6y19gGOuy3ZXGcW2nL2BI6rTATlSnDvSkbPx4YIjKHaFHfr_FE4ehPuldUim1pWhP9UWfcJB-YamyxrdNhmtG52N30xwNepGIidjp6k7Ab-aRkPAfbE8KhbfxEn_7zMAAP__RR61bw==
 
 
 # Regression test for #93887 - don't panic when generating index recommendations

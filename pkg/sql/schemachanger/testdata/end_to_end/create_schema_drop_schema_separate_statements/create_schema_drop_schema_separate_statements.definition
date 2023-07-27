@@ -1,5 +1,0 @@
-test
-CREATE SCHEMA sc;
-DROP SCHEMA sc;
-CREATE SCHEMA sc;
-----

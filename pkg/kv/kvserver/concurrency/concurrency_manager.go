@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -426,10 +425,9 @@ func (m *managerImpl) PoisonReq(g *Guard) {
 func (m *managerImpl) FinishReq(g *Guard) {
 	// NOTE: we release latches _before_ exiting lock wait-queues deliberately.
 	// Either order would be correct, but the order here avoids non-determinism in
-	// cases where a request A holds both latches and has claimed some keys by
-	// virtue of being the first request in a lock wait-queue and has a request B
-	// waiting on its claim. If request A released its claim (by exiting the lock
-	// wait-queue) before releasing its latches, it would be possible for B to
+	// cases where a request A holds both latches and lock wait-queue reservations
+	// and has a request B waiting on its reservations. If request A released its
+	// reservations before releasing its latches, it would be possible for B to
 	// beat A to the latch manager and end up blocking on its latches briefly. Not
 	// only is this confusing in traces, but it is slightly less efficient than if
 	// request A released latches before letting anyone waiting on it in the lock
@@ -529,16 +527,8 @@ func (m *managerImpl) HandleTransactionPushError(
 
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.AcquireLock(acq); err != nil {
-		if errors.IsAssertionFailure(err) {
-			log.Fatalf(ctx, "%v", err)
-		}
-		// It's reasonable to expect benign errors here that the layer above
-		// (command evaluation) isn't equipped to deal with. As long as we're not
-		// violating any assertions, we simply log and move on. One benign case is
-		// when an unreplicated lock is being acquired by a transaction at an older
-		// epoch.
-		log.Errorf(ctx, "%v", err)
+	if err := m.lt.AcquireLock(&acq.Txn, acq.Key, lock.Exclusive, acq.Durability); err != nil {
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -687,7 +677,7 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 // SpanSets to the caller, ensuring that the SpanSets are not destroyed with the
 // Guard. The method is only safe if called immediately before passing the Guard
 // to FinishReq.
-func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) {
+func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *spanset.SpanSet) {
 	la, lo := g.Req.LatchSpans, g.Req.LockSpans
 	g.Req.LatchSpans, g.Req.LockSpans = nil, nil
 	return la, lo
@@ -725,18 +715,18 @@ func (g *Guard) IsolatedAtLaterTimestamps() bool {
 	// unprotected timestamp. We only look at global latch spans because local
 	// latch spans always use unbounded (NonMVCC) timestamps.
 	return len(g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
-		// Similarly, if the request intends to perform any non-locking reads, it
-		// cannot trivially bump its timestamp and expect to be isolated at the
-		// higher timestamp. Bumping its timestamp could cause the request to
-		// conflict with locks that it previously did not conflict with. It must
-		// drop its lockTableGuard and re-scan the lockTable.
-		len(g.Req.LockSpans.GetSpans(lock.None)) == 0
+		// Similarly, if the request declared any global or local read lock spans
+		// then it can not trivially bump its timestamp without dropping its
+		// lockTableGuard and re-scanning the lockTable. Doing so could allow the
+		// request to conflict with locks that it previously did not conflict with.
+		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
+		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanLocal)) == 0
 }
 
 // CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
 // have a conflicting latch, lock.
 func (g *Guard) CheckOptimisticNoConflicts(
-	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
+	latchSpansRead *spanset.SpanSet, lockSpansRead *spanset.SpanSet,
 ) (ok bool) {
 	if g.EvalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
@@ -767,22 +757,15 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 	return g.lm.CheckOptimisticNoConflicts(g.lg, g.Req.LatchSpans)
 }
 
-// IsKeyLockedByConflictingTxn returns whether the specified key is claimed
-// (see claimantTxn()) by a conflicting transaction in the lockTableGuard's
-// snapshot of the lock table, given the caller's own desired locking
+// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
+// reserved (see lockTable "reservations") by a conflicting transaction in the
+// Guard's snapshot of the lock table, given the caller's own desired locking
 // strength. If so, true is returned. If the key is locked, the lock holder is
-// also returned. Otherwise, if the key was claimed by a concurrent request
-// still sequencing through the lock table, but the lock isn't held (yet), nil
-// is also returned.
-//
-// If the lock has been claimed (held or otherwise) by the transaction itself,
-// there's no conflict to speak of, so false is returned. In cases where the
-// lock isn't held, but the lock has been claimed by the transaction itself,
-// we do not make a distinction about which request claimed the key -- it
-// could either be the request itself, or a different concurrent request from
-// the same transaction; The specifics do not affect the caller.
-// This method is used by requests in conjunction with the SkipLocked wait
-// policy to determine which keys they should skip over during evaluation.
+// also returned. Otherwise, if the key is reserved, nil is also returned. A
+// transaction's own lock or reservation does not appear to be locked to itself
+// (false is returned). The method is used by requests in conjunction with the
+// SkipLocked wait policy to determine which keys they should skip over during
+// evaluation.
 func (g *Guard) IsKeyLockedByConflictingTxn(
 	key roachpb.Key, strength lock.Strength,
 ) (bool, *enginepb.TxnMeta) {

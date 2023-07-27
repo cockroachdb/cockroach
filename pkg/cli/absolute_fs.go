@@ -50,10 +50,6 @@ func (fs *absoluteFS) Create(name string) (vfs.File, error) {
 	return fs.fs.Create(name)
 }
 
-func (fs *absoluteFS) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
-	panic("unimplemented")
-}
-
 func (fs *absoluteFS) Link(oldname, newname string) error {
 	return wrapWithAbsolute(fs.fs.Link, oldname, newname)
 }

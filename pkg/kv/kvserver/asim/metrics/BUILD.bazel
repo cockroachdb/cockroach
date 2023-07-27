@@ -25,12 +25,10 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         ":metrics",
-        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -44,17 +44,6 @@ func (s NodeIDSlice) Len() int           { return len(s) }
 func (s NodeIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s NodeIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 
-func (s NodeIDSlice) String() string {
-	var sb strings.Builder
-	for i, ni := range s {
-		if i > 0 {
-			sb.WriteRune(',')
-		}
-		fmt.Fprintf(&sb, "n%d", ni)
-	}
-	return sb.String()
-}
-
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
 
@@ -64,20 +53,6 @@ type StoreIDSlice []StoreID
 func (s StoreIDSlice) Len() int           { return len(s) }
 func (s StoreIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s StoreIDSlice) Less(i, j int) bool { return s[i] < s[j] }
-
-func (s StoreIDSlice) String() string {
-	var sb strings.Builder
-	for i, st := range s {
-		if i > 0 {
-			sb.WriteRune(',')
-		}
-		fmt.Fprintf(&sb, "s%d", st)
-	}
-	return sb.String()
-}
-
-// SafeValue implements the redact.SafeValue interface.
-func (s StoreIDSlice) SafeValue() {}
 
 // String implements the fmt.Stringer interface.
 // It is used to format the ID for use in Gossip keys.
@@ -640,90 +615,6 @@ func (l Locality) Matches(filter Locality) (bool, Tier) {
 		}
 	}
 	return true, Tier{}
-}
-
-// getFirstRegionFirstZone iterates through the locality tiers and returns
-// multiple values containing:
-// 1. The value of the first encountered "region" tier.
-// 2. A boolean indicating whether the "region" tier key was found.
-// 3,4. The key and the value of the first encountered "zone" tier.
-// 5. A boolean indicating whether the "zone" tier key was found.
-func (l Locality) getFirstRegionFirstZone() (
-	firstRegionValue string,
-	hasRegion bool,
-	firstZoneKey string,
-	firstZoneValue string,
-	hasZone bool,
-) {
-	for _, tier := range l.Tiers {
-		if hasRegion && hasZone {
-			break
-		}
-		switch tier.Key {
-		case "region":
-			if !hasRegion {
-				firstRegionValue = tier.Value
-				hasRegion = true
-			}
-		case "zone", "availability-zone", "az":
-			if !hasZone {
-				firstZoneKey, firstZoneValue = tier.Key, tier.Value
-				hasZone = true
-			}
-		}
-	}
-	return firstRegionValue, hasRegion, firstZoneKey, firstZoneValue, hasZone
-}
-
-// CompareWithLocality returns the comparison result between this and the
-// provided other locality along with any lookup errors. Possible errors include
-// 1. if either locality does not have a "region" tier key. 2. if either
-// locality does not have a "zone" tier key or if the first "zone" tier keys
-// used by two localities are different.
-//
-// Limitation:
-// - It is unfortunate that the tier key is hardcoded here. Ideally, we would
-// prefer a more robust way to look up node locality regions and zones.
-// - Although it is technically possible for users to use  “az”, “zone”,
-// “availability-zone” as tier keys within a single locality, it can cause
-// confusion when choosing the zone tier values for cross-zone comparison. In
-// such cases, we would want to return an error. Ideally, both localities would
-// be checked thoroughly for duplicate zone tier keys and key mismatches.
-// However, due to frequent invocation of this function, we prefer to terminate
-// the check after examining the first encountered zone tier key-value pairs.
-//
-// Note: it is intentional here to perform multiple locality tiers comparison in
-// a single function to avoid overhead. If you are adding additional locality
-// tiers comparisons, it is recommended to handle them within one tier list
-// iteration.
-func (l Locality) CompareWithLocality(
-	other Locality,
-) (_ LocalityComparisonType, regionErr error, zoneErr error) {
-	firstRegionValue, hasRegion, firstZoneKey, firstZone, hasZone := l.getFirstRegionFirstZone()
-	firstRegionValueOther, hasRegionOther, firstZoneKeyOther, firstZoneOther, hasZoneOther := other.getFirstRegionFirstZone()
-
-	isCrossRegion := firstRegionValue != firstRegionValueOther
-	isCrossZone := firstZone != firstZoneOther
-
-	if !hasRegion || !hasRegionOther {
-		isCrossRegion = false
-		regionErr = errors.Errorf("localities must have a valid region tier key for cross-region comparison")
-	}
-
-	if (!hasZone || !hasZoneOther) || (firstZoneKey != firstZoneKeyOther) {
-		isCrossZone = false
-		zoneErr = errors.Errorf("localities must have a valid zone tier key for cross-zone comparison")
-	}
-
-	if isCrossRegion {
-		return LocalityComparisonType_CROSS_REGION, regionErr, zoneErr
-	} else {
-		if isCrossZone {
-			return LocalityComparisonType_SAME_REGION_CROSS_ZONE, regionErr, zoneErr
-		} else {
-			return LocalityComparisonType_SAME_REGION_SAME_ZONE, regionErr, zoneErr
-		}
-	}
 }
 
 // SharedPrefix returns the number of this locality's tiers which match those of

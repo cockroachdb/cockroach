@@ -30,7 +30,10 @@ import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses"
 import { Button } from "../button";
 import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
-import { aggregateStatements } from "../transactionsPage/utils";
+import {
+  aggregateStatements,
+  statementFingerprintIdsToText,
+} from "../transactionsPage/utils";
 import { Loading } from "../loading";
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import {
@@ -61,8 +64,6 @@ import Long from "long";
 import {
   createCombinedStmtsRequest,
   InsightRecommendation,
-  RequestState,
-  SqlStatsResponse,
   StatementsRequest,
   TxnInsightsRequest,
 } from "../api";
@@ -89,11 +90,6 @@ import {
 import { CockroachCloudContext } from "../contexts";
 import { SqlStatsSortType } from "src/api/statementsApi";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
-import {
-  getStatementsForTransaction,
-  getTxnFromSqlStatsMemoized,
-  getTxnQueryString,
-} from "./transactionDetailsUtils";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -109,13 +105,18 @@ export interface TransactionDetailsStateProps {
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
+  error?: Error | null;
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   nodeRegions: { [nodeId: string]: string };
+  statements?: Statement[];
+  transaction: Transaction;
   transactionFingerprintId: string;
+  isLoading: boolean;
+  lastUpdated: moment.Moment | null;
   transactionInsights: TxnInsightEvent[];
   hasAdminRole?: UIConfigState["hasAdminRole"];
-  txnStatsResp: RequestState<SqlStatsResponse>;
+  isDataValid: boolean;
   requestTime: moment.Moment;
 }
 
@@ -136,8 +137,6 @@ interface TState {
   sortSetting: SortSetting;
   pagination: ISortedTablePagination;
   latestTransactionText: string;
-  txnDetails: Transaction | null;
-  statements: Statement[] | null;
 }
 
 function statementsRequestFromProps(
@@ -158,18 +157,6 @@ export class TransactionDetails extends React.Component<
 > {
   constructor(props: TransactionDetailsProps) {
     super(props);
-
-    const txnDetails = getTxnFromSqlStatsMemoized(
-      this.props.txnStatsResp?.data,
-      this.props.match,
-      this.props.location,
-    );
-
-    const stmts = getStatementsForTransaction(
-      txnDetails,
-      this.props.txnStatsResp?.data?.statements,
-    );
-
     this.state = {
       sortSetting: {
         // Sort by statement latency as default column.
@@ -180,9 +167,7 @@ export class TransactionDetails extends React.Component<
         pageSize: 10,
         current: 1,
       },
-      latestTransactionText: getTxnQueryString(txnDetails, stmts),
-      txnDetails,
-      statements: stmts,
+      latestTransactionText: this.getTxnQueryString(),
     };
 
     // In case the user selected a option not available on this page,
@@ -194,33 +179,33 @@ export class TransactionDetails extends React.Component<
     }
   }
 
-  setTxnDetails = (): void => {
-    const txnDetails = getTxnFromSqlStatsMemoized(
-      this.props.txnStatsResp?.data,
-      this.props.match,
-      this.props.location,
-    );
+  getTxnQueryString = (): string => {
+    const { transaction } = this.props;
 
-    const statements = getStatementsForTransaction(
-      txnDetails,
-      this.props.txnStatsResp?.data?.statements,
-    );
+    const statementFingerprintIds =
+      transaction?.stats_data?.statement_fingerprint_ids;
 
-    // Only overwrite the transaction text if it is non-null.
-    const transactionText =
-      getTxnQueryString(txnDetails, statements) ??
-      this.state.latestTransactionText;
+    return (
+      (statementFingerprintIds &&
+        statementFingerprintIdsToText(
+          statementFingerprintIds,
+          this.getStatementsForTransaction(),
+        )) ??
+      ""
+    );
+  };
+
+  setTxnQueryString = (): void => {
+    const transactionText = this.getTxnQueryString();
 
     // If a new, non-empty-string transaction text is available (derived from the time-frame-specific endpoint
     // response), cache the text.
     if (
-      transactionText !== this.state.latestTransactionText ||
-      txnDetails !== this.state.txnDetails
+      transactionText &&
+      transactionText !== this.state.latestTransactionText
     ) {
       this.setState({
         latestTransactionText: transactionText,
-        txnDetails,
-        statements,
       });
     }
   };
@@ -240,7 +225,7 @@ export class TransactionDetails extends React.Component<
   };
 
   componentDidMount(): void {
-    if (!this.props.txnStatsResp?.data || !this.props.txnStatsResp?.valid) {
+    if (!this.props.transaction || !this.props.isDataValid) {
       this.refreshData();
     }
     this.props.refreshUserSQLRoles();
@@ -257,9 +242,9 @@ export class TransactionDetails extends React.Component<
     if (
       prevProps.transactionFingerprintId !==
         this.props.transactionFingerprintId ||
-      prevProps.txnStatsResp !== this.props.txnStatsResp
+      prevProps.statements !== this.props.statements
     ) {
-      this.setTxnDetails();
+      this.setTxnQueryString();
     }
 
     if (this.props.timeScale !== prevProps.timeScale) {
@@ -283,11 +268,28 @@ export class TransactionDetails extends React.Component<
     this.props.history.push("/sql-activity?tab=Transactions&view=fingerprints");
   };
 
+  getStatementsForTransaction = (): Statement[] => {
+    const { transaction, statements } = this.props;
+
+    const statementFingerprintIds =
+      transaction?.stats_data?.statement_fingerprint_ids;
+    if (!statementFingerprintIds) {
+      return [];
+    }
+
+    return (
+      statements?.filter(
+        s =>
+          s.key.key_data.transaction_fingerprint_id.toString() ===
+          this.props.transactionFingerprintId,
+      ) ?? []
+    );
+  };
+
   render(): React.ReactElement {
-    const { nodeRegions } = this.props;
-    const transaction = this.state.txnDetails;
-    const error = this.props.txnStatsResp?.error;
-    const { latestTransactionText, statements } = this.state;
+    const { error, nodeRegions, transaction } = this.props;
+    const { latestTransactionText } = this.state;
+    const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;
     const period = (
       <FormattedTimescale
@@ -330,7 +332,7 @@ export class TransactionDetails extends React.Component<
         <Loading
           error={error}
           page={"transaction details"}
-          loading={this.props.txnStatsResp?.inFlight}
+          loading={this.props.isLoading}
           render={() => {
             if (!transaction) {
               return (
@@ -364,7 +366,9 @@ export class TransactionDetails extends React.Component<
             } = this.props;
             const { sortSetting, pagination } = this.state;
 
-            const aggregatedStatements = aggregateStatements(statements);
+            const aggregatedStatements = aggregateStatements(
+              statementsForTransaction,
+            );
             populateRegionNodeForStatements(aggregatedStatements, nodeRegions);
             const duration = (v: number) => Duration(v * 1e9);
 

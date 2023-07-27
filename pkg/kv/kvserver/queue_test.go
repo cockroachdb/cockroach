@@ -14,7 +14,6 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"runtime/pprof"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -23,9 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -108,7 +105,6 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	cfg.disabledConfig = &settings.BoolSetting{}
 	return newBaseQueue(name, impl, store, cfg)
 }
 
@@ -565,39 +561,6 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	}
 }
 
-// BaseQueueLabel verifies that the queue name tag exists during maybeAdd but
-// does not exist before and after maybeAdd.
-func TestBaseQueueLabel(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-	sc := TestStoreConfig(nil)
-	sc.TestingKnobs.BaseQueueInterceptor = func(ctx context.Context, bq *baseQueue) {
-		_, labelDoesExist := pprof.Label(ctx, bq.name)
-		require.True(t, labelDoesExist)
-	}
-	tc.StartWithStoreConfig(ctx, t, stopper, sc)
-	r, err := tc.store.GetReplica(1)
-	require.NoError(t, err)
-
-	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, _ float64) {
-			shouldQueue = true
-			return
-		},
-	}
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{})
-
-	bq.Start(stopper)
-	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
-
-	_, labelDoesExist := pprof.Label(ctx, bq.name)
-	require.False(t, labelDoesExist)
-}
-
 // TestNeedsSystemConfig verifies that queues that don't need the system config
 // are able to process replicas when the system config isn't available.
 func TestNeedsSystemConfig(t *testing.T) {
@@ -1038,6 +1001,7 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 	ctx := context.Background()
 	type testCase struct {
 		guaranteedProcessingTime time.Duration
+		recoverySnapshotRate     int64 // bytes/s
 		rebalanceSnapshotRate    int64 // bytes/s
 		replicaSize              int64 // bytes
 		expectedTimeout          time.Duration
@@ -1046,8 +1010,9 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 		return fmt.Sprintf("%+v", tc), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			queueGuaranteedProcessingTimeBudget.Override(ctx, &st.SV, tc.guaranteedProcessingTime)
+			recoverySnapshotRate.Override(ctx, &st.SV, tc.recoverySnapshotRate)
 			rebalanceSnapshotRate.Override(ctx, &st.SV, tc.rebalanceSnapshotRate)
-			tf := makeRateLimitedTimeoutFunc(rebalanceSnapshotRate)
+			tf := makeRateLimitedTimeoutFunc(recoverySnapshotRate, rebalanceSnapshotRate)
 			repl := mvccStatsReplicaInQueue{
 				size: tc.replicaSize,
 			}
@@ -1057,30 +1022,56 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 	for _, tc := range []testCase{
 		{
 			guaranteedProcessingTime: time.Minute,
-			rebalanceSnapshotRate:    1 << 20,
+			recoverySnapshotRate:     1 << 30,
+			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
 			replicaSize:              1 << 20,
 			expectedTimeout:          time.Minute, // the minimum timeout (guaranteedProcessingTime).
 		},
 		{
 			guaranteedProcessingTime: time.Minute,
+			recoverySnapshotRate:     1 << 20, // minimum rate for timeout calculation.
+			rebalanceSnapshotRate:    1 << 30,
+			replicaSize:              1 << 20,
+			expectedTimeout:          time.Minute, // the minimum timeout (guaranteedProcessingTime).
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			recoverySnapshotRate:     1 << 20, // minimum rate for timeout calculation.
+			rebalanceSnapshotRate:    2 << 20,
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * time.Second * permittedRangeScanSlowdown,
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			recoverySnapshotRate:     2 << 20,
 			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
 			replicaSize:              100 << 20,
 			expectedTimeout:          100 * time.Second * permittedRangeScanSlowdown,
 		},
 		{
 			guaranteedProcessingTime: time.Hour,
+			recoverySnapshotRate:     1 << 20, // minimum rate for timeout calculation.
+			rebalanceSnapshotRate:    1 << 30,
+			replicaSize:              100 << 20,
+			expectedTimeout:          time.Hour, // the minimum timeout (guaranteedProcessingTime).
+		},
+		{
+			guaranteedProcessingTime: time.Hour,
+			recoverySnapshotRate:     1 << 30,
 			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
 			replicaSize:              100 << 20,
 			expectedTimeout:          time.Hour, // the minimum timeout (guaranteedProcessingTime).
 		},
 		{
 			guaranteedProcessingTime: time.Minute,
-			rebalanceSnapshotRate:    1 << 10,
+			recoverySnapshotRate:     1 << 10, // minimum rate for timeout calculation.
+			rebalanceSnapshotRate:    1 << 20,
 			replicaSize:              100 << 20,
 			expectedTimeout:          100 * (1 << 10) * time.Second * permittedRangeScanSlowdown,
 		},
 		{
 			guaranteedProcessingTime: time.Minute,
+			recoverySnapshotRate:     1 << 20,
 			rebalanceSnapshotRate:    1 << 10, // minimum rate for timeout calculation.
 			replicaSize:              100 << 20,
 			expectedTimeout:          100 * (1 << 10) * time.Second * permittedRangeScanSlowdown,
@@ -1224,92 +1215,6 @@ func TestBaseQueueDisable(t *testing.T) {
 
 	if pc := testQueue.getProcessed(); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
-	}
-}
-
-// TestQueueDisable verifies that setting the set of queue.enabled cluster
-// settings actually disables the base queue. This test works alongside
-// TestBaseQueueDisable to verify the entire disable workflow.
-func TestQueueDisable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
-
-	testCases := []struct {
-		name           string
-		clusterSetting *settings.BoolSetting
-		queue          *baseQueue
-	}{
-		{
-			name:           "Merge Queue",
-			clusterSetting: kvserverbase.MergeQueueEnabled,
-			queue:          tc.store.mergeQueue.baseQueue,
-		},
-		{
-			name:           "Replicate Queue",
-			clusterSetting: kvserverbase.ReplicateQueueEnabled,
-			queue:          tc.store.replicateQueue.baseQueue,
-		},
-		{
-			name:           "Replica GC Queue",
-			clusterSetting: kvserverbase.ReplicaGCQueueEnabled,
-			queue:          tc.store.replicaGCQueue.baseQueue,
-		},
-		{
-			name:           "Raft Log Queue",
-			clusterSetting: kvserverbase.RaftLogQueueEnabled,
-			queue:          tc.store.raftLogQueue.baseQueue,
-		},
-		{
-			name:           "Raft Snapshot Queue",
-			clusterSetting: kvserverbase.RaftSnapshotQueueEnabled,
-			queue:          tc.store.raftSnapshotQueue.baseQueue,
-		},
-		{
-			name:           "Consistency Queue",
-			clusterSetting: kvserverbase.ConsistencyQueueEnabled,
-			queue:          tc.store.consistencyQueue.baseQueue,
-		},
-		{
-			name:           "Split Queue",
-			clusterSetting: kvserverbase.SplitQueueEnabled,
-			queue:          tc.store.splitQueue.baseQueue,
-		},
-		{
-			name:           "MVCC GC Queue",
-			clusterSetting: kvserverbase.MVCCGCQueueEnabled,
-			queue:          tc.store.mvccGCQueue.baseQueue,
-		},
-	}
-
-	if tc.store.tsMaintenanceQueue != nil {
-		testCases = append(testCases, struct {
-			name           string
-			clusterSetting *settings.BoolSetting
-			queue          *baseQueue
-		}{
-			name:           "Timeseries Maintenance Queue",
-			clusterSetting: kvserverbase.TimeSeriesMaintenanceQueueEnabled,
-			queue:          tc.store.tsMaintenanceQueue.baseQueue,
-		})
-	}
-
-	// Disable and verify all queues are disabled
-	for _, testCase := range testCases {
-		testCase.clusterSetting.Override(ctx, &tc.store.ClusterSettings().SV, false)
-		if testCase.queue == nil {
-			continue
-		}
-		testCase.queue.mu.Lock()
-		disabled := testCase.queue.mu.disabled
-		testCase.queue.mu.Unlock()
-		if disabled != true {
-			t.Errorf("%s should be disabled", testCase.name)
-		}
 	}
 }
 

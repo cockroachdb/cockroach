@@ -26,10 +26,7 @@ import (
 type record struct {
 	id string
 	t  time.Time
-	// isProfileProto is true when the profile record is stored in protobuf format
-	// outlined in https://github.com/google/pprof/tree/main/proto#overview.
-	isProfileProto bool
-	b              []byte
+	b  []byte
 }
 
 // A MemStorage is a Storage implementation that holds recent profiles in memory.
@@ -43,7 +40,7 @@ type MemStorage struct {
 	keepNumber   int           // zero for disabled
 }
 
-func (s *MemStorage) GetRecords() []record {
+func (s *MemStorage) getRecords() []record {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]record(nil), s.mu.records...)
@@ -81,14 +78,14 @@ func (s *MemStorage) cleanLocked() {
 }
 
 // Store implements Storage.
-func (s *MemStorage) Store(id string, isProfileProto bool, write func(io.Writer) error) error {
+func (s *MemStorage) Store(id string, write func(io.Writer) error) error {
 	var b bytes.Buffer
 	if err := write(&b); err != nil {
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.records = append(s.mu.records, record{id: id, t: timeutil.Now(), b: b.Bytes(), isProfileProto: isProfileProto})
+	s.mu.records = append(s.mu.records, record{id: id, t: timeutil.Now(), b: b.Bytes()})
 	sort.Slice(s.mu.records, func(i, j int) bool {
 		return s.mu.records[i].t.Before(s.mu.records[j].t)
 	})
@@ -97,12 +94,12 @@ func (s *MemStorage) Store(id string, isProfileProto bool, write func(io.Writer)
 }
 
 // Get implements Storage.
-func (s *MemStorage) Get(id string, read func(bool, io.Reader) error) error {
+func (s *MemStorage) Get(id string, read func(io.Reader) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, v := range s.mu.records {
 		if v.id == id {
-			return read(v.isProfileProto, bytes.NewReader(v.b))
+			return read(bytes.NewReader(v.b))
 		}
 	}
 	return errors.Errorf("profile not found; it may have expired, please regenerate the profile.\n" +

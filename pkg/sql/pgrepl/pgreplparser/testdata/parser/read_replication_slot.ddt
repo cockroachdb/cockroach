@@ -1,5 +1,0 @@
-parse
-READ_REPLICATION_SLOT "a"
-----
-READ_REPLICATION_SLOT a -- normalized!
-READ_REPLICATION_SLOT a -- literals removed

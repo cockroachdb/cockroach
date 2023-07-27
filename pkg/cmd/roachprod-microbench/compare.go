@@ -12,104 +12,105 @@ package main
 
 import (
 	"context"
-	"log"
-	"os"
-	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
-	"golang.org/x/perf/benchfmt"
+	//lint:ignore SA1019 benchstat is deprecated
+	"golang.org/x/perf/benchstat"
+	//lint:ignore SA1019 storage/benchfmt is deprecated
+	"golang.org/x/perf/storage/benchfmt"
 )
 
-type compareConfig struct {
-	newDir    string
-	oldDir    string
-	sheetDesc string
+func compareBenchmarks(
+	packages []string, currentDir, previousDir string,
+) (map[string][]*benchstat.Table, error) {
+	packageResults := make(map[string][][]*benchfmt.Result)
+	var resultMutex syncutil.Mutex
+	var wg sync.WaitGroup
+	errorsFound := false
+	wg.Add(len(packages))
+	for _, pkg := range packages {
+		go func(pkg string) {
+			defer wg.Done()
+			basePackage := pkg[:strings.Index(pkg[4:]+"/", "/")+4]
+			resultMutex.Lock()
+			results, ok := packageResults[basePackage]
+			if !ok {
+				results = [][]*benchfmt.Result{make([]*benchfmt.Result, 0), make([]*benchfmt.Result, 0)}
+				packageResults[basePackage] = results
+			}
+			resultMutex.Unlock()
+
+			// Read the previous and current results. If either is missing, we'll just
+			// skip it. The not found error is ignored since it can be expected that
+			// some benchmarks have changed names or been removed.
+			if err := readReportFile(joinPath(previousDir, getReportLogName(reportLogName, pkg)),
+				func(result *benchfmt.Result) {
+					resultMutex.Lock()
+					results[0] = append(results[0], result)
+					resultMutex.Unlock()
+				}); err != nil &&
+				!isNotFoundError(err) {
+				l.Errorf("failed to add report for %s: %s", pkg, err)
+				errorsFound = true
+			}
+			if err := readReportFile(joinPath(currentDir, getReportLogName(reportLogName, pkg)),
+				func(result *benchfmt.Result) {
+					resultMutex.Lock()
+					results[1] = append(results[1], result)
+					resultMutex.Unlock()
+				}); err != nil &&
+				!isNotFoundError(err) {
+				l.Errorf("failed to add report for %s: %s", pkg, err)
+				errorsFound = true
+			}
+		}(pkg)
+	}
+	wg.Wait()
+	if errorsFound {
+		return nil, errors.New("failed to process reports")
+	}
+
+	tableResults := make(map[string][]*benchstat.Table)
+	for pkgGroup, results := range packageResults {
+		var c benchstat.Collection
+		c.Alpha = 0.05
+		c.Order = benchstat.Reverse(benchstat.ByDelta)
+		// Only add the results if both sets are present.
+		if len(results[0]) > 0 && len(results[1]) > 0 {
+			c.AddResults("old", results[0])
+			c.AddResults("new", results[1])
+			tables := c.Tables()
+			tableResults[pkgGroup] = tables
+		} else if len(results[0])+len(results[1]) > 0 {
+			l.Printf("Only one set of results present for %s", pkgGroup)
+		}
+	}
+	return tableResults, nil
 }
 
-type compare struct {
-	compareConfig
-	service  *google.Service
-	packages []string
-	ctx      context.Context
-}
-
-func newCompare(config compareConfig) (*compare, error) {
-	// Use the old directory to infer package info.
-	packages, err := getPackagesFromLogs(config.oldDir)
+func publishToGoogleSheets(
+	ctx context.Context, srv *google.Service, sheetName string, tables []*benchstat.Table,
+) error {
+	url, err := srv.CreateSheet(ctx, sheetName, tables)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	ctx := context.Background()
-	service, err := google.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &compare{compareConfig: config, service: service, packages: packages, ctx: ctx}, nil
-}
-
-func (c *compare) readMetrics() (map[string]*model.MetricMap, error) {
-	builders := make(map[string]*model.Builder)
-	for _, pkg := range c.packages {
-		basePackage := pkg[:strings.Index(pkg[4:]+"/", "/")+4]
-		results, ok := builders[basePackage]
-		if !ok {
-			results = model.NewBuilder()
-			builders[basePackage] = results
-		}
-
-		// Read the previous and current results. If either is missing, we'll just
-		// skip it.
-		if err := processReportFile(results, "old", pkg,
-			filepath.Join(c.oldDir, getReportLogName(reportLogName, pkg))); err != nil {
-			return nil, err
-
-		}
-		if err := processReportFile(results, "new", pkg,
-			filepath.Join(c.newDir, getReportLogName(reportLogName, pkg))); err != nil {
-			log.Printf("failed to add report for %s: %s", pkg, err)
-			return nil, err
-		}
-	}
-
-	// Compute the results.
-	metricMaps := make(map[string]*model.MetricMap)
-	for pkg, builder := range builders {
-		metricMap := builder.ComputeMetricMap()
-		metricMaps[pkg] = &metricMap
-	}
-	return metricMaps, nil
-}
-
-func (c *compare) publishToGoogleSheets(metricMaps map[string]*model.MetricMap) error {
-	for pkgGroup, metricMap := range metricMaps {
-		sheetName := pkgGroup + "/..."
-		if c.sheetDesc != "" {
-			sheetName += " " + c.sheetDesc
-		}
-		url, err := c.service.CreateSheet(c.ctx, sheetName, *metricMap, "old", "new")
-		if err != nil {
-			return err
-		}
-		log.Printf("Generated sheet for %s: %s\n", sheetName, url)
-	}
+	l.Printf("Generated sheet for %s: %s\n", sheetName, url)
 	return nil
 }
 
-func processReportFile(builder *model.Builder, id, pkg, path string) error {
-	file, err := os.Open(path)
+func readReportFile(path string, reportResults func(*benchfmt.Result)) error {
+	reader, err := createReader(path)
 	if err != nil {
-		// A not found error is ignored since it can be expected that
-		// some microbenchmarks have changed names or been removed.
-		if oserror.IsNotExist(err) {
-			return nil
-		}
 		return errors.Wrapf(err, "failed to create reader for %s", path)
 	}
-	defer file.Close()
-	reader := benchfmt.NewReader(file, path)
-	return builder.AddMetrics(id, pkg+"/", reader)
+	br := benchfmt.NewReader(reader)
+	for br.Next() {
+		reportResults(br.Result())
+	}
+	return br.Err()
 }

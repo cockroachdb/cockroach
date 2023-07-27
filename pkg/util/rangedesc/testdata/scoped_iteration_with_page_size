@@ -1,6 +1,6 @@
 scan page-size=3
 ----
-- r1:/{Meta1-System/NodeLiveness}
+- r1:/{Meta1/-System/NodeLiveness}
 - r2:/System/NodeLiveness{-Max}
 - r3:/System/{NodeLivenessMax-tsd}
 - r4:/System{/tsd-tse}

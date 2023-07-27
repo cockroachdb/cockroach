@@ -20,11 +20,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// crdbInternalBufferNotice sends a notice that will be buffered until the
-// connection is closed.
+// crdbInternalSendNotice sends a notice.
 // Note this is extracted to a different file to prevent churn on the pgwire
 // test, which records line numbers.
-func crdbInternalBufferNotice(
+func crdbInternalSendNotice(
 	ctx context.Context, evalCtx *eval.Context, severity string, msg string,
 ) (tree.Datum, error) {
 	if evalCtx.ClientNoticeSender == nil {
@@ -35,12 +34,4 @@ func crdbInternalBufferNotice(
 		pgnotice.NewWithSeverityf(strings.ToUpper(severity), "%s", msg),
 	)
 	return tree.NewDInt(0), nil
-}
-
-// crdbInternalSendNotice immediately flushes a notice to the client.
-func crdbInternalSendNotice(ctx context.Context, evalCtx *eval.Context, err error) error {
-	if evalCtx.ClientNoticeSender == nil {
-		return errors.AssertionFailedf("notice sender not set")
-	}
-	return evalCtx.ClientNoticeSender.SendClientNotice(ctx, pgnotice.Notice(err))
 }

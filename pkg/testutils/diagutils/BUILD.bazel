@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "diagutils",
-    testonly = 1,
     srcs = ["diag_test_server.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/diagutils",
     visibility = ["//visibility:public"],

@@ -3,4 +3,5 @@
 
 # Old benchmark data.
 mvcc_data
+# New benchmark data.
 mvcc_data_*

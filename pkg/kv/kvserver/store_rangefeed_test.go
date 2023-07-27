@@ -35,31 +35,15 @@ func TestRangeFeedUpdaterConf(t *testing.T) {
 		want    [2]time.Duration // {refresh, smear}
 		waitErr error
 	}{{
-		want: [...]time.Duration{200 * time.Millisecond, 1 * time.Millisecond}, // default
+		want: [...]time.Duration{200 * time.Millisecond, 200 * time.Millisecond}, // default
 	}, {
-		// By default, RangeFeedSmearInterval is 1ms.
-		updates: []*settings.DurationSetting{RangeFeedRefreshInterval},
-		updVals: []time.Duration{100 * time.Millisecond},
-		want:    [...]time.Duration{100 * time.Millisecond, 1 * time.Millisecond},
-	}, {
-		// When zero, RangeFeedSmearInterval picks up RangeFeedRefreshInterval.
-		updates: []*settings.DurationSetting{RangeFeedRefreshInterval, RangeFeedSmearInterval},
-		updVals: []time.Duration{100 * time.Millisecond, 0},
-		want:    [...]time.Duration{100 * time.Millisecond, 100 * time.Millisecond},
-	}, {
-		// When zero, RangeFeedSmearInterval picks up RangeFeedRefreshInterval,
-		// which is defaulted at SideTransportCloseInterval.
-		updates: []*settings.DurationSetting{RangeFeedSmearInterval},
-		updVals: []time.Duration{0},
-		want:    [...]time.Duration{200 * time.Millisecond, 200 * time.Millisecond},
-	}, {
-		// By default, RangeFeedRefreshInterval picks up SideTransportCloseInterval.
+		// By default RangeFeedRefreshInterval picks up SideTransportCloseInterval,
+		// and RangeFeedSmearInterval picks up RangeFeedRefreshInterval.
 		updates: []*settings.DurationSetting{closedts.SideTransportCloseInterval},
 		updVals: []time.Duration{10 * time.Millisecond},
-		want:    [...]time.Duration{10 * time.Millisecond, 1 * time.Millisecond},
+		want:    [...]time.Duration{10 * time.Millisecond, 10 * time.Millisecond},
 	}, {
-		// By default, RangeFeedRefreshInterval picks up SideTransportCloseInterval.
-		// Zero value is not a valid configuration though.
+		// By default RangeFeedRefreshInterval picks up SideTransportCloseInterval.
 		updates: []*settings.DurationSetting{closedts.SideTransportCloseInterval},
 		updVals: []time.Duration{0},
 		want:    [...]time.Duration{0, 0},
@@ -71,13 +55,18 @@ func TestRangeFeedUpdaterConf(t *testing.T) {
 		want:    [...]time.Duration{0, 0},
 		waitErr: context.DeadlineExceeded,
 	}, {
+		// By default RangeFeedSmearInterval picks up RangeFeedRefreshInterval.
+		updates: []*settings.DurationSetting{RangeFeedRefreshInterval},
+		updVals: []time.Duration{100 * time.Millisecond},
+		want:    [...]time.Duration{100 * time.Millisecond, 100 * time.Millisecond},
+	}, {
 		updates: []*settings.DurationSetting{RangeFeedRefreshInterval, RangeFeedSmearInterval},
-		updVals: []time.Duration{100 * time.Millisecond, 5 * time.Millisecond},
-		want:    [...]time.Duration{100 * time.Millisecond, 5 * time.Millisecond},
+		updVals: []time.Duration{100 * time.Millisecond, 1 * time.Millisecond},
+		want:    [...]time.Duration{100 * time.Millisecond, 1 * time.Millisecond},
 	}, {
 		updates: []*settings.DurationSetting{RangeFeedSmearInterval},
-		updVals: []time.Duration{5 * time.Millisecond},
-		want:    [...]time.Duration{200 * time.Millisecond, 5 * time.Millisecond},
+		updVals: []time.Duration{1 * time.Millisecond},
+		want:    [...]time.Duration{200 * time.Millisecond, 1 * time.Millisecond},
 	}, {
 		// Misconfigurations (potentially transient) are handled gracefully.
 		updates: []*settings.DurationSetting{closedts.SideTransportCloseInterval,

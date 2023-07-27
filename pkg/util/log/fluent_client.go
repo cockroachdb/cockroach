@@ -74,7 +74,6 @@ func (l *fluentSink) output(b []byte, opts sinkOutputOptions) (err error) {
 	}
 
 	if err := l.ensureConnLocked(b); err != nil {
-		logging.metrics.IncrementCounter(FluentSinkConnectionError, 1)
 		return err
 	}
 	return l.tryWriteLocked(b)

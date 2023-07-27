@@ -63,54 +63,6 @@ var (
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaDistSenderReplicaAddressedBatchRequestBytes = metric.Metadata{
-		Name:        "distsender.batch_requests.replica_addressed.bytes",
-		Help:        `Total byte count of replica-addressed batch requests processed`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderReplicaAddressedBatchResponseBytes = metric.Metadata{
-		Name:        "distsender.batch_responses.replica_addressed.bytes",
-		Help:        `Total byte count of replica-addressed batch responses received`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossRegionBatchRequestBytes = metric.Metadata{
-		Name: "distsender.batch_requests.cross_region.bytes",
-		Help: `Total byte count of replica-addressed batch requests processed cross
-		region when region tiers are configured`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossRegionBatchResponseBytes = metric.Metadata{
-		Name: "distsender.batch_responses.cross_region.bytes",
-		Help: `Total byte count of replica-addressed batch responses received cross
-		region when region tiers are configured`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossZoneBatchRequestBytes = metric.Metadata{
-		Name: "distsender.batch_requests.cross_zone.bytes",
-		Help: `Total byte count of replica-addressed batch requests processed cross
-		zone within the same region when region and zone tiers are configured.
-		However, if the region tiers are not configured, this count may also include
-		batch data sent between different regions. Ensuring consistent configuration
-		of region and zone tiers across nodes helps to accurately monitor the data
-		transmitted.`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossZoneBatchResponseBytes = metric.Metadata{
-		Name: "distsender.batch_responses.cross_zone.bytes",
-		Help: `Total byte count of replica-addressed batch responses received cross
-		zone within the same region when region and zone tiers are configured.
-		However, if the region tiers are not configured, this count may also include
-		batch data received between different regions. Ensuring consistent
-		configuration of region and zone tiers across nodes helps to accurately
-		monitor the data transmitted.`,
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
 	metaDistSenderAsyncSentCount = metric.Metadata{
 		Name:        "distsender.batches.async.sent",
 		Help:        "Number of partial batches sent asynchronously",
@@ -260,14 +212,6 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 	"kv.range_descriptor_cache.size",
 	"maximum number of entries in the range descriptor cache",
 	1e6,
-	func(v int64) error {
-		// Set a minimum value to avoid a cache that is too small to be useful.
-		const minVal = 64
-		if v < minVal {
-			return errors.Errorf("cannot be set to a value less than %d", minVal)
-		}
-		return nil
-	},
 )
 
 // senderConcurrencyLimit controls the maximum number of asynchronous send
@@ -289,56 +233,44 @@ func max(a, b int64) int64 {
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
-	BatchCount                         *metric.Counter
-	PartialBatchCount                  *metric.Counter
-	ReplicaAddressedBatchRequestBytes  *metric.Counter
-	ReplicaAddressedBatchResponseBytes *metric.Counter
-	CrossRegionBatchRequestBytes       *metric.Counter
-	CrossRegionBatchResponseBytes      *metric.Counter
-	CrossZoneBatchRequestBytes         *metric.Counter
-	CrossZoneBatchResponseBytes        *metric.Counter
-	AsyncSentCount                     *metric.Counter
-	AsyncThrottledCount                *metric.Counter
-	SentCount                          *metric.Counter
-	LocalSentCount                     *metric.Counter
-	NextReplicaErrCount                *metric.Counter
-	NotLeaseHolderErrCount             *metric.Counter
-	InLeaseTransferBackoffs            *metric.Counter
-	RangeLookups                       *metric.Counter
-	SlowRPCs                           *metric.Gauge
-	RangefeedRanges                    *metric.Gauge
-	RangefeedCatchupRanges             *metric.Gauge
-	RangefeedErrorCatchup              *metric.Counter
-	RangefeedRestartRanges             *metric.Counter
-	RangefeedRestartStuck              *metric.Counter
-	MethodCounts                       [kvpb.NumMethods]*metric.Counter
-	ErrCounts                          [kvpb.NumErrors]*metric.Counter
+	BatchCount              *metric.Counter
+	PartialBatchCount       *metric.Counter
+	AsyncSentCount          *metric.Counter
+	AsyncThrottledCount     *metric.Counter
+	SentCount               *metric.Counter
+	LocalSentCount          *metric.Counter
+	NextReplicaErrCount     *metric.Counter
+	NotLeaseHolderErrCount  *metric.Counter
+	InLeaseTransferBackoffs *metric.Counter
+	RangeLookups            *metric.Counter
+	SlowRPCs                *metric.Gauge
+	RangefeedRanges         *metric.Gauge
+	RangefeedCatchupRanges  *metric.Gauge
+	RangefeedErrorCatchup   *metric.Counter
+	RangefeedRestartRanges  *metric.Counter
+	RangefeedRestartStuck   *metric.Counter
+	MethodCounts            [kvpb.NumMethods]*metric.Counter
+	ErrCounts               [kvpb.NumErrors]*metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
 	m := DistSenderMetrics{
-		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
-		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
-		AsyncSentCount:                     metric.NewCounter(metaDistSenderAsyncSentCount),
-		AsyncThrottledCount:                metric.NewCounter(metaDistSenderAsyncThrottledCount),
-		SentCount:                          metric.NewCounter(metaTransportSentCount),
-		LocalSentCount:                     metric.NewCounter(metaTransportLocalSentCount),
-		ReplicaAddressedBatchRequestBytes:  metric.NewCounter(metaDistSenderReplicaAddressedBatchRequestBytes),
-		ReplicaAddressedBatchResponseBytes: metric.NewCounter(metaDistSenderReplicaAddressedBatchResponseBytes),
-		CrossRegionBatchRequestBytes:       metric.NewCounter(metaDistSenderCrossRegionBatchRequestBytes),
-		CrossRegionBatchResponseBytes:      metric.NewCounter(metaDistSenderCrossRegionBatchResponseBytes),
-		CrossZoneBatchRequestBytes:         metric.NewCounter(metaDistSenderCrossZoneBatchRequestBytes),
-		CrossZoneBatchResponseBytes:        metric.NewCounter(metaDistSenderCrossZoneBatchResponseBytes),
-		NextReplicaErrCount:                metric.NewCounter(metaTransportSenderNextReplicaErrCount),
-		NotLeaseHolderErrCount:             metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
-		InLeaseTransferBackoffs:            metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
-		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
-		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
-		RangefeedRanges:                    metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges:             metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:              metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
-		RangefeedRestartRanges:             metric.NewCounter(metaDistSenderRangefeedRestartRanges),
-		RangefeedRestartStuck:              metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+		BatchCount:              metric.NewCounter(metaDistSenderBatchCount),
+		PartialBatchCount:       metric.NewCounter(metaDistSenderPartialBatchCount),
+		AsyncSentCount:          metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncThrottledCount:     metric.NewCounter(metaDistSenderAsyncThrottledCount),
+		SentCount:               metric.NewCounter(metaTransportSentCount),
+		LocalSentCount:          metric.NewCounter(metaTransportLocalSentCount),
+		NextReplicaErrCount:     metric.NewCounter(metaTransportSenderNextReplicaErrCount),
+		NotLeaseHolderErrCount:  metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
+		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
+		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
+		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedErrorCatchup:   metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartRanges:  metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedRestartStuck:   metric.NewCounter(metaDistSenderRangefeedRestartStuck),
 	}
 	for i := range m.MethodCounts {
 		method := kvpb.Method(i).String()
@@ -355,44 +287,6 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		m.ErrCounts[i] = metric.NewCounter(meta)
 	}
 	return m
-}
-
-// updateCrossLocalityMetricsOnReplicaAddressedBatchRequest updates
-// DistSenderMetrics for batch requests that have been divided and are currently
-// forwarding to a specific replica for the corresponding range. The metrics
-// being updated include 1. total byte count of replica-addressed batch requests
-// processed 2. cross-region metrics, which monitor activities across different
-// regions, and 3. cross-zone metrics, which monitor activities across different
-// zones within the same region or in cases where region tiers are not
-// configured. These metrics may include batches that were not successfully sent
-// but were terminated at an early stage.
-func (dm *DistSenderMetrics) updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(
-	comparisonResult roachpb.LocalityComparisonType, inc int64,
-) {
-	dm.ReplicaAddressedBatchRequestBytes.Inc(inc)
-	switch comparisonResult {
-	case roachpb.LocalityComparisonType_CROSS_REGION:
-		dm.CrossRegionBatchRequestBytes.Inc(inc)
-	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		dm.CrossZoneBatchRequestBytes.Inc(inc)
-	}
-}
-
-// updateCrossLocalityMetricsOnReplicaAddressedBatchResponse updates
-// DistSenderMetrics for batch responses that are received back from transport
-// rpc. It updates based on the comparisonResult parameter determined during the
-// initial batch requests check. The underlying assumption is that the response
-// should match the cross-region or cross-zone nature of the requests.
-func (dm *DistSenderMetrics) updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(
-	comparisonResult roachpb.LocalityComparisonType, inc int64,
-) {
-	dm.ReplicaAddressedBatchResponseBytes.Inc(inc)
-	switch comparisonResult {
-	case roachpb.LocalityComparisonType_CROSS_REGION:
-		dm.CrossRegionBatchResponseBytes.Inc(inc)
-	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		dm.CrossZoneBatchResponseBytes.Inc(inc)
-	}
 }
 
 // FirstRangeProvider is capable of providing DistSender with the descriptor of
@@ -1206,7 +1100,6 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		qiReply.reply = qiBa.CreateReply()
 		for _, ru := range qiReply.reply.Responses {
 			ru.GetQueryIntent().FoundIntent = true
-			ru.GetQueryIntent().FoundUnpushedIntent = true
 		}
 	}
 
@@ -1826,7 +1719,7 @@ func (ds *DistSender) sendPartialBatch(
 			// deduceRetryEarlyExitError() call below the loop is inhibited.
 			pErr = kvpb.NewError(err)
 			switch {
-			case IsSendError(err):
+			case errors.HasType(err, sendError{}):
 				// We've tried all the replicas without success. Either they're all
 				// down, or we're using an out-of-date range descriptor. Evict from the
 				// cache and try again with an updated descriptor. Re-sending the
@@ -2080,7 +1973,7 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	// one to return; we may want to remember the "best" error we've seen (for
 	// example, a NotLeaseHolderError conveys more information than a
 	// RangeNotFound).
-	return newSendError(errors.Wrap(lastAttemptErr, "sending to all replicas failed; last error"))
+	return newSendError(fmt.Sprintf("sending to all replicas failed; last error: %s", lastAttemptErr))
 }
 
 // defaultSendClosedTimestampPolicy is used when the closed timestamp policy
@@ -2252,13 +2145,13 @@ func (ds *DistSender) sendToReplicas(
 		ba.Replica = curReplica
 		ba.RangeID = desc.RangeID
 		// Communicate to the server the information our cache has about the
-		// range. If it's stale, the server will return an update.
+		// range. If it's stale, the serve will return an update.
 		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
 			// Note that DescriptorGeneration will be 0 if the cached descriptor
 			// is "speculative" (see DescSpeculative()). Even if the speculation
 			// is correct, we want the serve to return an update, at which point
 			// the cached entry will no longer be "speculative".
-			DescriptorGeneration: desc.Generation,
+			DescriptorGeneration: routing.Desc().Generation,
 			// The LeaseSequence will be 0 if the cache doesn't have lease info,
 			// or has a speculative lease. Like above, this asks the server to
 			// return an update.
@@ -2270,18 +2163,9 @@ func (ds *DistSender) sendToReplicas(
 				defaultSendClosedTimestampPolicy,
 			),
 
-			// Range info is only returned when ClientRangeInfo is non-empty.
-			// Explicitly request an update for speculative/missing leases and
-			// descriptors, or when the client has requested it.
-			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested ||
-				(desc.Generation == 0 && routing.LeaseSeq() == 0),
+			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested,
 		}
-
-		comparisonResult := ds.getLocalityComparison(ctx, ds.getNodeID(), ba.Replica.NodeID)
-		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
-
 		br, err = transport.SendNext(ctx, ba)
-		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(comparisonResult, int64(br.Size()))
 		ds.maybeIncrementErrCounters(br, err)
 
 		if err != nil {
@@ -2387,12 +2271,20 @@ func (ds *DistSender) sendToReplicas(
 					var reqInfo tenantcostmodel.RequestInfo
 					var respInfo tenantcostmodel.ResponseInfo
 					if ba.IsWrite() {
-						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, true /* isWrite */)
-						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost)
+						// It is important to pass nil for replicas here so we
+						// will fetch a new list of *all* replicas, instead of
+						// just a subset (which routing uses).
+						writeMultiplier := ds.computeSendRUMultiplier(
+							ctx, desc, nil /* replicas */, &curReplica, false /* isRead */)
+						numReplicas := len(desc.Replicas().Descriptors())
+						reqInfo = tenantcostmodel.MakeRequestInfo(ba, numReplicas, writeMultiplier)
 					}
 					if !reqInfo.IsWrite() {
-						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, false /* isWrite */)
-						respInfo = tenantcostmodel.MakeResponseInfo(br, true, networkCost)
+						// Use replicas here since it is guaranteed to include
+						// curReplica, and we only need that for computation.
+						readMultiplier := ds.computeSendRUMultiplier(
+							ctx, desc, replicas, &curReplica, true /* isRead */)
+						respInfo = tenantcostmodel.MakeResponseInfo(br, true, readMultiplier)
 					}
 					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
 						return nil, err
@@ -2463,7 +2355,7 @@ func (ds *DistSender) sendToReplicas(
 								log.VEventf(
 									ctx, 2, "transport incompatible with updated routing; bailing early",
 								)
-								return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
+								return nil, newSendError(fmt.Sprintf("leaseholder not found in transport; last error: %s", tErr.Error()))
 							}
 						}
 					}
@@ -2529,33 +2421,6 @@ func (ds *DistSender) sendToReplicas(
 	}
 }
 
-// getLocalityComparison takes two nodeIDs as input and returns the locality
-// comparison result between their corresponding nodes. This result indicates
-// whether the two nodes are located in different regions or zones.
-func (ds *DistSender) getLocalityComparison(
-	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID,
-) roachpb.LocalityComparisonType {
-	gatewayNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(fromNodeID)
-	if err != nil {
-		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %+v", err)
-		return roachpb.LocalityComparisonType_UNDEFINED
-	}
-	destinationNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(toNodeID)
-	if err != nil {
-		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %+v", err)
-		return roachpb.LocalityComparisonType_UNDEFINED
-	}
-
-	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
-	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
-	}
-	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
-	}
-	return comparisonResult
-}
-
 // getCostControllerConfig returns the config for the tenant cost model. This
 // returns nil if no KV interceptors are associated with the DistSender, or the
 // KV interceptor is not a multitenant.TenantSideCostController.
@@ -2575,73 +2440,107 @@ func (ds *DistSender) getCostControllerConfig(ctx context.Context) *tenantcostmo
 	return cfg
 }
 
-// computeNetworkCost calculates the network cost multiplier for a read or
-// write operation. The network cost accounts for the logical byte traffic
-// between the client region and the replica regions.
-func (ds *DistSender) computeNetworkCost(
+// computeSendRUMultiplier returns the RU multiplier for a batch that is sent
+// from the current DistSender node to the node with curReplica. If isRead=true,
+// the read RU multiplier will be returned instead of a write RU multiplier.
+//
+//  1. Write requests account traffic for all replicas since the data is
+//     eventually replicated to the remaining replicas. For simplicity of
+//     computation, we will assume that the writes were replicated from the
+//     DistSender node instead of the node that received the writes.
+//  2. Read requests only account traffic from the DistSender node to the node
+//     that received the read.
+//
+// NOTE: desc cannot be nil, and numReplicas >= len(replicas). If replicas is
+// nil, desc will be used to construct a new ReplicaSlice by fetching the node
+// descriptors for all replicas.
+func (ds *DistSender) computeSendRUMultiplier(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	targetReplica *roachpb.ReplicaDescriptor,
-	isWrite bool,
-) tenantcostmodel.NetworkCost {
-	// It is unfortunate that we hardcode a particular locality tier name here.
-	// Ideally, we would have a cluster setting that specifies the name or some
-	// other way to configure it.
-	clientRegion, _ := ds.locality.Find("region")
-	if clientRegion == "" {
-		// If we do not have the source, there is no way to find the multiplier.
-		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
-			ds.locality.String())
-		return tenantcostmodel.NetworkCost(0)
+	replicas ReplicaSlice,
+	curReplica *roachpb.ReplicaDescriptor,
+	isRead bool,
+) tenantcostmodel.RUMultiplier {
+	numReplicas := len(desc.Replicas().Descriptors())
+
+	// Set default multipliers.
+	var res tenantcostmodel.RUMultiplier
+	if isRead {
+		res = 1
+	} else {
+		res = tenantcostmodel.RUMultiplier(numReplicas)
 	}
 
 	costCfg := ds.getCostControllerConfig(ctx)
 	if costCfg == nil {
 		// This case is unlikely to happen since this method will only be
 		// called through tenant processes, which has a KV interceptor.
-		return tenantcostmodel.NetworkCost(0)
+		return res
 	}
 
-	cost := tenantcostmodel.NetworkCost(0)
-	if isWrite {
-		for i := range desc.Replicas().Descriptors() {
-			if replicaRegion, ok := ds.getReplicaRegion(ctx, &desc.Replicas().Descriptors()[i]); ok {
-				cost += costCfg.NetworkCost(tenantcostmodel.NetworkPath{
-					ToRegion:   replicaRegion,
-					FromRegion: clientRegion,
-				})
-			}
+	// It is unfortunate that we hardcode a particular locality tier name here.
+	// Ideally, we would have a cluster setting that specifies the name or some
+	// other way to configure it.
+	fromRegion, _ := ds.locality.Find("region")
+	if fromRegion == "" {
+		// If we do not have the source, there is no way to find the multiplier.
+		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
+			ds.locality.String())
+		return res
+	}
+
+	// Input replicas wasn't provided, so we'd try to fetch all of them.
+	if len(replicas) == 0 {
+		// A leaseholder is not needed here since we are interested in returning
+		// all replicas, which will already include the leaseholder by definition.
+		var err error
+		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, nil /* leaseholder */, AllReplicas)
+		if err != nil {
+			log.VErrEventf(ctx, 2, "empty replica slice: %s", err)
+			return res
 		}
+	}
+
+	// This should not happen, and if it does, is a bug.
+	if numReplicas < len(replicas) {
+		log.VErrEventf(ctx, 2, "fewer descriptors than replicas: numReplicas=%d, len(replicas)=%d",
+			numReplicas, len(replicas))
+		return res
+	}
+
+	if isRead {
+		var toRegion string
+		if idx := replicas.Find(curReplica.ReplicaID); idx != -1 {
+			toRegion = replicas[idx].LocalityValue("region")
+		}
+		if toRegion == "" {
+			log.VErrEventf(ctx, 2, "missing region locality for n%d", curReplica.NodeID)
+		}
+		res = costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion)
 	} else {
-		if replicaRegion, ok := ds.getReplicaRegion(ctx, targetReplica); ok {
-			cost = costCfg.NetworkCost(tenantcostmodel.NetworkPath{
-				ToRegion:   clientRegion,
-				FromRegion: replicaRegion,
-			})
+		for _, r := range replicas {
+			toRegion := r.LocalityValue("region")
+			if toRegion == "" {
+				log.VErrEventf(ctx, 2, "missing region locality for n%d", r.NodeID)
+			}
+
+			// There is a possibility where len(replicas) != numReplicas, which
+			// occurs when the DistSender node has not received gossip
+			// subscription data for node descriptors. When that happens, we
+			// don't have locality information, so we will assume 1 for each
+			// replica.
+			//
+			// Since we started with numReplicas initially, this basically
+			// converts the multiplier accounted for that replica with its
+			// actual cost multiplier.
+			//
+			// Earlier we ensured that numReplicas >= len(replicas). Since
+			// cost multipliers are always non-negative (>= 0), res will never
+			// be negative (< 0).
+			res += (costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion) - 1)
 		}
 	}
-
-	return cost
-}
-
-func (ds *DistSender) getReplicaRegion(
-	ctx context.Context, replica *roachpb.ReplicaDescriptor,
-) (region string, ok bool) {
-	nodeDesc, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
-	if err != nil {
-		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
-		// If we don't know where a node is, we can't determine the network cost
-		// for the operation.
-		return "", false
-	}
-
-	region, ok = nodeDesc.Locality.Find("region")
-	if !ok {
-		log.VErrEventf(ctx, 2, "missing region locality for n %d", nodeDesc.NodeID)
-		return "", false
-	}
-
-	return region, true
+	return res
 }
 
 func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err error) {
@@ -2705,32 +2604,28 @@ func skipStaleReplicas(
 // TODO(andrei): clean up this stuff and tighten the meaning of the different
 // errors.
 type sendError struct {
-	cause error
+	message string
 }
 
-// newSendError creates a sendError that wraps the given error.
-func newSendError(err error) error {
-	return &sendError{cause: err}
+// newSendError creates a sendError.
+func newSendError(msg string) error {
+	return sendError{message: msg}
 }
 
 // TestNewSendError creates a new sendError for the purpose of unit tests
 func TestNewSendError(msg string) error {
-	return newSendError(errors.NewWithDepthf(1, "%s", msg))
+	return newSendError(msg)
 }
 
-// Error implements error.
-func (s *sendError) Error() string {
-	return fmt.Sprintf("failed to send RPC: %s", s.cause)
+// SendErrorString is the prefix for all sendErrors, exported in order to
+// perform cross-node error-checks.
+const SendErrorString = "failed to send RPC"
+
+func (s sendError) Error() string {
+	return SendErrorString + ": " + s.message
 }
-
-// Cause implements errors.Causer.
-// NB: this is an obsolete method, use Unwrap() instead.
-func (s *sendError) Cause() error { return s.cause }
-
-// Unwrap implements errors.Wrapper.
-func (s *sendError) Unwrap() error { return s.cause }
 
 // IsSendError returns true if err is a sendError.
 func IsSendError(err error) bool {
-	return errors.HasType(err, &sendError{})
+	return errors.HasType(err, sendError{})
 }

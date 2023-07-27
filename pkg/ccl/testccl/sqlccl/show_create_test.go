@@ -116,7 +116,6 @@ func TestShowCreateRedactableValues(t *testing.T) {
 		sqlsmith.PrefixStringConsts(pii),
 		sqlsmith.DisableMutations(),
 		sqlsmith.DisableWith(),
-		sqlsmith.DisableUDFs(),
 	)
 	if err != nil {
 		t.Fatal(err)

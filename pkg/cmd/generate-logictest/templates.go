@@ -256,10 +256,7 @@ go_test(
     size = "enormous",
     srcs = ["generated_test.go"],{{ if .SqliteLogicTest }}
     args = ["-test.timeout=7195s"],{{ else }}
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),{{ end }}
+    args = ["-test.timeout=3595s"],{{ end }}
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
@@ -268,11 +265,8 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    shard_count = {{ if gt .TestCount 48 }}48{{ else }}{{ .TestCount }}{{end}},
-    tags = [{{ if .Ccl }}
-        "ccl_test",{{ end }}
-        "cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}",
-    ],
+    shard_count = {{ if gt .TestCount 16 }}16{{ else }}{{ .TestCount }}{{end}},
+    tags = ["cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}"],
     deps = [
         "//pkg/build/bazel",{{ if .Ccl }}
         "//pkg/ccl",{{ end }}

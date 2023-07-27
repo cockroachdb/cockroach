@@ -50,10 +50,6 @@ func (c *serverController) sqlMux(
 			// The concurrent dispatch gives a chance to the succeeding
 			// servers to see and process the cancel at approximately the
 			// same time as every other.
-			//
-			// Cancel requests are unauthenticated so run the cancel async to prevent
-			// the client from deriving any info about the cancel based on how long it
-			// takes.
 			if err := c.stopper.RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
 				s.handleCancel(ctx, status.CancelKey)
 			}); err != nil {

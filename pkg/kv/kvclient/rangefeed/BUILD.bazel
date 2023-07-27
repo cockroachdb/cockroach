@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",

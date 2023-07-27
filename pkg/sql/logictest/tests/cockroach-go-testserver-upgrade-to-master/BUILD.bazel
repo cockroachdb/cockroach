@@ -4,19 +4,14 @@ go_test(
     name = "cockroach-go-testserver-upgrade-to-master_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
+    args = ["-test.timeout=3595s"],
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/cmd/cockroach-short",  # keep
         "//pkg/sql/logictest:testdata",  # keep
     ],
-    shard_count = 9,
-    tags = [
-        "cpu:2",
-    ],
+    shard_count = 8,
+    tags = ["cpu:2"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/security/securityassets",

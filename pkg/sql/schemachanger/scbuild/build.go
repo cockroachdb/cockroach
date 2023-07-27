@@ -12,7 +12,6 @@ package scbuild
 
 import (
 	"context"
-	"sort"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -117,51 +116,27 @@ func makeState(
 ) (s scpb.CurrentState, loggedTargets []scpb.Target) {
 	s = scpb.CurrentState{
 		TargetState: scpb.TargetState{
-			Targets:      make([]scpb.Target, 0, len(bs.output)),
-			NameMappings: makeNameMappings(bs.output),
+			Targets: make([]scpb.Target, 0, len(bs.output)),
 		},
 		Initial: make([]scpb.Status, 0, len(bs.output)),
 		Current: make([]scpb.Status, 0, len(bs.output)),
 	}
 	loggedTargets = make([]scpb.Target, 0, len(bs.output))
-	isElementAllowedInVersion := func(e scpb.Element) bool {
-		if !version.IsActive(screl.MinElementVersion(e)) {
-			// Exclude targets which are not yet usable in the currently active
-			// cluster version.
-			return false
-		}
-		if maxVersion, exists := screl.MaxElementVersion(e); exists && version.IsActive(maxVersion) {
-			// Exclude the target which are no longer allowed at the active
-			// max version.
-			return false
-		}
-		return true
-	}
-	// Collect the set of IDs of descriptors involved in the schema change.
-	// This is used to add targets which aren't explicitly set but which are
-	// necessary for execution plan correctness, typically in order to skip
-	// certain transitions and fences like the two version invariant.
-	// This only applies for cluster at or beyond version 23.2.
-	var descriptorIDsInSchemaChange catalog.DescriptorIDSet
-	if version.IsActive(clusterversion.V23_2) {
-		for _, e := range bs.output {
-			if isElementAllowedInVersion(e.element) && e.metadata.IsLinkedToSchemaChange() {
-				descriptorIDsInSchemaChange.Add(screl.GetDescID(e.element))
-			}
-		}
-	}
 	for _, e := range bs.output {
-		if !isElementAllowedInVersion(e.element) {
+		if e.metadata.Size() == 0 {
+			// Exclude targets which weren't explicitly set.
+			// Explicitly-set targets have non-zero values in the target metadata.
 			continue
 		}
-		if !e.metadata.IsLinkedToSchemaChange() {
-			// Exclude targets which weren't explicitly set, minus exceptions.
-			if !descriptorIDsInSchemaChange.Contains(screl.GetDescID(e.element)) {
-				continue
-			}
-			if !shouldElementBeRetainedWithoutMetadata(e.element, e.current) {
-				continue
-			}
+		if !version.IsActive(screl.MinElementVersion(e.element)) {
+			// Exclude targets which are not yet usable in the currently active
+			// cluster version.
+			continue
+		}
+		if maxVersion, exists := screl.MaxElementVersion(e.element); exists && version.IsActive(maxVersion) {
+			// Exclude the target which are no longer allowed at the active
+			// max version.
+			continue
 		}
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
 		s.Targets = append(s.Targets, t)
@@ -240,8 +215,7 @@ type cachedDesc struct {
 	desc             catalog.Descriptor
 	prefix           tree.ObjectNamePrefix
 	backrefs         catalog.DescriptorIDSet
-	outputIndexes    []int
-	cachedCollection *scpb.ElementCollection[scpb.Element]
+	ers              *elementResultSet
 	privileges       map[privilege.Kind]error
 	hasOwnership     bool
 	backrefsResolved bool
@@ -296,63 +270,6 @@ func newBuilderState(
 		})
 	}
 	return &bs
-}
-
-func makeNameMappings(elementStates []elementState) (ret scpb.NameMappings) {
-	id2Idx := make(map[catid.DescID]int)
-	getOrCreate := func(id catid.DescID) (_ *scpb.NameMapping, isNew bool) {
-		if idx, ok := id2Idx[id]; ok {
-			return &ret[idx], false /* isNew */
-		}
-		idx := len(ret)
-		id2Idx[id] = idx
-		ret = append(ret, scpb.NameMapping{
-			ID:          id,
-			Indexes:     make(map[catid.IndexID]string),
-			Columns:     make(map[catid.ColumnID]string),
-			Families:    make(map[catid.FamilyID]string),
-			Constraints: make(map[catid.ConstraintID]string),
-		})
-		return &ret[idx], true /* isNew */
-	}
-	isNotDropping := func(ts scpb.TargetStatus) bool {
-		return ts != scpb.ToAbsent && ts != scpb.Transient
-	}
-	for _, es := range elementStates {
-		switch e := es.element.(type) {
-		case *scpb.Namespace:
-			dnm, isNew := getOrCreate(e.DescriptorID)
-			if isNew || isNotDropping(es.target) {
-				dnm.Name = e.Name
-			}
-		case *scpb.FunctionName:
-			dnm, isNew := getOrCreate(e.FunctionID)
-			if isNew || isNotDropping(es.target) {
-				dnm.Name = e.Name
-			}
-		}
-	}
-	for _, es := range elementStates {
-		if !isNotDropping(es.target) {
-			continue
-		}
-		idx, ok := id2Idx[screl.GetDescID(es.element)]
-		if !ok {
-			continue
-		}
-		switch e := es.element.(type) {
-		case *scpb.IndexName:
-			ret[idx].Indexes[e.IndexID] = e.Name
-		case *scpb.ColumnName:
-			ret[idx].Columns[e.ColumnID] = e.Name
-		case *scpb.ColumnFamily:
-			ret[idx].Families[e.FamilyID] = e.Name
-		case *scpb.ConstraintWithoutIndexName:
-			ret[idx].Constraints[e.ConstraintID] = e.Name
-		}
-	}
-	sort.Sort(ret)
-	return ret
 }
 
 // eventLogState is the backing struct for scbuildstmt.EventLogState interface.
@@ -436,17 +353,4 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
-}
-
-// shouldElementBeRetainedWithoutMetadata tracks which elements should
-// be retained even if no metadata exists. These elements may contain
-// other hints that are used for planning such as TableData/IndexData elements
-// that allow us to skip the two version invariant or backfills/validation
-// at runtime.
-func shouldElementBeRetainedWithoutMetadata(element scpb.Element, status scpb.Status) bool {
-	switch element.(type) {
-	case *scpb.TableData, *scpb.IndexData:
-		return status == scpb.Status_PUBLIC
-	}
-	return false
 }

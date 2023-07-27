@@ -12,9 +12,8 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"math/rand"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -22,9 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,14 +49,17 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		replicationFactor = 5
 	)
 
-	var verboseStoreLogRe = "failed to transfer lease.*when draining.*no suitable transfer target found"
+	var verboseStoreLogRe = regexp.MustCompile("failed to transfer lease")
 
 	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
 	require.NoError(t, err)
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-	run := func(db *gosql.DB, stmt string) {
+	run := func(stmt string) {
+		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		defer db.Close()
+
 		_, err = db.ExecContext(ctx, stmt)
 		require.NoError(t, err)
 
@@ -72,43 +71,12 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		defer db.Close()
 
 		// Set the replication factor.
-		run(db, fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
-		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
 		err := WaitForReplication(ctx, t, db, replicationFactor)
 		require.NoError(t, err)
-
-		// Ensure that leases are sent away from pinned node to avoid situation
-		// where none of the leases should actually move during drain.
-		const q = `select range_id, lease_holder, replicas from crdb_internal.ranges;`
-		rows, err := db.QueryContext(ctx, q)
-		require.NoError(t, err, "failed to query ranges")
-
-		for rows.Next() {
-			var rangeID int
-			var leaseHolder int32
-			var replicas []int32
-			err = rows.Scan(&rangeID, &leaseHolder, pq.Array(&replicas))
-			require.NoError(t, err, "failed to scan replicas of range")
-			if leaseHolder != 1 || len(replicas) == 1 {
-				continue
-			}
-			rand.Shuffle(len(replicas), func(i, j int) {
-				replicas[i], replicas[j] = replicas[j], replicas[i]
-			})
-			var newLeaseHolder int32 = 0
-			for _, r := range replicas {
-				if r != 1 {
-					newLeaseHolder = r
-					break
-				}
-			}
-			_, err = db.ExecContext(ctx, "ALTER RANGE $1 RELOCATE LEASE TO $2", rangeID, newLeaseHolder)
-			if err != nil {
-				t.L().Printf("failed relocating lease for r%d: %s", rangeID, err)
-			}
-		}
 	}
 
 	// Drain the last 5 nodes from the cluster, resulting in immovable leases on
@@ -128,23 +96,21 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		})
 	}
 
-	// Let the drain commands run for a small amount of time to avoid immediate
-	// spinning.
-	time.Sleep(10 * time.Second)
+	// Let the drain commands run for a small amount of time.
+	time.Sleep(30 * time.Second)
 
 	// Check for more verbose logging concerning lease transfer stalls.
 	// The extra logging should exist on the logs of at least one of the nodes.
 	t.Status("checking for stalling drain logging...")
-	testutils.SucceedsWithin(t, func() error {
-		for nodeID := 2; nodeID <= numNodes; nodeID++ {
-			if err := c.RunE(ctx, c.Node(nodeID),
-				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
-			); err == nil {
-				return nil
-			}
+	found := false
+	for nodeID := 2; nodeID <= numNodes; nodeID++ {
+		if err := c.RunE(ctx, c.Node(nodeID),
+			fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
+		); err == nil {
+			found = true
 		}
-		return errors.New("lease transfer error message not found in logs")
-	}, time.Minute)
+	}
+	require.True(t, found)
 	t.Status("log messages found")
 
 	// Expect the drain timeout to expire.

@@ -90,9 +90,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Name:              fmt.Sprintf("admission-control/multitenant-fairness/%s", s.name),
 			Cluster:           r.MakeClusterSpec(5),
 			Owner:             registry.OwnerAdmissionControl,
-			Benchmark:         true,
 			Leases:            registry.MetamorphicLeases,
-			Tags:              registry.Tags(`weekly`),
 			NonReleaseBlocker: false,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runMultiTenantFairness(ctx, t, c, s)
@@ -203,6 +201,11 @@ func runMultiTenantFairness(
 
 	// Create the tenants.
 	t.L().Printf("initializing %d tenants (<%s)", numTenants, 5*time.Minute)
+	tenantIDs := make([]int, 0, numTenants)
+	for i := 0; i < numTenants; i++ {
+		tenantIDs = append(tenantIDs, tenantID(i))
+	}
+
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
 		if !t.SkipInit() {
@@ -211,7 +214,8 @@ func runMultiTenantFairness(
 		}
 
 		tenant := createTenantNode(ctx, t, c,
-			crdbNode, tenantID(i), tenantNodeID(i), tenantHTTPPort(i), tenantSQLPort(i))
+			crdbNode, tenantID(i), tenantNodeID(i), tenantHTTPPort(i), tenantSQLPort(i),
+			createTenantOtherTenantIDs(tenantIDs))
 		defer tenant.stop(ctx, t, c)
 
 		tenants[i] = tenant

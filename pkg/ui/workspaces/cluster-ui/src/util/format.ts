@@ -24,16 +24,7 @@ export const byteUnits: string[] = [
   "ZiB",
   "YiB",
 ];
-
-export const durationUnitsDescending = [
-  { units: "hr", value: 60 * 60 * 1_000_000_000 },
-  { units: "min", value: 60 * 1_000_000_000 },
-  { units: "s", value: 1_000_000_000 },
-  { units: "ms", value: 1_000_000 },
-  { units: "µs", value: 1_000 },
-  { units: "ns", value: 1 },
-];
-
+export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
 export const countUnits: string[] = ["", "k", "m", "b"];
 
 interface UnitValue {
@@ -182,10 +173,12 @@ export function PercentageCustom(
  * ComputeDurationScale calculates an appropriate scale factor and unit to use
  * to display a given duration value, without actually converting the value.
  */
-export function ComputeDurationScale(ns: number): UnitValue {
-  return durationUnitsDescending.find(
-    ({ value }) => ns / value >= 1 || value == 1,
-  );
+export function ComputeDurationScale(nanoseconds: number): UnitValue {
+  const scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
+  return {
+    value: Math.pow(1000, scale),
+    units: durationUnits[scale],
+  };
 }
 
 /**
@@ -211,6 +204,20 @@ export function DurationCheckSample(nanoseconds: number): string {
   }
   return Duration(nanoseconds);
 }
+
+/**
+ * Cast nanoseconds to provided scale units
+ */
+// tslint:disable-next-line: variable-name
+export const DurationFitScale =
+  (scale: string) =>
+  (nanoseconds: number): string => {
+    if (!nanoseconds) {
+      return `0.00 ${scale}`;
+    }
+    const n = durationUnits.indexOf(scale);
+    return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
+  };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =

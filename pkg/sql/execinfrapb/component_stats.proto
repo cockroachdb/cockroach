@@ -126,7 +126,6 @@ message NetworkTxStats {
 // KVStats contains statistics for components that perform KV operations.
 message KVStats {
   optional util.optional.Uint bytes_read = 1 [(gogoproto.nullable) = false];
-  optional util.optional.Uint kv_pairs_read = 24 [(gogoproto.customname) = "KVPairsRead", (gogoproto.nullable) = false];
   optional util.optional.Uint tuples_read = 2 [(gogoproto.nullable) = false];
   optional util.optional.Uint batch_requests_issued = 9 [(gogoproto.nullable) = false];
 

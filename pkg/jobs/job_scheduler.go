@@ -26,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -260,7 +260,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 	timeout := schedulerScheduleExecutionTimeout.Get(&s.Settings.SV)
 	if processErr := withSavePoint(ctx, txn.KV(), func() error {
 		if timeout > 0 {
-			return timeutil.RunWithTimeout(
+			return contextutil.RunWithTimeout(
 				ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
 				func(ctx context.Context) error {
 					return s.processSchedule(ctx, schedule, numRunning, txn)

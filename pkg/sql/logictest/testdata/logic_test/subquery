@@ -386,14 +386,14 @@ foo1 moo2 moo3
 2    4    4
 3    1    1
 
-query II colnames,nosort
+query II colnames
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
 ----
 a b
 1 2
 3 4
 
-query I colnames,nosort
+query I colnames
 SELECT foo.a FROM (VALUES (1), (2), (3)) AS foo (a)
 ----
 a
@@ -401,7 +401,7 @@ a
 2
 3
 
-query IITT colnames,nosort
+query IITT colnames
 SELECT foo.a, a, column2, foo.column2 FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo (a)
 ----
 a a column2 column2
@@ -527,7 +527,7 @@ k  i   prev_i
 4  40  33
 5  50  40
 
-query II rowsort
+query II
 SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
 ----
@@ -535,7 +535,7 @@ WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) E
 3  30
 4  40
 
-query IIB rowsort
+query IIB
 SELECT *,
   CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
 FROM corr
@@ -768,7 +768,7 @@ CREATE TABLE t96441 (
 );
 INSERT INTO t96441 VALUES (1, 10);
 
-query III rowsort
+query III
 SELECT * FROM (VALUES (0))
 FULL JOIN t96441 AS t1
 ON 1 IN (SELECT t1.i FROM t96441)

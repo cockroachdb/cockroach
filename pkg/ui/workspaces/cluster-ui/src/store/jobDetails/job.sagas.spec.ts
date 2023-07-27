@@ -27,7 +27,6 @@ import { actions, reducer, JobDetailsReducerState } from "./job.reducer";
 import { succeededJobFixture } from "../../jobs/jobsPage/jobsPage.fixture";
 import Long from "long";
 import { PayloadAction } from "@reduxjs/toolkit";
-import moment from "moment-timezone";
 
 describe("job sagas", () => {
   const payload = new cockroach.server.serverpb.JobRequest({
@@ -64,17 +63,6 @@ describe("job sagas", () => {
   });
 
   describe("requestJobSaga", () => {
-    const lastUpdated = moment();
-    let spy: jest.SpyInstance;
-
-    beforeAll(() => {
-      spy = jest.spyOn(moment, "utc").mockImplementation(() => lastUpdated);
-    });
-
-    afterAll(() => {
-      spy.mockRestore();
-    });
-
     it("successfully requests job", () => {
       return expectSaga(requestJobSaga, action)
         .provide(jobAPIProvider)
@@ -84,10 +72,9 @@ describe("job sagas", () => {
           cachedData: {
             [jobID]: {
               data: jobResponseWithKey.jobResponse,
-              error: null,
+              lastError: null,
               valid: true,
               inFlight: false,
-              lastUpdated,
             },
           },
         })
@@ -108,10 +95,9 @@ describe("job sagas", () => {
           cachedData: {
             [jobID]: {
               data: null,
-              error: error,
+              lastError: error,
               valid: false,
               inFlight: false,
-              lastUpdated,
             },
           },
         })

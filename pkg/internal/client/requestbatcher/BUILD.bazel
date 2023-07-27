@@ -9,6 +9,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/util/contextutil",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",

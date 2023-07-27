@@ -603,17 +603,6 @@ func (p *planner) replaceViewDesc(
 		toReplace.ViewQuery = updatedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery, false /* multiStmt */)
-	if err != nil {
-		return nil, err
-	}
-	toReplace.ViewQuery = typeReplacedQuery
-
-	// Check that the new view has at least as many columns as the old view before
-	// adding result columns.
-	if len(n.columns) < len(toReplace.ClusterVersion().Columns) {
-		return nil, pgerror.Newf(pgcode.InvalidTableDefinition, "cannot drop columns from view")
-	}
 	// Reset the columns to add the new result columns onto.
 	toReplace.Columns = make([]descpb.ColumnDescriptor, 0, len(n.columns))
 	toReplace.NextColumnID = 0

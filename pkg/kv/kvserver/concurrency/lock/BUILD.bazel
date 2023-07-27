@@ -12,7 +12,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/settings",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
@@ -29,7 +28,6 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/concurrency/isolation:isolation_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -44,7 +42,6 @@ go_proto_library(
     proto = ":lock_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
@@ -60,13 +57,11 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         ":lock",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",

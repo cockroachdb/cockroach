@@ -12,7 +12,6 @@ package colcontainerutils
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,7 +54,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 	}
 
 	if inMem {
-		if err := ngn.MkdirAll(inMemDirName, os.ModePerm); err != nil {
+		if err := ngn.MkdirAll(inMemDirName); err != nil {
 			t.Fatal(err)
 		}
 	}

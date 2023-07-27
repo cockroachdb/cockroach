@@ -111,3 +111,7 @@ COMMENT ON COLUMN t.i IS 'i is a column';
 
 statement ok
 DROP TABLE t;
+
+
+
+

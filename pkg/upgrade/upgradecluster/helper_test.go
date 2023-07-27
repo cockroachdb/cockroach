@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/nodelivenesstest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"google.golang.org/grpc"
@@ -45,7 +45,7 @@ func TestHelperEveryNode(t *testing.T) {
 	t.Run("with-node-addition", func(t *testing.T) {
 		// Add a node mid-way through execution. We expect EveryNode to start
 		// over from scratch and include the newly added node.
-		tc := livenesspb.TestCreateNodeVitality(1, 2, 3)
+		tc := nodelivenesstest.New(numNodes)
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
@@ -60,7 +60,7 @@ func TestHelperEveryNode(t *testing.T) {
 
 				opCount++
 				if opCount == numNodes {
-					tc.AddNextNode()
+					tc.AddNewNode()
 				}
 
 				return nil
@@ -78,7 +78,7 @@ func TestHelperEveryNode(t *testing.T) {
 	t.Run("with-node-restart", func(t *testing.T) {
 		// Restart a node mid-way through execution. We expect EveryNode to
 		// start over from scratch and include the restarted node.
-		tc := livenesspb.TestCreateNodeVitality(1, 2, 3)
+		tc := nodelivenesstest.New(numNodes)
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
@@ -112,7 +112,7 @@ func TestHelperEveryNode(t *testing.T) {
 		// Down a node mid-way through execution. We expect EveryNode to error
 		// out.
 		const downedNode = 2
-		tc := livenesspb.TestCreateNodeVitality(1, 2, 3)
+		tc := nodelivenesstest.New(numNodes)
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
@@ -156,7 +156,7 @@ func TestClusterNodes(t *testing.T) {
 	const numNodes = 3
 
 	t.Run("retrieves-all", func(t *testing.T) {
-		nl := livenesspb.TestCreateNodeVitality(1, 2, 3)
+		nl := nodelivenesstest.New(numNodes)
 		ns, err := NodesFromNodeLiveness(ctx, nl)
 		if err != nil {
 			t.Fatal(err)
@@ -177,10 +177,10 @@ func TestClusterNodes(t *testing.T) {
 	})
 
 	t.Run("ignores-decommissioned", func(t *testing.T) {
-		nl := livenesspb.TestCreateNodeVitality(1, 2, 3)
+		nl := nodelivenesstest.New(numNodes)
 
 		const decommissionedNode = 3
-		nl.Decommissioned(decommissionedNode, false)
+		nl.Decommission(decommissionedNode)
 
 		ns, err := NodesFromNodeLiveness(ctx, nl)
 		if err != nil {
@@ -202,7 +202,7 @@ func TestClusterNodes(t *testing.T) {
 	})
 
 	t.Run("errors-if-down", func(t *testing.T) {
-		nl := livenesspb.TestCreateNodeVitality(1, 2, 3)
+		nl := nodelivenesstest.New(numNodes)
 		const downedNode = 3
 		nl.DownNode(downedNode)
 

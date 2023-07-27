@@ -350,13 +350,6 @@ func TestExecBuild_join_order(
 	runExecBuildLogicTest(t, "join_order")
 }
 
-func TestExecBuild_json(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "json")
-}
-
 func TestExecBuild_limit(
 	t *testing.T,
 ) {

@@ -29,10 +29,16 @@ import {
 } from "./statementsPage";
 import {
   selectDatabases,
+  selectLastReset,
+  selectStatements,
+  selectStatementsDataValid,
+  selectStatementsDataInFlight,
+  selectStatementsLastError,
   selectColumns,
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectStatementsLastUpdated,
   selectRequestTime,
 } from "./statementsPage.selectors";
 import {
@@ -53,27 +59,28 @@ import {
   StatementsPageRootProps,
 } from "./statementsPageRoot";
 import {
-  ActiveStatementsViewDispatchProps,
-  ActiveStatementsViewStateProps,
-} from "./activeStatementsView";
+  RecentStatementsViewDispatchProps,
+  RecentStatementsViewStateProps,
+} from "./recentStatementsView";
 import {
-  mapDispatchToActiveStatementsPageProps,
-  mapStateToActiveStatementsPageProps,
-} from "./activeStatementsPage.selectors";
+  mapDispatchToRecentStatementsPageProps,
+  mapStateToRecentStatementsPageProps,
+} from "./recentStatementsPage.selectors";
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
   SqlStatsSortType,
 } from "../api";
+import { selectStmtsAllApps } from "../selectors";
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveStatementsViewStateProps;
+  activePageProps: RecentStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: ActiveStatementsViewDispatchProps;
+  activePageProps: RecentStatementsViewDispatchProps;
 };
 
 export const ConnectedStatementsPage = withRouter(
@@ -86,6 +93,7 @@ export const ConnectedStatementsPage = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
         ...props,
+        apps: selectStmtsAllApps(state.adminUI?.statements?.data),
         columns: selectColumns(state),
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
@@ -93,18 +101,22 @@ export const ConnectedStatementsPage = withRouter(
         isTenant: selectIsTenant(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
+        lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
+        statements: selectStatements(state, props),
+        isDataValid: selectStatementsDataValid(state),
+        isReqInFlight: selectStatementsDataInFlight(state),
+        lastUpdated: selectStatementsLastUpdated(state),
+        statementsError: selectStatementsLastError(state),
         limit: selectStmtsPageLimit(state),
         requestTime: selectRequestTime(state),
         reqSortSetting: selectStmtsPageReqSort(state),
         stmtsTotalRuntimeSecs:
           state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
-        statementsResponse: state.adminUI.statements,
-        statementDiagnostics: state.adminUI.statementDiagnostics?.data,
       },
-      activePageProps: mapStateToActiveStatementsPageProps(state),
+      activePageProps: mapStateToRecentStatementsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
@@ -265,7 +277,7 @@ export const ConnectedStatementsPage = withRouter(
             }),
           ),
       },
-      activePageProps: mapDispatchToActiveStatementsPageProps(dispatch),
+      activePageProps: mapDispatchToRecentStatementsPageProps(dispatch),
     }),
     (stateProps, dispatchProps) => ({
       fingerprintsPageProps: {

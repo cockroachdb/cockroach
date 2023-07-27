@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -150,14 +149,10 @@ func TestShouldPushImmediately(t *testing.T) {
 				PushType: test.typ,
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{
-						// NOTE: different pusher isolation levels tested below.
-						IsoLevel: isolation.Serializable,
 						Priority: test.pusherPri,
 					},
 				},
 				PusheeTxn: enginepb.TxnMeta{
-					// NOTE: different pushee isolation levels tested below.
-					IsoLevel: isolation.Serializable,
 					Priority: test.pusheePri,
 				},
 			}
@@ -169,20 +164,15 @@ func TestShouldPushImmediately(t *testing.T) {
 
 func TestCanPushWithPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Run(kvpb.PUSH_ABORT.String(), testCanPushWithPriorityPushAbort)
-	t.Run(kvpb.PUSH_TIMESTAMP.String(), testCanPushWithPriorityPushTimestamp)
-	t.Run(kvpb.PUSH_TOUCH.String(), testCanPushWithPriorityPushTouch)
-}
 
-func testCanPushWithPriorityPushAbort(t *testing.T) {
 	min := enginepb.MinTxnPriority
 	max := enginepb.MaxTxnPriority
 	mid1 := enginepb.TxnPriority(1)
 	mid2 := enginepb.TxnPriority(2)
 	testCases := []struct {
-		pusherPri enginepb.TxnPriority
-		pusheePri enginepb.TxnPriority
-		exp       bool
+		pusher enginepb.TxnPriority
+		pushee enginepb.TxnPriority
+		exp    bool
 	}{
 		{min, min, false},
 		{min, mid1, false},
@@ -201,221 +191,12 @@ func testCanPushWithPriorityPushAbort(t *testing.T) {
 		{max, mid2, true},
 		{max, max, false},
 	}
-	// NOTE: the behavior of PUSH_ABORT pushes is agnostic to isolation levels.
-	for _, pusherIso := range isolation.Levels() {
-		for _, pusheeIso := range isolation.Levels() {
-			for _, test := range testCases {
-				name := fmt.Sprintf("pusherIso=%s/pusheeIso=%s/pusherPri=%d/pusheePri=%d",
-					pusherIso, pusheeIso, test.pusherPri, test.pusheePri)
-				t.Run(name, func(t *testing.T) {
-					canPush := CanPushWithPriority(kvpb.PUSH_ABORT, pusherIso, pusheeIso, test.pusherPri, test.pusheePri)
-					require.Equal(t, test.exp, canPush)
-				})
-			}
-		}
-	}
-}
-
-func testCanPushWithPriorityPushTimestamp(t *testing.T) {
-	SSI := isolation.Serializable
-	SI := isolation.Snapshot
-	RC := isolation.ReadCommitted
-	min := enginepb.MinTxnPriority
-	max := enginepb.MaxTxnPriority
-	mid1 := enginepb.TxnPriority(1)
-	mid2 := enginepb.TxnPriority(2)
-	testCases := []struct {
-		pusherIso isolation.Level
-		pusheeIso isolation.Level
-		pusherPri enginepb.TxnPriority
-		pusheePri enginepb.TxnPriority
-		exp       bool
-	}{
-		// SSI pushing SSI
-		{SSI, SSI, min, min, false},
-		{SSI, SSI, min, mid1, false},
-		{SSI, SSI, min, mid2, false},
-		{SSI, SSI, min, max, false},
-		{SSI, SSI, mid1, min, true},
-		{SSI, SSI, mid1, mid1, false},
-		{SSI, SSI, mid1, mid2, false},
-		{SSI, SSI, mid1, max, false},
-		{SSI, SSI, mid2, min, true},
-		{SSI, SSI, mid2, mid1, false},
-		{SSI, SSI, mid2, mid2, false},
-		{SSI, SSI, mid2, max, false},
-		{SSI, SSI, max, min, true},
-		{SSI, SSI, max, mid1, true},
-		{SSI, SSI, max, mid2, true},
-		{SSI, SSI, max, max, false},
-		// SSI pushing SI
-		{SSI, SI, min, min, true},
-		{SSI, SI, min, mid1, true},
-		{SSI, SI, min, mid2, true},
-		{SSI, SI, min, max, true},
-		{SSI, SI, mid1, min, true},
-		{SSI, SI, mid1, mid1, true},
-		{SSI, SI, mid1, mid2, true},
-		{SSI, SI, mid1, max, true},
-		{SSI, SI, mid2, min, true},
-		{SSI, SI, mid2, mid1, true},
-		{SSI, SI, mid2, mid2, true},
-		{SSI, SI, mid2, max, true},
-		{SSI, SI, max, min, true},
-		{SSI, SI, max, mid1, true},
-		{SSI, SI, max, mid2, true},
-		{SSI, SI, max, max, true},
-		// SSI pushing RC
-		{SSI, RC, min, min, true},
-		{SSI, RC, min, mid1, true},
-		{SSI, RC, min, mid2, true},
-		{SSI, RC, min, max, true},
-		{SSI, RC, mid1, min, true},
-		{SSI, RC, mid1, mid1, true},
-		{SSI, RC, mid1, mid2, true},
-		{SSI, RC, mid1, max, true},
-		{SSI, RC, mid2, min, true},
-		{SSI, RC, mid2, mid1, true},
-		{SSI, RC, mid2, mid2, true},
-		{SSI, RC, mid2, max, true},
-		{SSI, RC, max, min, true},
-		{SSI, RC, max, mid1, true},
-		{SSI, RC, max, mid2, true},
-		{SSI, RC, max, max, true},
-		// SI pushing SSI
-		{SI, SSI, min, min, true},
-		{SI, SSI, min, mid1, false},
-		{SI, SSI, min, mid2, false},
-		{SI, SSI, min, max, false},
-		{SI, SSI, mid1, min, true},
-		{SI, SSI, mid1, mid1, true},
-		{SI, SSI, mid1, mid2, true},
-		{SI, SSI, mid1, max, false},
-		{SI, SSI, mid2, min, true},
-		{SI, SSI, mid2, mid1, true},
-		{SI, SSI, mid2, mid2, true},
-		{SI, SSI, mid2, max, false},
-		{SI, SSI, max, min, true},
-		{SI, SSI, max, mid1, true},
-		{SI, SSI, max, mid2, true},
-		{SI, SSI, max, max, true},
-		// SI pushing SI
-		{SI, SI, min, min, true},
-		{SI, SI, min, mid1, true},
-		{SI, SI, min, mid2, true},
-		{SI, SI, min, max, true},
-		{SI, SI, mid1, min, true},
-		{SI, SI, mid1, mid1, true},
-		{SI, SI, mid1, mid2, true},
-		{SI, SI, mid1, max, true},
-		{SI, SI, mid2, min, true},
-		{SI, SI, mid2, mid1, true},
-		{SI, SI, mid2, mid2, true},
-		{SI, SI, mid2, max, true},
-		{SI, SI, max, min, true},
-		{SI, SI, max, mid1, true},
-		{SI, SI, max, mid2, true},
-		{SI, SI, max, max, true},
-		// SI pushing RC
-		{SI, RC, min, min, true},
-		{SI, RC, min, mid1, true},
-		{SI, RC, min, mid2, true},
-		{SI, RC, min, max, true},
-		{SI, RC, mid1, min, true},
-		{SI, RC, mid1, mid1, true},
-		{SI, RC, mid1, mid2, true},
-		{SI, RC, mid1, max, true},
-		{SI, RC, mid2, min, true},
-		{SI, RC, mid2, mid1, true},
-		{SI, RC, mid2, mid2, true},
-		{SI, RC, mid2, max, true},
-		{SI, RC, max, min, true},
-		{SI, RC, max, mid1, true},
-		{SI, RC, max, mid2, true},
-		{SI, RC, max, max, true},
-		// RC pushing SSI
-		{RC, SSI, min, min, true},
-		{RC, SSI, min, mid1, false},
-		{RC, SSI, min, mid2, false},
-		{RC, SSI, min, max, false},
-		{RC, SSI, mid1, min, true},
-		{RC, SSI, mid1, mid1, true},
-		{RC, SSI, mid1, mid2, true},
-		{RC, SSI, mid1, max, false},
-		{RC, SSI, mid2, min, true},
-		{RC, SSI, mid2, mid1, true},
-		{RC, SSI, mid2, mid2, true},
-		{RC, SSI, mid2, max, false},
-		{RC, SSI, max, min, true},
-		{RC, SSI, max, mid1, true},
-		{RC, SSI, max, mid2, true},
-		{RC, SSI, max, max, true},
-		// RC pushing SI
-		{RC, SI, min, min, true},
-		{RC, SI, min, mid1, true},
-		{RC, SI, min, mid2, true},
-		{RC, SI, min, max, true},
-		{RC, SI, mid1, min, true},
-		{RC, SI, mid1, mid1, true},
-		{RC, SI, mid1, mid2, true},
-		{RC, SI, mid1, max, true},
-		{RC, SI, mid2, min, true},
-		{RC, SI, mid2, mid1, true},
-		{RC, SI, mid2, mid2, true},
-		{RC, SI, mid2, max, true},
-		{RC, SI, max, min, true},
-		{RC, SI, max, mid1, true},
-		{RC, SI, max, mid2, true},
-		{RC, SI, max, max, true},
-		// RC pushing RC
-		{RC, RC, min, min, true},
-		{RC, RC, min, mid1, true},
-		{RC, RC, min, mid2, true},
-		{RC, RC, min, max, true},
-		{RC, RC, mid1, min, true},
-		{RC, RC, mid1, mid1, true},
-		{RC, RC, mid1, mid2, true},
-		{RC, RC, mid1, max, true},
-		{RC, RC, mid2, min, true},
-		{RC, RC, mid2, mid1, true},
-		{RC, RC, mid2, mid2, true},
-		{RC, RC, mid2, max, true},
-		{RC, RC, max, min, true},
-		{RC, RC, max, mid1, true},
-		{RC, RC, max, mid2, true},
-		{RC, RC, max, max, true},
-	}
 	for _, test := range testCases {
-		name := fmt.Sprintf("pusherIso=%s/pusheeIso=%s/pusherPri=%d/pusheePri=%d",
-			test.pusherIso, test.pusheeIso, test.pusherPri, test.pusheePri)
+		name := fmt.Sprintf("pusher=%d/pushee=%d", test.pusher, test.pushee)
 		t.Run(name, func(t *testing.T) {
-			canPush := CanPushWithPriority(kvpb.PUSH_TIMESTAMP, test.pusherIso, test.pusheeIso, test.pusherPri, test.pusheePri)
+			canPush := CanPushWithPriority(test.pusher, test.pushee)
 			require.Equal(t, test.exp, canPush)
 		})
-	}
-}
-
-func testCanPushWithPriorityPushTouch(t *testing.T) {
-	min := enginepb.MinTxnPriority
-	max := enginepb.MaxTxnPriority
-	mid1 := enginepb.TxnPriority(1)
-	mid2 := enginepb.TxnPriority(2)
-	priorities := []enginepb.TxnPriority{min, mid1, mid2, max}
-	// NOTE: the behavior of PUSH_TOUCH pushes is agnostic to isolation levels.
-	for _, pusherIso := range isolation.Levels() {
-		for _, pusheeIso := range isolation.Levels() {
-			// NOTE: the behavior of PUSH_TOUCH pushes is agnostic to txn priorities.
-			for _, pusherPri := range priorities {
-				for _, pusheePri := range priorities {
-					name := fmt.Sprintf("pusherIso=%s/pusheeIso=%s/pusherPri=%d/pusheePri=%d",
-						pusherIso, pusheeIso, pusherPri, pusheePri)
-					t.Run(name, func(t *testing.T) {
-						canPush := CanPushWithPriority(kvpb.PUSH_TOUCH, pusherIso, pusheeIso, pusherPri, pusheePri)
-						require.True(t, canPush)
-					})
-				}
-			}
-		}
 	}
 }
 
@@ -498,7 +279,7 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 	q.Enable(1 /* leaseSeq */)
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, 0, cfg.Clock.Now(), 0, 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0, 0)
 	q.EnqueueTxn(&txn)
 
 	// Mock out responses to any QueryTxn requests.
@@ -589,7 +370,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, 0, cfg.Clock.Now(), 0, 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, cfg.Clock.Now(), 0, 0)
 	q.EnqueueTxn(&txn)
 
 	const numPushees = 3

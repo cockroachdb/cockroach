@@ -391,13 +391,6 @@ func (s *ColIndexJoin) GetBytesRead() int64 {
 	return s.cf.getBytesRead()
 }
 
-// GetKVPairsRead is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetKVPairsRead() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.cf.getKVPairsRead()
-}
-
 // GetRowsRead is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetRowsRead() int64 {
 	s.mu.Lock()

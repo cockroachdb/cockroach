@@ -13,19 +13,15 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
 )
 
@@ -60,7 +56,7 @@ func noopRaftHandlerFuncs() unreliableRaftHandlerFuncs {
 type unreliableRaftHandler struct {
 	name    string
 	rangeID roachpb.RangeID
-	kvserver.IncomingRaftMessageHandler
+	kvserver.RaftMessageHandler
 	unreliableRaftHandlerFuncs
 }
 
@@ -96,26 +92,8 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 
 			return nil
 		}
-		if !h.dropReq(req) && log.V(1) {
-			// Debug logging, even if requests aren't dropped. This is a
-			// convenient way to observe all raft messages in unit tests when
-			// run using --vmodule='client_raft_helpers_test=1'.
-			var prefix string
-			if h.name != "" {
-				prefix = fmt.Sprintf("[%s] ", h.name)
-			}
-			log.Infof(
-				ctx,
-				"%s [raft] r%d Raft message %s",
-				prefix,
-				req.RangeID,
-				raft.DescribeMessage(req.Message, func([]byte) string {
-					return "<omitted>"
-				}),
-			)
-		}
 	}
-	return h.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
 func (h *unreliableRaftHandler) filterHeartbeats(
@@ -142,7 +120,7 @@ func (h *unreliableRaftHandler) HandleRaftResponse(
 			return nil
 		}
 	}
-	return h.IncomingRaftMessageHandler.HandleRaftResponse(ctx, resp)
+	return h.RaftMessageHandler.HandleRaftResponse(ctx, resp)
 }
 
 func (h *unreliableRaftHandler) HandleSnapshot(
@@ -155,7 +133,7 @@ func (h *unreliableRaftHandler) HandleSnapshot(
 			return err
 		}
 	}
-	return h.IncomingRaftMessageHandler.HandleSnapshot(ctx, header, respStream)
+	return h.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 func (h *unreliableRaftHandler) HandleDelegatedSnapshot(
@@ -169,7 +147,7 @@ func (h *unreliableRaftHandler) HandleDelegatedSnapshot(
 			}
 		}
 	}
-	return h.IncomingRaftMessageHandler.HandleDelegatedSnapshot(ctx, req)
+	return h.RaftMessageHandler.HandleDelegatedSnapshot(ctx, req)
 }
 
 // testClusterStoreRaftMessageHandler exists to allows a store to be stopped and
@@ -241,7 +219,7 @@ type testClusterPartitionedRange struct {
 		partitioned         bool
 		partitionedReplicas map[roachpb.ReplicaID]bool
 	}
-	handlers []kvserver.IncomingRaftMessageHandler
+	handlers []kvserver.RaftMessageHandler
 }
 
 // setupPartitionedRange sets up an testClusterPartitionedRange for the provided
@@ -275,7 +253,7 @@ func setupPartitionedRange(
 	activated bool,
 	funcs unreliableRaftHandlerFuncs,
 ) (*testClusterPartitionedRange, error) {
-	handlers := make([]kvserver.IncomingRaftMessageHandler, 0, len(tc.Servers))
+	handlers := make([]kvserver.RaftMessageHandler, 0, len(tc.Servers))
 	for i := range tc.Servers {
 		handlers = append(handlers, &testClusterStoreRaftMessageHandler{
 			tc:       tc,
@@ -291,12 +269,12 @@ func setupPartitionedRangeWithHandlers(
 	replicaID roachpb.ReplicaID,
 	partitionedNodeIdx int,
 	activated bool,
-	handlers []kvserver.IncomingRaftMessageHandler,
+	handlers []kvserver.RaftMessageHandler,
 	funcs unreliableRaftHandlerFuncs,
 ) (*testClusterPartitionedRange, error) {
 	pr := &testClusterPartitionedRange{
 		rangeID:  rangeID,
-		handlers: make([]kvserver.IncomingRaftMessageHandler, 0, len(handlers)),
+		handlers: make([]kvserver.RaftMessageHandler, 0, len(handlers)),
 	}
 	pr.mu.partitioned = activated
 	pr.mu.partitionedNodeIdx = partitionedNodeIdx
@@ -323,7 +301,7 @@ func setupPartitionedRangeWithHandlers(
 		s := i
 		h := &unreliableRaftHandler{
 			rangeID:                    rangeID,
-			IncomingRaftMessageHandler: handlers[s],
+			RaftMessageHandler:         handlers[s],
 			unreliableRaftHandlerFuncs: funcs,
 		}
 		// Only filter messages from the partitioned store on the other
@@ -383,7 +361,7 @@ func setupPartitionedRangeWithHandlers(
 			}
 		}
 		pr.handlers = append(pr.handlers, h)
-		tc.Servers[s].RaftTransport().ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+		tc.Servers[s].RaftTransport().Listen(tc.Target(s).StoreID, h)
 	}
 	return pr, nil
 }
@@ -411,59 +389,4 @@ func (pr *testClusterPartitionedRange) extend(
 	funcs unreliableRaftHandlerFuncs,
 ) (*testClusterPartitionedRange, error) {
 	return setupPartitionedRangeWithHandlers(tc, rangeID, replicaID, partitionedNode, activated, pr.handlers, funcs)
-}
-
-// dropRaftMessagesFrom sets up a Raft message handler on the given server that
-// drops inbound Raft messages from the given range and replica IDs. Outbound
-// messages are not affected, and must be dropped on the receiver.
-//
-// If cond is given, messages are only dropped when the atomic bool is true.
-// Otherwise, messages are always dropped.
-//
-// This will replace the previous message handler, if any.
-func dropRaftMessagesFrom(
-	t *testing.T,
-	srv *server.TestServer,
-	rangeID roachpb.RangeID,
-	fromReplicaIDs []roachpb.ReplicaID,
-	cond *atomic.Bool,
-) {
-	dropFrom := map[roachpb.ReplicaID]bool{}
-	for _, id := range fromReplicaIDs {
-		dropFrom[id] = true
-	}
-	shouldDrop := func(rID roachpb.RangeID, from roachpb.ReplicaID) bool {
-		return rID == rangeID && (cond == nil || cond.Load()) && dropFrom[from]
-	}
-
-	store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
-	require.NoError(t, err)
-	srv.RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-		rangeID:                    rangeID,
-		IncomingRaftMessageHandler: store,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
-				return shouldDrop(hb.RangeID, hb.FromReplicaID)
-			},
-			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
-				return shouldDrop(req.RangeID, req.FromReplica.ReplicaID)
-			},
-			dropResp: func(resp *kvserverpb.RaftMessageResponse) bool {
-				return shouldDrop(resp.RangeID, resp.FromReplica.ReplicaID)
-			},
-		},
-	})
-}
-
-// getMapsDiff returns the difference between the values of corresponding
-// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
-// of keys.
-func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
-	diffMap := make(map[string]int64)
-	for metricName, beforeValue := range beforeMap {
-		if v, ok := afterMap[metricName]; ok {
-			diffMap[metricName] = v - beforeValue
-		}
-	}
-	return diffMap
 }

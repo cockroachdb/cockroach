@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package scgraph contains utilities for describing a schema change operation
-// as a graph of screl nodes.
 package scgraph
 
 import (
@@ -57,10 +55,6 @@ type Graph struct {
 
 	// noOpOpEdges that are marked optimized out, and will not generate
 	// any operations.
-	//
-	// Deprecated.
-	//
-	// TODO(postamar): remove once release_22_2 ruleset is also removed
 	noOpOpEdges map[*OpEdge]map[RuleName]struct{}
 
 	entities *rel.Database
@@ -360,10 +354,6 @@ func (g *Graph) AddDepEdge(
 
 // MarkAsNoOp marks an edge as no-op, so that no operations are emitted from
 // this edge during planning.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
 func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...RuleName) {
 	m := make(map[RuleName]struct{})
 	for _, r := range rule {
@@ -373,10 +363,6 @@ func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...RuleName) {
 }
 
 // IsNoOp checks if an edge is marked as an edge that should emit no operations.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
 func (g *Graph) IsNoOp(edge *OpEdge) bool {
 	if len(edge.op) == 0 {
 		return true
@@ -386,10 +372,6 @@ func (g *Graph) IsNoOp(edge *OpEdge) bool {
 }
 
 // NoOpRules returns the rules which caused the edge to not emit any operations.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
 func (g *Graph) NoOpRules(edge *OpEdge) (rules []RuleName) {
 	if !g.IsNoOp(edge) {
 		return nil

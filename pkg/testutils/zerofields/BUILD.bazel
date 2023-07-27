@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "zerofields",
-    testonly = 1,
     srcs = ["no_zero_field.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/zerofields",
     visibility = ["//visibility:public"],

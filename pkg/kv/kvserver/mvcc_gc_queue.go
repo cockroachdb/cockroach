@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -191,7 +192,6 @@ func newMVCCGCQueue(store *Store) *mvccGCQueue {
 			failures:        store.metrics.MVCCGCQueueFailures,
 			pending:         store.metrics.MVCCGCQueuePending,
 			processingNanos: store.metrics.MVCCGCQueueProcessingNanos,
-			disabledConfig:  kvserverbase.MVCCGCQueueEnabled,
 		},
 	)
 	return mgcq
@@ -233,6 +233,11 @@ func (r mvccGCQueueScore) String() string {
 		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
 }
 
+func (mgcq *mvccGCQueue) enabled() bool {
+	st := mgcq.store.ClusterSettings()
+	return kvserverbase.MVCCGCQueueEnabled.Get(&st.SV)
+}
+
 // shouldQueue determines whether a replica should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
@@ -240,6 +245,10 @@ func (r mvccGCQueueScore) String() string {
 func (mgcq *mvccGCQueue) shouldQueue(
 	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, float64) {
+	if !mgcq.enabled() {
+		return false, 0
+	}
+
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
 	conf := repl.SpanConfig()
@@ -673,6 +682,11 @@ func (r *replicaGCer) GC(
 func (mgcq *mvccGCQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
+	if !mgcq.enabled() {
+		log.VEventf(ctx, 2, "skipping mvcc gc: queue has been disabled")
+		return false, nil
+	}
+
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	defer repl.MeasureReqCPUNanos(grunning.Time())
@@ -838,7 +852,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 	if !mgcq.lastRangeWasHighPriority {
 		// We are most likely processing first range that has a GC hint notifying
 		// that multiple range deletions happen.
-		if err := timeutil.RunWithTimeout(ctx, "gc-check-hinted-hi-pri-replicas", gcHintScannerTimeout, func(ctx context.Context) error {
+		if err := contextutil.RunWithTimeout(ctx, "gc-check-hinted-hi-pri-replicas", gcHintScannerTimeout, func(ctx context.Context) error {
 			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
 			return ctx.Err()
 		}); err != nil {

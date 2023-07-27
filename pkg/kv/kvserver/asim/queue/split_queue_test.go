@@ -48,7 +48,7 @@ func TestSplitQueue(t *testing.T) {
 			NumReplicas: replicationFactor,
 		}
 		for _, r := range s.Ranges() {
-			s.SetSpanConfigForRange(r.RangeID(), spanConfig)
+			s.SetSpanConfig(r.RangeID(), spanConfig)
 		}
 		s.TransferLease(state.RangeID(2 /* The interesting range */), leaseholder)
 		return s
@@ -142,13 +142,13 @@ func TestSplitQueue(t *testing.T) {
 			)
 			s.SplitRange(endKey)
 
-			testSettings.RangeSizeSplitThreshold = tc.splitThreshold
 			changer := state.NewReplicaChanger()
 			store, _ := s.Store(testingStore)
 			sq := NewSplitQueue(
 				store.StoreID(),
 				changer,
-				testSettings,
+				testSettings.RangeSplitDelayFn(),
+				tc.splitThreshold,
 				start,
 			)
 

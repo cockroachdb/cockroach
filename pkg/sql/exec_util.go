@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
@@ -1373,10 +1372,6 @@ type ExecutorConfig struct {
 	// compaction concurrency.
 	CompactionConcurrencyFunc eval.SetCompactionConcurrencyFunc
 
-	// GetTableMetricsFunc is used to gather information about sstables that
-	// overlap with a key range for a specified node and store.
-	GetTableMetricsFunc eval.GetTableMetricsFunc
-
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector
@@ -1388,10 +1383,6 @@ type ExecutorConfig struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
-
-	// InspectzServer is used to power various crdb_internal vtables, exposing
-	// the equivalent of /inspectz but through SQL.
-	InspectzServer inspectzpb.InspectzServer
 
 	// RangeDescIteratorFactory is used to construct Iterators over range
 	// descriptors.
@@ -1734,7 +1725,7 @@ type BackupRestoreTestingKnobs struct {
 
 	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
 	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
-	RunAfterProcessingRestoreSpanEntry func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry)
+	RunAfterProcessingRestoreSpanEntry func(ctx context.Context)
 
 	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
 	// span has been exported.
@@ -1786,8 +1777,6 @@ type StreamingTestingKnobs struct {
 	CutoverProgressShouldUpdate func() bool
 
 	DistSQLRetryPolicy *retry.Options
-
-	AfterRetryIteration func(err error)
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -1981,7 +1970,6 @@ func checkResultType(typ *types.T) error {
 	case types.UuidFamily:
 	case types.INetFamily:
 	case types.OidFamily:
-	case types.PGLSNFamily:
 	case types.TupleFamily:
 	case types.EnumFamily:
 	case types.VoidFamily:
@@ -2971,19 +2959,6 @@ type sessionDataMutatorIterator struct {
 	sessionDataMutatorCallbacks
 }
 
-func makeSessionDataMutatorIterator(
-	sds *sessiondata.Stack, defaults SessionDefaults, settings *cluster.Settings,
-) *sessionDataMutatorIterator {
-	return &sessionDataMutatorIterator{
-		sds: sds,
-		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults: defaults,
-			settings: settings,
-		},
-		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
-	}
-}
-
 // mutator returns a mutator for the given sessionData.
 func (it *sessionDataMutatorIterator) mutator(
 	applyCallbacks bool, sd *sessiondata.SessionData,
@@ -3110,10 +3085,6 @@ func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority
 	m.data.DefaultTxnPriority = int64(val)
 }
 
-func (m *sessionDataMutator) SetDefaultTransactionIsolationLevel(val tree.IsolationLevel) {
-	m.data.DefaultTxnIsolationLevel = int64(val)
-}
-
 func (m *sessionDataMutator) SetDefaultTransactionReadOnly(val bool) {
 	m.data.DefaultTxnReadOnly = val
 }
@@ -3182,10 +3153,6 @@ func (m *sessionDataMutator) SetVectorize(val sessiondatapb.VectorizeExecMode) {
 
 func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {
 	m.data.TestingVectorizeInjectPanics = val
-}
-
-func (m *sessionDataMutator) SetTestingOptimizerInjectPanics(val bool) {
-	m.data.TestingOptimizerInjectPanics = val
 }
 
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
@@ -3602,14 +3569,6 @@ func (m *sessionDataMutator) SetMultipleActivePortalsEnabled(val bool) {
 
 func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
-}
-
-func (m *sessionDataMutator) SetReplicationMode(val sessiondatapb.ReplicationMode) {
-	m.data.ReplicationMode = val
-}
-
-func (m *sessionDataMutator) SetOptimizerUseImprovedJoinElimination(val bool) {
-	m.data.OptimizerUseImprovedJoinElimination = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

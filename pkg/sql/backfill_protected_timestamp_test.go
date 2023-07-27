@@ -19,10 +19,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,11 +40,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func getFirstStoreReplica(
+	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
+) (*kvserver.Store, *kvserver.Replica) {
+	t.Helper()
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	var repl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		repl = store.LookupReplica(roachpb.RKey(key))
+		if repl == nil {
+			return errors.New(`could not find replica`)
+		}
+		return nil
+	})
+	return store, repl
+}
+
 func TestValidationWithProtectedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
-
 	skip.UnderStress(t, "test takes too long")
 	skip.UnderRace(t, "test takes too long")
 
@@ -52,56 +69,50 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	validationQuerySeen := sync.Once{}
 
 	indexScanQuery := regexp.MustCompile(`SELECT count\(1\) FROM \[\d+ AS t\]@\[2\]`)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				BeforeExecute: func(ctx context.Context, sql string, descriptors *descs.Collection) {
-					if indexScanQuery.MatchString(sql) {
-						validationQuerySeen.Do(func() {
-							indexValidationQueryWait <- struct{}{}
-							<-indexValidationQueryResume
-						})
+	settings := cluster.MakeTestingClusterSettings()
+	protectedts.PollInterval.Override(ctx, &settings.SV, time.Millisecond)
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings:                 settings,
+				DisableDefaultTestTenant: true,
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						BeforeExecute: func(ctx context.Context, sql string, descriptors *descs.Collection) {
+							if indexScanQuery.MatchString(sql) {
+								validationQuerySeen.Do(func() {
+									indexValidationQueryWait <- struct{}{}
+									<-indexValidationQueryResume
+								})
 
-					}
+							}
+						},
+					},
 				},
 			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-	ts := s.TenantOrServer()
-	tenantSettings := ts.ClusterSettings()
-	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, time.Millisecond)
-	r := sqlutils.MakeSQLRunner(db)
+		})
+	defer tc.Stopper().Stop(context.Background())
 
 	// Refreshes the in-memory protected timestamp state to asOf.
 	refreshTo := func(t *testing.T, tableKey roachpb.Key, asOf hlc.Timestamp) {
-		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
-		require.NoError(t, err)
-		var repl *kvserver.Replica
-		testutils.SucceedsSoon(t, func() error {
-			repl = store.LookupReplica(roachpb.RKey(tableKey))
-			if repl == nil {
-				return errors.New(`could not find replica`)
-			}
-			return nil
-		})
-		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
-		require.NoError(
-			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
-		)
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+		for i := 0; i < tc.NumServers(); i++ {
+			ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
+			_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
+			require.NoError(
+				t,
+				spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+			)
+			require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+		}
 	}
 	// Refresh forces the PTS cache to update to at least asOf.
 	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		require.NoError(t, ptp.Refresh(ctx, asOf))
+		for i := 0; i < tc.NumServers(); i++ {
+			s := tc.Server(i)
+			ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+			require.NoError(t, ptp.Refresh(ctx, asOf))
+		}
 	}
-
-	// By default, secondary tenants aren't allowed to muck with the zone
-	// config, so give them this ability if we happened to start the default
-	// test tenant.
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
 
 	for _, sql := range []string{
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
@@ -111,8 +122,12 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1",
 		"INSERT INTO t(n) SELECT * FROM generate_series(1, 250000)",
 	} {
-		r.Exec(t, sql)
+		_, err := tc.ServerConn(0).Exec(sql)
+		require.NoError(t, err)
 	}
+	db, _ := tc.ServerConn(0).Conn(ctx)
+	dbConn2, _ := tc.ServerConn(0).Conn(ctx)
+	r := sqlutils.MakeSQLRunner(db)
 
 	getTableID := func() (tableID uint32) {
 		r.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
@@ -120,15 +135,14 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		return tableID
 	}
 	tableID := getTableID()
-	tableKey := ts.Codec().TablePrefix(tableID)
+	tableKey := keys.SystemSQLCodec.TablePrefix(tableID)
 
-	systemSqlDb := serverutils.OpenDBConn(t, s.SQLAddr(), "system", false, s.Stopper())
 	grp := ctxgroup.WithContext(ctx)
 	grp.Go(func() error {
 		<-indexValidationQueryWait
 		getTableRangeIDs := func(t *testing.T) ([]int64, error) {
 			t.Helper()
-			rows, err := db.QueryContext(ctx, "WITH r AS (SHOW RANGES FROM TABLE t) SELECT range_id FROM r ORDER BY start_key")
+			rows, err := dbConn2.QueryContext(ctx, "WITH r AS (SHOW RANGES FROM TABLE t) SELECT range_id FROM r ORDER BY start_key")
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to query ranges")
 			}
@@ -151,19 +165,19 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		}
 		const retryTxnErrorSubstring = "restart transaction"
 		for {
-			if _, err := db.ExecContext(ctx, "BEGIN"); err != nil {
+			if _, err := dbConn2.ExecContext(ctx, "BEGIN"); err != nil {
 				return err
 			}
-			if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
+			if _, err := dbConn2.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
 				return err
 			}
-			if _, err := db.ExecContext(ctx, "DELETE FROM t;"); err != nil {
+			if _, err := dbConn2.ExecContext(ctx, "DELETE FROM t;"); err != nil {
 				return err
 			}
-			if _, err := db.ExecContext(ctx, "INSERT INTO t VALUES('9999999')"); err != nil {
+			if _, err := dbConn2.ExecContext(ctx, "INSERT INTO t VALUES('9999999')"); err != nil {
 				return err
 			}
-			_, err = db.ExecContext(ctx, "COMMIT")
+			_, err = dbConn2.ExecContext(ctx, "COMMIT")
 			if err != nil {
 				if strings.Contains(err.Error(), retryTxnErrorSubstring) {
 					err = nil
@@ -173,10 +187,10 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			}
 			break
 		}
-		refreshTo(t, tableKey, ts.Clock().Now())
-		refreshPTSCacheTo(t, ts.Clock().Now())
+		refreshTo(t, tableKey, tc.Server(0).Clock().Now())
+		refreshPTSCacheTo(t, tc.Server(0).Clock().Now())
 		for _, id := range ranges {
-			if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, id); err != nil {
+			if _, err := dbConn2.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, id); err != nil {
 				return err
 			}
 		}
@@ -188,11 +202,13 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		return err
 	})
 
-	require.NoError(t, grp.Wait())
+	err := grp.Wait()
+	require.NoError(t, err)
 	// Validate the rows were removed due to the drop
 	res := r.QueryStr(t, `SELECT n FROM t@foo`)
 	if len(res) != 1 {
 		t.Errorf("expected %d entries, got %d", 1, len(res))
 	}
 	require.NoError(t, db.Close())
+	require.NoError(t, dbConn2.Close())
 }

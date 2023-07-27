@@ -38,14 +38,10 @@ go_test(
         "show_test.go",
         "unique_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":multiregionccl"],
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -107,5 +103,6 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_x_sync//errgroup",
     ],
 )

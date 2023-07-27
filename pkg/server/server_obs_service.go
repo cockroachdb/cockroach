@@ -14,13 +14,8 @@ import (
 	"context"
 	"net"
 
-	"github.com/cockroachdb/cockroach/pkg/obs"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/router"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -31,9 +26,7 @@ import (
 // startEmbeddedObsService creates the schema for the Observability Service (if
 // it doesn't exist already), starts the internal RPC service for event
 // ingestion and hooks up the event exporter to talk to the local service.
-func (s *Server) startEmbeddedObsService(
-	ctx context.Context, knobs *obs.EventExporterTestingKnobs,
-) error {
+func (s *Server) startEmbeddedObsService(ctx context.Context) error {
 	// Create the Obs Service schema.
 	loopbackConfig, err := pgxpool.ParseConfig("")
 	if err != nil {
@@ -50,28 +43,23 @@ func (s *Server) startEmbeddedObsService(
 	}
 
 	// Create the internal ingester RPC server.
-	// TODO(abarganier): implement a more useful EventConsumer.
-	// TODO(abarganier): implement unified initialization for EventIngester.
-	var consumer obslib.EventConsumer
-	if knobs != nil && knobs.TestConsumer != nil {
-		consumer = knobs.TestConsumer
-	} else {
-		consumer = router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
-			obspb.EventlogEvent: &obsutil.StdOutConsumer{},
-		})
+	embeddedObsSvc, err := ingest.MakeEventIngester(ctx, loopbackConfig)
+	if err != nil {
+		return err
 	}
-	embeddedObsSvc := ingest.MakeEventIngester(ctx, consumer, nil)
 	// We'll use an RPC server serving on a "loopback" interface implemented with
 	// in-memory pipes.
 	grpcServer := grpc.NewServer()
-	logspb.RegisterLogsServiceServer(grpcServer, embeddedObsSvc)
+	logspb.RegisterLogsServiceServer(grpcServer, &embeddedObsSvc)
 	rpcLoopbackL := netutil.NewLoopbackListener(ctx, s.stopper)
 	if err := s.stopper.RunAsyncTask(
 		ctx, "obssvc-loopback-quiesce", func(ctx context.Context) {
 			<-s.stopper.ShouldQuiesce()
 			grpcServer.Stop()
+			embeddedObsSvc.Close()
 		},
 	); err != nil {
+		embeddedObsSvc.Close()
 		return err
 	}
 	if err := s.stopper.RunAsyncTask(

@@ -740,7 +740,7 @@ project
  ├── columns: k:1!null i:2 s:3 j:4 v:5 x:6
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-4,6), (3)-->(5)
+ ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
  ├── select
  │    ├── columns: k:1!null i:2 s:3 j:4
  │    ├── immutable
@@ -769,7 +769,7 @@ project
  ├── columns: k:1!null i:2 s:3 j:4 v:5 x:6
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-4,6), (3)-->(5)
+ ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
  ├── select
  │    ├── columns: k:1!null i:2 s:3 j:4
  │    ├── immutable
@@ -835,12 +835,12 @@ semi-join (hash)
  ├── columns: k:1!null i:2 s:3 j:4 v:5 x:6
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2-4,6), (3)-->(5)
+ ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
  ├── project
  │    ├── columns: v:5 x:6 k:1!null i:2 s:3 j:4
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4,6), (3)-->(5)
+ │    ├── fd: (1)-->(2-4), (3)-->(5), (4)-->(6)
  │    ├── scan virt
  │    │    ├── columns: k:1!null i:2 s:3 j:4
  │    │    ├── computed column expressions
@@ -1251,16 +1251,21 @@ norm expect=InlineUDF
 SELECT one_strict() FROM (VALUES (1), (2), (3)) v(i)
 ----
 project
- ├── columns: one_strict:3!null
+ ├── columns: one_strict:3
  ├── cardinality: [3 - 3]
- ├── fd: ()-->(3)
  ├── values
  │    ├── cardinality: [3 - 3]
  │    ├── ()
  │    ├── ()
  │    └── ()
  └── projections
-      └── 1 [as=one_strict:3]
+      └── subquery [as=one_strict:3, subquery]
+           └── values
+                ├── columns: "?column?":2!null
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(2)
+                └── (1,)
 
 # A UDF is not inlined when the arguments are not constants or either Variable
 # or Const expressions.
@@ -1310,7 +1315,19 @@ project
  │    └── filters
  │         └── add(k:1, add(10, f:3::INT8)) = 100 [outer=(1,3), immutable, udf]
  └── projections
-      └── u-d-f-call [as=add:20, outer=(2), immutable, correlated-subquery, udf]
+      └── u-d-f: &{add [values
+           ├── columns: "?column?":19(int)
+           ├── outer: (17,18)
+           ├── cardinality: [1 - 1]
+           ├── immutable
+           ├── stats: [rows=1]
+           ├── key: ()
+           ├── fd: ()-->(19)
+           └── tuple [type=tuple{int}]
+                └── plus [type=int]
+                     ├── variable: x:17 [type=int]
+                     └── variable: y:18 [type=int]
+          ] [17 18] int false immutable true false} [as=add:20, outer=(2), immutable, correlated-subquery, udf]
            ├── 10
            └── subquery
                 └── values
@@ -1334,32 +1351,30 @@ SELECT k, min_x() FROM a WHERE k = min_x()
 ----
 project
  ├── columns: k:1!null min_x:16
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(1,16)
- ├── inner-join (hash)
- │    ├── columns: k:1!null x:8!null
- │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- │    ├── key: ()
- │    ├── fd: ()-->(1,8), (8)==(1), (1)==(8)
+ ├── key: (1)
+ ├── fd: (1)-->(16)
+ ├── select
+ │    ├── columns: k:1!null
+ │    ├── key: (1)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
- │    ├── limit
- │    │    ├── columns: x:8!null
- │    │    ├── internal-ordering: +8
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(8)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:8!null
- │    │    │    ├── key: (8)
- │    │    │    ├── ordering: +8
- │    │    │    └── limit hint: 1.00
- │    │    └── 1
  │    └── filters
- │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │         └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+ │              ├── k:1
+ │              └── subquery
+ │                   └── limit
+ │                        ├── columns: x:8!null
+ │                        ├── internal-ordering: +8
+ │                        ├── cardinality: [0 - 1]
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(8)
+ │                        ├── scan xy
+ │                        │    ├── columns: x:8!null
+ │                        │    ├── key: (8)
+ │                        │    ├── ordering: +8
+ │                        │    └── limit hint: 1.00
+ │                        └── 1
  └── projections
       └── subquery [as=min_x:16, subquery]
            └── limit
@@ -1396,6 +1411,7 @@ select
       └── eq [outer=(1), stable, subquery, udf, constraints=(/1: (/NULL - ])]
            ├── k:1
            └── udf: min_x_gt
+                ├── params: i:13
                 ├── args
                 │    └── subquery
                 │         └── limit
@@ -1417,7 +1433,6 @@ select
                 │              │    └── filters
                 │              │         └── x:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
                 │              └── 1
-                ├── params: i:13
                 └── body
                      └── limit
                           ├── columns: x:14!null
@@ -1543,7 +1558,26 @@ project
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── u-d-f-call [as=x_0_1_y_2:12, outer=(2), immutable, correlated-subquery, udf]
+      └── u-d-f: &{x_0_1_y_2 [values
+           ├── columns: "?column?":11(bool)
+           ├── outer: (9,10)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1]
+           ├── key: ()
+           ├── fd: ()-->(11)
+           └── tuple [type=tuple{bool}]
+                └── or [type=bool]
+                     ├── or [type=bool]
+                     │    ├── eq [type=bool]
+                     │    │    ├── variable: x:9 [type=int]
+                     │    │    └── const: 0 [type=int]
+                     │    └── eq [type=bool]
+                     │         ├── variable: x:9 [type=int]
+                     │         └── const: 1 [type=int]
+                     └── eq [type=bool]
+                          ├── variable: y:10 [type=int]
+                          └── const: 2 [type=int]
+          ] [9 10] bool false immutable true false} [as=x_0_1_y_2:12, outer=(2), immutable, correlated-subquery, udf]
            ├── subquery
            │    └── max1-row
            │         ├── columns: column1:8!null

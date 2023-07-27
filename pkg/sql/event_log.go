@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -650,7 +651,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 			retryOpts.MaxRetries = int(maxAttempts)
 			for r := retry.Start(retryOpts); r.Next(); {
 				// Don't try too long to write if the system table is unavailable.
-				if err := timeutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {
+				if err := contextutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {
 					return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 						return writeToSystemEventsTable(ctx, txn, len(entries), query, args)
 					})

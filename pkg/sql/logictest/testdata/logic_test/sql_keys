@@ -18,7 +18,7 @@ SELECT id FROM system.namespace WHERE name = 't'
 
 # wait until split happens on secondary tenant's end key or list_sql_keys_in_range will fail
 onlyif config 3node-tenant
-query TT rowsort
+query TT
 SELECT start_key, end_key FROM [SHOW RANGES]
 ----
 /Tenant/10                /Tenant/10/Table/106/1/0
@@ -36,14 +36,14 @@ INSERT INTO t VALUES (1, 1), (2, 2)
 # List out all of the keys in this range. The values themselves are
 # different on each run of the test due to metadata stored in the value.
 onlyif config local
-query T rowsort
+query T
 SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 ----
 /Table/106/1/1/0
 /Table/106/1/2/0
 
 onlyif config 3node-tenant
-query T rowsort
+query T
 SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 ----
 /Tenant/10/Table/106/1/1/0
@@ -52,14 +52,14 @@ SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 # List out all of the keys in this range. The values themselves are
 # different on each run of the test due to metadata stored in the value.
 onlyif config local
-query T rowsort
+query T
 SELECT crdb_internal.pretty_key(key, 0) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
 ----
 /106/1/1/0
 /106/1/2/0
 
 onlyif config 3node-tenant
-query T rowsort
+query T
 SELECT crdb_internal.pretty_key(key, 0) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
 ----
 /10/Table/106/1/1/0

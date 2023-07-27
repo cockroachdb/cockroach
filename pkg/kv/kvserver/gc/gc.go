@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -1040,7 +1040,7 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 		return b.cleanupIntentsFn(ctx, b.pendingIntents)
 	}
 	if b.options.intentCleanupBatchTimeout > 0 {
-		err = timeutil.RunWithTimeout(
+		err = contextutil.RunWithTimeout(
 			ctx, "intent GC batch", b.options.intentCleanupBatchTimeout, cleanupIntentsFn)
 	} else {
 		err = cleanupIntentsFn(ctx)

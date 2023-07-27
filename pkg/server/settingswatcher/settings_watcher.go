@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -142,27 +141,18 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	s.mu.values = make(map[string]settingsValue)
 
 	if s.overridesMonitor != nil {
-		// Initialize the overrides. We want to do this before processing
-		// the settings table, otherwise we could see temporary
-		// transitions to the value in the table.
-		s.mu.overrides = make(map[string]settings.EncodedValue)
-		// Wait for the overrides monitor to be ready, which also ensures
-		// it has received initial data from the KV layer.
-		if err := s.overridesMonitor.WaitForStart(ctx); err != nil {
-			return err
-		}
-		// Fetch the overrides once initially, synchronously with the
-		// `Start` call. This ensures that all the overrides have been
-		// applied by the time the `Start` call completes.
-		overridesCh := s.updateOverrides(ctx)
-		log.Infof(ctx, "applied initial setting overrides")
+		s.mu.overrides = make(map[string]settings.EncodedValue) // Initialize the overrides. We want to do this before processing the
+		// settings table, otherwise we could see temporary transitions to the value
+		// in the table.
+		s.updateOverrides(ctx)
 
-		// Set up a worker to watch the monitor asynchronously.
+		// Set up a worker to watch the monitor.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
+			overridesCh := s.overridesMonitor.RegisterOverridesChannel()
 			for {
 				select {
 				case <-overridesCh:
-					overridesCh = s.updateOverrides(ctx)
+					s.updateOverrides(ctx)
 
 				case <-s.stopper.ShouldQuiesce():
 					return
@@ -252,9 +242,7 @@ func (s *SettingsWatcher) handleKV(
 		Value: kv.Value,
 	}, &alloc)
 	if err != nil {
-		// This should never happen: the rangefeed should only ever deliver valid SQL rows.
-		err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode settings row %v", kv.Key)
-		logcrash.ReportOrPanic(ctx, &s.settings.SV, "%w", err)
+		log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
 		return nil
 	}
 
@@ -368,9 +356,8 @@ func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
 
 // updateOverrides updates the overrides map and updates any settings
 // accordingly.
-func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan struct{}) {
-	var newOverrides map[string]settings.EncodedValue
-	newOverrides, updateCh = s.overridesMonitor.Overrides()
+func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
+	newOverrides := s.overridesMonitor.Overrides()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -379,9 +366,8 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 		if key == versionSettingKey {
 			var newVersion clusterversion.ClusterVersion
 			if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
-				log.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
-					"Note: the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade.",
-					newVersion, err)
+				log.Warningf(ctx, "ignoring invalid cluster version: %newVersion - "+
+					"the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade", err)
 			} else {
 				// We don't want to fully process the override in the case
 				// where we're dealing with the "version" setting, as we want
@@ -418,8 +404,6 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 			}
 		}
 	}
-
-	return updateCh
 }
 
 func (s *SettingsWatcher) resetUpdater() {

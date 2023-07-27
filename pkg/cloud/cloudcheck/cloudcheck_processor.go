@@ -139,7 +139,7 @@ func checkStorage(
 
 	// Now read the file back and time it.
 	beforeRead := timeutil.Now()
-	r, _, err := store.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
+	r, err := store.ReadFile(ctx, filename)
 	if err != nil {
 		return res, errors.Wrap(err, "opening reader")
 	}

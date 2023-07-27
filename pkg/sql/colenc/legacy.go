@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -67,7 +66,7 @@ func MarshalLegacy(colType *types.T, vec coldata.Vec, row int) (roachpb.Value, e
 		switch vec.Type().Family() {
 		case types.StringFamily, types.BytesFamily, types.UuidFamily, types.EnumFamily:
 			b := vec.Bytes().Get(row)
-			r.SetString(encoding.UnsafeConvertBytesToString(b))
+			r.SetString(unsafeConvertBytesToString(b))
 			return r, nil
 		}
 	case types.TimestampFamily, types.TimestampTZFamily:

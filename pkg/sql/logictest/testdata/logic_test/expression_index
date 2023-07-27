@@ -1,5 +1,3 @@
-# LogicTest: default-configs !local-mixed-22.2-23.1
-
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
@@ -113,8 +111,14 @@ CREATE TABLE err (a INT, INDEX (a, (NULL)))
 statement ok
 CREATE TABLE t_null_cast (a INT, INDEX (a, (NULL::TEXT)))
 
+statement error index element j->'a' of type jsonb is not indexable
+CREATE TABLE err (a INT, j JSON, INDEX (a, (j->'a')))
+
 statement error index element \(a, b\) of type record is not indexable
 CREATE TABLE err (a INT, b INT, INDEX (a, (row(a, b))))
+
+statement error index element j->'a' of type jsonb is not allowed as a prefix column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE err (a INT, j JSON, INVERTED INDEX ((j->'a'), j))
 
 statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (a + b)))
@@ -261,7 +265,6 @@ SELECT * FROM (
 {"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query T
 SELECT * FROM (
   SELECT json_array_elements(
@@ -269,7 +272,7 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "pgAttributeNum": 9, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 statement ok
 DROP INDEX t_lower_c_a_plus_b_idx
@@ -278,26 +281,23 @@ DROP INDEX t_lower_c_a_plus_b_idx
 # because other indexes contain them.
 # exists in the descriptor.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query T
-SELECT cols.desc FROM (
-  SELECT id, json_array_elements(
+SELECT * FROM (
+  SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
-ORDER BY id
 ----
-{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
-{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "pgAttributeNum": 7, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "pgAttributeNum": 8, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 onlyif config local-legacy-schema-changer
 query T
-SELECT cols.desc FROM (
-  SELECT id, json_array_elements(
+SELECT * FROM (
+  SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
-ORDER BY id
 ----
 {"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 {"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
@@ -338,20 +338,14 @@ CREATE INDEX err ON t (a, (NULL), b)
 statement ok
 CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
 
-statement ok
+statement error index element j->'a' of type jsonb is not indexable
 CREATE INDEX err ON t (a, (j->'a'));
-
-statement ok
-DROP INDEX err
 
 statement error index element \(a, b\) of type record is not indexable
 CREATE INDEX err ON t (a, (row(a, b)));
 
-statement ok
+statement error index element j->'a' of type jsonb is not allowed as a prefix column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t ((j->'a'), j);
-
-statement ok
-DROP INDEX err
 
 statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (a + b));
@@ -642,68 +636,6 @@ SELECT k, a, b, c, comp FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND
 ----
 k  a   b    c    comp
 2  20  200  FOO  30
-
-statement ok
-CREATE TABLE d (a INT, j JSON);
-CREATE INDEX json_expr_index on d ((j->'a'))
-
-statement ok
-INSERT INTO d VALUES
-        (1, '{"a": "hello"}'),
-        (2, '{"a": "b"}'),
-        (3, '{"a": "bye"}'),
-        (4, '{"a": "json"}')
-
-query IT
-SELECT a, j from d@json_expr_index where j->'a' = '"b"' ORDER BY a
-----
-2  {"a": "b"}
-
-query IT
-SELECT a, j from d@json_expr_index where j->'a' = '"b"' OR j->'a' = '"bye"' ORDER BY a
-----
-2  {"a": "b"}
-3  {"a": "bye"}
-
-query IT
-SELECT a, j from d@json_expr_index where j->'a' > '"a"' ORDER BY a
-----
-1  {"a": "hello"}
-2  {"a": "b"}
-3  {"a": "bye"}
-4  {"a": "json"}
-
-query IT
-SELECT a, j from d@json_expr_index where j->'a' <= '"hello"' ORDER BY a
-----
-1  {"a": "hello"}
-2  {"a": "b"}
-3  {"a": "bye"}
-
-
-statement ok
-INSERT INTO d VALUES
-        (5, '{"a": "forward", "json": "inverted"}'),
-        (6, '{"a": "c", "b": "d"}')
-
-
-statement ok
-CREATE INVERTED INDEX json_inv on d ((j->'a'), j)
-
-query IT
-SELECT a, j from d@json_inv where j->'a' = '"forward"' AND j->'json' = '"inverted"' ORDER BY a
-----
-5  {"a": "forward", "json": "inverted"}
-
-query IT
-SELECT a, j from d@json_inv where j->'a' = '"c"' AND j->'json' = '"inverted"' ORDER BY a
-----
-
-query IT
-SELECT a, j from d@json_inv where j->'a' = '"c"' AND j->'b' = '"d"' ORDER BY a
-----
-6  {"a": "c", "b": "d"}
-
 
 # Backfilling expression indexes.
 
@@ -997,97 +929,6 @@ SELECT i, j FROM inv@i_plus_100_j_a WHERE i+100 = 101 AND j->'a' @> '"x"' ORDER 
 1  {"a": ["x", "y", "z"]}
 1  {"a": [1, "x"]}
 
-# Backfilling JSON expression indexes
-
-statement ok
-CREATE TABLE json_backfill (
-  k INT PRIMARY KEY,
-  j JSON,
-  INDEX forward_expr ((j->'a')),
-  INDEX forward (j)
-)
-
-statement ok
-INSERT INTO json_backfill VALUES
-  (1, '[1, 2, 3]'),
-  (2, '{"a": [1, 2, 3], "b": [4, 5, 6]}'),
-  (3, '{"a": {"a": "b"}, "d": {"e": [1, 2, 3]}}'),
-  (4, '{"a": [4, 5]}')
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' IN ('[1, 2, 3]', '[4,5]') ORDER BY k
-----
-{"a": [1, 2, 3], "b": [4, 5, 6]}
-{"a": [4, 5]}
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' = '{"a": "b"}' ORDER BY k
-----
-{"a": {"a": "b"}, "d": {"e": [1, 2, 3]}}
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' > '{"a": "b"}' ORDER BY k
-----
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' < '{"a": "b"}' ORDER BY k
-----
-{"a": [1, 2, 3], "b": [4, 5, 6]}
-{"a": [4, 5]}
-
-query T
-SELECT j from json_backfill@forward where j = '[1, 2, 3]' ORDER BY k
-----
-[1, 2, 3]
-
-query T
-SELECT j from json_backfill@forward where j = '{"a": [4, 5]}' OR j = '[1, 2, 3]' ORDER BY k
-----
-[1, 2, 3]
-{"a": [4, 5]}
-
-
-statement ok
-DROP INDEX forward_expr;
-DROP INDEX forward;
-
-statement ok
-CREATE INDEX forward_expr on json_backfill ((j->'a'));
-CREATE INDEX forward on json_backfill (j);
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' IN ('[1, 2, 3]', '[4,5]') ORDER BY k
-----
-{"a": [1, 2, 3], "b": [4, 5, 6]}
-{"a": [4, 5]}
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' = '{"a": "b"}' ORDER BY k
-----
-{"a": {"a": "b"}, "d": {"e": [1, 2, 3]}}
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' > '{"a": "b"}' ORDER BY k
-----
-
-query T
-SELECT j from json_backfill@forward_expr where j->'a' < '{"a": "b"}' ORDER BY k
-----
-{"a": [1, 2, 3], "b": [4, 5, 6]}
-{"a": [4, 5]}
-
-query T
-SELECT j from json_backfill@forward where j = '[1, 2, 3]' ORDER BY k
-----
-[1, 2, 3]
-
-query T
-SELECT j from json_backfill@forward where j = '{"a": [4, 5]}' OR j = '[1, 2, 3]' ORDER BY k
-----
-[1, 2, 3]
-{"a": [4, 5]}
-
-
 # Unique expression indexes.
 
 statement ok
@@ -1166,17 +1007,3 @@ BEGIN;
 CREATE INDEX t_a_times_three_idx ON t ((a * 3));
 SELECT crdb_internal.force_retry('10ms');
 COMMIT
-
-# JSON Expression Unique Indexes
-
-statement ok
-CREATE TABLE uniq_json (
-  k INT PRIMARY KEY,
-  j JSON,
-  UNIQUE INDEX ((j->'a'))
-)
-
-statement error duplicate key value violates unique constraint "uniq_json_expr_key"
-INSERT INTO uniq_json VALUES
-  (1, '{"a": "b"}'),
-  (2, '{"a": "b"}')

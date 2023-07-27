@@ -223,7 +223,7 @@ func makeSimpleImportSpans(
 								if cover[i].Span.Overlaps(sp) {
 									// If this is the last partition, we might have added it above.
 									if i == len(cover)-1 {
-										if last := len(cover[i].Files) - 1; last < 0 || cover[i].Files[last].Path != fileSpec.Path {
+										if last := len(cover[i].Files) - 1; last < 0 || cover[i].Files[last] != fileSpec {
 											cover[i].Files = append(cover[i].Files, fileSpec)
 											lastCovSpanSize += sz
 										}
@@ -472,15 +472,9 @@ func generateAndSendImportSpans(
 		}
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
-				fileSpec := execinfrapb.RestoreFileSpec{
-					Path:                  f.Path,
-					Dir:                   backups[layer].Dir,
-					BackupFileEntrySpan:   f.Span,
-					BackupFileEntryCounts: f.EntryCounts,
-					BackingFileSize:       f.BackingFileSize,
-				}
+				fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
-					fileSpec.Dir = dir
+					fileSpec = execinfrapb.RestoreFileSpec{Path: f.Path, Dir: dir}
 				}
 				entry.Files = append(entry.Files, fileSpec)
 			}

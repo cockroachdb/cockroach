@@ -55,7 +55,6 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 					"unoptimized-query-oracle/disable-rules=%s/%s", disableRuleSpec.disableRules, setupName,
 				),
 				Owner:           registry.OwnerSQLQueries,
-				NativeLibs:      registry.LibGEOS,
 				Timeout:         time.Hour * 1,
 				RequiresLicense: true,
 				Tags:            nil,
@@ -64,7 +63,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
 						name:      "unoptimized-query-oracle",
 						setupName: setupName,
-						run: func(s queryGenerator, r *rand.Rand, h queryComparisonHelper) error {
+						run: func(s *sqlsmith.Smither, r *rand.Rand, h queryComparisonHelper) error {
 							return runUnoptimizedQueryOracleImpl(s, r, h, disableRuleSpec.disableRuleProbability)
 						},
 					})
@@ -79,7 +78,10 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 // and once with normal optimization and/or execution. If the results of the two
 // executions are not equal an error is returned.
 func runUnoptimizedQueryOracleImpl(
-	qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelper, disableRuleProbability float64,
+	smither *sqlsmith.Smither,
+	rnd *rand.Rand,
+	h queryComparisonHelper,
+	disableRuleProbability float64,
 ) error {
 	var stmt string
 	// Ignore panics from Generate.
@@ -89,7 +91,7 @@ func runUnoptimizedQueryOracleImpl(
 				return
 			}
 		}()
-		stmt = qgen.Generate()
+		stmt = smither.Generate()
 	}()
 
 	var verboseLogging bool
@@ -171,11 +173,7 @@ func runUnoptimizedQueryOracleImpl(
 		//nolint:returnerrcheck
 		return nil
 	}
-	diff, err := unsortedMatricesDiffWithFloatComp(unoptimizedRows, optimizedRows, h.colTypes)
-	if err != nil {
-		return err
-	}
-	if diff != "" {
+	if diff := unsortedMatricesDiff(unoptimizedRows, optimizedRows); diff != "" {
 		// We have a mismatch in the unoptimized vs optimized query outputs.
 		verboseLogging = true
 		return h.makeError(errors.Newf(

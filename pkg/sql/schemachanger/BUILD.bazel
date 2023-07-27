@@ -1,16 +1,9 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
 load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 
-go_library(
-    name = "schemachanger",
-    srcs = ["doc.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger",
-    visibility = ["//visibility:public"],
-)
-
 filegroup(
-    name = "end_to_end_testdata_definitions",
-    srcs = glob(["testdata/end_to_end/*/*.definition"]),
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
     visibility = ["//visibility:public"],
 )
 
@@ -28,23 +21,20 @@ go_test(
         "schemachanger_test.go",
         ":test_gen",  # keep
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
-    data = glob(["testdata/**"]),
+    args = ["-test.timeout=3595s"],
+    data = [":testdata"],
     shard_count = 16,
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
@@ -55,10 +45,11 @@ go_test(
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/sctest",  # keep
         "//pkg/sql/sqltestutils",
+        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
@@ -80,18 +71,31 @@ sctest_gen(
     name = "test_gen",
     out = "sctest_generated_test.go",
     ccl = False,
-    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
+    new_cluster_func = "sctest.SingleNodeCluster",
     package = "schemachanger",
-    test_data = [
-        ":end_to_end_testdata_definitions",
-    ],
+    test_data = glob(["testdata/end_to_end/**"]),
     tests = [
         "EndToEndSideEffects",
         "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
         "Pause",
-        "PauseMixedVersion",
         "Rollback",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+sctest_gen(
+    name = "test_mixed_gen",
+    out = "sctest_mixed_generated_test.go",
+    ccl = False,
+    new_cluster_func = "sctest.SingleNodeMixedCluster",
+    package = "schemachanger",
+    test_data = glob(["testdata/end_to_end/**"]),
+    tests = [
+        "ValidateMixedVersionElements",
     ],
     visibility = [
         ":__pkg__",

@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -530,7 +530,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
 	if err := h.stopper.RunAsyncTask(h.AnnotateCtx(context.Background()), taskName,
 		func(ctx context.Context) {
-			if err := timeutil.RunWithTimeout(ctx, taskName, abortTxnAsyncTimeout,
+			if err := contextutil.RunWithTimeout(ctx, taskName, abortTxnAsyncTimeout,
 				func(ctx context.Context) error {
 					h.mu.Lock()
 					defer h.mu.Unlock()

@@ -1314,7 +1314,7 @@ CREATE TABLE t98691 (
 statement ok
 INSERT INTO t98691 VALUES (1, 10)
 
-query B nosort
+query B
 SELECT (NULL, NULL) = ANY (
   SELECT a, b FROM t98691 WHERE a > i
 ) FROM (VALUES (0), (0)) v(i)
@@ -1325,7 +1325,7 @@ NULL
 statement ok
 INSERT INTO t98691 VALUES (NULL, NULL)
 
-query B nosort
+query B
 SELECT (2, 20) = ANY (
   SELECT a, b FROM t98691 WHERE a > i OR a IS NULL
 ) FROM (VALUES (0), (0)) v(i)

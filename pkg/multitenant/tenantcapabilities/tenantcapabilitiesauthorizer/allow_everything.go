@@ -66,10 +66,3 @@ func (n *AllowEverythingAuthorizer) IsExemptFromRateLimiting(
 ) bool {
 	return true
 }
-
-// HasProcessDebugCapability implements the tenantcapabilities.Authorizer interface.
-func (n *AllowEverythingAuthorizer) HasProcessDebugCapability(
-	ctx context.Context, tenID roachpb.TenantID,
-) error {
-	return nil
-}

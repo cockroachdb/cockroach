@@ -189,17 +189,15 @@ func NewBaseDatabasePrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDe
 // descriptor owned by the admin user which has CREATE and USAGE privilege for
 // the public role, and ALL privileges for superusers. It is used for the
 // public schema.
-func NewPublicSchemaPrivilegeDescriptor(includeCreatePriv bool) *PrivilegeDescriptor {
+func NewPublicSchemaPrivilegeDescriptor() *PrivilegeDescriptor {
 	// In postgres, the user "postgres" is the owner of the public schema in a
 	// newly created db. In CockroachDB, admin is our substitute for the postgres
 	// user.
 	p := NewBasePrivilegeDescriptor(username.AdminRoleName())
-
-	if includeCreatePriv {
-		p.Grant(username.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
-	} else {
-		p.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false)
-	}
+	// By default, everyone has USAGE and CREATE on the public schema.
+	// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
+	// the public role will no longer have CREATE privileges.
+	p.Grant(username.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
 	return p
 }
 

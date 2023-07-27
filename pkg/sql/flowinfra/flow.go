@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -273,7 +273,7 @@ func (f *FlowBase) setStatus(status flowStatus) {
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
 ) (context.Context, execopnode.OpChains, error) {
-	ctx, f.mu.ctxCancel = ctxlog.WithCancel(ctx)
+	ctx, f.mu.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 	f.spec = spec
 	return ctx, nil, nil

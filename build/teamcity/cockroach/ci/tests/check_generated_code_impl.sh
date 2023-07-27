@@ -39,12 +39,5 @@ check_workspace_clean 'dev_generate' "Run \`./dev generate\` to automatically re
 # docs.
 bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
 check_workspace_clean 'go_mod_tidy' "Run \`go mod tidy\` to automatically regenerate these."
-# Run `generate-logictest` and ensure nothing changes.
-bazel run //pkg/cmd/generate-logictest -- -out-dir="$PWD"
-check_workspace_clean 'generate_logictest' "Run \`./dev gen testlogic\` to automatically regenerate these."
-
-# NB: If this step fails, then some checksum in the code is probably not
-# matching up to the "real" checksum for that artifact.
-bazel fetch @distdir//:archives
 
 end_check_generated_code_tests

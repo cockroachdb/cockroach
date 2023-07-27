@@ -43,7 +43,6 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -200,7 +199,6 @@ PreCommitPhase stage 2 of 2 with 5 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -442,7 +440,6 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -540,7 +537,7 @@ DROP INDEX idx3 CASCADE
 - from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: constraint no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 5}, DELETE_ONLY]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -596,7 +593,7 @@ DROP INDEX idx3 CASCADE
 - from: [ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT]
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: dependents removed before constraint
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: Precedence
@@ -864,7 +861,6 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1479,7 +1475,6 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 106

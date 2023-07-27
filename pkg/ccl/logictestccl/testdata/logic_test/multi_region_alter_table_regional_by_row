@@ -46,7 +46,7 @@ SELECT status, error FROM [SHOW JOB WHEN COMPLETE $job_id]
 ----
 succeeded  ·
 
-query TI rowsort
+query TI
 SELECT crdb_region, * FROM t
 ----
 ap-southeast-2  1
@@ -79,7 +79,7 @@ SELECT status, error FROM [SHOW JOB WHEN COMPLETE $job_id]
 ----
 succeeded  ·
 
-query I rowsort
+query I
 SELECT * FROM t
 ----
 1

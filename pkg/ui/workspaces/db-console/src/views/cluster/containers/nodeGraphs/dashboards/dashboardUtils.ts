@@ -42,10 +42,6 @@ export interface GraphDashboardProps {
   storeIDsByNodeID: {
     [key: string]: string[];
   };
-
-  // Tenant ID which should be queried for data. This is empty if all tenants
-  // should be queried.
-  tenantSource?: string;
 }
 
 export function nodeDisplayName(

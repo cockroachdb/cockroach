@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,11 +34,11 @@ func TestPurgeSession(t *testing.T) {
 
 	ts := s.(*TestServer)
 	userName := username.TestUserName()
-	if err := ts.CreateAuthUser(userName, false /* isAdmin */); err != nil {
+	if err := ts.createAuthUser(userName, false /* isAdmin */); err != nil {
 		t.Fatal(err)
 	}
 
-	_, hashedSecret, err := authserver.CreateAuthSecret()
+	_, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
 		t.Fatal(err)
 	}

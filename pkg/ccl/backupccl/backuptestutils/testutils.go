@@ -66,13 +66,13 @@ func backupRestoreTestSetupWithParams(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+	params.ServerArgs.DisableDefaultTestTenant = true
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]
 			param.ExternalIODir = dir
 			param.UseDatabase = "data"
-			param.DefaultTestTenant = base.TODOTestTenantDisabled
+			param.DisableDefaultTestTenant = true
 			params.ServerArgsPerNode[i] = param
 		}
 	}
@@ -187,11 +187,6 @@ func CheckForInvalidDescriptors(t testing.TB, sqlDB *gosql.DB) {
 	// acquisition and allows the query to fetch all descriptors in the cluster.
 	rows, err := sqlDB.Query(`SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
 	if err != nil {
-		if testutils.IsError(err, "role .* was concurrently dropped") {
-			// Some tests do not restore users, so the user who owned this session may
-			// no longer exist.
-			return
-		}
 		t.Fatal(err)
 	}
 	invalidIDs, err := sqlutils.RowsToDataDrivenOutput(rows)

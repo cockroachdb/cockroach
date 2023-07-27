@@ -70,18 +70,18 @@ id username  species
 2  jerry     rat
 
 # Renaming a column updates the column names in an index.
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-users       bar         false       1             id           id          ASC        false    false     true     1
-users       bar         false       2             username     username    ASC        false    false     true     1
-users       foo         true        1             username     username    ASC        false    false     true     1
-users       foo         true        2             species      species     N/A        true     false     true     1
-users       foo         true        3             id           id          ASC        false    true      true     1
-users       users_pkey  false       1             id           id          ASC        false    false     true     1
-users       users_pkey  false       2             username     username    N/A        true     false     true     1
-users       users_pkey  false       3             species      species     N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+users       bar         false       1             id           id          ASC        false    false     true
+users       bar         false       2             username     username    ASC        false    false     true
+users       foo         true        1             username     username    ASC        false    false     true
+users       foo         true        2             species      species     N/A        true     false     true
+users       foo         true        3             id           id          ASC        false    true      true
+users       users_pkey  false       1             id           id          ASC        false    false     true
+users       users_pkey  false       2             username     username    N/A        true     false     true
+users       users_pkey  false       3             species      species     N/A        true     false     true
 
 statement ok
 CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'

@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -90,7 +89,6 @@ func migrateTable(
 		}
 
 		// Wait for any in-flight schema changes to complete.
-		// Check legacy schema changer jobs.
 		if mutations := storedTable.GetMutationJobs(); len(mutations) > 0 {
 			for _, mutation := range mutations {
 				log.Infof(ctx, "waiting for the mutation job %v to complete", mutation.JobID)
@@ -101,15 +99,7 @@ func migrateTable(
 			}
 			continue
 		}
-		// Check declarative schema changer jobs.
-		if state := storedTable.GetDeclarativeSchemaChangerState(); state != nil && state.JobID != catpb.InvalidJobID {
-			log.Infof(ctx, "waiting for the mutation job %v to complete", state.JobID)
-			if _, err := d.InternalExecutor.Exec(ctx, "migration-mutations-wait",
-				nil, waitForJobStatement, state.JobID); err != nil {
-				return err
-			}
-			continue
-		}
+
 		// Ignore the schema change if the table already has the required schema.
 		// Expect all or none.
 		var exists bool

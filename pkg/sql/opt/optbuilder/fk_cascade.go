@@ -86,8 +86,6 @@ func (cb *onDeleteCascadeBuilder) Build(
 	oldValues, newValues opt.ColList,
 ) (_ memo.RelExpr, err error) {
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
-
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
@@ -279,8 +277,6 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	_, _ opt.ColList,
 ) (_ memo.RelExpr, err error) {
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
-
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
@@ -430,8 +426,6 @@ func (cb *onDeleteSetBuilder) Build(
 	oldValues, newValues opt.ColList,
 ) (_ memo.RelExpr, err error) {
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
-
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
@@ -645,8 +639,6 @@ func (cb *onUpdateCascadeBuilder) Build(
 	oldValues, newValues opt.ColList,
 ) (_ memo.RelExpr, err error) {
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
-
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())

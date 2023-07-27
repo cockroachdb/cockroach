@@ -34,7 +34,7 @@ db        ap-southeast-2  true     false      {ap-az1,ap-az2,ap-az3}
 statement ok
 CREATE DATABASE db_explicit_primary_region PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2"
 
-query TTBBT colnames,rowsort
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE db_explicit_primary_region
 ----
 database                    region          primary  secondary  zones

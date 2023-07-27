@@ -6,7 +6,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 # keep
 go_library(
     name = "pebbleiter",
-    srcs = ["pebbleiter.go"] + select({
+    srcs = select({
         "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
         "//conditions:default": [":gen-crdb-test-off"],
     }),

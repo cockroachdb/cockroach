@@ -23,8 +23,6 @@ type RaftTransportMetrics struct {
 
 	ReverseSent *metric.Counter
 	ReverseRcvd *metric.Counter
-
-	FlowTokenDispatchesDropped *metric.Counter
 }
 
 func (t *RaftTransport) initMetrics() {
@@ -91,13 +89,6 @@ responses to Raft messages. Responses are sent over another stream.`,
 These messages should be rare. They are mostly informational, and are not actual
 responses to Raft messages. Responses are received over another stream.`,
 			Measurement: "Messages",
-			Unit:        metric.Unit_COUNT,
-		}),
-
-		FlowTokenDispatchesDropped: metric.NewCounter(metric.Metadata{
-			Name:        "raft.transport.flow-token-dispatches-dropped",
-			Help:        "Number of flow token dispatches dropped by the Raft Transport",
-			Measurement: "Dispatches",
 			Unit:        metric.Unit_COUNT,
 		}),
 	}

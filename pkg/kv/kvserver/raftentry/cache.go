@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -100,11 +99,11 @@ const partitionSize = int32(unsafe.Sizeof(partition{}))
 // implement the below interface.
 type rangeCache interface {
 	add(ent []raftpb.Entry) (bytesAdded, entriesAdded int32)
-	truncateFrom(lo kvpb.RaftIndex) (bytesRemoved, entriesRemoved int32)
-	clearTo(hi kvpb.RaftIndex) (bytesRemoved, entriesRemoved int32)
-	get(index kvpb.RaftIndex) (raftpb.Entry, bool)
-	scan(ents []raftpb.Entry, lo, hi kvpb.RaftIndex, maxBytes uint64) (
-		_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool)
+	truncateFrom(lo uint64) (bytesRemoved, entriesRemoved int32)
+	clearTo(hi uint64) (bytesRemoved, entriesRemoved int32)
+	get(index uint64) (raftpb.Entry, bool)
+	scan(ents []raftpb.Entry, lo, hi, maxBytes uint64) (
+		_ []raftpb.Entry, bytes uint64, nextIdx uint64, exceededMaxBytes bool)
 }
 
 // ringBuf implements rangeCache.
@@ -189,7 +188,7 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 		// Note that ents[0].Index may not even be in the cache
 		// at this point. `truncateFrom` will still remove any entries
 		// it may have at indexes >= truncIdx, as instructed.
-		truncIdx := kvpb.RaftIndex(ents[0].Index)
+		truncIdx := ents[0].Index
 		bytesRemoved, entriesRemoved = p.truncateFrom(truncIdx)
 	}
 	if add {
@@ -199,7 +198,7 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 }
 
 // Clear removes all entries on the given range with index less than hi.
-func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
+func (c *Cache) Clear(id roachpb.RangeID, hi uint64) {
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, false /* recordUse */)
 	if p == nil {
@@ -215,7 +214,7 @@ func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
 
 // Get returns the entry for the specified index and true for the second return
 // value. If the index is not present in the cache, false is returned.
-func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
+func (c *Cache) Get(id roachpb.RangeID, idx uint64) (e raftpb.Entry, ok bool) {
 	c.metrics.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
@@ -240,8 +239,8 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 // cache miss occurs. The returned size reflects the size of the returned
 // entries.
 func (c *Cache) Scan(
-	ents []raftpb.Entry, id roachpb.RangeID, lo, hi kvpb.RaftIndex, maxBytes uint64,
-) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
+	ents []raftpb.Entry, id roachpb.RangeID, lo, hi, maxBytes uint64,
+) (_ []raftpb.Entry, bytes uint64, nextIdx uint64, exceededMaxBytes bool) {
 	c.metrics.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)

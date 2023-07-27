@@ -154,15 +154,17 @@ here: https://storybook.js.org/docs/react/api/csf in order to
 facilitate writing unit tests with the storybook components.
 
 ## Publishing Cluster UI package to npm
-### Automatic Publishing with Github Actions
-Publishing Cluster UI versions to npm is done by Github Action workflows that run
-on master and release branches. "Publish Cluster UI Pre-release" runs on master,
-and "Publish Cluster UI Release" for commits merged to release branches. These
-workflows will publish to npm anytime a version of Cluster UI is merged to the branch
-that is unpublished (by comparing the version in the `package.json` to versions of
-`@cockroachlabs/cluster-ui` on npm).
+Publishing Cluster UI pre-release versions from the master branch to npm is done
+by a Github Action workflow called "Publish Cluster UI Pre-release". This workflow
+will publish to npm anytime a version of Cluster UI is merged to master that is
+unpublished (by comparing the version in the `package.json` to versions of
+`@cockroachlabs/cluster-ui` on npm). To change the version of Cluster UI, you can
+run the command `pnpm bump` from `pkg/ui/workspaces/cluster-ui`.
 
-Follow the steps below on your feature branch:
+To publish a version from a release branch, a manual publish is still required.
+The steps below can be followed to manually publish to npm. Github Workflows are
+being worked on for release branches, and this README will be updated when they
+are available.
 
 ### 1. Bump Cluster UI Version
 Run `pnpm bump` from `pkg/ui/workspaces/cluster-ui`, or change the version manually

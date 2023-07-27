@@ -75,7 +75,7 @@ CREATE TABLE "A delightful name for a schema!".rbr (i INT PRIMARY KEY) LOCALITY 
 CREATE TABLE sc.rbt (i INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE;
 
 query TTTTIT
-SELECT * FROM [SHOW TABLES] ORDER BY 1
+SHOW TABLES
 ----
 A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW
 public                           g    table  root  0  GLOBAL
@@ -85,7 +85,7 @@ statement ok
 use defaultdb
 
 query TTTTIT
-SELECT * FROM [SHOW TABLES FROM "This is a fun name, no?"] ORDER BY 1
+SHOW TABLES FROM "This is a fun name, no?"
 ----
 A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW
 public                           g    table  root  0  GLOBAL

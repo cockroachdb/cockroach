@@ -12,7 +12,6 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
-  createSelectorForCachedDataField,
   refreshNodes,
   refreshTxns,
   refreshUserSQLRoles,
@@ -30,8 +29,8 @@ import {
   defaultFilters,
   util,
   TransactionsPageStateProps,
-  ActiveTransactionsViewDispatchProps,
-  ActiveTransactionsViewStateProps,
+  RecentTransactionsViewDispatchProps,
+  RecentTransactionsViewStateProps,
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
@@ -42,11 +41,26 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
 import {
-  activeTransactionsPageActionCreators,
-  mapStateToActiveTransactionsPageProps,
-} from "./activeTransactionsSelectors";
+  recentTransactionsPageActionCreators,
+  mapStateToRecentTransactionsPageProps,
+} from "./recentTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
+import {
+  selectTxnsLastUpdated,
+  selectTxnsDataValid,
+  selectTxnsDataInFlight,
+} from "src/selectors/executionFingerprintsSelectors";
 import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
+
+// selectData returns the array of AggregateStatistics to show on the
+// TransactionsPage, based on if the appAttr route parameter is set.
+export const selectData = createSelector(
+  (state: AdminUIState) => state.cachedData.transactions,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => {
+    if (!state.data || !state.valid) return null;
+    return state.data;
+  },
+);
 
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
@@ -59,6 +73,11 @@ export const selectLastReset = createSelector(
 
     return PrintTime(util.TimestampToMoment(state.data.last_reset));
   },
+);
+
+export const selectLastError = createSelector(
+  (state: AdminUIState) => state.cachedData.transactions,
+  (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
 export const sortSettingLocalSetting = new LocalSetting(
@@ -103,9 +122,6 @@ export const limitSetting = new LocalSetting(
   api.DEFAULT_STATS_REQ_OPTIONS.limit,
 );
 
-export const selectTxns =
-  createSelectorForCachedDataField<api.SqlStatsResponse>("transactions");
-
 const fingerprintsPageActions = {
   refreshData: refreshTxns,
   refreshNodes,
@@ -139,12 +155,12 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveTransactionsViewStateProps;
+  activePageProps: RecentTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: ActiveTransactionsViewDispatchProps;
+  activePageProps: RecentTransactionsViewDispatchProps;
 };
 
 const TransactionsPageConnected = withRouter(
@@ -158,19 +174,24 @@ const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
-        txnsResp: selectTxns(state),
+        data: selectData(state),
+        isDataValid: selectTxnsDataValid(state),
+        isReqInFlight: selectTxnsDataInFlight(state),
+        lastUpdated: selectTxnsLastUpdated(state),
         timeScale: selectTimeScale(state),
+        error: selectLastError(state),
         filters: filtersLocalSetting.selector(state),
         lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
+        statementsError: state.cachedData.transactions.lastError,
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
         requestTime: requestTimeLocalSetting.selector(state),
       },
-      activePageProps: mapStateToActiveTransactionsPageProps(state),
+      activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
     dispatch => ({
       fingerprintsPageProps: bindActionCreators(
@@ -178,7 +199,7 @@ const TransactionsPageConnected = withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        activeTransactionsPageActionCreators,
+        recentTransactionsPageActionCreators,
         dispatch,
       ),
     }),

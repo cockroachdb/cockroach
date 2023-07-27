@@ -45,7 +45,8 @@ import (
 // AddMessage can be called multiple times before getting the rows, but this
 // will cause data to accumulate internally.
 type StreamDecoder struct {
-	types        []*types.T
+	types []*types.T
+	// TODO(yuzefovich): move catenumpb.DatumEncoding into execinfrapb.
 	encoding     []catenumpb.DatumEncoding
 	data         []byte
 	numEmptyRows int

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -43,18 +42,6 @@ func (p *planner) EvalRoutineExpr(
 	// Return the cached result if it exists.
 	if expr.CachedResult != nil {
 		return expr.CachedResult, nil
-	}
-
-	if expr.TailCall && !expr.Generator && p.EvalContext().RoutineSender != nil {
-		// This is a nested routine in tail-call position.
-		if !p.curPlan.flags.IsDistributed() && tailCallOptimizationEnabled {
-			// Tail-call optimizations are enabled. Send the information needed to
-			// evaluate this routine to the parent routine, then return. It is safe to
-			// return NULL here because the parent is guaranteed not to perform any
-			// processing on the result of the child.
-			p.EvalContext().RoutineSender.SendDeferredRoutine(expr, args)
-			return tree.DNull, nil
-		}
 	}
 
 	var g routineGenerator
@@ -111,16 +98,9 @@ type routineGenerator struct {
 	rch      rowContainerHelper
 	rci      *rowContainerIterator
 	currVals tree.Datums
-	// deferredRoutine encapsulates the information needed to execute a nested
-	// routine that has deferred its execution.
-	deferredRoutine struct {
-		expr *tree.RoutineExpr
-		args tree.Datums
-	}
 }
 
 var _ eval.ValueGenerator = &routineGenerator{}
-var _ eval.DeferredRoutineSender = &routineGenerator{}
 
 // init initializes a routineGenerator.
 func (g *routineGenerator) init(p *planner, expr *tree.RoutineExpr, args tree.Datums) {
@@ -137,28 +117,11 @@ func (g *routineGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the ValueGenerator interface.
-func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
-	for {
-		err = g.startInternal(ctx, txn)
-		if err != nil || g.deferredRoutine.expr == nil {
-			// No tail-call optimization.
-			return err
-		}
-		// A nested routine in tail-call position deferred its execution until now.
-		// Since it's in tail-call position, evaluating it will give the result of
-		// this routine as well.
-		p, expr, args := g.p, g.deferredRoutine.expr, g.deferredRoutine.args
-		g.Close(ctx)
-		g.init(p, expr, args)
-	}
-}
-
-// startInternal implements logic for a single execution of a routine.
 // TODO(mgartner): We can cache results for future invocations of the routine by
 // creating a new iterator over an existing row container helper if the routine
 // is cache-able (i.e., there are no arguments to the routine and stepping is
 // disabled).
-func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err error) {
+func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	rt := g.expr.ResolvedType()
 	var retTypes []*types.T
 	if g.expr.MultiColOutput {
@@ -176,7 +139,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	// invoking statement are visible to the routine.
 	if g.expr.EnableStepping {
 		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-		prevSeqNum := txn.GetReadSeqNum()
+		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
 		defer func() {
 			// If the routine errored, the transaction should be aborted, so
 			// there is no need to reconfigure stepping or revert to the
@@ -216,7 +179,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		}
 
 		// Run the plan.
-		err = runPlanInsidePlan(ctx, g.p.RunParams(ctx), plan.(*planComponents), w, g)
+		err = runPlanInsidePlan(ctx, g.p.RunParams(ctx), plan.(*planComponents), w)
 		if err != nil {
 			return err
 		}
@@ -250,19 +213,9 @@ func (g *routineGenerator) Values() (tree.Datums, error) {
 func (g *routineGenerator) Close(ctx context.Context) {
 	if g.rci != nil {
 		g.rci.Close()
+		g.rci = nil
 	}
 	g.rch.Close(ctx)
-	*g = routineGenerator{}
-}
-
-var tailCallOptimizationEnabled = util.ConstantWithMetamorphicTestBool(
-	"tail-call-optimization-enabled",
-	true,
-)
-
-func (g *routineGenerator) SendDeferredRoutine(routine *tree.RoutineExpr, args tree.Datums) {
-	g.deferredRoutine.expr = routine
-	g.deferredRoutine.args = args
 }
 
 // droppingResultWriter drops all rows that are added to it. It only tracks

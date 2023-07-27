@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -59,39 +59,36 @@ const (
 RETURNING id;`
 )
 
-// maybeDumpTrace will conditionally persist the trace recording of the job's
-// current resumer for consumption by job profiler tools. This method must be
-// invoked before the tracing span corresponding to the job's current resumer is
-// Finish()'ed.
-func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, jobID jobspb.JobID) {
-	if tj, ok := resumer.(TraceableJob); !ok || !tj.DumpTraceAfterRun() {
+func (r *Registry) maybeDumpTrace(
+	resumerCtx context.Context, resumer Resumer, jobID, traceID int64, jobErr error,
+) {
+	if _, ok := resumer.(TraceableJob); !ok || r.td == nil {
+		return
+	}
+	dumpMode := traceableJobDumpTraceMode.Get(&r.settings.SV)
+	if dumpMode == int64(noDump) {
 		return
 	}
 
 	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
-	sp := tracing.SpanFromContext(resumerCtx)
-	if sp == nil || sp.IsNoop() {
-		// Should never be true since TraceableJobs force real tracing spans to be
-		// attached to the context.
+
+	ieNotBoundToTxn := r.db.Executor()
+
+	// If the job has failed, and the dump mode is set to anything
+	// except noDump, then we should dump the trace.
+	// The string comparison is unfortunate but is used to differentiate a job
+	// that has failed from a job that has been canceled.
+	if jobErr != nil && !HasErrJobCanceled(jobErr) && resumerCtx.Err() == nil {
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
 		return
 	}
 
-	if !r.settings.Version.IsActive(dumpCtx, clusterversion.V23_1) {
-		return
-	}
-
-	resumerTraceFilename := fmt.Sprintf("resumer-trace-n%s.%s.txt",
-		r.ID().String(), timeutil.Now().Format("20060102_150405.00"))
-	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
-	b, err := protoutil.Marshal(&td)
-	if err != nil {
-		return
-	}
-	if err := WriteExecutionDetailFile(dumpCtx, resumerTraceFilename, b, r.db, jobID); err != nil {
-		log.Warning(dumpCtx, "failed to write trace on resumer trace file")
-		return
+	// If the dump mode is set to `dumpOnStop` then we should dump the
+	// trace when the job is any of paused, canceled, succeeded or failed state.
+	if dumpMode == int64(dumpOnStop) {
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
 	}
 }
 
@@ -331,15 +328,7 @@ func (r *Registry) resumeJob(
 				return err
 			}
 			if !exists {
-				// 23.1.3 could finalize an upgrade but leave some jobs behind with rows
-				// not copied to info table. If we get here, try backfilling the info
-				// table for this job in the txn and proceed if it succeeds.
-				fixedPayload, err := infoStorage.BackfillLegacyPayload(ctx)
-				if err != nil {
-					return errors.Wrap(err, "job payload not found in system.job_info")
-				}
-				log.Infof(ctx, "fixed missing payload info for job %d", jobID)
-				payloadBytes = fixedPayload
+				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
 			}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
 				return err
@@ -350,12 +339,7 @@ func (r *Registry) resumeJob(
 				return err
 			}
 			if !exists {
-				fixedProgress, err := infoStorage.BackfillLegacyProgress(ctx)
-				if err != nil {
-					return errors.Wrap(err, "job progress not found in system.job_info")
-				}
-				log.Infof(ctx, "fixed missing progress info for job %d", jobID)
-				progressBytes = fixedProgress
+				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
 			}
 			return protoutil.Unmarshal(progressBytes, progress)
 		}); err != nil {
@@ -455,7 +439,7 @@ func (r *Registry) runJob(
 	defer r.unregister(job.ID())
 
 	// Bookkeeping.
-	execCtx, cleanup := r.execCtx(ctx, "resume-"+taskName, username)
+	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
 	defer cleanup()
 
 	// Create a new root span to trace the execution of the current instance of
@@ -500,7 +484,7 @@ func (r *Registry) runJob(
 	// and further updates to the job record from this node may
 	// fail.
 	r.maybeClearLease(job, err)
-	r.maybeDumpTrace(ctx, resumer, job.ID())
+	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine()
 	}

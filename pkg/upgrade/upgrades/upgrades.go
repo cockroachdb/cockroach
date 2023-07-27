@@ -110,6 +110,12 @@ var upgrades = []upgradebase.Upgrade{
 		ensureSQLSchemaTelemetrySchedule,
 		"add default SQL schema telemetry schedule",
 	),
+	upgrade.NewTenantUpgrade(
+		"wait for all in-flight schema changes",
+		toCV(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable),
+		upgrade.NoPrecondition,
+		waitForAllSchemaChanges,
+	),
 	firstUpgradeTowardsV23_1,
 	upgrade.NewTenantUpgrade("add columns to system.tenants and populate a system tenant entry",
 		toCV(clusterversion.V23_1TenantNamesStateAndServiceMode),
@@ -255,7 +261,7 @@ var upgrades = []upgradebase.Upgrade{
 		backfillExternalConnectionsTableOwnerIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
-		"backfill the system.job_info table with the payload and progress of each job in the system.jobs table",
+		"backfill the system.jobs_info table with the payload and progress of each job in the system.jobs table",
 		toCV(clusterversion.V23_1JobInfoTableIsBackfilled),
 		upgrade.NoPrecondition,
 		backfillJobInfoTable,
@@ -310,13 +316,6 @@ var upgrades = []upgradebase.Upgrade{
 		createActivityUpdateJobMigration,
 		"create statement_activity and transaction_activity job",
 	),
-	firstUpgradeTowardsV23_2,
-	upgrade.NewTenantUpgrade(
-		"enable partially visible indexes",
-		toCV(clusterversion.V23_2_PartiallyVisibleIndexes),
-		upgrade.NoPrecondition,
-		NoTenantUpgradeFunc,
-	),
 }
 
 var (
@@ -327,21 +326,15 @@ var (
 		NoTenantUpgradeFunc,
 	)
 
-	firstUpgradeTowardsV23_2 = upgrade.NewTenantUpgrade(
-		"prepare upgrade to v23.2 release",
-		toCV(clusterversion.V23_2Start),
-		FirstUpgradeFromReleasePrecondition,
-		FirstUpgradeFromRelease,
-	)
-
 	// This slice must contain all upgrades bound to V??_?Start cluster
-	// version keys. These should have FirstUpgradeFromReleasePrecondition as a
-	// precondition and FirstUpgradeFromRelease as the upgrade function itself,
-	// except for V23_1Start which remains a no-op, due to this functionality
-	// having been added in the 23.2 release cycle.
+	// version keys. In this release branch, this means V23_1Start.
+	//
+	// These should have FirstUpgradeFromReleasePrecondition as a
+	// precondition and NoTenantUpgradeFunc as the upgrade function itself,
+	// due to this functionality having been added in the 23.2 release cycle
+	// and backported into this release branch.
 	firstUpgradesAfterPreExistingReleases = []upgradebase.Upgrade{
 		firstUpgradeTowardsV23_1,
-		firstUpgradeTowardsV23_2,
 	}
 )
 

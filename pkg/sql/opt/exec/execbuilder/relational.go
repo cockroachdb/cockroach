@@ -17,7 +17,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -620,9 +619,18 @@ func (b *Builder) scanParams(
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
 
-	locking, err := b.buildLocking(scan.Locking)
-	if err != nil {
-		return exec.ScanParams{}, opt.ColMap{}, err
+	locking := scan.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
+
+	// Raise error if row-level locking is part of a read-only transaction.
+	// TODO(nvanbenschoten): this check should be shared across all expressions
+	// that can perform row-level locking.
+	if locking.IsLocking() && b.evalCtx.TxnReadOnly {
+		return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot execute %s in a read-only transaction", locking.Strength.String())
 	}
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
@@ -753,7 +761,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{},
 			errors.AssertionFailedf("expected inverted index scan to have an inverted constraint")
 	}
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
@@ -2161,7 +2169,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	// TODO(radu): the distsql implementation of index join assumes that the input
 	// starts with the PK columns in order (#40749).
 	pri := tab.Index(cat.PrimaryIndex)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), pri.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), pri.ID())})
 	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
 		keyCols[i], err = input.getNodeColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal()))
@@ -2173,10 +2181,11 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	cols := join.Cols
 	needed, output := b.getColumns(cols, join.Table)
 
-	locking, err := b.buildLocking(join.Locking)
-	if err != nil {
-		return execPlan{}, err
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	res := execPlan{outputCols: output}
 	b.recordJoinAlgorithm(exec.IndexJoin)
@@ -2491,12 +2500,13 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
 
-	locking, err := b.buildLocking(join.Locking)
-	if err != nil {
-		return execPlan{}, err
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
@@ -2665,7 +2675,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	md := b.mem.Metadata()
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
 
 	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
 	for i, c := range join.PrefixKeyCols {
@@ -2734,10 +2744,11 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		return execPlan{}, err
 	}
 
-	locking, err := b.buildLocking(join.Locking)
-	if err != nil {
-		return execPlan{}, err
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
@@ -2777,9 +2788,9 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	rightTable := md.Table(join.RightTable)
 	leftIndex := leftTable.Index(join.LeftIndex)
 	rightIndex := rightTable.Index(join.RightIndex)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed,
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed,
 		[]string{fmt.Sprintf("%d@%d", leftTable.ID(), leftIndex.ID())})
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed,
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed,
 		[]string{fmt.Sprintf("%d@%d", rightTable.ID(), rightIndex.ID())})
 
 	leftEqCols := make([]exec.TableColumnOrdinal, len(join.LeftEqCols))
@@ -2813,14 +2824,13 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
 
-	leftLocking, err := b.buildLocking(join.LeftLocking)
-	if err != nil {
-		return execPlan{}, err
+	leftLocking := join.LeftLocking
+	rightLocking := join.RightLocking
+	if b.forceForUpdateLocking {
+		leftLocking = forUpdateLocking
+		rightLocking = forUpdateLocking
 	}
-	rightLocking, err := b.buildLocking(join.RightLocking)
-	if err != nil {
-		return execPlan{}, err
-	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || leftLocking.IsLocking() || rightLocking.IsLocking()
 
 	allCols := joinOutputMap(leftColMap, rightColMap)
 
@@ -2883,29 +2893,6 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 
 	// Apply a post-projection to retain only the columns we need.
 	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
-}
-
-func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
-	if b.forceForUpdateLocking {
-		locking = locking.Max(forUpdateLocking)
-	}
-	if locking.IsLocking() {
-		// Raise error if row-level locking is part of a read-only transaction.
-		if b.evalCtx.TxnReadOnly {
-			return opt.Locking{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", locking.Strength.String(),
-			)
-		}
-		if locking.Durability == tree.LockDurabilityGuaranteed &&
-			b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			return opt.Locking{}, unimplemented.NewWithIssuef(
-				100144, "cannot execute SELECT FOR UPDATE statements under %s isolation",
-				b.evalCtx.TxnIsoLevel,
-			)
-		}
-		b.ContainsNonDefaultKeyLocking = true
-	}
-	return locking, nil
 }
 
 func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {

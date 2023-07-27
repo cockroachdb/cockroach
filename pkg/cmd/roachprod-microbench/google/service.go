@@ -15,13 +15,13 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/maps"
+	//lint:ignore SA1019 benchstat is deprecated; refactor to use benchproc and
+	// benchmath packages.
+	"golang.org/x/perf/benchstat"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -79,25 +79,17 @@ func (srv *Service) testServices(ctx context.Context) error {
 
 // CreateSheet creates a new Google spreadsheet with the provided metric data.
 func (srv *Service) CreateSheet(
-	ctx context.Context, name string, metricMap model.MetricMap, oldID, newID string,
+	ctx context.Context, name string, tables []*benchstat.Table,
 ) (string, error) {
 	var s sheets.Spreadsheet
 	s.Properties = &sheets.SpreadsheetProperties{Title: name}
 
-	// Sort sheets by name.
-	sheetNames := make([]string, 0, len(metricMap))
-	for sheetName := range metricMap {
-		sheetNames = append(sheetNames, sheetName)
-	}
-	sort.Strings(sheetNames)
-
 	// Raw data sheets.
-	sheetInfos := make([]rawSheetInfo, len(metricMap))
-	for idx, sheetName := range sheetNames {
-		m := metricMap[sheetName]
-		sh, info := srv.createRawSheet(m, oldID, newID, idx)
+	sheetInfos := make([]rawSheetInfo, len(tables))
+	for i, t := range tables {
+		sh, info := srv.createRawSheet(t, i)
 		s.Sheets = append(s.Sheets, sh)
-		sheetInfos[idx] = info
+		sheetInfos[i] = info
 	}
 
 	// Pivot table overview sheet. Place in front.
@@ -120,7 +112,7 @@ func (srv *Service) CreateSheet(
 
 type rawSheetInfo struct {
 	id          int64
-	metric      *model.Metric
+	table       *benchstat.Table
 	grid        *sheets.GridProperties
 	deltaCol    int64
 	nonZeroVals []string
@@ -135,18 +127,15 @@ type rawSheetInfo struct {
 //	| Benchmark1 |            290026.2 |              290075 | -34.29% | (p=0.008 n=5+5) |
 //	| Benchmark2 |               15588 |             15717.6 |  ~      | (p=0.841 n=5+5) |
 //	                                          ...
-func (srv *Service) createRawSheet(
-	metric *model.Metric, oldID, newID string, tIdx int,
-) (*sheets.Sheet, rawSheetInfo) {
+func (srv *Service) createRawSheet(t *benchstat.Table, tIdx int) (*sheets.Sheet, rawSheetInfo) {
 	sheetID := sheetIDForTable(tIdx)
-	runs := []string{oldID, newID}
 
 	var info rawSheetInfo
-	info.metric = metric
+	info.table = t
 	info.id = sheetID
 
 	props := &sheets.SheetProperties{
-		Title:   "Raw: " + metric.Name,
+		Title:   "Raw: " + t.Metric,
 		SheetId: sheetID,
 	}
 
@@ -163,9 +152,13 @@ func (srv *Service) createRawSheet(
 		metadata = append(metadata, withSize(400))
 
 		// Columns: Metric names.
-		for _, run := range runs {
-			name := fmt.Sprintf("%s %s (%s)", run, metric.Name, metric.Unit)
-			vals = append(vals, strCell(name))
+		for j, cfg := range t.Configs {
+			unit := fmt.Sprintf("%s %s", cfg, t.Metric)
+			if len(t.Rows) > 0 {
+				metric := t.Rows[0].Metrics[j]
+				unit = fmt.Sprintf("%s (%s)", unit, metric.Unit)
+			}
+			vals = append(vals, strCell(unit))
 			metadata = append(metadata, withSize(150))
 		}
 
@@ -182,48 +175,25 @@ func (srv *Service) createRawSheet(
 		data = append(data, &sheets.RowData{Values: vals})
 	}
 
-	// Compute comparisons for each benchmark present in both runs.
-	comparisons := make(map[string]*model.Comparison)
-	for name := range metric.BenchmarkEntries {
-		comparison := metric.ComputeComparison(name, oldID, newID)
-		if comparison != nil {
-			comparisons[name] = comparison
-		}
-	}
-
-	// Sort comparisons by delta, or the benchmark name if no delta is available.
-	keys := maps.Keys(comparisons)
-	sort.Slice(keys, func(i, j int) bool {
-		d1 := comparisons[keys[i]].Delta * float64(metric.Better)
-		d2 := comparisons[keys[j]].Delta * float64(metric.Better)
-		if d1 == d2 {
-			return keys[i] < keys[j]
-		}
-		return d1 > d2
-	})
-
 	// Data rows.
-	for _, name := range keys {
-		entry := metric.BenchmarkEntries[name]
-		comparison := comparisons[name]
+	for _, row := range t.Rows {
 		var vals []*sheets.CellData
-		vals = append(vals, strCell(name))
-		for _, run := range runs {
-			vals = append(vals, numCell(entry.Summaries[run].Center))
+		vals = append(vals, strCell(row.Benchmark))
+		for _, val := range row.Metrics {
+			vals = append(vals, numCell(val.Mean))
 		}
-		delta := comparison.FormattedDelta
-		if delta == "~" || delta == "?" {
-			vals = append(vals, strCell(delta))
+		if row.Delta == "~" {
+			vals = append(vals, strCell(row.Delta))
 		} else {
-			vals = append(vals, percentCell(deltaToNum(delta)))
-			info.nonZeroVals = append(info.nonZeroVals, deltaToPercentString(delta))
+			vals = append(vals, percentCell(deltaToNum(row.Delta)))
+			info.nonZeroVals = append(info.nonZeroVals, deltaToPercentString(row.Delta))
 		}
-		vals = append(vals, strCell(comparison.Distribution.String()))
+		vals = append(vals, strCell(row.Note))
 		data = append(data, &sheets.RowData{Values: vals})
 	}
 
 	// Conditional formatting.
-	cf := condFormatting(sheetID, info.deltaCol, metric.Better < 0)
+	cf := condFormatting(sheetID, info.deltaCol, isSmallerBetter(t))
 
 	// Grid properties.
 	grid := &sheets.GridProperties{
@@ -246,7 +216,7 @@ func (srv *Service) createRawSheet(
 	return sheet, info
 }
 
-// createOverviewSheet creates a new sheet that contains an overview of all raw
+// createRawSheet creates a new sheet that contains an overview of all raw
 // metric data using pivot tables. The sheet is formatted like:
 //
 //	+------------+---------+----+------------+----------+
@@ -276,13 +246,13 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 		// If there were no significant changes in this table, don't create
 		// a pivot table.
 		if len(info.nonZeroVals) == 0 {
-			noChanges := fmt.Sprintf("no change in %s", info.metric.Name)
+			noChanges := fmt.Sprintf("no change in %s", info.table.Metric)
 			vals = append(vals, strCell(noChanges))
 			metadata = append(metadata, withSize(200))
 			continue
 		}
 
-		smallerBetter := info.metric.Better < 0
+		smallerBetter := isSmallerBetter(info.table)
 		sortOrder := "DESCENDING"
 		if smallerBetter {
 			sortOrder = "ASCENDING"
@@ -306,7 +276,7 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 				}},
 				Values: []*sheets.PivotValue{{
 					SourceColumnOffset: info.deltaCol,
-					Name:               info.metric.Name,
+					Name:               info.table.Metric,
 					SummarizeFunction:  "AVERAGE",
 				}},
 				Criteria: map[string]sheets.PivotFilterCriteria{
@@ -421,6 +391,12 @@ func deltaToPercentString(delta string) string {
 		}
 	}
 	return delta
+}
+
+func isSmallerBetter(table *benchstat.Table) bool {
+	// "smaller is better, except speeds"
+	//  https://github.com/golang/perf/blob/master/benchstat/table.go#L110
+	return (table.Metric != "speed")
 }
 
 func withSize(pixels int64) *sheets.DimensionProperties {

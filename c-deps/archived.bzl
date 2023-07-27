@@ -4,7 +4,7 @@ load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain")
 
 # NB: URL_TMPL and LOC are used by generate-distdir. Don't change the format or
 # name of these definitions unless you update generate-distdir accordingly.
-LOC = "20230718-202534"
+LOC = "20230718-201514"
 URL_TMPL = "https://storage.googleapis.com/public-bazel-artifacts/c-deps/{loc}/{lib}_foreign.{config}.{loc}.tar.gz"
 
 # NB: When we link with the krb5 libraries, we want the linker to see them in
@@ -92,15 +92,8 @@ _archived_cdep = rule(
 )
 
 def archived_cdeps():
-    for lib in ["libjemalloc", "libproj"]:
+    for lib in ["libgeos", "libjemalloc", "libproj"]:
         for config in ["linux", "linuxarm", "macos", "macosarm", "windows"]:
-            _archived_cdep(
-                name = "archived_cdep_{}_{}".format(lib, config),
-                headers = "@archived_cdep_{}_{}//:headers".format(lib, config),
-                libs = "@archived_cdep_{}_{}//:libs".format(lib, config),
-            )
-    for lib in ["libgeos"]:
-        for config in ["linux", "linuxarm", "macos", "macosarm"]:  # No libgeos for windows.
             _archived_cdep(
                 name = "archived_cdep_{}_{}".format(lib, config),
                 headers = "@archived_cdep_{}_{}//:headers".format(lib, config),
@@ -150,8 +143,7 @@ def cdep_alias(lib):
     if lib != "libkrb5":
         actual["//build/toolchains:is_darwin_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_macos".format(lib)
         actual["//build/toolchains:is_darwin_arm64_no_force_build_cdeps"] = ":archived_cdep_{}_macosarm".format(lib)
-        if lib != "libgeos":
-            actual["//build/toolchains:is_windows_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_windows".format(lib)
+        actual["//build/toolchains:is_windows_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_windows".format(lib)
     native.alias(
         name = lib,
         actual = select(actual),

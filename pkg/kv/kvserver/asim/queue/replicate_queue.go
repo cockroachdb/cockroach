@@ -13,76 +13,57 @@ package queue
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type replicateQueue struct {
 	baseQueue
-	planner  plan.ReplicationPlanner
-	clock    *hlc.Clock
-	settings *config.SimulationSettings
+	allocator allocatorimpl.Allocator
+	storePool storepool.AllocatorStorePool
+	delay     func(rangeSize int64, add bool) time.Duration
 }
 
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
 	stateChanger state.Changer,
-	settings *config.SimulationSettings,
+	delay func(rangeSize int64, add bool) time.Duration,
 	allocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
-	rq := replicateQueue{
+	return &replicateQueue{
 		baseQueue: baseQueue{
-			AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
-			priorityQueue:  priorityQueue{items: make([]*replicaItem, 0, 1)},
-			storeID:        storeID,
-			stateChanger:   stateChanger,
-			next:           start,
+			priorityQueue: priorityQueue{items: make([]*replicaItem, 0, 1)},
+			storeID:       storeID,
+			stateChanger:  stateChanger,
+			next:          start,
 		},
-		settings: settings,
-		planner: plan.NewReplicaPlanner(
-			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
-		clock: storePool.Clock(),
+		delay:     delay,
+		allocator: allocator,
+		storePool: storePool,
 	}
-	rq.AddLogTag("rq", nil)
-	return &rq
-}
-
-func simCanTransferleaseFrom(ctx context.Context, repl plan.LeaseCheckReplica) bool {
-	return true
 }
 
 // MaybeAdd proposes a replica for inclusion into the ReplicateQueue, if it
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a non-noop, then the replica is added.
-func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
-	repl := NewSimulatorReplica(replica, s)
-	rq.AddLogTag("r", repl.repl.Descriptor())
-	rq.AnnotateCtx(ctx)
+func (rq *replicateQueue) MaybeAdd(
+	ctx context.Context, replica state.Replica, state state.State,
+) bool {
+	rng, ok := state.Range(replica.Range())
+	if !ok {
+		return false
+	}
 
-	_, config := repl.DescAndSpanConfig()
-	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s",
-		repl.repl.Descriptor(), &config)
-
-	shouldPlanChange, priority := rq.planner.ShouldPlanChange(
-		ctx,
-		rq.clock.NowAsClockTimestamp(),
-		repl,
-		simCanTransferleaseFrom,
-	)
-
-	if !shouldPlanChange {
+	action, priority := rq.allocator.ComputeAction(ctx, rq.storePool, rng.SpanConfig(), rng.Descriptor())
+	if action == allocatorimpl.AllocatorNoop {
 		return false
 	}
 
@@ -102,9 +83,9 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 // on the action taken. Replicas in the queue are processed in order of
 // priority, then in FIFO order on ties. The Tick function currently only
 // supports processing ConsiderRebalance actions on replicas.
+// TODO(kvoli,lidorcarmel): Support taking additional actions, beyond consider
+// rebalance.
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
-	rq.AddLogTag("tick", tick)
-	ctx = rq.ResetAndAnnotateCtx(ctx)
 	if rq.lastTick.After(rq.next) {
 		rq.next = rq.lastTick
 	}
@@ -117,72 +98,63 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 
 		rng, ok := s.Range(state.RangeID(item.rangeID))
 		if !ok {
-			panic("range missing which is unexpected")
+			return
 		}
 
-		replica, ok := rng.Replica(rq.storeID)
-		if !ok {
-			// The replica may have been removed from the store by another change
-			// (store rebalancer). In which case, we just ignore it and proceed.
-			continue
+		action, _ := rq.allocator.ComputeAction(ctx, rq.storePool, rng.SpanConfig(), rng.Descriptor())
+
+		switch action {
+		case allocatorimpl.AllocatorConsiderRebalance:
+			rq.considerRebalance(ctx, rq.next, rng, s)
+		case allocatorimpl.AllocatorNoop:
+			return
+		default:
+			log.Infof(ctx, "s%d: allocator action %s for range %s is unsupported by the simulator "+
+				"replicate queue, ignoring.", rq.storeID, action, rng)
+			return
 		}
-
-		repl := NewSimulatorReplica(replica, s)
-		change, err := rq.planner.PlanOneChange(ctx, repl, simCanTransferleaseFrom, false /* scatter */)
-		if err != nil {
-			log.Errorf(ctx, "error planning change %s", err.Error())
-			continue
-		}
-
-		log.VEventf(ctx, 1, "conf=%+v", rng.SpanConfig())
-
-		rq.applyChange(ctx, change, rng, tick)
 	}
 
 	rq.lastTick = tick
 }
 
-// applyChange applies a range allocation change. It is responsible only for
-// application and returns an error if unsuccessful.
-//
-// TODO(kvoli): Currently applyChange is only called by the replicate queue. It
-// is desirable to funnel all allocation changes via one function. Move this
-// application phase onto a separate struct that will be used by both the
-// replicate queue and the store rebalancer and specifically for operations
-// rather than changes.
-func (rq *replicateQueue) applyChange(
-	ctx context.Context, change plan.ReplicateChange, rng state.Range, tick time.Time,
+// considerRebalance simulates the logic of the replicate queue when given a
+// considerRebalance action. It will first ask the allocator for add and remove
+// targets for a range. It will then enqueue the replica change into the state
+// changer and update the time to process the next replica, with the completion
+// time returned.
+func (rq *replicateQueue) considerRebalance(
+	ctx context.Context, tick time.Time, rng state.Range, s state.State,
 ) {
-	var stateChange state.Change
-	switch op := change.Op.(type) {
-	case plan.AllocationNoop:
-		// Nothing to do.
+	add, remove, _, ok := rq.allocator.RebalanceVoter(
+		ctx,
+		rq.storePool,
+		rng.SpanConfig(),
+		nil, /* raftStatus */
+		rng.Descriptor().Replicas().VoterDescriptors(),
+		rng.Descriptor().Replicas().NonVoterDescriptors(),
+		s.ReplicaLoad(rng.RangeID(), rq.storeID).Load(),
+		storepool.StoreFilterNone,
+		rq.allocator.ScorerOptions(ctx),
+	)
+
+	// We were unable to find a rebalance target for the range.
+	if !ok {
 		return
-	case plan.AllocationFinalizeAtomicReplicationOp:
-		panic("unimplemented finalize atomic replication op")
-	case plan.AllocationTransferLeaseOp:
-		stateChange = &state.LeaseTransferChange{
-			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target),
-			Author:         rq.storeID,
-			Wait:           rq.settings.ReplicaChangeDelayFn()(0, false),
-		}
-	case plan.AllocationChangeReplicasOp:
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
-		stateChange = &state.ReplicaChange{
-			RangeID: state.RangeID(change.Replica.GetRangeID()),
-			Changes: op.Chgs,
-			Author:  rq.storeID,
-			Wait:    rq.settings.ReplicaChangeDelayFn()(rng.Size(), true),
-		}
-	default:
-		panic(fmt.Sprintf("Unknown operation %+v, unable to apply replicate queue change", op))
 	}
 
-	if completeAt, ok := rq.stateChanger.Push(tick, stateChange); ok {
+	// Enqueue the change to be processed and update when the next replica
+	// processing can occur with the completion time of the change.
+	// 	NB: This limits concurrency to at most one change at a time per
+	// 	ReplicateQueue.
+	change := state.ReplicaChange{
+		RangeID: state.RangeID(rng.Descriptor().RangeID),
+		Add:     state.StoreID(add.StoreID),
+		Remove:  state.StoreID(remove.StoreID),
+		Wait:    rq.delay(rng.Size(), true),
+		Author:  rq.storeID,
+	}
+	if completeAt, ok := rq.stateChanger.Push(tick, &change); ok {
 		rq.next = completeAt
-		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
-	} else {
-		log.VEventf(ctx, 1, "pushing state change failed")
 	}
 }

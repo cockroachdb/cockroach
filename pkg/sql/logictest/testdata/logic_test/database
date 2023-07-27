@@ -10,7 +10,7 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query TTTTTT colnames,rowsort
+query TTTTTT colnames
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
@@ -31,7 +31,7 @@ true
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TTTTTTT colnames,rowsort
+query TTTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -44,7 +44,7 @@ test           root   NULL            NULL              {}       NULL           
 statement ok
 COMMENT ON DATABASE a IS 'AAA'
 
-query TTTTTTT colnames,rowsort
+query TTTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -120,7 +120,7 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 a          root  NULL  NULL  {}  NULL
@@ -186,7 +186,7 @@ DROP DATABASE b7 CASCADE
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query TTTTTT colnames,rowsort
+query TTTTTT colnames
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
@@ -321,7 +321,7 @@ CREATE DATABASE aa with owner fake_user
 statement ok
 CREATE DATABASE a with owner testuser
 
-query TTTTTT colnames,rowsort
+query TTTTTT colnames
 SHOW DATABASES
 ----
 database_name  owner     primary_region  secondary_region  regions  survival_goal

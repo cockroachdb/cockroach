@@ -27,15 +27,10 @@ export default function (props: GraphDashboardProps) {
     storeSources,
     nodeDisplayNameByID,
     storeIDsByNodeID,
-    tenantSource,
   } = props;
 
   return [
-    <LineGraph
-      title="CPU Percent"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="CPU Percent" sources={nodeSources}>
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
           <Metric
@@ -50,7 +45,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Goroutine Scheduling Latency: 99th percentile"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={`P99 scheduling latency for goroutines`}
     >
       <Axis units={AxisUnits.Duration} label="latency">
@@ -71,7 +65,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Runnable Goroutines per CPU"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={`The number of Goroutines waiting per CPU.`}
     >
       <Axis label="goroutines">
@@ -88,7 +81,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="LSM L0 Health"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The number of files and sublevels within Level 0.`}
     >
       <Axis label="count">
@@ -113,11 +105,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="KV Admission Slots"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="KV Admission Slots" sources={nodeSources}>
       <Axis label="slots">
         {nodeIDs.map(nid => (
           <>
@@ -141,7 +129,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="KV Admission IO Tokens Exhausted Duration Per Second"
       sources={nodeSources}
-      tenantSource={tenantSource}
     >
       <Axis label="duration (micros/sec)">
         {nodeIDs.map(nid => (
@@ -156,11 +143,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Admission Work Rate"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Admission Work Rate" sources={nodeSources}>
       <Axis label="work rate">
         {nodeIDs.map(nid => (
           <>
@@ -208,11 +191,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Admission Delay Rate"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Admission Delay Rate" sources={nodeSources}>
       <Axis label="delay rate (micros/sec)">
         {nodeIDs.map(nid => (
           <>
@@ -253,11 +232,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Admission Delay: 75th percentile"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Admission Delay: 75th percentile" sources={nodeSources}>
       <Axis units={AxisUnits.Duration} label="delay for requests that waited">
         {nodeIDs.map(nid => (
           <>

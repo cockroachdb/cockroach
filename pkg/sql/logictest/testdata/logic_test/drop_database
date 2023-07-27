@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.2-23.1
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
@@ -7,7 +9,7 @@ SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
 statement ok
 CREATE DATABASE "foo-bar"
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -30,7 +32,7 @@ SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
 ----
 t  [106]  DROP
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -53,7 +55,7 @@ statement ok
 CREATE DATABASE "foo bar"
 
 query TTTTTT
-SELECT * FROM [SHOW DATABASES] ORDER BY database_name
+SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
 foo bar    root  NULL  NULL  {}  NULL
@@ -64,7 +66,7 @@ test       root  NULL  NULL  {}  NULL
 statement ok
 DROP DATABASE "foo bar" CASCADE
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -148,7 +150,7 @@ SELECT * FROM d2.v4
 ----
 0
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 d1         root  NULL  NULL  {}  NULL
@@ -161,7 +163,7 @@ test       root  NULL  NULL  {}  NULL
 statement ok
 DROP DATABASE d1 CASCADE
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 d2         root  NULL  NULL  {}  NULL
@@ -189,7 +191,7 @@ SELECT * FROM d2.v1
 statement ok
 DROP DATABASE d2 CASCADE
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -237,7 +239,7 @@ SCHEMA CHANGE     updating referenced FK table t1(125) for table t2(126)        
 SCHEMA CHANGE GC  GC for DROP DATABASE constraint_db CASCADE                                                                                                  running
 SCHEMA CHANGE GC  GC for DROP DATABASE d2 CASCADE                                                                                                             running
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL

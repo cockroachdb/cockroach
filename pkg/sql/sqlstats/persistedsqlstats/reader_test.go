@@ -93,7 +93,7 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 		require.NoError(t,
 			sqlStats.IterateStatementStats(
 				context.Background(),
-				sqlstats.IteratorOptions{
+				&sqlstats.IteratorOptions{
 					SortedKey:      true,
 					SortedAppNames: true,
 				},
@@ -115,7 +115,7 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 		require.NoError(t,
 			sqlStats.IterateTransactionStats(
 				context.Background(),
-				sqlstats.IteratorOptions{},
+				&sqlstats.IteratorOptions{},
 				func(
 					ctx context.Context,
 					statistics *appstatspb.CollectedTransactionStatistics,
@@ -215,7 +215,7 @@ func verifyStoredStmtFingerprints(
 	require.NoError(t,
 		sqlStats.IterateStatementStats(
 			context.Background(),
-			sqlstats.IteratorOptions{},
+			&sqlstats.IteratorOptions{},
 			func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 				if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
 					foundQueries[statistics.Key.Query] = struct{}{}
@@ -228,7 +228,7 @@ func verifyStoredStmtFingerprints(
 	require.NoError(t,
 		sqlStats.IterateTransactionStats(
 			context.Background(),
-			sqlstats.IteratorOptions{},
+			&sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics,

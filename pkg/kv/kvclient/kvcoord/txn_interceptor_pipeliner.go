@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 )
@@ -31,8 +30,7 @@ import (
 // The degree of the inFlightWrites btree.
 const txnPipelinerBtreeDegree = 32
 
-// PipelinedWritesEnabled is the kv.transaction.write_pipelining_enabled cluster setting.
-var PipelinedWritesEnabled = settings.RegisterBoolSetting(
+var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.transaction.write_pipelining_enabled",
 	"if enabled, transactional writes are pipelined through Raft consensus",
@@ -365,10 +363,10 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 	}
 	et := args.(*kvpb.EndTxnRequest)
 	if len(et.LockSpans) > 0 {
-		return ba, kvpb.NewError(errors.AssertionFailedf("client must not pass intents to EndTxn"))
+		return ba, kvpb.NewErrorf("client must not pass intents to EndTxn")
 	}
 	if len(et.InFlightWrites) > 0 {
-		return ba, kvpb.NewError(errors.AssertionFailedf("client must not pass in-flight writes to EndTxn"))
+		return ba, kvpb.NewErrorf("client must not pass in-flight writes to EndTxn")
 	}
 
 	// Populate et.LockSpans and et.InFlightWrites.
@@ -433,7 +431,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 		return false
 	}
 
-	if !PipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
+	if !pipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
 		return false
 	}
 
@@ -704,19 +702,12 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
 			// the ErrorIfMissing option set to return without error
-			// and with FoundIntent=false, but we handle that case here
-			// because it happens a lot in tests.
-			// TODO(nvanbenschoten): we only need to check FoundIntent, but this field
-			// was not set before v23.2, so for now, we check both fields. Remove this
-			// in the future.
-			qiResp := resp.(*kvpb.QueryIntentResponse)
-			if qiResp.FoundIntent || qiResp.FoundUnpushedIntent {
+			// and with with FoundIntent=false, but we handle that
+			// case here because it happens a lot in tests.
+			if resp.(*kvpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
 				// Move to lock footprint.
 				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
-			} else {
-				log.Warningf(ctx,
-					"QueryIntent(ErrorIfMissing=true) found no intent, but did not error; resp=%+v", qiResp)
 			}
 		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.

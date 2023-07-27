@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func tenantOrSystemAdminURL(s serverutils.TestServerInterface) *serverutils.TestURL {
+func tenantOrSystemAdminURL(s serverutils.TestServerInterface) string {
 	if len(s.TestTenants()) > 0 {
 		return s.TestTenants()[0].AdminURL()
 	}
@@ -71,7 +71,7 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
 
-	resp, err := client.Get(tenantOrSystemAdminURL(s).WithPath("/oidc/v1/login").String())
+	resp, err := client.Get(tenantOrSystemAdminURL(s) + "/oidc/v1/login")
 	if err != nil {
 		t.Fatalf("could not issue GET request to admin server: %s", err)
 	}
@@ -196,7 +196,7 @@ func TestOIDCEnabled(t *testing.T) {
 	}
 
 	t.Run("login redirect", func(t *testing.T) {
-		resp, err := client.Get(tenantOrSystemAdminURL(s).WithPath("/oidc/v1/login").String())
+		resp, err := client.Get(tenantOrSystemAdminURL(s) + "/oidc/v1/login")
 		if err != nil {
 			t.Fatalf("could not issue GET request to admin server: %s", err)
 		}

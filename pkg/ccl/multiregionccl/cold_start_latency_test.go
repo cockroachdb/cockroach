@@ -37,6 +37,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -45,6 +46,7 @@ import (
 func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 96334)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
 
@@ -78,8 +80,8 @@ func TestColdStartLatency(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		args := base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Locality:          localities[i],
+			DisableDefaultTestTenant: true,
+			Locality:                 localities[i],
 		}
 		signalAfter[i] = make(chan struct{})
 		serverKnobs := &server.TestingKnobs{
@@ -145,8 +147,6 @@ func TestColdStartLatency(t *testing.T) {
 	// Shorten the closed timestamp target duration so that span configs
 	// propagate more rapidly.
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
-	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
 	// Lengthen the lead time for the global tables to prevent overload from
 	// resulting in delays in propagating closed timestamps and, ultimately
 	// forcing requests from being redirected to the leaseholder. Without this
@@ -284,29 +284,37 @@ SELECT checkpoint > extract(epoch from after)
 			[][]string{{"true"}})
 		tenant.Stopper().Stop(ctx)
 	}
-
 	// Wait for the configs to be applied.
 	testutils.SucceedsWithin(t, func() error {
-		for _, server := range tc.Servers {
-			reporter := server.Server.SpanConfigReporter()
-			report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
-				{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
-			})
-			if err != nil {
+		reporter := tc.Servers[0].Server.SpanConfigReporter()
+		report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
+			{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
+		})
+		if err != nil {
+			return err
+		}
+		if !report.IsEmpty() {
+			var g errgroup.Group
+			for _, r := range report.ViolatingConstraints {
+				r := r // for closure
+				g.Go(func() error {
+					_, err := tc.Server(0).DB().AdminScatter(
+						ctx, r.RangeDescriptor.StartKey.AsRawKey(), 0,
+					)
+					return err
+				})
+			}
+			if err := g.Wait(); err != nil {
 				return err
 			}
-			if !report.IsEmpty() {
-				return errors.Errorf("expected empty report, got: {over: %d, under: %d, violating: %d, unavailable: %d}",
-					len(report.OverReplicated),
-					len(report.UnderReplicated),
-					len(report.ViolatingConstraints),
-					len(report.Unavailable))
-			}
+			return errors.Errorf("expected empty report, got: {over: %d, under: %d, violating: %d, unavailable: %d}",
+				len(report.OverReplicated),
+				len(report.UnderReplicated),
+				len(report.ViolatingConstraints),
+				len(report.Unavailable))
 		}
 		return nil
 	}, 5*time.Minute)
-
-	require.NoError(t, tc.WaitForFullReplication())
 
 	doTest := func(wg *sync.WaitGroup, qp *quotapool.IntPool, i int, duration *time.Duration) {
 		defer wg.Done()
@@ -323,8 +331,8 @@ SELECT checkpoint > extract(epoch from after)
 			},
 			Locality: localities[i],
 		})
-		require.NoError(t, err)
 		defer tenant.Stopper().Stop(ctx)
+		require.NoError(t, err)
 		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
 			tenant.SQLAddr(), "tenantdata", url.UserPassword("foo", password),
 			false, // withClientCerts

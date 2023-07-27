@@ -30,7 +30,7 @@ GRANT meeter TO granter
 statement ok
 GRANT greeter TO alice WITH ADMIN OPTION
 
-query TTBB colnames,rowsort
+query TTBB colnames
 SELECT * FROM "".crdb_internal.kv_inherited_role_members
 ----
 role     inheriting_member  member_is_explicit  member_is_admin
@@ -46,7 +46,7 @@ meeter   dave               false               false
 meeter   granter            true                false
 admin    root               true                true
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE
 ----
 role_name  member   is_admin

@@ -20,7 +20,6 @@ go_proto_library(
 
 go_library(
     name = "grpcutils",
-    testonly = 1,
     srcs = ["testserver.go"],
     embed = [":grpcutils_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/grpcutils",

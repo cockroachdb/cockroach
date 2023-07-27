@@ -15,8 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,15 +50,13 @@ func NewStateLoader(rangeID roachpb.RangeID) StateLoader {
 }
 
 // LoadLastIndex loads the last index.
-func (sl StateLoader) LoadLastIndex(
-	ctx context.Context, reader storage.Reader,
-) (kvpb.RaftIndex, error) {
+func (sl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
 	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
 	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
 	defer iter.Close()
 
-	var lastIndex kvpb.RaftIndex
+	var lastIndex uint64
 	iter.SeekLT(storage.MakeMVCCMetadataKey(keys.RaftLogKeyFromPrefix(prefix, math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
 		key := iter.UnsafeKey().Key
@@ -90,21 +86,21 @@ func (sl StateLoader) LoadLastIndex(
 // LoadRaftTruncatedState loads the truncated state.
 func (sl StateLoader) LoadRaftTruncatedState(
 	ctx context.Context, reader storage.Reader,
-) (kvserverpb.RaftTruncatedState, error) {
-	var truncState kvserverpb.RaftTruncatedState
+) (roachpb.RaftTruncatedState, error) {
+	var truncState roachpb.RaftTruncatedState
 	if _, err := storage.MVCCGetProto(
 		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, storage.MVCCGetOptions{},
 	); err != nil {
-		return kvserverpb.RaftTruncatedState{}, err
+		return roachpb.RaftTruncatedState{}, err
 	}
 	return truncState, nil
 }
 
 // SetRaftTruncatedState overwrites the truncated state.
 func (sl StateLoader) SetRaftTruncatedState(
-	ctx context.Context, writer storage.Writer, truncState *kvserverpb.RaftTruncatedState,
+	ctx context.Context, writer storage.Writer, truncState *roachpb.RaftTruncatedState,
 ) error {
-	if (*truncState == kvserverpb.RaftTruncatedState{}) {
+	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
@@ -157,14 +153,14 @@ func (sl StateLoader) SynthesizeHardState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	oldHS raftpb.HardState,
-	truncState kvserverpb.RaftTruncatedState,
-	raftAppliedIndex kvpb.RaftIndex,
+	truncState roachpb.RaftTruncatedState,
+	raftAppliedIndex uint64,
 ) error {
 	newHS := raftpb.HardState{
-		Term: uint64(truncState.Term),
+		Term: truncState.Term,
 		// Note that when applying a Raft snapshot, the applied index is
 		// equal to the Commit index represented by the snapshot.
-		Commit: uint64(raftAppliedIndex),
+		Commit: raftAppliedIndex,
 	}
 
 	if oldHS.Commit > newHS.Commit {
@@ -190,7 +186,7 @@ func (sl StateLoader) SynthesizeHardState(
 func (sl StateLoader) SetRaftReplicaID(
 	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
 ) error {
-	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
+	rid := roachpb.RaftReplicaID{ReplicaID: replicaID}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
@@ -207,8 +203,8 @@ func (sl StateLoader) SetRaftReplicaID(
 // LoadRaftReplicaID loads the RaftReplicaID.
 func (sl StateLoader) LoadRaftReplicaID(
 	ctx context.Context, reader storage.Reader,
-) (*kvserverpb.RaftReplicaID, error) {
-	var replicaID kvserverpb.RaftReplicaID
+) (*roachpb.RaftReplicaID, error) {
+	var replicaID roachpb.RaftReplicaID
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
 		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{})
 	if err != nil {

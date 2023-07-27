@@ -35,7 +35,7 @@ func benchmarkImportFixture(b *testing.B, gen workload.Generator) {
 			b,
 			base.TestServerArgs{
 				UseDatabase:       `d`,
-				SQLMemoryPoolSize: 1 << 30, /* 1GiB */ // default 256MiB might be insufficient
+				SQLMemoryPoolSize: 1 << 30, /* 1GiB */ // default 128MiB might be insufficient
 			},
 		)
 		sqlDB := sqlutils.MakeSQLRunner(db)

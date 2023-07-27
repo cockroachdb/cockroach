@@ -75,7 +75,7 @@ describe("txnStats sagas", () => {
         .hasFinalState<TxnStatsState>({
           inFlight: false,
           data: txnStatsResponse,
-          error: null,
+          lastError: null,
           valid: true,
           lastUpdated,
         })
@@ -91,7 +91,7 @@ describe("txnStats sagas", () => {
         .hasFinalState<TxnStatsState>({
           inFlight: false,
           data: null,
-          error: error,
+          lastError: error,
           valid: false,
           lastUpdated,
         })

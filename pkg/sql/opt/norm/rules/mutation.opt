@@ -26,21 +26,13 @@
 (Update
     (Project
         $input
-        (Let
-            (
-                $simplifiedProjections
-                $simplifiedPrivate
-            ):(SimplifyPartialIndexProjections
-                $projections
-                $passthrough
-                $simplifiableCols
-                $mutationPrivate
-            )
-            $simplifiedProjections
+        (SimplifyPartialIndexProjections
+            $projections
+            $simplifiableCols
         )
         $passthrough
     )
     $uniqueChecks
     $fkChecks
-    $simplifiedPrivate
+    $mutationPrivate
 )

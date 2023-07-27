@@ -45,51 +45,6 @@ var ReplicateQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// ReplicaGCQueueEnabled is a setting that controls whether the replica GC queue
-// is enabled.
-var ReplicaGCQueueEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.replica_gc_queue.enabled",
-	"whether the replica gc queue is enabled",
-	true,
-)
-
-// RaftLogQueueEnabled is a setting that controls whether the raft log queue is
-// enabled.
-var RaftLogQueueEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.raft_log_queue.enabled",
-	"whether the raft log queue is enabled",
-	true,
-)
-
-// RaftSnapshotQueueEnabled is a setting that controls whether the raft snapshot
-// queue is enabled.
-var RaftSnapshotQueueEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.raft_snapshot_queue.enabled",
-	"whether the raft snapshot queue is enabled",
-	true,
-)
-
-// ConsistencyQueueEnabled is a setting that controls whether the consistency
-// queue is enabled.
-var ConsistencyQueueEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.consistency_queue.enabled",
-	"whether the consistency queue is enabled",
-	true,
-)
-
-// TimeSeriesMaintenanceQueueEnabled is a setting that controls whether the
-// timeseries maintenance queue is enabled.
-var TimeSeriesMaintenanceQueueEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.timeseries_maintenance_queue.enabled",
-	"whether the timeseries maintenance queue is enabled",
-	true,
-)
-
 // SplitQueueEnabled is a setting that controls whether the split queue is
 // enabled.
 var SplitQueueEnabled = settings.RegisterBoolSetting(

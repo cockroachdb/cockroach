@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -113,7 +112,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if dir == "" {
 			t.Fatal("no sideloaded directory")
 		}
-		if err := eng.MkdirAll(dir, os.ModePerm); err != nil {
+		if err := eng.MkdirAll(dir); err != nil {
 			t.Fatal(err)
 		}
 		if err := fs.WriteFile(eng, filepath.Join(dir, "i1000000.t100000"), []byte("foo")); err != nil {

@@ -15,81 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// FirstUpgradeFromRelease implements the tenant upgrade step for all
-// V[0-9]+_[0-9]+Start cluster versions, which is every first internal version
-// following each major release version.
-//
-// The purpose of this upgrade function is to keep the data in the system
-// database up to date to mitigate the impact of metadata corruptions
-// caused by bugs in earlier versions.
-//
-// As of the time of this writing, this implementation covers only the
-// system.descriptor table, but in the future this may grow to
-// include other system tables as well.
-func FirstUpgradeFromRelease(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
-) error {
-	var all nstree.Catalog
-	if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
-		all, err = txn.Descriptors().GetAll(ctx, txn.KV())
-		return err
-	}); err != nil {
-		return err
-	}
-	var batch catalog.DescriptorIDSet
-	const batchSize = 1000
-	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if !desc.GetPostDeserializationChanges().HasChanges() {
-			return nil
-		}
-		batch.Add(desc.GetID())
-		if batch.Len() >= batchSize {
-			if err := upgradeDescriptors(ctx, d, batch); err != nil {
-				return err
-			}
-			batch = catalog.MakeDescriptorIDSet()
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	return upgradeDescriptors(ctx, d, batch)
-}
-
-// upgradeDescriptors round-trips the descriptor protobufs for the given keys
-// and updates them in place if they've changed.
-func upgradeDescriptors(
-	ctx context.Context, d upgrade.TenantDeps, ids catalog.DescriptorIDSet,
-) error {
-	if ids.Empty() {
-		return nil
-	}
-	return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		muts, err := txn.Descriptors().MutableByID(txn.KV()).Descs(ctx, ids.Ordered())
-		if err != nil {
-			return err
-		}
-		b := txn.KV().NewBatch()
-		for _, mut := range muts {
-			if !mut.GetPostDeserializationChanges().HasChanges() {
-				continue
-			}
-			key := catalogkeys.MakeDescMetadataKey(d.Codec, mut.GetID())
-			b.CPut(key, mut.DescriptorProto(), mut.GetRawBytesInStorage())
-		}
-		return txn.KV().Run(ctx, b)
-	})
-}
 
 // FirstUpgradeFromReleasePrecondition is the precondition check for upgrading
 // from any supported major release.

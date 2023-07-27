@@ -90,7 +90,7 @@ statement ok
 ALTER TABLE t2 ADD FOREIGN KEY (b) REFERENCES t2
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM t2] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM t2
 ----
 t2  t2_b_fkey  FOREIGN KEY  FOREIGN KEY (b) REFERENCES t2(d)  true
 t2  t2_pkey    PRIMARY KEY  PRIMARY KEY (d ASC)               true
@@ -108,7 +108,7 @@ statement ok
 ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS(b);
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM t3] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM t3
 ----
 t3  t3_c_key  UNIQUE       UNIQUE (c ASC)       true
 t3  t3_pkey   PRIMARY KEY  PRIMARY KEY (b ASC)  true
@@ -122,7 +122,7 @@ statement ok
 ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM t4] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM t4
 ----
 t4  t4_d_key  UNIQUE       UNIQUE (d ASC)       true
 t4  t4_pkey   PRIMARY KEY  PRIMARY KEY (e ASC)  true

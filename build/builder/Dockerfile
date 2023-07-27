@@ -152,14 +152,10 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
  && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
  && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
- && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
- && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    azure-cli \
     ccache \
     google-cloud-sdk \
-    google-cloud-cli-gke-gcloud-auth-plugin \
     lsof \
     netcat \
     netbase \
@@ -168,8 +164,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
     openssh-client \
     yarn \
     google-chrome-stable \
-    unzip \
-&& apt-get clean
+    unzip
 
 # awscli - roachtests
 # NB: we don't use apt-get because we need an up to date version of awscli
@@ -182,7 +177,6 @@ RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip"
 
 # git - Upgrade to a more modern version
 RUN DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
-    apt-get clean && \
     curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
     unzip "git-2.29.2.zip" && \
     cd git-2.29.2 && \

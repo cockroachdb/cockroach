@@ -1,0 +1,49 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
+EXPLAIN (ddl) rollback at post-commit stage 6 of 15;
+----
+Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 8 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+      │    │    ├── MERGE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+      │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+      │    └── 10 Mutation operations
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
+      │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 7 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106, ColumnID: 2}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 2}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 3}
+           └── 8 Mutation operations
+                ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

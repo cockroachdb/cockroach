@@ -16,14 +16,10 @@ import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources, tenantSource } = props;
+  const { storeSources } = props;
 
   return [
-    <LineGraph
-      title="Slow Raft Proposals"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Slow Raft Proposals" sources={storeSources}>
       <Axis label="proposals">
         <Metric
           name="cr.store.requests.slow.raft"
@@ -33,11 +29,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Slow DistSender RPCs"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Slow DistSender RPCs" sources={storeSources}>
       <Axis label="proposals">
         <Metric
           name="cr.node.requests.slow.distsender"
@@ -47,11 +39,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Slow Lease Acquisitions"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Slow Lease Acquisitions" sources={storeSources}>
       <Axis label="lease acquisitions">
         <Metric
           name="cr.store.requests.slow.lease"
@@ -61,11 +49,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Slow Latch Acquisitions"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Slow Latch Acquisitions" sources={storeSources}>
       <Axis label="latch acquisitions">
         <Metric
           name="cr.store.requests.slow.latch"

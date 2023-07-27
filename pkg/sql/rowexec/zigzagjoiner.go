@@ -850,7 +850,6 @@ func (z *zigzagJoiner) ConsumerClosed() {
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	kvStats := execinfrapb.KVStats{
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
-		KVPairsRead:         optional.MakeUint(uint64(z.getKVPairsRead())),
 		ContentionTime:      optional.MakeTimeValue(z.contentionEventsListener.CumulativeContentionTime),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
@@ -878,14 +877,6 @@ func (z *zigzagJoiner) getBytesRead() int64 {
 		bytesRead += z.infos[i].fetcher.GetBytesRead()
 	}
 	return bytesRead
-}
-
-func (z *zigzagJoiner) getKVPairsRead() int64 {
-	var kvPairsRead int64
-	for i := range z.infos {
-		kvPairsRead += z.infos[i].fetcher.GetKVPairsRead()
-	}
-	return kvPairsRead
 }
 
 func (z *zigzagJoiner) getRowsRead() int64 {

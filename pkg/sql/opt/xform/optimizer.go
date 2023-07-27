@@ -98,8 +98,7 @@ type Optimizer struct {
 	// JoinOrderBuilder adds new join orderings to the memo.
 	jb JoinOrderBuilder
 
-	// rng is used to deterministically perturb costs and/or disable rules and/or
-	// determine the visibility (for this query) of a partially visible index.
+	// rng is used to deterministically perturb costs and/or disable rules.
 	rng *rand.Rand
 
 	// scratchSort is used to avoid repeated allocations during sort enforcement.
@@ -703,7 +702,7 @@ func (o *Optimizer) enforceProps(
 }
 
 // optimizeEnforcer optimizes and costs the enforcer. getEnforcer is used to
-// reset the enforcer after recursing in optimizeGroup, since the current group
+// reset the enforcer after recusing in optimizeGroup, since the current group
 // and its children may use the same SortExpr to avoid allocations.
 func (o *Optimizer) optimizeEnforcer(
 	state *groupState,

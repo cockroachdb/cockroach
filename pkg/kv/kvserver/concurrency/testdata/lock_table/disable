@@ -17,9 +17,10 @@ new-txn txn=txn2 ts=10,1 epoch=0
 
 clear disable
 ----
-num=0
+global: num=0
+local: num=0
 
-new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@c
+new-request r=req1 txn=txn1 ts=10,1 spans=w@a+w@c
 ----
 
 scan r=req1
@@ -32,7 +33,8 @@ new: state=doneWaiting
 
 add-discovered r=req1 k=a txn=txn2
 ----
-num=0
+global: num=0
+local: num=0
 
 # NOTE: this won't end up in an infinite loop of scanning a disabled
 # lock-table and discovering but ignoring the same lock in practice
@@ -43,13 +45,15 @@ scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=c durability=u strength=exclusive
+acquire r=req1 k=c durability=u
 ----
-num=0
+global: num=0
+local: num=0
 
 dequeue r=req1
 ----
-num=0
+global: num=0
+local: num=0
 
 # -------------------------------------------------------------
 # Enable the lock-table - the behavior should return to normal.
@@ -58,7 +62,7 @@ num=0
 enable
 ----
 
-new-request r=req2 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@c
+new-request r=req2 txn=txn1 ts=10,1 spans=w@a+w@c
 ----
 
 scan r=req2
@@ -71,11 +75,12 @@ new: state=doneWaiting
 
 add-discovered r=req2 k=a txn=txn2
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
+local: num=0
 
 scan r=req2
 ----
@@ -83,30 +88,31 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Exclusive
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
 
 release txn=txn2 span=a
 ----
-num=1
+global: num=1
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+local: num=0
 
 guard-state r=req2
 ----
 new: state=doneWaiting
 
-acquire r=req2 k=c durability=u strength=exclusive
+acquire r=req2 k=c durability=u
 ----
-num=2
+global: num=2
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 dequeue r=req2
 ----
-num=1
+global: num=1
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0

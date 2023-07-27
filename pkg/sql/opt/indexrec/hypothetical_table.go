@@ -42,10 +42,7 @@ func BuildOptAndHypTableMaps(
 		for _, indexCols := range indexes {
 			indexOrd := hypTable.Table.IndexCount() + len(hypIndexes)
 			lastKeyCol := indexCols[len(indexCols)-1]
-			// TODO (Shivam): Index recommendations should not only allow JSON columns
-			// to be part of inverted indexes since they are also forward indexable.
-			inverted := !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
-				lastKeyCol.DatumType().Family() == types.JsonFamily
+			inverted := !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType())
 			if inverted {
 				invertedCol := hypTable.addInvertedCol(lastKeyCol.Column)
 				indexCols[len(indexCols)-1] = cat.IndexColumn{Column: invertedCol}
@@ -161,7 +158,7 @@ func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) ca
 		existingIndex := ht.Table.Index(i)
 		indexExists := index.hasSameExplicitCols(existingIndex, index.IsInverted())
 		_, isPartialIndex := existingIndex.Predicate()
-		if indexExists && !isPartialIndex && existingIndex.GetInvisibility() == 0.0 {
+		if indexExists && !isPartialIndex && !existingIndex.IsNotVisible() {
 			return existingIndex
 		}
 	}

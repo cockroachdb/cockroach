@@ -1,7 +1,0 @@
-echo
-----
-db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-  txn.SetIsoLevel(isolation.Snapshot)
-  txn.Put(ctx, tk(5), sv(5)) // @<ts> <nil>
-  return errors.New("rollback")
-}) // rollback

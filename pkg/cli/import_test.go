@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -76,7 +75,7 @@ func runImportCLICommand(
 	store, err := c.ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
 		userfileURI, username.RootUserName())
 	require.NoError(t, err)
-	_, _, err = store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+	_, err = store.ReadFile(ctx, "")
 	testutils.IsError(err, "file doesn't exist")
 
 	var output []string

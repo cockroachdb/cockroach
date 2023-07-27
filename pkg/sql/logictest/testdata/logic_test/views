@@ -74,7 +74,7 @@ x y
 2 98
 3 97
 
-query II colnames,rowsort
+query II colnames
 SELECT * FROM v7
 ----
 x y
@@ -106,7 +106,7 @@ SELECT y FROM v2
 98
 97
 
-query I rowsort
+query I
 SELECT x FROM v7
 ----
 3
@@ -117,7 +117,7 @@ SELECT x FROM v7 ORDER BY x LIMIT 1
 ----
 2
 
-query I rowsort
+query I
 SELECT y FROM v7
 ----
 97
@@ -202,7 +202,7 @@ x y
 2 98
 3 97
 
-query II colnames,rowsort
+query II colnames
 SELECT * FROM test.v7
 ----
 x y
@@ -381,6 +381,13 @@ DROP TABLE v1
 statement error pgcode 42809 "t" is not a view
 DROP VIEW t
 
+skipif config local-legacy-schema-changer
+statement error cannot drop relation "v1" because view "v7" depends on it
+DROP VIEW v1
+
+# Legacy schema changer orders dependent views differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
 statement error cannot drop relation "v1" because view "v6" depends on it
 DROP VIEW v1
 
@@ -1633,7 +1640,7 @@ DROP MATERIALIZED VIEW mv2
 statement ok
 CREATE VIEW view_with_null AS SELECT 1 AS a, null AS c
 
-query TTBTTTB rowsort
+query TTBTTTB
 SHOW COLUMNS FROM view_with_null
 ----
 a  INT8    true  NULL  ·  {}  false
@@ -1643,7 +1650,7 @@ c  STRING  true  NULL  ·  {}  false
 statement ok
 CREATE MATERIALIZED VIEW materialized_view_with_null AS SELECT a, NULL AS b, b AS c FROM test_view
 
-query TTBTTTB rowsort
+query TTBTTTB
 SHOW COLUMNS FROM materialized_view_with_null
 ----
 a      INT8    true   NULL            ·  {materialized_view_with_null_pkey}  false
@@ -1807,30 +1814,6 @@ SELECT * FROM v;
 statement ok
 SET DATABASE = test;
 
-# When replacing a view with fewer columns, an error about dropping columns from
-# views preempts any errors about dependencies.
-subtest regression_99000
-
-statement ok
-CREATE TABLE films (id int PRIMARY KEY, title text, kind text, classification CHAR(1));
-
-statement ok
-CREATE VIEW comedies AS
-    SELECT *
-    FROM films
-    WHERE kind = 'Comedy';
-
-statement ok
-CREATE VIEW pg_comedies AS
-    SELECT *
-    FROM comedies
-    WHERE classification = 'PG';
-
-statement error pq: cannot drop columns from view
-CREATE OR REPLACE VIEW comedies AS SELECT ARRAY[films.*]::string FROM films;
-
-subtest end
-
 subtest circular_dependency
 
 statement ok
@@ -1867,39 +1850,6 @@ DROP VIEW cd_v1 CASCADE;
 
 subtest end
 
-# Regression test for #104927. Correctly resolve table references in views as
-# TupleStars.
-subtest regression_104927
-
-statement ok
-CREATE TABLE t104927 (
-  i INT,
-  s STRING
-);
-INSERT INTO t104927 VALUES (1, 'foo');
-
-query T
-SELECT json_agg(r) FROM (
-  SELECT i, s
-  FROM t104927
-) AS r
-----
-[{"i": 1, "s": "foo"}]
-
-statement ok
-CREATE VIEW v104927 AS SELECT json_agg(r) FROM (
-  SELECT i, s
-  FROM t104927
-) AS r
-
-# The output should match the output above where the query was run directly.
-query T
-SELECT * FROM v104927
-----
-[{"i": 1, "s": "foo"}]
-
-subtest end
-
 # Regression test for #105259. Do not type-check subqueries in views outside
 # optbuilder. Doing so can cause internal errors.
 subtest regression_105259
@@ -1922,35 +1872,5 @@ ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
 # Renaming the enum value corrupts the view. This is expected behavior.
 statement error pgcode 22P02 invalid input value for enum e105259: "foo"
 SELECT * FROM v105259
-
-subtest end
-
-# Regression test for #106602. Check for cross-database type references when
-# executing CREATE OR REPLACE VIEW.
-subtest regression_106602
-
-statement ok
-SET CLUSTER SETTING sql.cross_db_views.enabled = FALSE
-
-statement ok
-CREATE DATABASE db106602a
-
-statement ok
-CREATE DATABASE db106602b
-
-statement ok
-USE db106602a;
-
-statement ok
-CREATE TYPE e AS ENUM ('foo');
-
-statement ok
-USE db106602b;
-
-statement ok
-CREATE VIEW v AS (SELECT 1)
-
-statement error cross database type references are not supported: db106602a.public.e
-CREATE OR REPLACE VIEW v AS (SELECT 1 FROM (VALUES (1)) val(i) WHERE 'foo'::db106602a.e = 'foo'::db106602a.e)
 
 subtest end

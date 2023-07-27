@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -402,39 +401,19 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
-			var allowedValues []string
-			if allowSnapshot {
-				allowedValues = []string{"serializable", "snapshot", "read committed"}
-			} else {
-				allowedValues = []string{"serializable", "read committed"}
+			switch strings.ToUpper(s) {
+			case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `SERIALIZABLE`, `DEFAULT`:
+				// Do nothing. All transactions execute with serializable isolation.
+			default:
+				return newVarValueError(`default_transaction_isolation`, s, "serializable")
 			}
-			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
-			if !ok {
-				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
-			}
-			switch level {
-			case tree.ReadUncommittedIsolation:
-				level = tree.ReadCommittedIsolation
-			case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
-				level = tree.SerializableIsolation
-				if allowSnapshot {
-					level = tree.SnapshotIsolation
-				}
-			}
-			m.SetDefaultTransactionIsolationLevel(level)
+
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			level := tree.IsolationLevel(evalCtx.SessionData().DefaultTxnIsolationLevel)
-			if level == tree.UnspecifiedIsolation {
-				level = tree.SerializableIsolation
-			}
-			return strings.ToLower(level.String()), nil
+			return "serializable", nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return strings.ToLower(tree.SerializableIsolation.String())
-		},
+		GlobalDefault: func(sv *settings.Values) string { return "default" },
 	},
 
 	// CockroachDB extension.
@@ -442,7 +421,7 @@ var varGen = map[string]sessionVar{
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			pri, ok := tree.UserPriorityFromString(s)
 			if !ok {
-				return newVarValueError(`default_transaction_priority`, s, "low", "normal", "high")
+				return newVarValueError(`default_transaction_isolation`, s, "low", "normal", "high")
 			}
 			m.SetDefaultTransactionPriority(pri)
 			return nil
@@ -716,23 +695,6 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().TestingVectorizeInjectPanics), nil
-		},
-		GlobalDefault: globalFalse,
-	},
-
-	// CockroachDB extension.
-	`testing_optimizer_inject_panics`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`testing_optimizer_inject_panics`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("testing_optimizer_inject_panics", s)
-			if err != nil {
-				return err
-			}
-			m.SetTestingOptimizerInjectPanics(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().TestingOptimizerInjectPanics), nil
 		},
 		GlobalDefault: globalFalse,
 	},
@@ -1484,38 +1446,20 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// This is not directly documented in PG's docs but does indeed behave this
-	// way. This variable shows the isolation level of the current transaction,
-	// and also allows the isolation level to change as long as queries have not
-	// been executed yet.
+	// This is not directly documented in PG's docs but does indeed behave this way.
 	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
 	`transaction_isolation`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			level := kvTxnIsolationLevelToTree(evalCtx.Txn.IsoLevel())
-			return strings.ToLower(level.String()), nil
+			return "serializable", nil
 		},
-		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
-			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
+		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
+			_, ok := tree.IsolationLevelMap[s]
 			if !ok {
-				var allowedValues []string
-				if allowSnapshotIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
-					allowedValues = []string{"serializable", "snapshot", "read committed"}
-				} else {
-					allowedValues = []string{"serializable", "read committed"}
-				}
-				return newVarValueError(`transaction_isolation`, s, allowedValues...)
-			}
-			modes := tree.TransactionModes{
-				Isolation: level,
-			}
-			if err := evalCtx.TxnModesSetter.setTransactionModes(ctx, modes, hlc.Timestamp{} /* asOfSystemTime */); err != nil {
-				return err
+				return newVarValueError(`transaction_isolation`, s, "serializable")
 			}
 			return nil
 		},
-		GlobalDefault: func(_ *settings.Values) string {
-			return strings.ToLower(tree.SerializableIsolation.String())
-		},
+		GlobalDefault: func(_ *settings.Values) string { return "serializable" },
 	},
 
 	// CockroachDB extension.
@@ -2638,7 +2582,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries), nil
 		},
-		GlobalDefault: globalTrue,
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -2655,7 +2599,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation), nil
 		},
-		GlobalDefault: globalTrue,
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -2743,7 +2687,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().MultipleActivePortalsEnabled), nil
 		},
-		GlobalDefault: displayPgBool(util.ConstantWithMetamorphicTestBool("multiple_active_portals_enabled", false)),
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -2762,78 +2706,6 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
-
-	// CockroachDB extension.
-	// PostgreSQL does not use the "replication" session variable (it is only a
-	// parameter on the connection string). Instead, it is represented by a
-	// `am_walsender` / `am_db_walsender` bool on the connection.
-	`replication`: {
-		// We are hiding this for now as it is only meant for internal observability.
-		// It should only be set at connection time.
-		Hidden: true,
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			mode, err := ReplicationModeFromString(s)
-			if err != nil {
-				return err
-			}
-			m.SetReplicationMode(mode)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			switch evalCtx.SessionData().ReplicationMode {
-			case sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED:
-				return formatBoolAsPostgresSetting(false), nil
-			case sessiondatapb.ReplicationMode_REPLICATION_MODE_ENABLED:
-				return formatBoolAsPostgresSetting(true), nil
-			case sessiondatapb.ReplicationMode_REPLICATION_MODE_DATABASE:
-				return "database", nil
-			}
-			return "", errors.AssertionFailedf("unknown replication mode: %v", evalCtx.SessionData().ReplicationMode)
-		},
-		GlobalDefault: globalFalse,
-	},
-
-	// CockroachDB extension.
-	`max_connections`: {
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			maxConn := maxNumNonAdminConnections.Get(&evalCtx.ExecCfg.Settings.SV)
-			return strconv.FormatInt(maxConn, 10), nil
-		},
-	},
-
-	// CockroachDB extension.
-	`optimizer_use_improved_join_elimination`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_improved_join_elimination`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("optimizer_use_improved_join_elimination", s)
-			if err != nil {
-				return err
-			}
-			m.SetOptimizerUseImprovedJoinElimination(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseImprovedJoinElimination), nil
-		},
-		GlobalDefault: globalTrue,
-	},
-}
-
-func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
-	if strings.ToLower(s) == "database" {
-		return sessiondatapb.ReplicationMode_REPLICATION_MODE_DATABASE, nil
-	}
-	b, err := paramparse.ParseBoolVar("replication", s)
-	if err != nil {
-		return 0, pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			`parameter "replication" requires a boolean value or "database"`,
-		)
-	}
-	if b {
-		return sessiondatapb.ReplicationMode_REPLICATION_MODE_ENABLED, nil
-	}
-	return sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED, nil
 }
 
 // We want test coverage for this on and off so make it metamorphic.

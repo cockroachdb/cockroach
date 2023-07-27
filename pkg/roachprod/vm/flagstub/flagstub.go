@@ -32,35 +32,17 @@ type provider struct {
 	unimplemented string
 }
 
-func (p *provider) CreateVolumeSnapshot(
-	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
-) (vm.VolumeSnapshot, error) {
-	return vm.VolumeSnapshot{}, errors.Newf("%s", p.unimplemented)
+func (p *provider) SnapshotVolume(
+	*logger.Logger, vm.Volume, string, string, map[string]string,
+) (string, error) {
+	return "", errors.Newf("%s", p.unimplemented)
 }
 
-func (p *provider) ListVolumeSnapshots(
-	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
-) ([]vm.VolumeSnapshot, error) {
-	return nil, errors.Newf("%s", p.unimplemented)
+func (p *provider) CreateVolume(*logger.Logger, vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+	return vol, errors.Newf("%s", p.unimplemented)
 }
 
-func (p *provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	return errors.Newf("%s", p.unimplemented)
-}
-
-func (p *provider) CreateVolume(*logger.Logger, vm.VolumeCreateOpts) (vm.Volume, error) {
-	return vm.Volume{}, errors.Newf("%s", p.unimplemented)
-}
-
-func (p *provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	return errors.Newf("%s", p.unimplemented)
-}
-
-func (p *provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
-	return vm.NonBootAttachedVolumes, nil
-}
-
-func (p *provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
+func (p *provider) AttachVolumeToVM(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
 	return "", errors.Newf("%s", p.unimplemented)
 }
 

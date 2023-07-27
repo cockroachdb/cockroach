@@ -97,7 +97,6 @@ var (
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
-// put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
@@ -355,18 +354,6 @@ func TestMVCCHistories(t *testing.T) {
 		}
 
 		e := newEvalCtx(ctx, engine)
-		defer func() {
-			require.NoError(t, engine.Compact())
-			m := engine.GetMetrics().Metrics
-			if m.Keys.MissizedTombstonesCount > 0 {
-				// A missized tombstone is a Pebble DELSIZED tombstone that encodes
-				// the wrong size of the value it deletes. This kind of tombstone is
-				// written when ClearOptions.ValueSizeKnown=true. If this assertion
-				// failed, something might be awry in the code clearing the key. Are
-				// we feeding the wrong value length to ValueSize?
-				t.Fatalf("expected to find 0 missized tombstones; found %d", m.Keys.MissizedTombstonesCount)
-			}
-		}()
 		defer e.close()
 		if strings.Contains(path, "_nometamorphiciter") {
 			e.noMetamorphicIter = true
@@ -563,7 +550,7 @@ func TestMVCCHistories(t *testing.T) {
 						for i := range d.CmdArgs {
 							buf.Printf(" %s", &d.CmdArgs[i])
 						}
-						_ = buf.WriteByte('\n')
+						buf.Printf("\n")
 					}
 
 					// Record the engine and evaluated stats before the command, so
@@ -743,7 +730,6 @@ var commands = map[string]cmd{
 	"initput":               {typDataUpdate, cmdInitPut},
 	"merge":                 {typDataUpdate, cmdMerge},
 	"put":                   {typDataUpdate, cmdPut},
-	"put_blind_inline":      {typDataUpdate, cmdPutBlindInline},
 	"put_rangekey":          {typDataUpdate, cmdPutRangeKey},
 	"scan":                  {typReadOnly, cmdScan},
 	"is_span_empty":         {typReadOnly, cmdIsSpanEmpty},
@@ -890,11 +876,11 @@ func (rw intentPrintingReadWriter) PutIntent(
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts storage.ClearOptions,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	rw.buf.Printf("called ClearIntent(%v, TDNUM(%t), %v)\n",
 		key, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
+	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (e *evalCtx) tryWrapForIntentPrinting(rw storage.ReadWriter) storage.ReadWriter {
@@ -1004,7 +990,7 @@ func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
 	return e.withWriter("clear", func(rw storage.ReadWriter) error {
-		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, storage.ClearOptions{})
+		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts})
 	})
 }
 
@@ -1365,24 +1351,6 @@ func cmdPut(e *evalCtx) error {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
-	})
-}
-
-func cmdPutBlindInline(e *evalCtx) error {
-	key := e.getKey()
-
-	var val, prev roachpb.Value
-	if e.hasArg("v") {
-		val = e.getValInternal("v")
-		val.InitChecksum(key)
-	}
-	if e.hasArg("prev") {
-		prev = e.getValInternal("prev")
-		prev.InitChecksum(key)
-	}
-
-	return e.withWriter("put_blind_inline", func(rw storage.ReadWriter) error {
-		return storage.MVCCBlindPutInlineWithPrev(e.ctx, rw, e.ms, key, val, prev)
 	})
 }
 

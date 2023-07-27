@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "testcat",
-    testonly = 1,
     srcs = [
         "alter_table.go",
         "create_index.go",

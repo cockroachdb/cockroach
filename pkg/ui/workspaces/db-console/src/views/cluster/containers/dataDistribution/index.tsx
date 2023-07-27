@@ -182,15 +182,6 @@ export class DataDistributionPage extends React.Component<
         <BackToAdvanceDebug history={this.props.history} />
         <section className="section">
           <h1 className="base-heading">Data Distribution</h1>
-          <p style={{ maxWidth: 300, paddingTop: 10 }}>
-            Note: the data distribution render does not work with coalesced
-            ranges. To disable coalesced ranges (would increase range count),
-            run the following SQL statement:
-          </p>
-          <pre>
-            SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled =
-            false;
-          </pre>
         </section>
         <section className="section">
           <Loading

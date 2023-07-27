@@ -4,10 +4,7 @@ BEGIN
   RETURN 1+2;
 END
 ----
-DECLARE
-BEGIN
-RETURN 1 + 2;
-END
+expected parse error: at or near "2": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -16,11 +13,7 @@ BEGIN
   RETURN x;
 END
 ----
-DECLARE
-BEGIN
-x := 1 + 2;
-RETURN x;
-END
+expected parse error: at or near "x": syntax error: unimplemented: this syntax
 
 
 parse
@@ -29,10 +22,7 @@ BEGIN
   RETURN (1, 'string');
 END
 ----
-DECLARE
-BEGIN
-RETURN (1, 'string');
-END
+expected parse error: at or near "string": syntax error: unimplemented: this syntax
 
 
 

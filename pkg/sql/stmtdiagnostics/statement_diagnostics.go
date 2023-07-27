@@ -314,7 +314,6 @@ func (r *Registry) insertRequestInternal(
 	var reqID RequestID
 	var expiresAt time.Time
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		txn.KV().SetDebugName("stmt-diag-insert-request")
 		// Check if there's already a pending request for this fingerprint.
 		row, err := txn.QueryRowEx(ctx, "stmt-diag-check-pending", txn.KV(),
 			sessiondata.RootUserSessionDataOverride,
@@ -531,9 +530,7 @@ func (r *Registry) InsertStatementDiagnostics(
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // nolint:context
 		defer cancel()
 	}
-
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		txn.KV().SetDebugName("stmt-diag-insert-bundle")
 		if requestID != 0 {
 			row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
 				sessiondata.RootUserSessionDataOverride,
@@ -561,14 +558,13 @@ func (r *Registry) InsertStatementDiagnostics(
 		}
 
 		bundleChunksVal := tree.NewDArray(types.Int)
-		bundleToUpload := bundle
-		for len(bundleToUpload) > 0 {
+		for len(bundle) > 0 {
 			chunkSize := int(bundleChunkSize.Get(&r.st.SV))
-			chunk := bundleToUpload
+			chunk := bundle
 			if len(chunk) > chunkSize {
 				chunk = chunk[:chunkSize]
 			}
-			bundleToUpload = bundleToUpload[len(chunk):]
+			bundle = bundle[len(chunk):]
 
 			// Insert the chunk into system.statement_bundle_chunks.
 			row, err := txn.QueryRowEx(

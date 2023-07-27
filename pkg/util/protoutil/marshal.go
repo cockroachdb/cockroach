@@ -10,12 +10,7 @@
 
 package protoutil
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/gogo/protobuf/proto"
-)
+import "github.com/gogo/protobuf/proto"
 
 // Message extends the proto.Message interface with the MarshalTo and Size
 // methods we tell gogoproto to generate for us.
@@ -27,7 +22,7 @@ type Message interface {
 	Size() int
 }
 
-// Marshal encodes pb into the wire format and returns the resulting byte slice.
+// Marshal encodes pb into the wire format.
 func Marshal(pb Message) ([]byte, error) {
 	dest := make([]byte, pb.Size())
 	if _, err := MarshalToSizedBuffer(pb, dest); err != nil {
@@ -36,31 +31,13 @@ func Marshal(pb Message) ([]byte, error) {
 	return dest, nil
 }
 
-// MarshalTo encodes pb into the wire format and writes the result into the
-// provided byte slice, returning the number of bytes written.
-//
-// dest is required to have a capacity of at least pb.Size() bytes.
+// MarshalTo encodes pb into the wire format.
 func MarshalTo(pb Message, dest []byte) (int, error) {
-	if buildutil.CrdbTestBuild {
-		if pb.Size() > cap(dest) {
-			panic(fmt.Sprintf("MarshalTo called for %T with slice with insufficient "+
-				"capacity: pb.Size()=%d, cap(dest)=%d", pb, pb.Size(), cap(dest)))
-		}
-	}
 	return pb.MarshalTo(dest)
 }
 
-// MarshalToSizedBuffer encodes pb into the wire format and writes the result
-// into the provided byte slice, returning the number of bytes written.
-//
-// dest is required to have a length of exactly pb.Size() bytes.
+// MarshalToSizedBuffer encodes pb into the wire format.
 func MarshalToSizedBuffer(pb Message, dest []byte) (int, error) {
-	if buildutil.CrdbTestBuild {
-		if pb.Size() != len(dest) {
-			panic(fmt.Sprintf("MarshalToSizedBuffer called for %T with slice with "+
-				"incorrect length: pb.Size()=%d, len(dest)=%d", pb, pb.Size(), len(dest)))
-		}
-	}
 	return pb.MarshalToSizedBuffer(dest)
 }
 

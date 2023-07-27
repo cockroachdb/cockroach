@@ -58,7 +58,7 @@ var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue
 ))
 
 // sendFunc is the function used to execute a KV batch; normally
-// wraps (*kv.Txn).Send.
+// wraps (*client.Txn).Send.
 type sendFunc func(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error)
@@ -165,7 +165,6 @@ type txnKVFetcher struct {
 	reqsScratch    []kvpb.RequestUnion
 
 	responses           []kvpb.ResponseUnion
-	kvPairsRead         int64
 	remainingBatches    [][]byte
 	remainingColBatches []coldata.Batch
 
@@ -262,7 +261,6 @@ type newTxnKVFetcherArgs struct {
 	lockTimeout                time.Duration
 	acc                        *mon.BoundAccount
 	forceProductionKVBatchSize bool
-	kvPairsRead                *int64
 	batchRequestsIssued        *int64
 	requestAdmissionHeader     kvpb.AdmissionHeader
 	responseAdmissionQ         *admission.WorkQueue
@@ -287,7 +285,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		requestAdmissionHeader:     args.requestAdmissionHeader,
 		responseAdmissionQ:         args.responseAdmissionQ,
 	}
-	f.kvBatchFetcherHelper.init(f.nextBatch, args.kvPairsRead, args.batchRequestsIssued)
+	f.kvBatchFetcherHelper.init(f.nextBatch, args.batchRequestsIssued)
 	return f
 }
 
@@ -505,10 +503,6 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 	if br != nil {
 		f.responses = br.Responses
-		f.kvPairsRead = 0
-		for i := range f.responses {
-			f.kvPairsRead += f.responses[i].GetInner().Header().NumKeys
-		}
 	} else {
 		f.responses = nil
 	}
@@ -655,11 +649,9 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		}
 
 		ret := KVBatchFetcherResponse{
-			MoreKVs:     true,
-			spanID:      f.curSpanID,
-			kvPairsRead: f.kvPairsRead,
+			MoreKVs: true,
+			spanID:  f.curSpanID,
 		}
-		f.kvPairsRead = 0
 
 		switch t := reply.(type) {
 		case *kvpb.ScanResponse:
@@ -850,17 +842,14 @@ type kvBatchFetcherHelper struct {
 	nextBatch func(context.Context) (KVBatchFetcherResponse, error)
 	atomics   struct {
 		bytesRead           int64
-		kvPairsRead         *int64
 		batchRequestsIssued *int64
 	}
 }
 
 func (h *kvBatchFetcherHelper) init(
-	nextBatch func(context.Context) (KVBatchFetcherResponse, error),
-	kvPairsRead, batchRequestsIssued *int64,
+	nextBatch func(context.Context) (KVBatchFetcherResponse, error), batchRequestsIssued *int64,
 ) {
 	h.nextBatch = nextBatch
-	h.atomics.kvPairsRead = kvPairsRead
 	h.atomics.batchRequestsIssued = batchRequestsIssued
 }
 
@@ -870,7 +859,6 @@ func (h *kvBatchFetcherHelper) NextBatch(ctx context.Context) (KVBatchFetcherRes
 	if !resp.MoreKVs || err != nil {
 		return resp, err
 	}
-	atomic.AddInt64(h.atomics.kvPairsRead, resp.kvPairsRead)
 	// Note that if resp.ColBatch is nil, then GetBatchMemSize will return 0.
 	// TODO(yuzefovich, 23.1): for resp.ColBatch this includes the decoded
 	// footprint as well as the overhead of slices and whatnot which is
@@ -891,14 +879,6 @@ func (h *kvBatchFetcherHelper) GetBytesRead() int64 {
 		return 0
 	}
 	return atomic.LoadInt64(&h.atomics.bytesRead)
-}
-
-// GetKVPairsRead implements the KVBatchFetcher interface.
-func (h *kvBatchFetcherHelper) GetKVPairsRead() int64 {
-	if h == nil || h.atomics.kvPairsRead == nil {
-		return 0
-	}
-	return atomic.LoadInt64(h.atomics.kvPairsRead)
 }
 
 // GetBatchRequestsIssued implements the KVBatchFetcher interface.

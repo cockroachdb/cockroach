@@ -40,6 +40,7 @@ func registerAcceptance(r registry.Registry) {
 				encryptionSupport: registry.EncryptionAlwaysDisabled,
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
+			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
 				name: "many-splits", fn: runManySplits,
 				encryptionSupport: registry.EncryptionMetamorphic,
@@ -77,6 +78,7 @@ func registerAcceptance(r registry.Registry) {
 			},
 		},
 	}
+	tags := []string{"default", "quick"}
 	specTemplate := registry.TestSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
@@ -86,7 +88,7 @@ func registerAcceptance(r registry.Registry) {
 		// will be posted.
 		Name:    "acceptance",
 		Timeout: 10 * time.Minute,
-		Tags:    registry.Tags("default", "quick"),
+		Tags:    tags,
 	}
 
 	for owner, tests := range testCases {

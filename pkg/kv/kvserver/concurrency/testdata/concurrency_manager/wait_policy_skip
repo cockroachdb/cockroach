@@ -30,11 +30,11 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 @ k
 
 on-lock-acquired req=req1 key=k2
 ----
-[-] acquire lock: txn 00000001 @ ‹k2›
+[-] acquire lock: txn 00000001 @ k2
 
 finish req=req1
 ----
@@ -53,7 +53,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=k3
 ----
-[-] acquire lock: txn 00000002 @ ‹k3›
+[-] acquire lock: txn 00000002 @ k3
 
 finish req=req2
 ----
@@ -72,7 +72,7 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=k4
 ----
-[-] acquire lock: txn 00000003 @ ‹k4›
+[-] acquire lock: txn 00000003 @ k4
 
 finish req=req3
 ----
@@ -88,7 +88,7 @@ sequence req=req4
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: waiting in lock wait-queues
-[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k4"› (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "k4" (queuedWriters: 1, queuedReaders: 0)
 [4] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req4: pushing txn 00000003 to abort
 [4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -96,25 +96,25 @@ sequence req=req4
 on-txn-updated txn=txn3 status=aborted
 ----
 [-] update txn: aborting txn3
-[4] sequence req4: resolving intent ‹"k4"› for txn 00000003 with ABORTED status
+[4] sequence req4: resolving intent "k4" for txn 00000003 with ABORTED status
 [4] sequence req4: lock wait-queue event: done waiting
-[4] sequence req4: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
+[4] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on "k4" for 0.000s
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: sequencing complete, returned guard
 
 debug-lock-table
 ----
-num=4
+global: num=4
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k4"
-   queued writers:
-    active: false req: 4, txn: 00000004-0000-0000-0000-000000000000
+  res: req: 4, txn: 00000004-0000-0000-0000-000000000000, ts: 13.000000000,0, seq: 0
+local: num=0
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Skip hits lock sequences

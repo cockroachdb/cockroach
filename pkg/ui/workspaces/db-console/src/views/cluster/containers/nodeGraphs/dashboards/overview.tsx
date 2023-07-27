@@ -30,7 +30,6 @@ export default function (props: GraphDashboardProps) {
     tooltipSelection,
     nodeDisplayNameByID,
     storeIDsByNodeID,
-    tenantSource,
   } = props;
 
   return [
@@ -38,7 +37,6 @@ export default function (props: GraphDashboardProps) {
       title="SQL Statements"
       isKvGraph={false}
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={`A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements
         successfully executed per second ${tooltipSelection}.`}
       preCalcGraphSize={true}
@@ -70,7 +68,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Service Latency: SQL Statements, 99th percentile"
       isKvGraph={false}
-      tenantSource={tenantSource}
       tooltip={
         <div>
           Over the last minute, this node executed 99% of SQL statements within
@@ -99,7 +96,6 @@ export default function (props: GraphDashboardProps) {
       title="SQL Statement Contention"
       isKvGraph={false}
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={`A moving average of the number of SQL statements executed per second that experienced contention ${tooltipSelection}.`}
       preCalcGraphSize={true}
     >
@@ -114,7 +110,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Replicas per Node"
-      tenantSource={tenantSource}
       tooltip={
         <div>
           The number of range replicas stored on this node.{" "}
@@ -142,7 +137,6 @@ export default function (props: GraphDashboardProps) {
       title="Capacity"
       isKvGraph={true}
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
       preCalcGraphSize={true}
     >

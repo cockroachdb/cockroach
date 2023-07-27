@@ -35,12 +35,9 @@ func Delete(
 	reply.FoundKey, err = storage.MVCCDelete(
 		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn,
 	)
-	if err != nil {
-		return result.Result{}, err
-	}
 
 	// If requested, replace point tombstones with range tombstones.
-	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes && h.Txn == nil {
+	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes && err == nil && h.Txn == nil {
 		if err := storage.ReplacePointTombstonesWithRangeTombstones(
 			ctx, spanset.DisableReadWriterAssertions(readWriter),
 			cArgs.Stats, args.Key, args.EndKey); err != nil {
@@ -48,5 +45,11 @@ func Delete(
 		}
 	}
 
-	return result.FromAcquiredLocks(h.Txn, args.Key), nil
+	// NB: even if MVCC returns an error, it may still have written an intent
+	// into the batch. This allows callers to consume errors like WriteTooOld
+	// without re-evaluating the batch. This behavior isn't particularly
+	// desirable, but while it remains, we need to assume that an intent could
+	// have been written even when an error is returned. This is harmless if the
+	// error is not consumed by the caller because the result will be discarded.
+	return result.FromAcquiredLocks(h.Txn, args.Key), err
 }

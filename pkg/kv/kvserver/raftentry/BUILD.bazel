@@ -10,7 +10,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/metric",
@@ -30,7 +29,6 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":raftentry"],
     deps = [
-        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",

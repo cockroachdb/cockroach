@@ -27,11 +27,7 @@ func init() {
 						Index: *protoutil.Clone(&this.Index).(*scpb.Index),
 					}
 				}),
-				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
-					// Avoid adding splits for tables without any data (i.e. newly created ones).
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
+				emit(func(this *scpb.PrimaryIndex) *scop.MaybeAddSplitForIndex {
 					return &scop.MaybeAddSplitForIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -39,12 +35,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_BACKFILLED,
-				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.BackfillIndex {
-					// No need to backfill indexes for added descriptors, these will
-					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
+				emit(func(this *scpb.PrimaryIndex) *scop.BackfillIndex {
 					return &scop.BackfillIndex{
 						TableID:       this.TableID,
 						SourceIndexID: this.SourceIndexID,
@@ -69,12 +60,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_MERGED,
-				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MergeIndex {
-					// No need to merge indexes for added descriptors, these will
-					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
+				emit(func(this *scpb.PrimaryIndex) *scop.MergeIndex {
 					return &scop.MergeIndex{
 						TableID:           this.TableID,
 						TemporaryIndexID:  this.TemporaryIndexID,
@@ -97,12 +83,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.ValidateIndex {
-					// No need to backfill validate for added descriptors, these will
-					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
-						return nil
-					}
+				emit(func(this *scpb.PrimaryIndex) *scop.ValidateIndex {
 					return &scop.ValidateIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,

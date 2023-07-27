@@ -17,19 +17,17 @@ import {
 } from "./statementsTable";
 import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
 import { calculateTotalWorkload } from "src/util";
-import { convertRawStmtsToAggregateStatistics } from "../sqlActivity/util";
 
-const statements =
-  statementsPagePropsFixture.statementsResponse.data.statements;
+const { statements } = statementsPagePropsFixture;
 
 storiesOf("StatementsSortedTable", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
   .add("with data", () => (
     <StatementsSortedTable
       className="statements-table"
-      data={convertRawStmtsToAggregateStatistics(statements)}
+      data={statements}
       columns={makeStatementsColumns(
-        convertRawStmtsToAggregateStatistics(statements),
+        statements,
         ["$ internal"],
         calculateTotalWorkload(statements),
         "statement",
@@ -51,9 +49,9 @@ storiesOf("StatementsSortedTable", module)
   .add("with data and VIEWACTIVITYREDACTED role", () => (
     <StatementsSortedTable
       className="statements-table"
-      data={convertRawStmtsToAggregateStatistics(statements)}
+      data={statements}
       columns={makeStatementsColumns(
-        convertRawStmtsToAggregateStatistics(statements),
+        statements,
         ["$ internal"],
         calculateTotalWorkload(statements),
         "statement",

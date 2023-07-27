@@ -218,7 +218,7 @@ type copyMachine struct {
 	csvReader    *csv.Reader
 	// buf is used to parse input data into rows. It also accumulates a partial
 	// row between protocol messages.
-	buf []byte
+	buf bytes.Buffer
 	// rows accumulates a batch of rows to be eventually inserted.
 	rows rowcontainer.RowContainer
 	// insertedRows keeps track of the total number of rows inserted by the
@@ -504,11 +504,10 @@ type copyTxnOpt struct {
 }
 
 func (c *copyMachine) Close(ctx context.Context) {
-	if c.vectorized {
-		c.rowsMemAcc.Close(ctx)
-	} else {
-		c.rows.Close(ctx)
-	}
+	c.rows.Close(ctx)
+	// TODO(cucaroach): if this isn't close'd the Stop below errors out
+	// saying there's 10240 bytes left, investigate.
+	c.rowsMemAcc.Close(ctx)
 	c.bufMemAcc.Close(ctx)
 	c.copyMon.Stop(ctx)
 }
@@ -616,20 +615,20 @@ const (
 func (c *copyMachine) processCopyData(ctx context.Context, data string, final bool) (retErr error) {
 	// At the end, adjust the mem accounting to reflect what's left in the buffer.
 	defer func() {
-		if err := c.bufMemAcc.ResizeTo(ctx, int64(cap(c.buf))); err != nil && retErr == nil {
+		if err := c.bufMemAcc.ResizeTo(ctx, int64(c.buf.Cap())); err != nil && retErr == nil {
 			retErr = err
 		}
 	}()
 
-	if len(data) > (cap(c.buf) - len(c.buf)) {
+	if len(data) > (c.buf.Cap() - c.buf.Len()) {
 		// If it looks like the buffer will need to allocate to accommodate data,
 		// account for the memory here. This is not particularly accurate - we don't
 		// know how much the buffer will actually grow by.
-		if err := c.bufMemAcc.Grow(ctx, int64(len(data))); err != nil {
+		if err := c.bufMemAcc.ResizeTo(ctx, int64(len(data))); err != nil {
 			return err
 		}
 	}
-	c.buf = append(c.buf, data...)
+	c.buf.WriteString(data)
 	var readFn func(ctx context.Context, final bool) (brk bool, err error)
 	switch c.format {
 	case tree.CopyFormatText:
@@ -641,7 +640,7 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 	default:
 		panic("unknown copy format")
 	}
-	for len(c.buf) > 0 {
+	for c.buf.Len() > 0 {
 		brk, err := readFn(ctx, final)
 		if err != nil {
 			return err
@@ -664,11 +663,11 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		// If we have a full batch of rows or we have exceeded maxRowMem process
 		// them. Only set finalBatch to true if this is the last
 		// CopyData segment AND we have no more data in the buffer.
-		if length := c.currentBatchSize(); length > 0 && (c.rowsMemAcc.Used() > c.maxRowMem || length >= c.copyBatchRowSize || batchDone) {
-			if length != c.copyBatchRowSize {
-				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", length, c.rowsMemAcc.Used(), c.maxRowMem)
+		if len := c.currentBatchSize(); len > 0 && (c.rowsMemAcc.Used() > c.maxRowMem || len >= c.copyBatchRowSize || batchDone) {
+			if len != c.copyBatchRowSize {
+				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", len, c.rowsMemAcc.Used(), c.maxRowMem)
 			}
-			if err := c.processRows(ctx, final && len(c.buf) == 0); err != nil {
+			if err := c.processRows(ctx, final && c.buf.Len() == 0); err != nil {
 				return err
 			}
 		}
@@ -692,26 +691,24 @@ func (c *copyMachine) currentBatchSize() int {
 }
 
 func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, err error) {
-	idx := bytes.IndexByte(c.buf, lineDelim)
-	var line []byte
-	if idx == -1 {
-		if !final {
-			// Leave the incomplete row in the buffer, to be processed next time.
+	line, err := c.buf.ReadBytes(lineDelim)
+	if err != nil {
+		if err != io.EOF {
+			return false, err
+		} else if !final {
+			// Put the incomplete row back in the buffer, to be processed next time.
+			c.buf.Write(line)
 			return true, nil
 		}
-		// If this is the final batch, use the whole buffer.
-		line = c.buf[:len(c.buf)]
-		c.buf = c.buf[len(c.buf):]
 	} else {
 		// Remove lineDelim from end.
-		line = c.buf[:idx]
-		c.buf = c.buf[idx+1:]
+		line = line[:len(line)-1]
 		// Remove a single '\r' at EOL, if present.
 		if len(line) > 0 && line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
 		}
 	}
-	if len(c.buf) == 0 && bytes.Equal(line, []byte(`\.`)) {
+	if c.buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 		return true, nil
 	}
 	err = c.readTextTuple(ctx, line)
@@ -721,29 +718,29 @@ func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, e
 func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, err error) {
 	var fullLine []byte
 	quoteCharsSeen := 0
-	offset := 0
 	// Keep reading lines until we encounter a newline that is not inside a
 	// quoted field, and therefore signifies the end of a CSV record.
 	for {
-		idx := bytes.IndexByte(c.buf[offset:], lineDelim)
-		if idx == -1 {
-			if final {
-				// If we reached EOF and this is the final chunk of input data, then
-				// try to process it.
-				fullLine = append(fullLine, c.buf[offset:]...)
-				c.buf = c.buf[len(c.buf):]
-				break
+		line, err := c.buf.ReadBytes(lineDelim)
+		fullLine = append(fullLine, line...)
+		if err != nil {
+			if err == io.EOF {
+				if final {
+					// If we reached EOF and this is the final chunk of input data, then
+					// try to process it.
+					break
+				} else {
+					// If there's more CopyData, put the incomplete row back in the
+					// buffer, to be processed next time.
+					c.buf.Write(fullLine)
+					return true, nil
+				}
 			} else {
-				// If there's more CopyData, keep the incomplete row in the
-				// buffer, to be processed next time.
-				return true, nil
+				return false, err
 			}
 		}
-		// Include the delimiter in the line.
-		line := c.buf[offset : offset+idx+1]
-		offset += idx + 1
-		fullLine = append(fullLine, line...)
-		// Now we need to calculate if we have reached the end of the quote.
+
+		// Now we need to calculate if we are have reached the end of the quote.
 		// If so, break out.
 		if c.csvEscape == 0 {
 			// CSV escape is not specified and hence defaults to '"'.¥
@@ -779,7 +776,6 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 			}
 		}
 		if quoteCharsSeen%2 == 0 {
-			c.buf = c.buf[offset:]
 			break
 		}
 	}
@@ -795,7 +791,7 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	record, err := c.csvReader.Read()
 	// Look for end of data before checking for errors, since a field count
 	// error will still return record data.
-	if len(record) == 1 && !record[0].Quoted && record[0].Val == endOfData && len(c.buf) == 0 {
+	if len(record) == 1 && !record[0].Quoted && record[0].Val == endOfData && c.buf.Len() == 0 {
 		return true, nil
 	}
 	if err != nil {
@@ -871,31 +867,25 @@ func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool,
 	}
 	switch c.binaryState {
 	case binaryStateNeedSignature:
-		n, err := c.readBinarySignature()
-		if err != nil {
+		if readSoFar, err := c.readBinarySignature(); err != nil {
 			// If this isn't the last message and we saw incomplete data, then
-			// leave it in the buffer to process more next time.
-			if !final && err == io.ErrUnexpectedEOF {
+			// put it back in the buffer to process more next time.
+			if !final && (err == io.EOF || err == io.ErrUnexpectedEOF) {
+				c.buf.Write(readSoFar)
 				return true, nil
 			}
-			c.buf = c.buf[n:]
 			return false, err
 		}
-		c.buf = c.buf[n:]
-		return false, nil
 	case binaryStateRead:
-		n, err := c.readBinaryTuple(ctx)
-		if err != nil {
+		if readSoFar, err := c.readBinaryTuple(ctx); err != nil {
 			// If this isn't the last message and we saw incomplete data, then
-			// leave it in the buffer to process more next time.
-			if !final && err == io.ErrUnexpectedEOF {
+			// put it back in the buffer to process more next time.
+			if !final && (err == io.EOF || err == io.ErrUnexpectedEOF) {
+				c.buf.Write(readSoFar)
 				return true, nil
 			}
-			c.buf = c.buf[n:]
 			return false, errors.Wrapf(err, "read binary tuple")
 		}
-		c.buf = c.buf[n:]
-		return false, nil
 	case binaryStateFoundTrailer:
 		if !final {
 			return false, pgerror.New(pgcode.BadCopyFileFormat,
@@ -905,33 +895,34 @@ func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool,
 	default:
 		panic("unknown binary state")
 	}
+	return false, nil
 }
 
-func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err error) {
+func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, err error) {
 	var fieldCount int16
 	var fieldCountBytes [2]byte
-	n := copy(fieldCountBytes[:], c.buf[bytesRead:])
-	bytesRead += n
-	if n < len(fieldCountBytes) {
-		return bytesRead, io.ErrUnexpectedEOF
+	n, err := io.ReadFull(&c.buf, fieldCountBytes[:])
+	readSoFar = append(readSoFar, fieldCountBytes[:n]...)
+	if err != nil {
+		return readSoFar, err
 	}
 	fieldCount = int16(binary.BigEndian.Uint16(fieldCountBytes[:]))
 	if fieldCount == -1 {
 		c.binaryState = binaryStateFoundTrailer
-		return bytesRead, nil
+		return nil, nil
 	}
 	if fieldCount < 1 {
-		return bytesRead, pgerror.Newf(pgcode.BadCopyFileFormat,
+		return nil, pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
 	datums := make(tree.Datums, fieldCount)
 	var byteCount int32
 	var byteCountBytes [4]byte
 	for i := range datums {
-		n := copy(byteCountBytes[:], c.buf[bytesRead:])
-		bytesRead += n
-		if n < len(byteCountBytes) {
-			return bytesRead, io.ErrUnexpectedEOF
+		n, err := io.ReadFull(&c.buf, byteCountBytes[:])
+		readSoFar = append(readSoFar, byteCountBytes[:n]...)
+		if err != nil {
+			return readSoFar, err
 		}
 		byteCount = int32(binary.BigEndian.Uint32(byteCountBytes[:]))
 		if byteCount == -1 {
@@ -939,10 +930,10 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			continue
 		}
 		data := make([]byte, byteCount)
-		n = copy(data, c.buf[bytesRead:])
-		bytesRead += n
-		if n < len(data) {
-			return bytesRead, io.ErrUnexpectedEOF
+		n, err = io.ReadFull(&c.buf, data)
+		readSoFar = append(readSoFar, data[:n]...)
+		if err != nil {
+			return readSoFar, err
 		}
 		d, err := pgwirebase.DecodeDatum(
 			ctx,
@@ -952,35 +943,33 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			data,
 		)
 		if err != nil {
-			return bytesRead, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
+			return nil, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
 		datums[i] = d
 	}
 	_, err = c.rows.AddRow(ctx, datums)
 	if err != nil {
-		return bytesRead, err
+		return nil, err
 	}
-	return bytesRead, nil
+	return nil, nil
 }
 
-// This is the standard 11-byte binary signature with the flags and
-// header 32-bit integers appended since we only support the zero value
-// of them.
-var copyBinarySignature = [19]byte{'P', 'G', 'C', 'O', 'P', 'Y', '\n', '\377', '\r', '\n', '\000', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00'}
-
-func (c *copyMachine) readBinarySignature() (int, error) {
-	var sig [19]byte
-	n := copy(sig[:], c.buf)
-	if n < len(sig) {
-		return n, io.ErrUnexpectedEOF
+func (c *copyMachine) readBinarySignature() ([]byte, error) {
+	// This is the standard 11-byte binary signature with the flags and
+	// header 32-bit integers appended since we only support the zero value
+	// of them.
+	const binarySignature = "PGCOPY\n\377\r\n\000" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00"
+	var sig [11 + 8]byte
+	if n, err := io.ReadFull(&c.buf, sig[:]); err != nil {
+		return sig[:n], err
 	}
-	if sig != copyBinarySignature {
-		return n, pgerror.New(pgcode.BadCopyFileFormat,
+	if !bytes.Equal(sig[:], []byte(binarySignature)) {
+		return sig[:], pgerror.New(pgcode.BadCopyFileFormat,
 			"unrecognized binary copy signature")
 	}
 	c.binaryState = binaryStateRead
-	return n, nil
+	return sig[:], nil
 }
 
 // preparePlannerForCopy resets the planner so that it can be used during

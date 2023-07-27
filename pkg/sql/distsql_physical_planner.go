@@ -306,7 +306,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 			return false, expr
 		}
 	case *tree.RoutineExpr:
-		// TODO(#86310): enable UDFs in DistSQL.
+		// TODO(86310): enable UDFs in DistSQL.
 		v.err = newQueryNotSupportedErrorf("user-defined routine %s cannot be executed with distsql", t)
 		return false, expr
 	case *tree.DOid:
@@ -917,15 +917,14 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		if planner.instrumentation.collectBundle && vectorized {
 			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
 			defer cleanup()
-			flowCtx.Local = !planner.curPlan.flags.IsDistributed()
 			getExplain := func(verbose bool) []string {
-				gatewaySQLInstanceID := planner.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID
 				// When we're collecting the bundle, we're always recording the
 				// stats.
 				const recordingStats = true
 				explain, err := colflow.ExplainVec(
 					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
-					gatewaySQLInstanceID, verbose, recordingStats,
+					planner.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
+					verbose, planner.curPlan.flags.IsDistributed(), recordingStats,
 				)
 				if err != nil {
 					// In some edge cases (like when subqueries are present or
@@ -1327,7 +1326,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 func (dsp *DistSQLPlanner) partitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
-	resolver, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
+	resolver, instances, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1353,6 +1352,11 @@ func (dsp *DistSQLPlanner) partitionSpans(
 			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
+			return nil, false, err
+		}
+	}
+	if planCtx.localityFilter.Empty() {
+		if err = dsp.maybeReassignToGatewaySQLInstance(partitions, instances); err != nil {
 			return nil, false, err
 		}
 	}
@@ -1390,24 +1394,29 @@ func instanceIDForKVNodeHostedInstance(nodeID roachpb.NodeID) base.SQLInstanceID
 }
 
 // makeInstanceResolver returns a function that can choose the SQL instance ID
-// for a provided KV node ID.
+// for a provided KV node ID. It also returns a list of all healthy instances if
+// that list was used in choosing an instance, specifically if the localities of
+// those instances were used to decide the assignment, for use by any steps that
+// wish to post-process that assignment (such as adjusting based on localities).
+// If the instance was assigned statically or the instance list had no locality
+// information leading to random assignments then no instance list is returned.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
 	ctx context.Context, locFilter roachpb.Locality,
-) (func(roachpb.NodeID) base.SQLInstanceID, error) {
+) (func(roachpb.NodeID) base.SQLInstanceID, []sqlinstance.InstanceInfo, error) {
 	_, mixedProcessMode := dsp.distSQLSrv.NodeID.OptionalNodeID()
 
 	if mixedProcessMode && locFilter.Empty() {
-		return instanceIDForKVNodeHostedInstance, nil
+		return instanceIDForKVNodeHostedInstance, nil, nil
 	}
 
 	// GetAllInstances only returns healthy instances.
 	// TODO(yuzefovich): confirm that all instances are of compatible version.
 	instances, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(instances) == 0 {
-		return nil, errors.New("no healthy sql instances available for planning")
+		return nil, nil, errors.New("no healthy sql instances available for planning")
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -1426,7 +1435,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			}
 		}
 		if len(eligible) == 0 {
-			return nil, errors.New("no healthy sql instances available matching locality requirement")
+			return nil, nil, errors.New("no healthy sql instances available matching locality requirement")
 		}
 		instances = eligible
 		instancesHaveLocality = true
@@ -1477,7 +1486,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			}
 			return instances[rng.Intn(len(instances))].InstanceID
 		}
-		return resolver, nil
+		return resolver, instances, nil
 	}
 
 	// If no sql instances have locality information, fallback to a naive
@@ -1493,7 +1502,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		i++
 		return id
 	}
-	return resolver, nil
+	return resolver, nil, nil
 }
 
 // closestInstances returns the subset of instances which are closest to the
@@ -1514,6 +1523,56 @@ func closestInstances(
 		}
 	}
 	return res
+}
+
+// maybeReassignToGatewaySQLInstance checks whether the span partitioning is
+// such that it contains only a single SQL instance that is different from the
+// gateway, yet the gateway instance is in the same region as the assigned one.
+// If that is the case, then all spans are reassigned to the gateway instance in
+// order to avoid an extra hop needed when setting up the distributed plan. If
+// the locality information isn't available for the instances, then we assume
+// the assigned instance to be in the same region as the gateway.
+func (dsp *DistSQLPlanner) maybeReassignToGatewaySQLInstance(
+	partitions []SpanPartition, instances []sqlinstance.InstanceInfo,
+) error {
+	if len(partitions) != 1 || partitions[0].SQLInstanceID == dsp.gatewaySQLInstanceID {
+		// Keep the existing partitioning if more than one instance is used or
+		// the gateway is already used as the single instance.
+		return nil
+	}
+	var gatewayRegion, assignedRegion string
+	if len(instances) > 0 {
+		assignedInstance := partitions[0].SQLInstanceID
+		var ok bool
+		for _, instance := range instances {
+			if instance.InstanceID == dsp.gatewaySQLInstanceID {
+				gatewayRegion, ok = instance.Locality.Find("region")
+				if !ok {
+					// If we can't determine the region of the gateway, keep the
+					// spans assigned to the other instance.
+					break
+				}
+			} else if instance.InstanceID == assignedInstance {
+				assignedRegion, ok = instance.Locality.Find("region")
+				if !ok {
+					// We couldn't determine the region of the assigned instance
+					// but it shouldn't be possible since we wouldn't have used
+					// the instance in the planning (since we wouldn't include
+					// it into regionToSQLInstanceIDs map in
+					// makeSQLInstanceIDForKVNodeIDTenantResolver).
+					return errors.AssertionFailedf(
+						"unexpectedly planned all spans on a SQL instance %s "+
+							"which we could not find region for", instance,
+					)
+				}
+			}
+		}
+	}
+
+	if gatewayRegion == assignedRegion {
+		partitions[0].SQLInstanceID = dsp.gatewaySQLInstanceID
+	}
+	return nil
 }
 
 // getInstanceIDForScan retrieves the SQL Instance ID where the single table
@@ -1549,7 +1608,7 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	if dsp.useGossipPlanning(ctx, planCtx) && planCtx.localityFilter.Empty() {
 		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
 	}
-	resolver, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
+	resolver, _, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
 	if err != nil {
 		return 0, err
 	}

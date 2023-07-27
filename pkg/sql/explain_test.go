@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,13 +40,9 @@ func TestStatementReuses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	tenantSettings := s.TenantOrServer().ClusterSettings()
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 
 	initStmts := []string{
 		`CREATE DATABASE d`,
@@ -238,6 +233,8 @@ func TestPrepareExplain(t *testing.T) {
 		"EXPLAIN SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (VERBOSE) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (TYPES) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE (VERBOSE) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (DISTSQL) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (VEC) SELECT * FROM abc WHERE c=1",
 	}
@@ -362,7 +359,6 @@ func TestExplainKVInfo(t *testing.T) {
 			info := getKVInfo(t, r, scanQuery)
 
 			assert.Equal(t, 1000, info.counters[rowsRead])
-			assert.Equal(t, 1000, info.counters[pairsRead])
 			assert.LessOrEqual(t, 31 /* KiB */, info.counters[bytesRead])
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 1000, info.counters[stepCount])
@@ -372,7 +368,6 @@ func TestExplainKVInfo(t *testing.T) {
 			info = getKVInfo(t, r, lookupJoinQuery)
 
 			assert.Equal(t, 1000, info.counters[rowsRead])
-			assert.Equal(t, 1000, info.counters[pairsRead])
 			assert.LessOrEqual(t, 13 /* KiB */, info.counters[bytesRead])
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 0, info.counters[stepCount])
@@ -383,7 +378,6 @@ func TestExplainKVInfo(t *testing.T) {
 
 const (
 	rowsRead = iota
-	pairsRead
 	bytesRead
 	gRPCCalls
 	stepCount
@@ -398,8 +392,7 @@ type kvInfo struct {
 var patterns [numKVCounters]*regexp.Regexp
 
 func init() {
-	patterns[rowsRead] = regexp.MustCompile(`KV rows decoded: (\d+)`)
-	patterns[pairsRead] = regexp.MustCompile(`KV pairs read: (\d+)`)
+	patterns[rowsRead] = regexp.MustCompile(`KV rows read: (\d+)`)
 	patterns[bytesRead] = regexp.MustCompile(`KV bytes read: (\d+) \w+`)
 	patterns[gRPCCalls] = regexp.MustCompile(`KV gRPC calls: (\d+)`)
 	patterns[stepCount] = regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/[\d+]`)

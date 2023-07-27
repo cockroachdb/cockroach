@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -68,66 +67,33 @@ func TestReplicateQueue(t *testing.T) {
 	testSettings.StateExchangeInterval = 5 * time.Second
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
 
-	getReplLeaseCounts := func(s state.State) (map[int]int, map[int]int) {
-		storeReplView := make(map[int]int)
-		storeLeaseView := make(map[int]int)
+	getReplCounts := func(s state.State) map[int]int {
+		storeView := make(map[int]int)
 		stores := s.Stores()
 		storeIDs := make([]state.StoreID, len(stores))
 		for i, store := range stores {
 			storeIDs[i] = store.StoreID()
 		}
 		for _, desc := range s.StoreDescriptors(false /* cached */, storeIDs...) {
-			storeReplView[int(desc.StoreID)] = int(desc.Capacity.RangeCount)
-			storeLeaseView[int(desc.StoreID)] = int(desc.Capacity.LeaseCount)
+			storeView[int(desc.StoreID)] = int(desc.Capacity.RangeCount)
 		}
-		return storeReplView, storeLeaseView
+		return storeView
 	}
 
-	singleLocality := func(k, v string) roachpb.Locality {
-		return roachpb.Locality{Tiers: []roachpb.Tier{{Key: k, Value: v}}}
-	}
-
-	constraint := func(k, v string) roachpb.Constraint {
-		return roachpb.Constraint{
-			Type:  roachpb.Constraint_REQUIRED,
-			Key:   k,
-			Value: v,
-		}
-	}
-
-	leasePreference := func(constraints ...roachpb.Constraint) roachpb.LeasePreference {
-		preference := roachpb.LeasePreference{
-			Constraints: make([]roachpb.Constraint, len(constraints)),
-		}
-		copy(preference.Constraints, constraints)
-		return preference
-	}
-
-	conjunctionConstraint := func(k, v string, numReplicas int32) roachpb.ConstraintsConjunction {
-		return roachpb.ConstraintsConjunction{
-			NumReplicas: numReplicas,
-			Constraints: []roachpb.Constraint{constraint(k, v)},
-		}
-	}
-
-	testingState := func(replicaCounts map[state.StoreID]int, spanConfig roachpb.SpanConfig, initialRF int) state.State {
-		s := state.NewStateWithReplCounts(replicaCounts, initialRF, 1000 /* keyspace */, testSettings)
+	testingState := func(replicaCounts map[state.StoreID]int, replicationFactor int32) state.State {
+		s := state.NewStateWithReplCounts(replicaCounts, 2 /* replsPerRange */, 1000 /* keyspace */, testSettings)
+		spanConfig := roachpb.SpanConfig{NumVoters: replicationFactor, NumReplicas: replicationFactor}
 		for _, r := range s.Ranges() {
-			s.SetSpanConfigForRange(r.RangeID(), spanConfig)
-			s.TransferLease(r.RangeID(), testingStore)
+			s.SetSpanConfig(r.RangeID(), spanConfig)
 		}
 		return s
 	}
 
 	testCases := []struct {
-		desc                                    string
-		replicaCounts                           map[state.StoreID]int
-		spanConfig                              roachpb.SpanConfig
-		initialRF                               int
-		nonLiveNodes                            map[state.NodeID]livenesspb.NodeLivenessStatus
-		nodeLocalities                          map[state.NodeID]roachpb.Locality
-		ticks                                   []int64
-		expectedReplCounts, expectedLeaseCounts map[int64]map[int]int
+		desc          string
+		replicaCounts map[state.StoreID]int
+		ticks         []int64
+		expected      map[int64]map[int]int
 	}{
 		{
 			// NB: Expect no action, range counts are balanced.
@@ -136,7 +102,7 @@ func TestReplicateQueue(t *testing.T) {
 				1: 10, 2: 10,
 			},
 			ticks: []int64{5, 10, 15},
-			expectedReplCounts: map[int64]map[int]int{
+			expected: map[int64]map[int]int{
 				5:  {1: 10, 2: 10},
 				10: {1: 10, 2: 10},
 				15: {1: 10, 2: 10},
@@ -150,241 +116,31 @@ func TestReplicateQueue(t *testing.T) {
 			replicaCounts: map[state.StoreID]int{
 				1: 10, 2: 10, 3: 0,
 			},
-			ticks: []int64{5, 10, 15, 20},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 10, 3: 0},
-				10: {1: 10, 2: 10, 3: 0},
-				15: {1: 10, 2: 9, 3: 1},
-				20: {1: 9, 2: 9, 3: 2},
-			},
-		},
-		{
-			desc: "up-replicate RF=3 -> RF=5",
-			replicaCounts: map[state.StoreID]int{
-				1: 1, 2: 1, 3: 1, 4: 0, 5: 0,
-			},
-			initialRF: 3,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 5,
-				NumVoters:   5,
-			},
-			ticks: []int64{5, 10, 15, 20},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 1, 2: 1, 3: 1, 4: 0, 5: 0},
-				10: {1: 1, 2: 1, 3: 1, 4: 0, 5: 0},
-				15: {1: 1, 2: 1, 3: 1, 4: 0, 5: 1},
-				20: {1: 1, 2: 1, 3: 1, 4: 1, 5: 1},
-			},
-		},
-		{
-			desc: "up-replicate RF=3 -> RF=5 +2 non-voters",
-			replicaCounts: map[state.StoreID]int{
-				1: 1, 2: 1, 3: 1, 4: 0, 5: 0,
-			},
-			initialRF: 3,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 5,
-				NumVoters:   3,
-			},
-			ticks: []int64{5, 10, 15, 20},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 1, 2: 1, 3: 1, 4: 0, 5: 0},
-				10: {1: 1, 2: 1, 3: 1, 4: 0, 5: 0},
-				15: {1: 1, 2: 1, 3: 1, 4: 0, 5: 1},
-				20: {1: 1, 2: 1, 3: 1, 4: 1, 5: 1},
-			},
-		},
-		{
-			desc: "down-replicate RF=5 -> RF=3",
-			replicaCounts: map[state.StoreID]int{
-				1: 1, 2: 1, 3: 1, 4: 1, 5: 1,
-			},
-			initialRF: 5,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 3,
-				NumVoters:   3,
-			},
-			ticks: []int64{5, 10, 15, 20},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 1, 2: 1, 3: 1, 4: 1, 5: 1},
-				10: {1: 1, 2: 1, 3: 1, 4: 1, 5: 1},
-				15: {1: 1, 2: 1, 3: 1, 4: 0, 5: 1},
-				20: {1: 1, 2: 0, 3: 1, 4: 0, 5: 1},
-			},
-		},
-		{
-			desc: "replace dead voter",
-			replicaCounts: map[state.StoreID]int{
-				1: 1, 2: 1, 3: 1, 4: 0,
-			},
-			initialRF: 3,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 3,
-				NumVoters:   3,
-			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				3: livenesspb.NodeLivenessStatus_DEAD},
 			ticks: []int64{5, 10, 15},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 1, 2: 1, 3: 1, 4: 0},
-				10: {1: 1, 2: 1, 3: 1, 4: 0},
-				15: {1: 1, 2: 1, 3: 0, 4: 1},
-			},
-		},
-		{
-			desc: "replace decommissioning voters",
-			replicaCounts: map[state.StoreID]int{
-				1: 10, 2: 10, 3: 10, 4: 0,
-			},
-			initialRF: 3,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 3,
-				NumVoters:   3,
-			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING},
-			ticks: []int64{5, 10, 15, 20, 25},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 10, 3: 10, 4: 0},
-				10: {1: 10, 2: 10, 3: 10, 4: 0},
-				15: {1: 10, 2: 10, 3: 9, 4: 1},
-				20: {1: 10, 2: 10, 3: 8, 4: 2},
-				25: {1: 10, 2: 10, 3: 7, 4: 3},
-			},
-		},
-		{
-			// There are 10 voters in region a and b each at the moment.The span
-			// config specifies 1 replica should be in a and one replica in c. b is
-			// not a valid region, replicas should move from b -> c.
-			desc: "handle span config constraints",
-			replicaCounts: map[state.StoreID]int{
-				1: 10, 2: 10, 3: 0,
-			},
-			initialRF: 2,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 2,
-				NumVoters:   2,
-				Constraints: []roachpb.ConstraintsConjunction{
-					conjunctionConstraint("region", "a", 1),
-					conjunctionConstraint("region", "c", 1),
-				},
-			},
-			nodeLocalities: map[state.NodeID]roachpb.Locality{
-				1: singleLocality("region", "a"),
-				2: singleLocality("region", "b"),
-				3: singleLocality("region", "c"),
-			},
-			ticks: []int64{5, 10, 15, 20, 25},
-			expectedReplCounts: map[int64]map[int]int{
+			expected: map[int64]map[int]int{
 				5:  {1: 10, 2: 10, 3: 0},
-				10: {1: 10, 2: 10, 3: 0},
-				15: {1: 10, 2: 9, 3: 1},
-				20: {1: 10, 2: 8, 3: 2},
-				25: {1: 10, 2: 7, 3: 3},
-			},
-		},
-		{
-			desc: "handle lease preferences",
-			replicaCounts: map[state.StoreID]int{
-				1: 10, 2: 10,
-			},
-			initialRF: 2,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 2,
-				NumVoters:   2,
-				LeasePreferences: []roachpb.LeasePreference{
-					leasePreference(constraint("region", "b")),
-				},
-			},
-			nodeLocalities: map[state.NodeID]roachpb.Locality{
-				1: singleLocality("region", "a"),
-				2: singleLocality("region", "b"),
-			},
-			ticks: []int64{5, 10, 15, 20, 25},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 10},
-				10: {1: 10, 2: 10},
-				15: {1: 10, 2: 10},
-				20: {1: 10, 2: 10},
-				25: {1: 10, 2: 10},
-			},
-			expectedLeaseCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 0},
-				10: {1: 10, 2: 0},
-				15: {1: 9, 2: 1},
-				20: {1: 8, 2: 2},
-				25: {1: 7, 2: 3},
-			},
-		},
-		{
-			desc: "don't transfer leases to draining store",
-			replicaCounts: map[state.StoreID]int{
-				1: 10, 2: 10,
-			},
-			initialRF: 2,
-			spanConfig: roachpb.SpanConfig{
-				NumReplicas: 2,
-				NumVoters:   2,
-				LeasePreferences: []roachpb.LeasePreference{
-					leasePreference(constraint("region", "b")),
-				},
-			},
-			nodeLocalities: map[state.NodeID]roachpb.Locality{
-				1: singleLocality("region", "a"),
-				2: singleLocality("region", "b"),
-			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				2: livenesspb.NodeLivenessStatus_DRAINING},
-			ticks: []int64{5, 10, 15},
-			expectedReplCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 10},
-				10: {1: 10, 2: 10},
-				15: {1: 10, 2: 10},
-			},
-			expectedLeaseCounts: map[int64]map[int]int{
-				5:  {1: 10, 2: 0},
-				10: {1: 10, 2: 0},
-				15: {1: 10, 2: 0},
+				10: {1: 10, 2: 9, 3: 1},
+				15: {1: 10, 2: 8, 3: 2},
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			spanConfig := tc.spanConfig
-			initialRF := tc.initialRF
-			// Default to RF=2 for simplicity when not specified. Although this is
-			// fairly unrealistic.
-			if spanConfig.NumReplicas == 0 {
-				spanConfig = roachpb.SpanConfig{NumVoters: 2, NumReplicas: 2}
-			}
-			if initialRF == 0 {
-				initialRF = 2
-			}
-
-			s := testingState(tc.replicaCounts, spanConfig, initialRF)
+			s := testingState(tc.replicaCounts, 2 /* replication factor */)
 			changer := state.NewReplicaChanger()
 			store, _ := s.Store(testingStore)
 			rq := NewReplicateQueue(
 				store.StoreID(),
 				changer,
-				testSettings,
+				testSettings.ReplicaChangeDelayFn(),
 				s.MakeAllocator(store.StoreID()),
 				s.StorePool(store.StoreID()),
 				start,
 			)
 			s.TickClock(start)
 
-			for nodeID, livenessStatus := range tc.nonLiveNodes {
-				s.SetNodeLiveness(nodeID, livenessStatus)
-			}
-
-			for nodeID, locality := range tc.nodeLocalities {
-				s.SetNodeLocality(nodeID, locality)
-			}
-
-			replCountResults := make(map[int64]map[int]int)
-			leaseCountResults := make(map[int64]map[int]int)
+			results := make(map[int64]map[int]int)
 			// Initialize the store pool information.
 			gossip := gossip.NewGossip(s, testSettings)
 			gossip.Tick(ctx, start, s)
@@ -397,9 +153,6 @@ func TestReplicateQueue(t *testing.T) {
 				// considering stores as dead.
 				s.TickClock(state.OffsetTick(start, tick))
 
-				// Tick state updates that are queued for completion.
-				changer.Tick(state.OffsetTick(start, tick), s)
-
 				// Update the store's view of the cluster, we update all stores
 				// but only care about s1's view.
 				gossip.Tick(ctx, state.OffsetTick(start, tick), s)
@@ -408,22 +161,16 @@ func TestReplicateQueue(t *testing.T) {
 				// considering rebalance.
 				rq.Tick(ctx, state.OffsetTick(start, tick), s)
 
-				if nextRepl == len(repls) {
-					repls = s.Replicas(store.StoreID())
-					nextRepl = 0
-				}
+				// Tick state updates that are queued for completion.
+				changer.Tick(state.OffsetTick(start, tick), s)
+
 				// Add a new repl to the replicate queue.
 				rq.MaybeAdd(ctx, repls[nextRepl], s)
-
 				nextRepl++
-				replCounts, leaseCounts := getReplLeaseCounts(s)
-				replCountResults[tick] = replCounts
-				leaseCountResults[tick] = leaseCounts
+
+				results[tick] = getReplCounts(s)
 			}
-			require.Equal(t, tc.expectedReplCounts, replCountResults)
-			if len(tc.expectedLeaseCounts) > 0 {
-				require.Equal(t, tc.expectedLeaseCounts, leaseCountResults)
-			}
+			require.Equal(t, tc.expected, results)
 		})
 	}
 }

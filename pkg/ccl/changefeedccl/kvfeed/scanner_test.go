@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -94,6 +95,7 @@ INSERT INTO t VALUES (1), (2), (3);
 
 	scanner := &scanRequestScanner{
 		settings: s.ClusterSettings(),
+		gossip:   gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db:       kvdb,
 	}
 

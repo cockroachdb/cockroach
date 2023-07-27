@@ -1,0 +1,310 @@
+setup
+CREATE TABLE t2 (i INT PRIMARY KEY);
+CREATE TABLE t1 (i INT PRIMARY KEY REFERENCES t2(i));
+----
+...
++object {100 101 t2} -> 104
++object {100 101 t1} -> 105
+
+# Constraint is still enforced in this stage, so the second
+# insert will fail.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t1 VALUES (0);
+----
+pq: insert on table "t1" violates foreign key constraint "crdb_internal_constraint_2_name_placeholder"
+
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*) FROM t1;
+----
+0
+
+# A dropping FK is only enforced for incoming writes, as demonstrated above,
+# but not validated on existing rows. We hence use the following explain
+# statement to ensure the optimizer effective ignores the FK constraint.
+# This is proved by t1 using a *full scan*, rather than a limited scan.
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+EXPLAIN SELECT * FROM t1 JOIN t2 ON t1.i = t2.i LIMIT 1
+----
+----
+distribution: local
+vectorized: true
+
+• limit
+│ count: 1
+│
+└── • lookup join
+    │ table: t2@t2_pkey
+    │ equality: (i) = (i)
+    │ equality cols are key
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: FULL SCAN (SOFT LIMIT)
+----
+----
+
+test
+ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_constraint
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     inboundFks:
+     - constraintId: 2
+  -    name: t1_i_fkey
+  +    name: crdb_internal_constraint_2_name_placeholder
+       originColumnIds:
+       - 1
+  ...
+       - 1
+       referencedTableId: 104
+  +    validity: Dropping
+     modificationTime: {}
+     name: t2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+  ...
+     id: 105
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check: {}
+  +      constraintType: FOREIGN_KEY
+  +      foreignKey:
+  +        constraintId: 2
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        originColumnIds:
+  +        - 1
+  +        originTableId: 105
+  +        referencedColumnIds:
+  +        - 1
+  +        referencedTableId: 104
+  +        validity: Dropping
+  +      name: t1_i_fkey
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t1
+     nextColumnId: 2
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  -  outboundFks:
+  -  - constraintId: 2
+  -    name: t1_i_fkey
+  -    originColumnIds:
+  -    - 1
+  -    originTableId: 105
+  -    referencedColumnIds:
+  -    - 1
+  -    referencedTableId: 104
+     parentId: 100
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     families:
+     - columnIds:
+  ...
+     inboundFks:
+     - constraintId: 2
+  -    name: t1_i_fkey
+  +    name: crdb_internal_constraint_2_name_placeholder
+       originColumnIds:
+       - 1
+  ...
+       - 1
+       referencedTableId: 104
+  +    validity: Dropping
+     modificationTime: {}
+     name: t2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›
+  +        statement: ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey
+  +        statementTag: ALTER TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 105
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check: {}
+  +      constraintType: FOREIGN_KEY
+  +      foreignKey:
+  +        constraintId: 2
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        originColumnIds:
+  +        - 1
+  +        originTableId: 105
+  +        referencedColumnIds:
+  +        - 1
+  +        referencedTableId: 104
+  +        validity: Dropping
+  +      name: t1_i_fkey
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t1
+     nextColumnId: 2
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  -  outboundFks:
+  -  - constraintId: 2
+  -    name: t1_i_fkey
+  -    originColumnIds:
+  -    - 1
+  -    originTableId: 105
+  -    referencedColumnIds:
+  -    - 1
+  -    referencedTableId: 104
+     parentId: 100
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t1 DROP CONSTRAINT t1_i_fkey"
+  descriptor IDs: [104 105]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 104
+  -  inboundFks:
+  -  - constraintId: 2
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    originColumnIds:
+  -    - 1
+  -    originTableId: 105
+  -    referencedColumnIds:
+  -    - 1
+  -    referencedTableId: 104
+  -    validity: Dropping
+     modificationTime: {}
+     name: t2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›
+  -        statement: ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 105
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check: {}
+  -      constraintType: FOREIGN_KEY
+  -      foreignKey:
+  -        constraintId: 2
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        originColumnIds:
+  -        - 1
+  -        originTableId: 105
+  -        referencedColumnIds:
+  -        - 1
+  -        referencedTableId: 104
+  -        validity: Dropping
+  -      name: t1_i_fkey
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t1
+     nextColumnId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
+commit transaction #3
+# end PostCommitPhase

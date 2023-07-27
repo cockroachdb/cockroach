@@ -15,11 +15,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
@@ -83,27 +81,19 @@ type State interface {
 	// AddNode modifies the state to include one additional node. This cannot
 	// fail. The new Node is returned.
 	AddNode() Node
-	// SetNodeLocality sets the locality of the node with ID NodeID to be the
-	// locality given.
-	SetNodeLocality(NodeID, roachpb.Locality)
-	// Topology returns the locality hierarchy information for a cluster.
-	Topology() Topology
 	// AddStore modifies the state to include one additional store on the Node
 	// with ID NodeID. This fails if no Node exists with ID NodeID.
 	AddStore(NodeID) (Store, bool)
-	// SetStoreCapacity sets the capacity in bytes of the store with ID storeID.
-	SetStoreCapacity(StoreID, int64)
 	// CanAddReplica returns whether adding a replica for the Range with ID RangeID
 	// to the Store with ID StoreID is valid.
 	CanAddReplica(RangeID, StoreID) bool
 	// CanRemoveReplica returns whether removing a replica for the Range with
 	// ID RangeID from the Store with ID StoreID is valid.
 	CanRemoveReplica(RangeID, StoreID) bool
-	// AddReplica modifies the state to include one additional replica for the
-	// Range with ID RangeID, placed on the Store with ID StoreID. The replica
-	// type is set to the given replica type.  This fails if a Replica for the
-	// Range already exists the Store.
-	AddReplica(RangeID, StoreID, roachpb.ReplicaType) (Replica, bool)
+	// AddReplica modifies the state to include one additional range for the
+	// Range with ID RangeID, placed on the Store with ID StoreID. This fails
+	// if a Replica for the Range already exists the Store.
+	AddReplica(RangeID, StoreID) (Replica, bool)
 	// RemoveReplica modifies the state to remove a Replica with the ID
 	// ReplicaID. It fails if this Replica does not exist.
 	RemoveReplica(RangeID, StoreID) bool
@@ -119,18 +109,8 @@ type State interface {
 	// RangeSpan returns the [StartKey, EndKey) for the range with ID RangeID
 	// if it exists, otherwise it returns false.
 	RangeSpan(RangeID) (Key, Key, bool)
-	// SetSpanConfigForRange set the span config for the Range with ID RangeID.
-	SetSpanConfigForRange(RangeID, roachpb.SpanConfig) bool
-	// SetSpanConfig sets the span config for all ranges represented by the span,
-	// splitting if necessary.
-	SetSpanConfig(roachpb.Span, roachpb.SpanConfig)
-	// SetRangeBytes sets the size of the range with ID RangeID to be equal to
-	// the bytes given.
-	SetRangeBytes(RangeID, int64)
-	// SetCapacityOverride updates the capacity for the store with ID StoreID to
-	// always return the overriden value given for any set fields in
-	// CapacityOverride.
-	SetCapacityOverride(StoreID, CapacityOverride)
+	// SetSpanConfig set the span config for the Range with ID RangeID.
+	SetSpanConfig(RangeID, roachpb.SpanConfig) bool
 	// ValidTransfer returns whether transferring the lease for the Range with ID
 	// RangeID, to the Store with ID StoreID is valid.
 	ValidTransfer(RangeID, StoreID) bool
@@ -145,9 +125,9 @@ type State interface {
 	// likewise modified to reflect this in it's Capacity, held in the
 	// StoreDescriptor.
 	ApplyLoad(workload.LoadBatch)
-	// RangeUsageInfo returns the usage information for the Range with ID RangeID
-	// on the store with ID StoreID.
-	RangeUsageInfo(RangeID, StoreID) allocator.RangeUsageInfo
+	// ReplicaLoad returns the usage information for the Range with ID
+	// RangeID on the store with ID StoreID.
+	ReplicaLoad(RangeID, StoreID) ReplicaLoad
 	// ClusterUsageInfo returns the usage information for the entire cluster.
 	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
@@ -158,9 +138,6 @@ type State interface {
 	// NextReplicasFn returns a function, that when called will return the current
 	// replicas that exist on the store.
 	NextReplicasFn(StoreID) func() []Replica
-	// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
-	// the status given.
-	SetNodeLiveness(NodeID, livenesspb.NodeLivenessStatus)
 	// NodeLivenessFn returns a function, that when called will return the
 	// liveness of the Node with ID NodeID.
 	// TODO(kvoli): Find a better home for this method, required by the
@@ -184,8 +161,6 @@ type State interface {
 	// RaftStatus returns the current raft status for the replica of the Range
 	// with ID RangeID, on the store with ID StoreID.
 	RaftStatus(RangeID, StoreID) *raft.Status
-	// Report returns the span config conformance report for every range.
-	Report() roachpb.SpanConfigConformanceReport
 	// RegisterCapacityChangeListener registers a listener which will be
 	// notified on events where there is a lease or replica addition or
 	// removal, for a specific store.
@@ -194,9 +169,6 @@ type State interface {
 	// a new store capacity has been generated from scratch, for a specific
 	// store.
 	RegisterCapacityListener(NewCapacityListener)
-	// RegisterConfigChangeListener registers a listener which will be called
-	// when a cluster configuration change occurs such as a store being added.
-	RegisterConfigChangeListener(ConfigChangeListener)
 }
 
 // Node is a container for stores and is part of a cluster.

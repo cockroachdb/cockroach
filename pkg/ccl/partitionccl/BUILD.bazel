@@ -41,7 +41,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":partitionccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

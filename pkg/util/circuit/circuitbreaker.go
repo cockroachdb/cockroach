@@ -61,12 +61,6 @@ func NewBreaker(opts Options) *Breaker {
 	return br
 }
 
-// Signal is returned from the Breaker.Signal method.
-type Signal interface {
-	Err() error
-	C() <-chan struct{}
-}
-
 // Signal returns a channel that is closed once the breaker trips and a function
 // (which may be invoked multiple times) returning a pertinent error. This is
 // similar to context.Context's Done() and Err().
@@ -79,21 +73,15 @@ type Signal interface {
 //
 // Signal is allocation-free and suitable for use in performance-sensitive code
 // paths. See ExampleBreaker_Signal for a usage example.
-func (b *Breaker) Signal() Signal {
+func (b *Breaker) Signal() interface {
+	Err() error
+	C() <-chan struct{}
+} {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	if fn := b.mu.signalInterceptor; fn != nil {
-		return fn(b.mu.errAndCh)
-	}
 	// NB: we need to return errAndCh here, returning (errAndCh.C(), errAndCh.Err)
 	// allocates.
 	return b.mu.errAndCh
-}
-
-// Probe forces the breaker probe to run (if it is not already running),
-// even if the breaker is not currently tripped.
-func (b *Breaker) Probe() {
-	b.maybeTriggerProbe(true /* force */)
 }
 
 // HasMark returns whether the error has an error mark that is unique to this
@@ -152,7 +140,7 @@ func (b *Breaker) Report(err error) {
 		// and we don't want a self-perpetuating loop of probe invocations. Instead,
 		// we only probe when clients are actively asking the Breaker for its
 		// status, via Breaker.Signal.
-		b.maybeTriggerProbe(false /* force */)
+		b.maybeTriggerProbe()
 	}
 }
 
@@ -196,43 +184,9 @@ func (b *Breaker) Reconfigure(opts Options) {
 	b.mu.Options = &opts
 }
 
-var closedCh = func() <-chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}()
-
-type alwaysTrippedSignaler struct {
-	err error
-}
-
-func (a *alwaysTrippedSignaler) Err() error {
-	return a.err
-}
-
-func (a *alwaysTrippedSignaler) C() <-chan struct{} {
-	return closedCh
-}
-
-func TestingSetTripped(b *Breaker, err error) (undo func()) {
-	err = errors.Mark(errors.Mark(err, ErrBreakerOpen), b.errMark())
-	a := &alwaysTrippedSignaler{
-		err: err,
-	}
-	opts := b.Opts()
-	orig := opts
-	opts.signalInterceptor = func(sig Signal) Signal {
-		return a
-	}
-	b.Reconfigure(opts)
-	return func() {
-		b.Reconfigure(orig)
-	}
-}
-
-func (b *Breaker) maybeTriggerProbe(force bool) {
+func (b *Breaker) maybeTriggerProbe() {
 	b.mu.Lock()
-	if b.mu.probing || (!force && b.mu.errAndCh.err == nil) {
+	if b.mu.probing || b.mu.errAndCh.err == nil {
 		b.mu.Unlock()
 		// A probe is already running or the breaker is not currently tripped. The
 		// latter case can occur since maybeTriggerProbe is invoked from
@@ -276,7 +230,7 @@ func (b *Breaker) maybeTriggerProbe(force bool) {
 
 func (b *Breaker) newErrAndCh() *errAndCh {
 	return &errAndCh{
-		maybeTriggerProbe: func() { b.maybeTriggerProbe(false /* force */) },
+		maybeTriggerProbe: b.maybeTriggerProbe,
 		ch:                make(chan struct{}),
 	}
 }

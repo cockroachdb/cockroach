@@ -70,7 +70,7 @@ sequence req=req1
 # NOTE: replicated locks are not immediately stored in the lock-table.
 on-lock-acquired req=req1 key=k dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 @ k
 
 finish req=req1
 ----
@@ -78,7 +78,8 @@ finish req=req1
 
 debug-lock-table
 ----
-num=0
+global: num=0
+local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -100,7 +101,8 @@ on-lease-updated leaseholder=false lease-seq=2
 
 debug-lock-table
 ----
-num=0
+global: num=0
+local: num=0
 
 # The following series of events takes place on the new leaseholder.
 #
@@ -132,13 +134,14 @@ sequence req=req4
 handle-write-intent-error req=req4 lease-seq=3
   intent txn=txn3 key=k
 ----
-[4] handle write intent error req4: handled conflicting intents on ‹"k"›, released latches
+[4] handle write intent error req4: handled conflicting intents on "k", released latches
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
+local: num=0
 
 sequence req=req4
 ----
@@ -146,7 +149,7 @@ sequence req=req4
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: waiting in lock wait-queues
-[5] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
+[5] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
 [5] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req4: pushing timestamp of txn 00000003 above 10.000000000,0
 [5] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -154,17 +157,18 @@ sequence req=req4
 handle-write-intent-error req=req2 lease-seq=1
   intent txn=txn1 key=k
 ----
-[6] handle write intent error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[6] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[6] handle write intent error req2: intent on "k" discovered but not added to disabled lock table
+[6] handle write intent error req2: handled conflicting intents on "k", released latches
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
    waiting readers:
     req: 3, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3
+local: num=0
 
 sequence req=req2
 ----
@@ -172,7 +176,7 @@ sequence req=req2
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: waiting in lock wait-queues
-[7] sequence req2: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 2)
+[7] sequence req2: lock wait-queue event: wait for txn 00000003 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 2)
 [7] sequence req2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [7] sequence req2: pushing timestamp of txn 00000003 above 10.000000000,0
 [7] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -180,15 +184,15 @@ sequence req=req2
 on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
-[5] sequence req4: resolving intent ‹"k"› for txn 00000003 with COMMITTED status
+[5] sequence req4: resolving intent "k" for txn 00000003 with COMMITTED status
 [5] sequence req4: lock wait-queue event: done waiting
-[5] sequence req4: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[5] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on "k" for 0.000s
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: sequencing complete, returned guard
-[7] sequence req2: resolving intent ‹"k"› for txn 00000003 with COMMITTED status
+[7] sequence req2: resolving intent "k" for txn 00000003 with COMMITTED status
 [7] sequence req2: lock wait-queue event: done waiting
-[7] sequence req2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[7] sequence req2: conflicted with 00000003-0000-0000-0000-000000000000 on "k" for 0.000s
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: sequencing complete, returned guard

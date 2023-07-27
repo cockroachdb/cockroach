@@ -139,7 +139,7 @@ func ensureClockMonotonicity(
 	if delta > 0 {
 		log.Ops.Infof(
 			ctx,
-			"Sleeping till wall time %v to catches up to %v to ensure monotonicity. Sub: %v",
+			"Sleeping till wall time %v to catches up to %v to ensure monotonicity. Delta: %v",
 			currentWallTime,
 			sleepUntil,
 			delta,

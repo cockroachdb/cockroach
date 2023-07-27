@@ -8,8 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { createSelector } from "@reduxjs/toolkit";
 import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { AppState, uiConfigActions } from "src/store";
@@ -28,6 +29,10 @@ import {
   TransactionDetailsStateProps,
 } from "./transactionDetails";
 import {
+  selectTransactionsData,
+  selectTransactionsLastError,
+} from "../transactionsPage/transactionsPage.selectors";
+import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
@@ -39,27 +44,80 @@ import {
   selectTxnsPageReqSort,
 } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
-import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
+import {
+  txnFingerprintIdAttr,
+  getMatchParamByName,
+  queryByName,
+  appNamesAttr,
+  unset,
+} from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 import { actions as analyticsActions } from "../store/analytics";
 import { selectRequestTime } from "src/transactionsPage/transactionsPage.selectors";
+
+export const selectTransaction = createSelector(
+  (state: AppState) => state.adminUI?.transactions,
+  (_state: AppState, props: RouteComponentProps) => props,
+  (transactionState, props) => {
+    const transactions = transactionState.data?.transactions;
+    if (!transactions) {
+      return {
+        isLoading: transactionState.inFlight,
+        transaction: null,
+        isValid: transactionState.valid,
+      };
+    }
+
+    const apps = queryByName(props.location, appNamesAttr)
+      ?.split(",")
+      .map(s => s.trim());
+
+    const txnFingerprintId = getMatchParamByName(
+      props.match,
+      txnFingerprintIdAttr,
+    );
+
+    const transaction = transactions.find(
+      txn =>
+        txn.stats_data.transaction_fingerprint_id.toString() ===
+          txnFingerprintId &&
+        (apps?.length ? apps.includes(txn.stats_data.app ?? unset) : true),
+    );
+
+    return {
+      isLoading: transactionState.inFlight,
+      transaction: transaction,
+      lastUpdated: transactionState.lastUpdated,
+      isValid: transactionState.valid,
+    };
+  },
+);
 
 const mapStateToProps = (
   state: AppState,
   props: TransactionDetailsProps,
 ): TransactionDetailsStateProps => {
+  const { isLoading, transaction, lastUpdated, isValid } = selectTransaction(
+    state,
+    props,
+  );
   return {
     timeScale: selectTimeScale(state),
+    error: selectTransactionsLastError(state),
     isTenant: selectIsTenant(state),
     nodeRegions: nodeRegionsByIDSelector(state),
-    txnStatsResp: state?.adminUI?.transactions,
+    statements: selectTransactionsData(state)?.statements,
+    transaction,
     transactionFingerprintId: getMatchParamByName(
       props.match,
       txnFingerprintIdAttr,
     ),
+    isLoading: isLoading,
+    lastUpdated: lastUpdated,
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     transactionInsights: selectTxnInsightsByFingerprint(state, props),
     hasAdminRole: selectHasAdminRole(state),
+    isDataValid: isValid,
     limit: selectTxnsPageLimit(state),
     reqSortSetting: selectTxnsPageReqSort(state),
     requestTime: selectRequestTime(state),

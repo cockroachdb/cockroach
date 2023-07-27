@@ -51,28 +51,19 @@ func TestMatchOrSkip(t *testing.T) {
 	testCases := []struct {
 		filter   []string
 		name     string
-		tags     map[string]struct{}
+		tags     []string
 		expected registry.MatchType
 	}{
 		{nil, "foo", nil, registry.Matched},
-		{nil, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		// Partial tag match is not supported
-		{[]string{"tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
+		{nil, "foo", []string{"bar"}, registry.FailedTags},
+		{[]string{"tag:b"}, "foo", []string{"bar"}, registry.Matched},
 		{[]string{"tag:b"}, "foo", nil, registry.FailedTags},
-		{[]string{"tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		// Specifying no tag filters matches all tags.
-		{[]string{"f"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f"}, "bar", registry.Tags("bar"), registry.FailedFilter},
-		{[]string{"f", "tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f", "tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"f", "tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		// Match tests that have both tags 'abc' and 'bar'
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc", "bar"), registry.Matched},
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc"), registry.FailedTags},
-		// Match tests that have tag 'abc' but not 'bar'
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc"), registry.Matched},
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc", "bar"), registry.FailedTags},
+		{[]string{"tag:default"}, "foo", nil, registry.Matched},
+		{[]string{"tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
+		{[]string{"f"}, "foo", []string{"bar"}, registry.FailedTags},
+		{[]string{"f"}, "bar", []string{"bar"}, registry.FailedFilter},
+		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, registry.Matched},
+		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

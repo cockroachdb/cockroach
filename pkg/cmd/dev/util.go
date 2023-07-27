@@ -102,7 +102,7 @@ func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	return val
 }
 
-func (d *dev) getBazelInfo(ctx context.Context, key string, extraArgs []string) (string, error) {
+func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 	args := []string{"info", key, "--color=no"}
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
@@ -117,17 +117,15 @@ func (d *dev) getWorkspace(ctx context.Context) (string, error) {
 		return os.Getwd()
 	}
 
-	return d.getBazelInfo(ctx, "workspace", []string{})
+	return d.getBazelInfo(ctx, "workspace")
 }
 
-// The second argument should be the relevant "config args", namely Bazel arguments
-// that are --config or --compilation_mode arguments (see getConfigArgs()).
-func (d *dev) getBazelBin(ctx context.Context, configArgs []string) (string, error) {
-	return d.getBazelInfo(ctx, "bazel-bin", configArgs)
+func (d *dev) getBazelBin(ctx context.Context) (string, error) {
+	return d.getBazelInfo(ctx, "bazel-bin")
 }
 
 func (d *dev) getExecutionRoot(ctx context.Context) (string, error) {
-	return d.getBazelInfo(ctx, "execution_root", []string{})
+	return d.getBazelInfo(ctx, "execution_root")
 }
 
 // getDevBin returns the path to the running dev executable.
@@ -226,19 +224,7 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	}
 	defer file.Close()
 	httpClient := &http.Client{}
-
-	// TODO(dt): Ideally this would be <100ms since it is blocking the process
-	// from exiting and returning to the user to the their prompt, and any delay
-	// longer than that is noticeable. However empirical testing suggests we need
-	// ~300ms to upload successfully. Ideally we would move the invocation of this
-	// function to its own subcommand, and then post-build we would just exec that
-	// command forked in a new process, but not wait for it before exiting.
-	const timeout = 400 * time.Millisecond
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	req, _ := http.NewRequestWithContext(ctx, "POST", beaverHubServerEndpoint, file)
+	req, _ := http.NewRequest("POST", beaverHubServerEndpoint, file)
 	req.Header.Add("Run-Env", "dev")
 	req.Header.Add("Content-Type", "application/octet-stream")
 	if _, err := httpClient.Do(req); err != nil {

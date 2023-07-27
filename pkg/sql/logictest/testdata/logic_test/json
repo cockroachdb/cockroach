@@ -179,11 +179,10 @@ SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
 {"a": "b"}
 
-statement ok
+statement error pgcode 0A000 can't order by column type jsonb.*\nHINT.*\n.*35706
 SELECT bar FROM foo ORDER BY bar
 
-skipif config local-mixed-22.2-23.1
-statement ok
+statement error pgcode 0A000 column k is of type jsonb and thus is not indexable
 CREATE TABLE pk (k JSON PRIMARY KEY)
 
 query T rowsort
@@ -847,7 +846,7 @@ SELECT '{"foo": "bar"}' - s AS a, '{"bar": "foo"}' - s AS b FROM t57165 ORDER BY
 {}              {"bar": "foo"}
 {"foo": "bar"}  {}
 
-query T nosort
+query T
 SELECT j - s FROM t57165
 ----
 {}
@@ -952,24 +951,3 @@ query T
 SELECT j FROM json_subscript_test WHERE j['other_field'] = '2' ORDER BY id
 ----
 {"other_field": 2}
-
-# Regression test for https://github.com/cockroachdb/cockroach/issues/49144.
-# Check that json columns can be compared.
-
-statement ok
-CREATE TABLE test_49144 (
-    value jsonb
-);
-INSERT INTO test_49144 VALUES ('{"c": 2}'), ('{"c": 2.5}'), ('{"c": 3}')
-
-query T
-SELECT * FROM test_49144 WHERE ("test_49144"."value" -> 'c') > '2' ORDER BY 1
-----
-{"c": 2.5}
-{"c": 3}
-
-query T
-SELECT * FROM test_49144 WHERE ("test_49144"."value" -> 'c') > '2.33' ORDER BY 1
-----
-{"c": 2.5}
-{"c": 3}

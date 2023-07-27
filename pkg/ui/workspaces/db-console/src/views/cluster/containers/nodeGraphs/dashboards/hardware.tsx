@@ -31,14 +31,12 @@ export default function (props: GraphDashboardProps) {
     nodeSources,
     storeSources,
     tooltipSelection,
-    tenantSource,
   } = props;
 
   return [
     <LineGraph
       title="CPU Percent"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={<div>CPU usage for the CRDB nodes {tooltipSelection}</div>}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
@@ -55,7 +53,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Host CPU Percent"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={<div>Machine-wide CPU usage {tooltipSelection}</div>}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
@@ -72,7 +69,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Memory Usage"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={<div>Memory in use {tooltipSelection}</div>}
     >
       <Axis units={AxisUnits.Bytes} label="memory usage">
@@ -86,11 +82,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Disk Read MiB/s"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Disk Read MiB/s" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
           <Metric
@@ -103,11 +95,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Disk Write MiB/s"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Disk Write MiB/s" sources={nodeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
           <Metric
@@ -120,11 +108,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Disk Read IOPS"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Disk Read IOPS" sources={nodeSources}>
       <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map(nid => (
           <Metric
@@ -137,11 +121,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Disk Write IOPS"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Disk Write IOPS" sources={nodeSources}>
       <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map(nid => (
           <Metric
@@ -154,11 +134,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Disk Ops In Progress"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Disk Ops In Progress" sources={nodeSources}>
       <Axis units={AxisUnits.Count} label="Ops">
         {nodeIDs.map(nid => (
           <Metric
@@ -173,7 +149,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Available Disk Capacity"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={<AvailableDiscCapacityGraphTooltip />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
@@ -182,6 +157,32 @@ export default function (props: GraphDashboardProps) {
             name="cr.store.capacity.available"
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Bytes Received" sources={nodeSources}>
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.bytes"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Bytes Sent" sources={nodeSources}>
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.send.bytes"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            nonNegativeRate
           />
         ))}
       </Axis>

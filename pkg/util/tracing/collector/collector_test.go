@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -121,7 +120,6 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 
 func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -134,31 +132,34 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 
 	traceCollector := collector.New(
 		localTracer,
-		func(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
-			instanceIDs := make([]sqlinstance.InstanceInfo, len(tc.Servers))
+		func(ctx context.Context) ([]roachpb.NodeID, error) {
+			nodeIDs := make([]roachpb.NodeID, len(tc.Servers))
 			for i := range tc.Servers {
-				instanceIDs[i].InstanceID = tc.Server(i).SQLInstanceID()
+				nodeIDs[i] = tc.Server(i).NodeID()
 			}
-			return instanceIDs, nil
+			return nodeIDs, nil
 		},
 		tc.Server(0).NodeDialer().(*nodedialer.Dialer))
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	getSpansFromAllInstances := func(traceID tracingpb.TraceID) map[base.SQLInstanceID][]tracingpb.Recording {
-		res := make(map[base.SQLInstanceID][]tracingpb.Recording)
-		iter, err := traceCollector.StartIter(ctx, traceID)
-		require.NoError(t, err)
-		for ; iter.Valid(); iter.Next(ctx) {
-			instanceID, recording := iter.Value()
-			res[instanceID] = append(res[instanceID], recording)
+	getSpansFromAllNodes := func(traceID tracingpb.TraceID) map[roachpb.NodeID][]tracingpb.Recording {
+		res := make(map[roachpb.NodeID][]tracingpb.Recording)
+
+		var iter *collector.Iterator
+		var err error
+		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next(ctx) {
+			nodeID, recording := iter.Value()
+			res[nodeID] = append(res[nodeID], recording)
 		}
+		require.NoError(t, err)
+		require.NoError(t, iter.Error())
 		return res
 	}
 
 	t.Run("fetch-local-recordings", func(t *testing.T) {
-		nodeRecordings := getSpansFromAllInstances(localTraceID)
-		node1Recordings := nodeRecordings[tc.Server(0).SQLInstanceID()]
+		nodeRecordings := getSpansFromAllNodes(localTraceID)
+		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
 		require.Equal(t, 1, len(node1Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root
@@ -169,7 +170,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 						span: root.child.remotechilddone
 							tags: _verbose=1
 	`))
-		node2Recordings := nodeRecordings[tc.Server(1).SQLInstanceID()]
+		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
 		require.Equal(t, 1, len(node2Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root.child.remotechild
@@ -181,8 +182,8 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	// The traceCollector is running on node 1, so most of the recordings for this
 	// subtest will be passed back by node 2 over RPC.
 	t.Run("fetch-remote-recordings", func(t *testing.T) {
-		nodeRecordings := getSpansFromAllInstances(remoteTraceID)
-		node1Recordings := nodeRecordings[tc.Server(0).SQLInstanceID()]
+		nodeRecordings := getSpansFromAllNodes(remoteTraceID)
+		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
 		require.Equal(t, 2, len(node1Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root2.child.remotechild
@@ -193,7 +194,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 					tags: _unfinished=1 _verbose=1
 	`))
 
-		node2Recordings := nodeRecordings[tc.Server(1).SQLInstanceID()]
+		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
 		require.Equal(t, 1, len(node2Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root2
@@ -217,7 +218,8 @@ func TestClusterInflightTraces(t *testing.T) {
 	defer cancel()
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			// The test itself creates tenants however necessary.
+			DisableDefaultTestTenant: true,
 		},
 	}
 

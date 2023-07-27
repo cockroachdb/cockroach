@@ -325,10 +325,6 @@ type zipReporter struct {
 	// withPrefix(), start(), info() are only valid while inItem is false,
 	// whereas progress(), done() and fail() are only valid while inItem is true.
 	inItem bool
-
-	// The file name extension for SQL table contents
-	// retrieved via RunQueryAndFormatResults().
-	sqlOutputFilenameExtension string
 }
 
 func (zc *zipContext) newZipReporter(format string, args ...interface{}) *zipReporter {

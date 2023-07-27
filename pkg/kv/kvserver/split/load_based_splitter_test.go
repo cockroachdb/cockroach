@@ -861,10 +861,18 @@ func TestDataDriven(t *testing.T) {
 
 				d.ScanArgs(t, "seed", &seed)
 				d.ScanArgs(t, "iterations", &iterations)
-				d.MaybeScanArgs(t, "timing", &showTiming)
-				d.MaybeScanArgs(t, "cartesian", &cartesian)
-				d.MaybeScanArgs(t, "all", &all)
-				d.MaybeScanArgs(t, "show_last", &showLastState)
+				if d.HasArg("timing") {
+					d.ScanArgs(t, "timing", &showTiming)
+				}
+				if d.HasArg("cartesian") {
+					d.ScanArgs(t, "cartesian", &cartesian)
+				}
+				if d.HasArg("all") {
+					d.ScanArgs(t, "all", &all)
+				}
+				if d.HasArg("show_last") {
+					d.ScanArgs(t, "show_last", &showLastState)
+				}
 				if d.HasArg("mix") {
 					d.ScanArgs(t, "mix", &mix)
 					d.ScanArgs(t, "mix_count", &mixCount)

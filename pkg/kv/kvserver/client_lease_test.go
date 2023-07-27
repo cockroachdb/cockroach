@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -1002,8 +1003,8 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 	}
 	// We need to wait until 2 and 3 are considered to be dead.
-	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
-	wait(timeUntilNodeDead)
+	timeUntilStoreDead := storepool.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	wait(timeUntilStoreDead)
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {
 		if dead, timetoDie, err := store.GetStoreConfig().StorePool.IsDead(
@@ -1284,7 +1285,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	}
 	testutils.SucceedsSoon(t, allLeasesOnNonSuspectStores)
 	// Wait out the suspect time.
-	suspectDuration := liveness.TimeAfterNodeSuspect.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	suspectDuration := storepool.TimeAfterStoreSuspect.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	for i := 0; i < int(math.Ceil(suspectDuration.Seconds())); i++ {
 		manualClock.Increment(time.Second.Nanoseconds())
 		heartbeat(0, 1, 2, 3)
@@ -1488,10 +1489,11 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 					WallClock: manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					// Disable proactive renewal of expiration based leases. Lease
-					// upgrades happen immediately after applying without needing active
+					// Outlandishly high to disable proactive renewal of
+					// expiration based leases. Lease upgrades happen
+					// immediately after applying without needing active
 					// renewal.
-					DisableAutomaticLeaseRenewal: true,
+					LeaseRenewalDurationOverride: 100 * time.Hour,
 					LeaseUpgradeInterceptor: func(lease *roachpb.Lease) {
 						mu.Lock()
 						defer mu.Unlock()
@@ -1662,12 +1664,12 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 
 		// Check that n1's liveness epoch was bumped.
 		l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
-		livenesses, err := l0.ScanNodeVitalityFromKV(ctx)
+		livenesses, err := l0.GetLivenessesFromKV(ctx)
 		require.NoError(t, err)
 		var liveness livenesspb.Liveness
-		for nodeID, l := range livenesses {
-			if nodeID == 1 {
-				liveness = l.GetInternalLiveness()
+		for _, l := range livenesses {
+			if l.NodeID == 1 {
+				liveness = l
 				break
 			}
 		}

@@ -22,7 +22,7 @@ import (
 func TestLeaseHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	history := newLeaseHistory(leaseHistoryMaxEntries)
+	history := newLeaseHistory()
 
 	for i := 0; i < leaseHistoryMaxEntries; i++ {
 		leases := history.get()

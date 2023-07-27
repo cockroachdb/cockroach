@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,8 +37,7 @@ func declareKeysPushTransaction(
 	rs ImmutableRangeState,
 	_ *kvpb.Header,
 	req kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	pr := req.(*kvpb.PushTxnRequest)
@@ -243,10 +241,9 @@ func PushTxn(
 		}
 	}
 
-	pusherIso, pusheeIso := args.PusherTxn.IsoLevel, reply.PusheeTxn.IsoLevel
-	pusherPri, pusheePri := args.PusherTxn.Priority, reply.PusheeTxn.Priority
 	var pusherWins bool
 	var reason string
+
 	switch {
 	case txnwait.IsExpired(cArgs.EvalCtx.Clock().Now(), &reply.PusheeTxn):
 		reason = "pushee is expired"
@@ -258,7 +255,7 @@ func PushTxn(
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
-	case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri):
+	case txnwait.CanPushWithPriority(args.PusherTxn.Priority, reply.PusheeTxn.Priority):
 		reason = "pusher has priority"
 		pusherWins = true
 	case args.Force:

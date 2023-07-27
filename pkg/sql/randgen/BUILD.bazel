@@ -26,7 +26,6 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
-        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",

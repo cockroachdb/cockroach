@@ -16,7 +16,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -388,7 +387,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	br := &BatchResponse{}
 	{
 		txn := roachpb.MakeTransaction(
-			"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
+			"test", nil /* baseKey */, roachpb.NormalUserPriority,
 			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99, /* coordinatorNodeID */
 		)
 		brTxn := &BatchResponse{

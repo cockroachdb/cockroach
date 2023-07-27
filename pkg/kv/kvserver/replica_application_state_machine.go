@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -366,7 +367,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 		// to raft.
 		return nil
 	}
-	return sm.r.withRaftGroup(func(rn *raft.RawNode) (bool, error) {
+	return sm.r.withRaftGroup(true, func(rn *raft.RawNode) (bool, error) {
 		// NB: `etcd/raft` configuration changes diverge from the official Raft way
 		// in that a configuration change becomes active when the corresponding log
 		// entry is applied (rather than appended). This ultimately enables the way
@@ -438,7 +439,7 @@ type closedTimestampSetterInfo struct {
 	// lease represents the lease under which the command is being applied.
 	lease *roachpb.Lease
 	// leaseIdx is the LAI of the command.
-	leaseIdx kvpb.LeaseAppliedIndex
+	leaseIdx ctpb.LAI
 	// leaseReq is set if the request that generated this command was a
 	// RequestLeaseRequest. This is only ever set on the leaseholder replica since
 	// only the leaseholder has information about the request corresponding to a
@@ -456,7 +457,7 @@ type closedTimestampSetterInfo struct {
 // timestamp.
 func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Lease) {
 	*s = closedTimestampSetterInfo{}
-	s.leaseIdx = cmd.LeaseIndex
+	s.leaseIdx = ctpb.LAI(cmd.LeaseIndex)
 	s.lease = lease
 	if !cmd.IsLocal() {
 		return

@@ -667,16 +667,6 @@ func (ts *testState) HasCapabilityForBatch(
 
 func (ts *testState) BindReader(tenantcapabilities.Reader) {}
 
-var _ tenantcapabilities.Authorizer = &testState{}
-
-func (ts *testState) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if ts.capabilities[tenID].CanDebugProcess {
-		return nil
-	} else {
-		return errors.New("unauthorized")
-	}
-}
-
 func (ts *testState) HasNodeStatusCapability(_ context.Context, tenID roachpb.TenantID) error {
 	if ts.capabilities[tenID].CanViewNodeInfo {
 		return nil
@@ -777,8 +767,6 @@ func parseStrings(t *testing.T, d *datadriven.TestData) []string {
 // is subject to rate limit checks. (For testing in this package.)
 type fakeAuthorizer struct{}
 
-var _ tenantcapabilities.Authorizer = &fakeAuthorizer{}
-
 func (fakeAuthorizer) HasNodeStatusCapability(_ context.Context, tenID roachpb.TenantID) error {
 	return nil
 }
@@ -799,7 +787,3 @@ func (fakeAuthorizer) HasCapabilityForBatch(
 	return nil
 }
 func (fakeAuthorizer) BindReader(tenantcapabilities.Reader) {}
-
-func (fakeAuthorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	return nil
-}

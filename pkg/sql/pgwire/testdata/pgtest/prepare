@@ -90,15 +90,3 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"08P01"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
-
-send
-Parse {"Query": "EXPLAIN ANALYZE SELECT 1;"}
-Sync
-----
-
-until crdb_only keepErrMessage
-ErrorResponse
-ReadyForQuery
-----
-{"Type":"ErrorResponse","Code":"42601","Message":"EXPLAIN ANALYZE can only be used as a top-level statement"}
-{"Type":"ReadyForQuery","TxStatus":"I"}

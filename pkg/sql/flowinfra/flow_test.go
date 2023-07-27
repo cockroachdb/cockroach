@@ -56,8 +56,6 @@ func BenchmarkFlowSetup(b *testing.B) {
 				if vectorize {
 					vectorizeMode = sessiondatapb.VectorizeOn
 				}
-				sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
-				sd.VectorizeMode = vectorizeMode
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					// NB: planner cannot be reset and can only be used for
@@ -69,7 +67,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 						username.RootUserName(),
 						&sql.MemoryMetrics{},
 						&execCfg,
-						sd,
+						sessiondatapb.SessionData{VectorizeMode: vectorizeMode},
 					)
 					b.StartTimer()
 					err := dsp.Exec(

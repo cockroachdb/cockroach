@@ -36,17 +36,6 @@ CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = 'id')
 
 subtest end
 
-# timestamptz + interval is stable, not immutable
-subtest ttl_expiration_expression_volatility_stable
-
-statement ok
-CREATE TABLE tbl_ttl_expiration_expression_volatility_stable (
-  id INT PRIMARY KEY,
-  expire_at timestamptz
-) WITH (ttl_expiration_expression = $$expire_at + '10 minutes'$$)
-
-subtest end
-
 subtest ttl_expire_after_or_ttl_expiration_expression_must_be_set
 
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
@@ -975,13 +964,7 @@ subtest end
 
 subtest desc_pk_with_ttl
 
-# TODO(ecwall): remove local-mixed-22.2-23.1 variant in 24.1
-onlyif config local-mixed-22.2-23.1
 statement error non-ascending ordering on PRIMARY KEYs are not supported
-CREATE TABLE tbl_desc_pk_with_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC)) WITH (ttl_expire_after = '10 minutes')
-
-skipif config local-mixed-22.2-23.1
-statement ok
 CREATE TABLE tbl_desc_pk_with_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC)) WITH (ttl_expire_after = '10 minutes')
 
 subtest end
@@ -991,13 +974,7 @@ subtest desc_pk_without_ttl_add_ttl
 statement ok
 CREATE TABLE tbl_desc_pk_without_ttl_add_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC))
 
-# TODO(ecwall): remove local-mixed-22.2-23.1 variant in 24.1
-onlyif config local-mixed-22.2-23.1
 statement error non-ascending ordering on PRIMARY KEYs are not supported
-ALTER TABLE tbl_desc_pk_without_ttl_add_ttl SET (ttl_expire_after = '10 minutes')
-
-skipif config local-mixed-22.2-23.1
-statement ok
 ALTER TABLE tbl_desc_pk_without_ttl_add_ttl SET (ttl_expire_after = '10 minutes')
 
 subtest end
@@ -1007,13 +984,7 @@ subtest asc_pk_alter_desc_pk
 statement ok
 CREATE TABLE tbl_asc_pk_alter_desc_pk (id INT, id2 INT, PRIMARY KEY (id, id2)) WITH (ttl_expire_after = '10 minutes')
 
-# TODO(ecwall): remove local-mixed-22.2-23.1 variant in 24.1
-onlyif config local-mixed-22.2-23.1
 statement error non-ascending ordering on PRIMARY KEYs are not supported
-ALTER TABLE tbl_asc_pk_alter_desc_pk ALTER PRIMARY KEY USING COLUMNS (id, id2 DESC)
-
-skipif config local-mixed-22.2-23.1
-statement ok
 ALTER TABLE tbl_asc_pk_alter_desc_pk ALTER PRIMARY KEY USING COLUMNS (id, id2 DESC)
 
 subtest end

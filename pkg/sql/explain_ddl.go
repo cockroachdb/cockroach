@@ -105,8 +105,6 @@ func (n *explainDDLNode) setExplainValues(
 	var info string
 	if n.options.Flags[tree.ExplainFlagVerbose] {
 		info, err = p.ExplainVerbose()
-	} else if n.options.Flags[tree.ExplainFlagShape] {
-		info, err = p.ExplainShape()
 	} else {
 		info, err = p.ExplainCompact()
 	}

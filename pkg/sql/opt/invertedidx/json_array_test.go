@@ -1031,104 +1031,6 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			tight:    false,
 			unique:   false,
 		},
-		{
-			// Testing the equality operator without the fetch value operator.
-			filters:          `j = '1'`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           true,
-			remainingFilters: `j = '1'`,
-		},
-		{
-			filters:          `j = '"a"'`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           true,
-			remainingFilters: `j = '"a"'`,
-		},
-		{
-			filters:          `j = '[1, 2, 3, 4]'`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           true,
-			remainingFilters: `j = '[1, 2, 3, 4]'`,
-		},
-		{
-			filters:          `j = '[1]'`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           true,
-			remainingFilters: `j = '[1]'`,
-		},
-		{
-			filters:          `j = '{"a": "b"}'`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           true,
-			remainingFilters: `j = '{"a": "b"}'`,
-		},
-		{
-			filters:          `j = '{"a": "b"}' OR j = '[1, 2, 3]'`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           false,
-			remainingFilters: `j = '{"a": "b"}' OR j = '[1, 2, 3]'`,
-		},
-		{
-			// Testing the IN operator without the fetch value operator.
-			filters:          `j IN ('1', '2', '3')`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           false,
-			remainingFilters: `j IN ('1', '2', '3')`,
-		},
-		{
-			filters:          `j IN ('"a"', '"b"', '"c"')`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           false,
-			remainingFilters: `j IN ('"a"', '"b"', '"c"')`,
-		},
-		{
-			filters:          `j IN ('1', '"b"', '[1, 2, 3]')`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           false,
-			remainingFilters: `j IN ('1', '"b"', '[1, 2, 3]')`,
-		},
-		{
-			filters:          `j IN ('[1, 2, 3]')`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           true,
-			remainingFilters: `j IN ('[1, 2, 3]')`,
-		},
-		{
-			filters:          `j IN ('[1, 2, 3]', '{"a": "b"}')`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           false,
-			remainingFilters: `j IN ('[1, 2, 3]', '{"a": "b"}')`,
-		},
-		{
-			filters:          `j IN ('[1, 2, 3]', '{"a": "b"}', '1', '"a"')`,
-			indexOrd:         jsonOrd,
-			ok:               true,
-			tight:            false,
-			unique:           false,
-			remainingFilters: `j IN ('[1, 2, 3]', '{"a": "b"}', '1', '"a"')`,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -1147,8 +1049,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tc.indexOrd),
-			nil,       /* computedColumns */
-			func() {}, /* checkCancellation */
+			nil, /* computedColumns */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

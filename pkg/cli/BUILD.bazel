@@ -1,6 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "cli",
@@ -128,7 +128,6 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/gc",
-        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery",
@@ -144,7 +143,6 @@ go_library(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/server/authserver",
         "//pkg/server/autoconfig/acprovider",
         "//pkg/server/pgurl",
         "//pkg/server/profiler",
@@ -186,8 +184,8 @@ go_library(
         "//pkg/ts/tsutil",
         "//pkg/upgrade/upgrades",
         "//pkg/util",
-        "//pkg/util/buildutil",
         "//pkg/util/cgroups",
+        "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/flagutil",
@@ -237,7 +235,6 @@ go_library(
         "@com_github_cockroachdb_errors//hintdetail",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
-        "@com_github_cockroachdb_pebble//objstorage/remote",
         "@com_github_cockroachdb_pebble//tool",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
@@ -362,7 +359,6 @@ go_test(
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster",
         "//pkg/cli/exit",
-        "//pkg/cloud",
         "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/jobs",
@@ -372,7 +368,7 @@ go_test(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
@@ -394,6 +390,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/buildutil",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
@@ -407,7 +404,6 @@ go_test(
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
-        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
@@ -435,6 +431,14 @@ filegroup(
     name = "interactive_tests",
     srcs = glob(
         ["interactive_tests/**"],
+        # TODO(rail): The following tests fail under bazel.
+        # https://github.com/cockroachdb/cockroach/issues/71932, aka
+        # "broken_in_bazel"
+        exclude = [
+            "*/test_multiline_statements.tcl",
+            "*/test_pretty.tcl",
+            "*/test_server_sig.tcl",
+        ],
     ),
     visibility = ["//visibility:public"],
 )

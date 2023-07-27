@@ -22,42 +22,34 @@ type Check struct {
 	// If asOfSystemTime is non-empty it will be used to perform the check as
 	// a historical query using the provided value as the argument to the
 	// AS OF SYSTEM TIME clause.
-	Fn func(db *gosql.DB, asOfSystemTime string) error
-	// If true, the check is "expensive" and may take a long time to run.
+	Fn        func(db *gosql.DB, asOfSystemTime string) error
 	Expensive bool
-	// If true, the check is only valid immediately after loading the dataset.
-	// The check may fail if run after the workload.
-	LoadOnly bool
 }
 
 // AllChecks returns a slice of all of the checks.
 func AllChecks() []Check {
 	return []Check{
-		{"3.3.2.1", check3321, false, false},
-		{"3.3.2.2", check3322, false, false},
-		{"3.3.2.3", check3323, false, false},
-		{"3.3.2.4", check3324, false, false},
-		{"3.3.2.5", check3325, false, false},
-		{"3.3.2.6", check3326, true, false},
-		{"3.3.2.7", check3327, false, false},
-		{"3.3.2.8", check3328, false, false},
-		{"3.3.2.9", check3329, false, false},
-		{"3.3.2.10", check33210, true, false},
-		// 3.3.2.11 is LoadOnly. It asserts a relationship between the number of
-		// rows in the "order" table and rows in the "new_order" table. Rows are
-		// inserted into these tables transactional by the NewOrder transaction.
-		// However, only rows in the "new_order" table are deleted by the Delivery
-		// transaction. Consequently, the consistency condition will fail after the
-		// first Delivery transaction is run by the workload.
-		{"3.3.2.11", check33211, false, true},
-		{"3.3.2.12", check33212, true, false},
+		{"3.3.2.1", check3321, false},
+		{"3.3.2.2", check3322, false},
+		{"3.3.2.3", check3323, false},
+		{"3.3.2.4", check3324, false},
+		{"3.3.2.5", check3325, false},
+		{"3.3.2.6", check3326, true},
+		{"3.3.2.7", check3327, false},
+		{"3.3.2.8", check3328, false},
+		{"3.3.2.9", check3329, false},
 	}
 }
 
 func check3321(db *gosql.DB, asOfSystemTime string) error {
 	// 3.3.2.1 Entries in the WAREHOUSE and DISTRICT tables must satisfy the relationship:
 	// W_YTD = sum (D_YTD)
-	return checkNoRows(db, asOfSystemTime, `
+	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = txn.Rollback() }()
+	row := txn.QueryRow(`
 SELECT
     count(*)
 FROM
@@ -73,6 +65,16 @@ FROM
 WHERE
     w_ytd != sum_d_ytd
 `)
+	var i int
+	if err := row.Scan(&i); err != nil {
+		return err
+	}
+
+	if i != 0 {
+		return errors.Errorf("%d rows returned, expected zero", i)
+	}
+
+	return nil
 }
 
 func check3322(db *gosql.DB, asOfSystemTime string) (retErr error) {
@@ -145,32 +147,25 @@ ORDER BY
 				i, order, newOrder, district-1)
 		}
 	}
-	if err := districtRows.Err(); err != nil {
-		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on district"))
-	}
-	if err := newOrderRows.Err(); err != nil {
-		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on new_order"))
-	}
-	if err := orderRows.Err(); err != nil {
-		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on order"))
-	}
-	// Return the error before performing the remaining checks, because they are
-	// expected to fail if something else has already gone wrong.
-	if retErr != nil {
-		return retErr
-	}
 	if districtRows.Next() || newOrderRows.Next() || orderRows.Next() {
 		return errors.New("length mismatch between rows")
 	}
 	if i == 0 {
 		return errors.Errorf("zero rows")
 	}
-	return nil
+	retErr = errors.CombineErrors(retErr, districtRows.Err())
+	retErr = errors.CombineErrors(retErr, newOrderRows.Err())
+	return errors.CombineErrors(retErr, orderRows.Err())
 }
 
 func check3323(db *gosql.DB, asOfSystemTime string) error {
 	// max(NO_O_ID) - min(NO_O_ID) + 1 = # of rows in new_order for each warehouse/district
-	return checkNoRows(db, asOfSystemTime, `
+	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = txn.Rollback() }()
+	row := txn.QueryRow(`
 SELECT
     count(*)
 FROM
@@ -183,8 +178,18 @@ FROM
             no_w_id, no_d_id
     )
 WHERE
-    nod != -1
-`)
+    nod != -1`)
+
+	var i int
+	if err := row.Scan(&i); err != nil {
+		return err
+	}
+
+	if i != 0 {
+		return errors.Errorf("%d rows returned, expected zero", i)
+	}
+
+	return nil
 }
 
 func check3324(db *gosql.DB, asOfSystemTime string) (retErr error) {
@@ -238,17 +243,17 @@ ORDER BY
 			return errors.Errorf("order.sum(o_ol_cnt): %d != order_line.count(*): %d", left, right)
 		}
 	}
-	if err := leftRows.Err(); err != nil {
-		return errors.Wrap(err, "on `order`")
-	}
-	if err := rightRows.Err(); err != nil {
-		return errors.Wrap(err, "on `order_line`")
-	}
 	if leftRows.Next() || rightRows.Next() {
 		return errors.Errorf("at %s: length of order.sum(o_ol_cnt) != order_line.count(*)", ts)
 	}
 	if i == 0 {
 		return errors.Errorf("0 rows returned")
+	}
+	if err := leftRows.Err(); err != nil {
+		return errors.Wrap(err, "on `order`")
+	}
+	if err := rightRows.Err(); err != nil {
+		return errors.Wrap(err, "on `order_line`")
 	}
 	return nil
 }
@@ -325,7 +330,12 @@ func check3327(db *gosql.DB, asOfSystemTime string) error {
 	// date/time if and only if the corresponding row in the ORDER table defined
 	// by (O_W_ID, O_D_ID, O_ID) = (OL_W_ID, OL_D_ID, OL_O_ID) has
 	// O_CARRIER_ID set to a null value.
-	return checkNoRows(db, asOfSystemTime, `
+	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = txn.Rollback() }()
+	row := txn.QueryRow(`
 SELECT count(*) FROM
   (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 FULL OUTER JOIN
@@ -333,12 +343,28 @@ FULL OUTER JOIN
 ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
 WHERE ol_o_id IS NULL OR o_id IS NULL
 `)
+
+	var i int
+	if err := row.Scan(&i); err != nil {
+		return err
+	}
+
+	if i != 0 {
+		return errors.Errorf("%d rows returned, expected zero", i)
+	}
+
+	return nil
 }
 
 func check3328(db *gosql.DB, asOfSystemTime string) error {
 	// Entries in the WAREHOUSE and HISTORY tables must satisfy the relationship:
 	// W_YTD = SUM(H_AMOUNT) for each warehouse defined by (W_ID = H _W_ID).
-	return checkNoRows(db, asOfSystemTime, `
+	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = txn.Rollback() }()
+	row := txn.QueryRow(`
 SELECT count(*) FROM
   (SELECT w_id, w_ytd, sum FROM warehouse
   JOIN
@@ -347,12 +373,28 @@ SELECT count(*) FROM
   WHERE w_ytd != sum
   )
 `)
+
+	var i int
+	if err := row.Scan(&i); err != nil {
+		return err
+	}
+
+	if i != 0 {
+		return errors.Errorf("%d rows returned, expected zero", i)
+	}
+
+	return nil
 }
 
 func check3329(db *gosql.DB, asOfSystemTime string) error {
 	// Entries in the DISTRICT and HISTORY tables must satisfy the relationship:
 	// D_YTD=SUM(H_AMOUNT) for each district defined by (D_W_ID,D_ID)=(H_W_ID,H_D_ID)
-	return checkNoRows(db, asOfSystemTime, `
+	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = txn.Rollback() }()
+	row := txn.QueryRow(`
 SELECT count(*) FROM
   (SELECT d_id, d_ytd, sum FROM district
   JOIN
@@ -361,106 +403,16 @@ SELECT count(*) FROM
   WHERE d_ytd != sum
   )
 `)
-}
-
-func check33210(db *gosql.DB, asOfSystemTime string) error {
-	// Entries in the CUSTOMER, HISTORY, ORDER, and ORDER-LINE tables must satisfy
-	// the relationship:
-	//
-	//   C_BALANCE = sum(OL_AMOUNT) - sum(H_AMOUNT)
-	//
-	// where:
-	//
-	//   H_AMOUNT is selected by (C_W_ID, C_D_ID, C_ID) = (H_C_W_ID, H_C_D_ID, H_C_ID)
-	//
-	// and
-	//
-	//   OL_AMOUNT is selected by:
-	//     (OL_W_ID, OL_D_ID, OL_O_ID) = (O_W_ID, O_D_ID, O_ID) and
-	//     (O_W_ID, O_D_ID, O_C_ID) = (C_W_ID, C_D_ID, C_ID) and
-	//     (OL_DELIVERY_D is not a null value)
-	//
-	return checkNoRows(db, asOfSystemTime, `
-SELECT count(*) FROM
-  (SELECT c_balance,
-          (SELECT coalesce(sum(ol_amount), 0) FROM "order", order_line
-            WHERE ol_w_id = o_w_id
-            AND ol_d_id = o_d_id
-            AND ol_o_id = o_id
-            AND o_w_id = c_w_id
-            AND o_d_id = c_d_id
-            AND o_c_id = c_id
-            AND ol_delivery_d IS NOT NULL) sum_ol_amount,
-          (SELECT coalesce(sum(h_amount), 0) FROM history
-            WHERE h_c_w_id = c_w_id
-            AND h_c_d_id = c_d_id
-            AND h_c_id = c_id) sum_h_amount
-  FROM customer)
-WHERE c_balance != sum_ol_amount - sum_h_amount
-`)
-}
-
-func check33211(db *gosql.DB, asOfSystemTime string) error {
-	// Entries in the CUSTOMER, ORDER and NEW-ORDER tables must satisfy the
-	// relationship:
-	//
-	//   (count(*) from ORDER) - (count(*) from NEW-ORDER) = 2100
-	//
-	// for each district defined by:
-	//
-	//    (O_W_ID, O_D_ID) = (NO_W_ID, NO_D_ID) = (C_W_ID, C_D_ID)
-	//
-	return checkNoRows(db, asOfSystemTime, `
-SELECT count(*) FROM
-  (SELECT order_count, new_order_count FROM
-    (SELECT o_w_id, o_d_id, count(*) order_count FROM "order" GROUP BY o_w_id, o_d_id),
-    (SELECT no_w_id, no_d_id, count(*) new_order_count FROM new_order GROUP BY no_w_id, no_d_id),
-    (SELECT c_w_id, c_d_id FROM customer GROUP BY c_w_id, c_d_id)
-	WHERE (o_w_id, o_d_id) = (no_w_id, no_d_id)
-	AND   (no_w_id, no_d_id) = (c_w_id, c_d_id))
-WHERE order_count - new_order_count != 2100
-`)
-}
-
-func check33212(db *gosql.DB, asOfSystemTime string) error {
-	// Entries in the CUSTOMER and ORDER-LINE tables must satisfy the
-	// relationship:
-	//
-	//   C_BALANCE + C_YTD_PAYMENT = sum(OL_AMOUNT)
-	//
-	// for any randomly selected customers and where OL_DELIVERY_D is
-	// not set to a null date / time.
-	return checkNoRows(db, asOfSystemTime, `
-SELECT count(*) FROM
-  (SELECT c_balance,
-          c_ytd_payment,
-          (SELECT coalesce(sum(ol_amount), 0) FROM "order", order_line
-            WHERE ol_w_id = o_w_id
-            AND ol_d_id = o_d_id
-            AND ol_o_id = o_id
-            AND o_w_id = c_w_id
-            AND o_d_id = c_d_id
-            AND o_c_id = c_id
-            AND ol_delivery_d IS NOT NULL) sum_ol_amount
-  FROM customer)
-WHERE c_balance + c_ytd_payment != sum_ol_amount
-`)
-}
-
-func checkNoRows(db *gosql.DB, asOfSystemTime string, q string) error {
-	txn, err := beginAsOfSystemTime(db, asOfSystemTime)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = txn.Rollback() }()
 
 	var i int
-	if err := txn.QueryRow(q).Scan(&i); err != nil {
+	if err := row.Scan(&i); err != nil {
 		return err
 	}
+
 	if i != 0 {
 		return errors.Errorf("%d rows returned, expected zero", i)
 	}
+
 	return nil
 }
 

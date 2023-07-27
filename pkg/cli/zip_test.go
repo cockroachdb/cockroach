@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -88,9 +88,6 @@ table_name NOT IN (
 	'kv_repairable_catalog_corruptions',
 	'kv_dropped_relations',
 	'kv_inherited_role_members',
-	'kv_flow_control_handles',
-	'kv_flow_controller',
-	'kv_flow_token_deductions',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',
@@ -102,12 +99,12 @@ table_name NOT IN (
   'table_spans',
 	'tables',
 	'cluster_statement_statistics',
-  'statement_activity',
+	'statement_activity',
 	'statement_statistics_persisted',
 	'statement_statistics_persisted_v22_2',
 	'cluster_transaction_statistics',
 	'statement_statistics',
-  'transaction_activity',
+	'transaction_activity',
 	'transaction_statistics_persisted',
 	'transaction_statistics_persisted_v22_2',
 	'transaction_statistics',
@@ -504,7 +501,7 @@ func TestPartialZip(t *testing.T) {
 	// is no risk to see the override bumped due to a gossip update
 	// because this setting is not otherwise set in the test cluster.
 	s := tc.Server(0)
-	liveness.TimeUntilNodeDead.Override(ctx, &s.ClusterSettings().SV, liveness.TestTimeUntilNodeDead)
+	storepool.TimeUntilStoreDead.Override(ctx, &s.ClusterSettings().SV, storepool.TestTimeUntilStoreDead)
 
 	// This last case may take a little while to converge. To make this work with datadriven and at the same
 	// time retain the ability to use the `-rewrite` flag, we use a retry loop within that already checks the
@@ -574,11 +571,9 @@ func TestZipRetries(t *testing.T) {
 		}()
 
 		zr := zipCtx.newZipReporter("test")
-		zr.sqlOutputFilenameExtension = "json"
 		zc := debugZipContext{
-			z:              z,
-			clusterPrinter: zr,
-			timeout:        3 * time.Second,
+			z:       z,
+			timeout: 3 * time.Second,
 		}
 		if err := zc.dumpTableDataForZip(
 			zr,
@@ -600,16 +595,16 @@ func TestZipRetries(t *testing.T) {
 	for _, f := range r.File {
 		fmt.Fprintln(&fileList, f.Name)
 	}
-	const expected = `test/generate_series(1,15000) as t(x).json
-test/generate_series(1,15000) as t(x).json.err.txt
-test/generate_series(1,15000) as t(x).1.json
-test/generate_series(1,15000) as t(x).1.json.err.txt
-test/generate_series(1,15000) as t(x).2.json
-test/generate_series(1,15000) as t(x).2.json.err.txt
-test/generate_series(1,15000) as t(x).3.json
-test/generate_series(1,15000) as t(x).3.json.err.txt
-test/generate_series(1,15000) as t(x).4.json
-test/generate_series(1,15000) as t(x).4.json.err.txt
+	const expected = `test/generate_series(1,15000) as t(x).txt
+test/generate_series(1,15000) as t(x).txt.err.txt
+test/generate_series(1,15000) as t(x).1.txt
+test/generate_series(1,15000) as t(x).1.txt.err.txt
+test/generate_series(1,15000) as t(x).2.txt
+test/generate_series(1,15000) as t(x).2.txt.err.txt
+test/generate_series(1,15000) as t(x).3.txt
+test/generate_series(1,15000) as t(x).3.txt.err.txt
+test/generate_series(1,15000) as t(x).4.txt
+test/generate_series(1,15000) as t(x).4.txt.err.txt
 `
 	assert.Equal(t, expected, fileList.String())
 }

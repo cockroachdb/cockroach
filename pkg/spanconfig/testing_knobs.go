@@ -123,7 +123,7 @@ type TestingKnobs struct {
 	StoreDisableCoalesceAdjacent bool
 
 	// StoreIgnoreCoalesceAdjacentExceptions, if set, ignores the cluster settings
-	// spanconfig.{storage,tenant}_coalesce_adjacent.enabled. It also allows
+	// spanconfig.{host,tenant}_coalesce_adjacent.enabled. It also allows
 	// coalescing system database ranges for the host tenant.
 	StoreIgnoreCoalesceAdjacentExceptions bool
 

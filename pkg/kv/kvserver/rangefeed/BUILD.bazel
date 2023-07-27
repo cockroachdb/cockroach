@@ -17,7 +17,6 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/storage",
@@ -60,7 +59,6 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",

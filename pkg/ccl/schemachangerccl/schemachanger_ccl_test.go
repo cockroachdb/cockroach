@@ -9,7 +9,6 @@
 package schemachangerccl
 
 import (
-	"context"
 	gosql "database/sql"
 	"testing"
 
@@ -27,62 +26,49 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// MultiRegionTestClusterFactory is a multi-region implementation of the
-// sctest.TestServerFactory interface.
-type MultiRegionTestClusterFactory struct {
-	scexec *scexec.TestingKnobs
-	server *server.TestingKnobs
-}
-
-var _ sctest.TestServerFactory = MultiRegionTestClusterFactory{}
-
-// WithSchemaChangerKnobs implements the sctest.TestServerFactory interface.
-func (f MultiRegionTestClusterFactory) WithSchemaChangerKnobs(
-	knobs *scexec.TestingKnobs,
-) sctest.TestServerFactory {
-	f.scexec = knobs
-	return f
-}
-
-// WithMixedVersion implements the sctest.TestServerFactory interface.
-func (f MultiRegionTestClusterFactory) WithMixedVersion() sctest.TestServerFactory {
-	f.server = &server.TestingKnobs{
-		BootstrapVersionKeyOverride:    sctest.OldVersionKey,
-		BinaryVersionOverride:          clusterversion.ByKey(sctest.OldVersionKey),
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-	}
-	return f
-}
-
-// Run implements the sctest.TestServerFactory interface.
-func (f MultiRegionTestClusterFactory) Run(
-	ctx context.Context, t *testing.T, fn func(_ serverutils.TestServerInterface, _ *gosql.DB),
-) {
-	const numServers = 3
-	knobs := base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		SQLExecutor: &sql.ExecutorTestingKnobs{
-			UseTransactionalDescIDGenerator: true,
+func newCluster(
+	t *testing.T, knobs *scexec.TestingKnobs,
+) (serverutils.TestServerInterface, *gosql.DB, func()) {
+	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: knobs,
+			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				StatementFilter:                 nil,
+				UseTransactionalDescIDGenerator: true,
+			},
 		},
+	)
+	return c.Server(0), sqlDB, cleanup
+}
+
+func newClusterMixed(
+	t *testing.T, knobs *scexec.TestingKnobs, downlevelVersion bool,
+) (serverutils.TestServerInterface, *gosql.DB, func()) {
+	targetVersion := clusterversion.TestingBinaryVersion
+	if downlevelVersion {
+		targetVersion = clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1)
 	}
-	if f.server != nil {
-		knobs.Server = f.server
-	}
-	if f.scexec != nil {
-		knobs.SQLDeclarativeSchemaChanger = f.scexec
-	}
-	c, db, _ := multiregionccltestutils.TestingCreateMultiRegionCluster(t, numServers, knobs)
-	defer c.Stopper().Stop(ctx)
-	fn(c.Server(0), db)
+	c, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t,
+		3, /* numServers */
+		base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          targetVersion,
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+			SQLDeclarativeSchemaChanger: knobs,
+			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				UseTransactionalDescIDGenerator: true,
+			},
+		})
+
+	return c.Server(0), db, cleanup
 }
 
 func TestDecomposeToElements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.DecomposeToElements(
-		t,
-		datapathutils.TestDataPath(t, "decomp"),
-		MultiRegionTestClusterFactory{},
-	)
+	sctest.DecomposeToElements(t, datapathutils.TestDataPath(t, "decomp"), newCluster)
 }

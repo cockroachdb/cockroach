@@ -23,6 +23,7 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
 import { PrintTime } from "src/views/reports/containers/range/print";
+import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
@@ -37,12 +38,14 @@ import {
   defaultFilters,
   util,
   StatementsPageRoot,
-  ActiveStatementsViewStateProps,
+  RecentStatementsViewStateProps,
   StatementsPageStateProps,
-  ActiveStatementsViewDispatchProps,
+  RecentStatementsViewDispatchProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
   api,
+  selectStmtsAllApps,
+  selectStmtsCombiner,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -60,16 +63,30 @@ import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
-  activeStatementsViewActions,
-  mapStateToActiveStatementViewProps,
-} from "./activeStatementsSelectors";
+  recentStatementsViewActions,
+  mapStateToRecentStatementViewProps,
+} from "./recentStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
-import { createSelectorForCachedDataField } from "src/redux/apiReducers";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+  selectStatementsDataInFlight,
+} from "src/selectors/executionFingerprintsSelectors";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+// selectStatements returns the array of AggregateStatistics to show on the
+// StatementsPage, based on if the appAttr route parameter is set.
+export const selectStatements = createSelector(
+  (state: AdminUIState) => state.cachedData.statements?.data,
+  (_state: AdminUIState, props: RouteComponentProps) => props,
+  selectDiagnosticsReportsPerStatement,
+  selectStmtsCombiner,
+);
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(
   (state: AdminUIState) => state.cachedData.databases,
-  (state: CachedDataReducerState<api.DatabasesListResponse>) => {
+  (state: CachedDataReducerState<clusterUiApi.DatabasesListResponse>) => {
     if (!state?.data) {
       return [];
     }
@@ -153,7 +170,7 @@ const fingerprintsPageActions = {
     };
   },
   onActivateStatementDiagnostics: (
-    insertStmtDiagnosticRequest: api.InsertStmtDiagnosticRequest,
+    insertStmtDiagnosticRequest: clusterUiApi.InsertStmtDiagnosticRequest,
   ) => {
     return (dispatch: AppDispatch) =>
       dispatch(
@@ -175,7 +192,7 @@ const fingerprintsPageActions = {
   onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
   onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
   onSelectDiagnosticsReportDropdownOption: (
-    report: api.StatementDiagnosticsReport,
+    report: clusterUiApi.StatementDiagnosticsReport,
   ) => {
     if (report.completed) {
       return trackDownloadDiagnosticsBundleAction(report.statement_fingerprint);
@@ -205,21 +222,13 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps;
-  activePageProps: ActiveStatementsViewStateProps;
+  activePageProps: RecentStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: ActiveStatementsViewDispatchProps;
+  activePageProps: RecentStatementsViewDispatchProps;
 };
-
-const selectStatements =
-  createSelectorForCachedDataField<api.SqlStatsResponse>("statements");
-
-const selectStatementDiagnostics =
-  createSelectorForCachedDataField<api.StatementDiagnosticsResponse>(
-    "statementDiagnosticsReports",
-  );
 
 export default withRouter(
   connect<
@@ -231,13 +240,20 @@ export default withRouter(
     (state: AdminUIState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
         ...props,
+        apps: selectStmtsAllApps(state.cachedData.statements?.data),
         columns: statementColumnsLocalSetting.selectorToArray(state),
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
         filters: filtersLocalSetting.selector(state),
+        lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
+        statements: selectStatements(state, props),
+        isDataValid: selectStatementsDataValid(state),
+        isReqInFlight: selectStatementsDataInFlight(state),
+        lastUpdated: selectStatementsLastUpdated(state),
+        statementsError: state.cachedData.statements.lastError,
         requestTime: requestTimeLocalSetting.selector(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
@@ -245,10 +261,8 @@ export default withRouter(
         reqSortSetting: reqSortSetting.selector(state),
         stmtsTotalRuntimeSecs:
           state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
-        statementsResponse: selectStatements(state),
-        statementDiagnostics: selectStatementDiagnostics(state)?.data,
       },
-      activePageProps: mapStateToActiveStatementViewProps(state),
+      activePageProps: mapStateToRecentStatementViewProps(state),
     }),
     (dispatch: AppDispatch): DispatchProps => ({
       fingerprintsPageProps: bindActionCreators(
@@ -256,7 +270,7 @@ export default withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        activeStatementsViewActions,
+        recentStatementsViewActions,
         dispatch,
       ),
     }),

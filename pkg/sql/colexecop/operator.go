@@ -66,9 +66,6 @@ type KVReader interface {
 	// GetBytesRead returns the number of bytes read from KV by this operator.
 	// It must be safe for concurrent use.
 	GetBytesRead() int64
-	// GetKVPairsRead returns the number of key-values pairs read from KV by
-	// this operator. It must be safe for concurrent use.
-	GetKVPairsRead() int64
 	// GetRowsRead returns the number of rows read from KV by this operator.
 	// It must be safe for concurrent use.
 	GetRowsRead() int64

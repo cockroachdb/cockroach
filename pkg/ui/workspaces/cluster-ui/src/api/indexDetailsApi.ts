@@ -23,7 +23,7 @@ import {
 import moment from "moment-timezone";
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { AggregateStatistics } from "../statementsTable";
-import { INTERNAL_APP_NAME_PREFIX } from "../activeExecutions/activeStatementUtils";
+import { INTERNAL_APP_NAME_PREFIX } from "../recentExecutions/recentStatementUtils";
 
 export type TableIndexStatsRequest =
   cockroach.server.serverpb.TableIndexStatsRequest;

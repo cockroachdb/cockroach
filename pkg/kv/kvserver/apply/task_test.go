@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -34,7 +33,7 @@ func setLogging(on bool) func() {
 }
 
 type cmd struct {
-	index                 kvpb.RaftIndex
+	index                 uint64
 	nonTrivial            bool
 	nonLocal              bool
 	shouldReject          bool
@@ -53,10 +52,10 @@ type appliedCmd struct {
 	*checkedCmd
 }
 
-func (c *cmd) Index() kvpb.RaftIndex { return c.index }
-func (c *cmd) IsTrivial() bool       { return !c.nonTrivial }
-func (c *cmd) IsLocal() bool         { return !c.nonLocal }
-func (c *cmd) Ctx() context.Context  { return context.Background() }
+func (c *cmd) Index() uint64        { return c.index }
+func (c *cmd) IsTrivial() bool      { return !c.nonTrivial }
+func (c *cmd) IsLocal() bool        { return !c.nonLocal }
+func (c *cmd) Ctx() context.Context { return context.Background() }
 func (c *cmd) AckErrAndFinish(_ context.Context, err error) error {
 	c.acked = true
 	c.finished = true
@@ -122,9 +121,9 @@ var _ apply.CheckedCommandList = &checkedCmdSlice{}
 var _ apply.AppliedCommandList = &appliedCmdSlice{}
 
 type testStateMachine struct {
-	batches            [][]kvpb.RaftIndex
-	applied            []kvpb.RaftIndex
-	appliedSideEffects []kvpb.RaftIndex
+	batches            [][]uint64
+	applied            []uint64
+	appliedSideEffects []uint64
 	batchOpen          bool
 }
 
@@ -167,7 +166,7 @@ func (sm *testStateMachine) ApplySideEffects(
 type testBatch struct {
 	sm        *testStateMachine
 	ephemeral bool
-	staged    []kvpb.RaftIndex
+	staged    []uint64
 }
 
 func (b *testBatch) Stage(_ context.Context, cmdI apply.Command) (apply.CheckedCommand, error) {
@@ -192,27 +191,27 @@ func (b *testBatch) Close() {
 }
 
 type testDecoder struct {
-	nonTrivial            map[kvpb.RaftIndex]bool
-	nonLocal              map[kvpb.RaftIndex]bool
-	shouldReject          map[kvpb.RaftIndex]bool
-	shouldThrowErrRemoved map[kvpb.RaftIndex]bool
+	nonTrivial            map[uint64]bool
+	nonLocal              map[uint64]bool
+	shouldReject          map[uint64]bool
+	shouldThrowErrRemoved map[uint64]bool
 
 	cmds []*cmd
 }
 
 func newTestDecoder() *testDecoder {
 	return &testDecoder{
-		nonTrivial:            make(map[kvpb.RaftIndex]bool),
-		nonLocal:              make(map[kvpb.RaftIndex]bool),
-		shouldReject:          make(map[kvpb.RaftIndex]bool),
-		shouldThrowErrRemoved: make(map[kvpb.RaftIndex]bool),
+		nonTrivial:            make(map[uint64]bool),
+		nonLocal:              make(map[uint64]bool),
+		shouldReject:          make(map[uint64]bool),
+		shouldThrowErrRemoved: make(map[uint64]bool),
 	}
 }
 
 func (d *testDecoder) DecodeAndBind(_ context.Context, ents []raftpb.Entry) (bool, error) {
 	d.cmds = make([]*cmd, len(ents))
 	for i, ent := range ents {
-		idx := kvpb.RaftIndex(ent.Index)
+		idx := ent.Index
 		cmd := &cmd{
 			index:                 idx,
 			nonTrivial:            d.nonTrivial[idx],
@@ -259,9 +258,9 @@ func TestApplyCommittedEntries(t *testing.T) {
 
 	// Assert that all commands were applied in the correct batches.
 	exp := testStateMachine{
-		batches:            [][]kvpb.RaftIndex{{1, 2}, {3}, {4}, {5}, {6}},
-		applied:            []kvpb.RaftIndex{1, 2, 3, 4, 5, 6},
-		appliedSideEffects: []kvpb.RaftIndex{1, 2, 3, 4, 5, 6},
+		batches:            [][]uint64{{1, 2}, {3}, {4}, {5}, {6}},
+		applied:            []uint64{1, 2, 3, 4, 5, 6},
+		appliedSideEffects: []uint64{1, 2, 3, 4, 5, 6},
 	}
 	require.Equal(t, exp, *sm)
 
@@ -289,9 +288,9 @@ func TestApplyCommittedEntriesWithBatchSize(t *testing.T) {
 
 	// Assert that all commands were applied in the correct batches.
 	exp := testStateMachine{
-		batches:            [][]kvpb.RaftIndex{{1, 2}, {3}, {4}, {5, 6}, {7}},
-		applied:            []kvpb.RaftIndex{1, 2, 3, 4, 5, 6, 7},
-		appliedSideEffects: []kvpb.RaftIndex{1, 2, 3, 4, 5, 6, 7},
+		batches:            [][]uint64{{1, 2}, {3}, {4}, {5, 6}, {7}},
+		applied:            []uint64{1, 2, 3, 4, 5, 6, 7},
+		appliedSideEffects: []uint64{1, 2, 3, 4, 5, 6, 7},
 	}
 	require.Equal(t, exp, *sm)
 
@@ -359,9 +358,9 @@ func TestApplyCommittedEntriesWithErr(t *testing.T) {
 
 	// Assert that only commands up to the replica removal were applied.
 	exp := testStateMachine{
-		batches:            [][]kvpb.RaftIndex{{1, 2}, {3}},
-		applied:            []kvpb.RaftIndex{1, 2, 3},
-		appliedSideEffects: []kvpb.RaftIndex{1, 2, 3},
+		batches:            [][]uint64{{1, 2}, {3}},
+		applied:            []uint64{1, 2, 3},
+		appliedSideEffects: []uint64{1, 2, 3},
 	}
 	require.Equal(t, exp, *sm)
 

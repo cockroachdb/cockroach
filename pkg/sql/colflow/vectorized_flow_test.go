@@ -12,12 +12,13 @@ package colflow
 
 import (
 	"context"
-	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -31,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -233,28 +234,22 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
-	flowBase := flowinfra.NewFlowBase(
-		execinfra.FlowCtx{
+	f := &flowinfra.FlowBase{
+		FlowCtx: execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{},
 			EvalCtx: &evalCtx,
 			Mon:     evalCtx.TestingMon,
 			NodeID:  base.TestingIDContainer,
 		},
-		nil,                     /* sp */
-		nil,                     /* flowReg */
-		&execinfra.RowChannel{}, /* rowSyncFlowConsumer */
-		nil,                     /* batchSyncFlowConsumer */
-		nil,                     /* localProcessors */
-		nil,                     /* localVectorSources */
-		nil,                     /* onFlowCleanupEnd */
-		"",                      /* statementSQL */
-	)
+	}
+	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
-		flowBase, componentCreator, false, /* recordingStats */
-		colcontainer.DiskQueueCfg{}, nil, /* fdSemaphore */
+		f, nil /* helper */, componentCreator, false, false, &wg, &execinfra.RowChannel{},
+		nil /* batchSyncFlowConsumer */, nil /* podNodeDialer */, colcontainer.DiskQueueCfg{},
+		nil /* fdSemaphore */, descs.DistSQLTypeResolver{}, admission.WorkInfo{},
 	)
 
-	_, _, err := vfc.setupFlow(ctx, procs, flowinfra.FuseNormally)
+	_, _, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, nil /* localProcessors */, nil /*localVectorSources*/, flowinfra.FuseNormally)
 	defer vfc.cleanup(ctx)
 	require.NoError(t, err)
 
@@ -267,7 +262,6 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 // subtests for a more thorough explanation.
 func TestVectorizedFlowTempDirectory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
@@ -372,12 +366,12 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		errCh := make(chan error)
 		go func() {
 			createTempDir(ctx)
-			errCh <- ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "async"), os.ModePerm)
+			errCh <- ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "async"))
 		}()
 		createTempDir(ctx)
 		// Both goroutines should be able to create their subdirectories within the
 		// flow's temporary directory.
-		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "main_goroutine"), os.ModePerm))
+		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.GetPath(ctx), "main_goroutine")))
 		require.NoError(t, <-errCh)
 		vf.Cleanup(ctx)
 		checkDirs(t, 0)

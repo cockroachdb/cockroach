@@ -56,10 +56,9 @@ const (
 type minMaxRemovableAggBase struct {
 	partitionSeekerBase
 	colexecop.CloserHelper
-	cancelChecker colexecutils.CancelChecker
-	allocator     *colmem.Allocator
-	outputColIdx  int
-	framer        windowFramer
+	allocator    *colmem.Allocator
+	outputColIdx int
+	framer       windowFramer
 
 	// A partial deque of indices into the current partition ordered by the value
 	// of the input column at each index. It contains only indices that are part
@@ -83,7 +82,6 @@ type minMaxRemovableAggBase struct {
 // Init implements the bufferedWindower interface.
 func (b *minMaxRemovableAggBase) Init(ctx context.Context) {
 	b.InitHelper.Init(ctx)
-	b.cancelChecker.Init(b.Ctx)
 }
 
 // transitionToProcessing implements the bufferedWindower interface.
@@ -256,7 +254,6 @@ func (a *minBoolAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -426,7 +423,6 @@ func (a *minBytesAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -582,7 +578,6 @@ func (a *minDecimalAggregator) aggregateOverIntervals(intervals []windowInterval
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -738,7 +733,6 @@ func (a *minInt16Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -916,7 +910,6 @@ func (a *minInt32Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -1094,7 +1087,6 @@ func (a *minInt64Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -1272,7 +1264,6 @@ func (a *minFloat64Aggregator) aggregateOverIntervals(intervals []windowInterval
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -1466,7 +1457,6 @@ func (a *minTimestampAggregator) aggregateOverIntervals(intervals []windowInterv
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -1636,7 +1626,6 @@ func (a *minIntervalAggregator) aggregateOverIntervals(intervals []windowInterva
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -1801,7 +1790,6 @@ func (a *minJSONAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -1991,7 +1979,6 @@ func (a *minDatumAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -2234,7 +2221,6 @@ func (a *maxBoolAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -2404,7 +2390,6 @@ func (a *maxBytesAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -2560,7 +2545,6 @@ func (a *maxDecimalAggregator) aggregateOverIntervals(intervals []windowInterval
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -2716,7 +2700,6 @@ func (a *maxInt16Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -2894,7 +2877,6 @@ func (a *maxInt32Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -3072,7 +3054,6 @@ func (a *maxInt64Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -3250,7 +3231,6 @@ func (a *maxFloat64Aggregator) aggregateOverIntervals(intervals []windowInterval
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -3444,7 +3424,6 @@ func (a *maxTimestampAggregator) aggregateOverIntervals(intervals []windowInterv
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -3614,7 +3593,6 @@ func (a *maxIntervalAggregator) aggregateOverIntervals(intervals []windowInterva
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -3779,7 +3757,6 @@ func (a *maxJSONAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()
@@ -3969,7 +3946,6 @@ func (a *maxDatumAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()

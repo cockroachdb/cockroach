@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
@@ -29,8 +28,7 @@ func declareKeysBarrier(
 	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	req kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	// Barrier is special-cased in the concurrency manager to *not* actually

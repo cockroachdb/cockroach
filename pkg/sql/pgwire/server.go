@@ -15,7 +15,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -86,6 +85,47 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
+
+// TODO(alyshan): This setting is enforcing max number of connections with superusers not being affected by
+// the limit. However, admin users connections are counted towards the max count. So we should either update the
+// description to say "the maximum number of connections per gateway ... Superusers are not affected by this limit"
+// or stop counting superuser connections towards the max count.
+var maxNumNonAdminConnections = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.max_connections_per_gateway",
+	"the maximum number of non-superuser SQL connections per gateway allowed at a given time "+
+		"(note: this will only limit future connection attempts and will not affect already established connections). "+
+		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
+	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
+).WithPublic()
+
+// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud to limit
+// connections to serverless clusters while still being able to connect from the Cockroach Cloud control plane.
+// This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
+// This setting may be removed one day.
+var maxNumNonRootConnections = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.cockroach_cloud.max_client_connections_per_gateway",
+	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
+		"The maximum number of SQL connections per gateway allowed at a given time "+
+		"(note: this will only limit future connection attempts and will not affect already established connections). "+
+		"Negative values result in unlimited number of connections. Cockroach Cloud internal users (including root user) "+
+		"are not affected by this limit.",
+	-1,
+)
+
+// maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
+// server.cockroach_cloud.max_client_connections_per_gateway.
+// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting
+// connections to serverless clusters.
+// This setting may be removed one day.
+var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
+	"a reason to provide in the error message for connections that are denied due to "+
+		"server.cockroach_cloud.max_client_connections_per_gateway",
+	"",
+)
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
@@ -929,6 +969,8 @@ func (s *Server) serveImpl(
 	authOpt authOptions,
 	sessionID clusterunique.ID,
 ) {
+	defer func() { _ = c.conn.Close() }()
+
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
 		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
 	} else {
@@ -967,9 +1009,11 @@ func (s *Server) serveImpl(
 		systemIdentity = c.sessionArgs.User
 	}
 	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
+	var authenticator authenticatorIO = authPipe
 
-	// procWg waits for the command processor to return.
-	var procWg sync.WaitGroup
+	// procCh is the channel on which we'll receive the termination signal from
+	// the command processor.
+	var procCh <-chan error
 
 	// We need a value for the unqualified int size here, but it is controlled
 	// by a session variable, and this layer doesn't have access to the session
@@ -982,22 +1026,18 @@ func (s *Server) serveImpl(
 
 	if !inTestWithoutSQL {
 		// Spawn the command processing goroutine, which also handles connection
-		// authentication). It will notify us when it's done through procWg, and
-		// we'll also interact with the authentication process through authPipe.
-		procWg.Add(1)
-		go func() {
-			// Inform the connection goroutine.
-			defer procWg.Done()
-			c.processCommands(
-				ctx,
-				authOpt,
-				authPipe,
-				sqlServer,
-				reserved,
-				onDefaultIntSizeChange,
-				sessionID,
-			)
-		}()
+		// authentication). It will notify us when it's done through procCh, and
+		// we'll also interact with the authentication process through ac.
+		var ac AuthConn = authPipe
+		procCh = c.processCommandsAsync(
+			ctx,
+			authOpt,
+			ac,
+			sqlServer,
+			reserved,
+			onDefaultIntSizeChange,
+			sessionID,
+		)
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
@@ -1012,8 +1052,12 @@ func (s *Server) serveImpl(
 		if err != nil {
 			return
 		}
+		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		authPipe.AuthOK(ctx)
+		ac.AuthOK(ctx)
+		dummyCh := make(chan error)
+		close(dummyCh)
+		procCh = dummyCh
 
 		if err := c.bufferInitialReadyForQuery(0 /* queryCancelKey */); err != nil {
 			return
@@ -1097,13 +1141,13 @@ func (s *Server) serveImpl(
 					// Pass the data to the authenticator. This hopefully causes it to finish
 					// authentication in the background and give us an intSizer when we loop
 					// around.
-					if err = authPipe.sendPwdData(pwd); err != nil {
+					if err = authenticator.sendPwdData(pwd); err != nil {
 						return false, isSimpleQuery, err
 					}
 					return false, isSimpleQuery, nil
 				}
 				// Wait for the auth result.
-				if err = authPipe.authResult(); err != nil {
+				if err = authenticator.authResult(); err != nil {
 					// The error has already been sent to the client.
 					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
@@ -1139,19 +1183,19 @@ func (s *Server) serveImpl(
 					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
 					followedBySync = true
 				}
-				return false, isSimpleQuery, c.handleExecute(ctx, timeReceived, followedBySync)
+				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
-				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
-				return false, isSimpleQuery, c.handleDescribe(ctx)
+				return false, isSimpleQuery, c.handleDescribe(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgBind:
-				return false, isSimpleQuery, c.handleBind(ctx)
+				return false, isSimpleQuery, c.handleBind(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgClose:
-				return false, isSimpleQuery, c.handleClose(ctx)
+				return false, isSimpleQuery, c.handleClose(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgTerminate:
 				terminateSeen = true
@@ -1224,10 +1268,13 @@ func (s *Server) serveImpl(
 	// In case the authenticator is blocked on waiting for data from the client,
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.
-	authPipe.noMorePwdData()
+	authenticator.noMorePwdData()
 
-	// Wait for the processor goroutine to finish, if it hasn't already.
-	procWg.Wait()
+	// Wait for the processor goroutine to finish, if it hasn't already. We're
+	// ignoring the error we get from it, as we have no use for it. It might be a
+	// connection error, or a context cancelation error case this goroutine is the
+	// one that triggered the execution to stop.
+	<-procCh
 
 	if terminateSeen {
 		return
@@ -1247,13 +1294,18 @@ func (s *Server) serveImpl(
 	}
 }
 
-// readCancelKey retrieves the "backend data" key that identifies
+// readCancelKeyAndCloseConn retrieves the "backend data" key that identifies
 // a cancellable query, then closes the connection.
-func readCancelKey(
-	ctx context.Context, buf *pgwirebase.ReadBuffer,
+func readCancelKeyAndCloseConn(
+	ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer,
 ) (ok bool, cancelKey pgwirecancel.BackendKeyData) {
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	backendKeyDataBits, err := buf.GetUint64()
+	// The connection that issued the cancel is not a SQL session -- it's an
+	// entirely new connection that's created just to send the cancel. We close
+	// the connection as soon as possible after reading the data, since there
+	// is nothing to send back to the client.
+	_ = conn.Close()
 	// The client is also unwilling to read an error payload, so we just log it locally.
 	if err != nil {
 		log.Sessions.Warningf(ctx, "%v", errors.Wrap(err, "reading cancel key from client"))
@@ -1326,7 +1378,7 @@ func (s *Server) registerConn(
 	rejectNewConnections = s.mu.rejectNewConnections
 	if !rejectNewConnections {
 		var cancel context.CancelFunc
-		newCtx, cancel = ctxlog.WithCancel(ctx)
+		newCtx, cancel = contextutil.WithCancel(ctx)
 		done := make(chan struct{})
 		s.mu.connCancelMap[done] = cancel
 		onCloseFn = func() {
@@ -1367,6 +1419,7 @@ func (s *Server) sendErr(
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
 	_ /* err */ = w.writeErr(ctx, err, conn)
+	_ = conn.Close()
 	return err
 }
 

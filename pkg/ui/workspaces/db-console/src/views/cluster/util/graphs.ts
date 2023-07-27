@@ -57,14 +57,8 @@ export function formatMetricData(
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
     if (result && !_.isEmpty(result.datapoints)) {
-      const scaledValues = result.datapoints.map(v => ({
-        ...v,
-        // if defined scale it, otherwise remain undefined
-        value: v.value && v.value * (s.props.scale ?? 1),
-      }));
-
       formattedData.push({
-        values: scaledValues,
+        values: result.datapoints,
         key: s.props.title || s.props.name,
         area: true,
         fillOpacity: 0.1,

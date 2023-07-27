@@ -21,7 +21,6 @@ CREATE TABLE a(id INT PRIMARY KEY)
 statement error OSS binaries do not include enterprise features
 ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 
-skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -100,7 +99,7 @@ SELECT 'db2.t'::REGCLASS::INT
 # in either of these tables for id = $t_id.
 statement ok
 BEGIN;
-ALTER TABLE db2.t CONFIGURE ZONE USING range_max_bytes = 64<<20, range_min_bytes = 1<<20;
+ALTER TABLE db2.t CONFIGURE ZONE USING range_max_bytes = 1<<24, range_min_bytes = 1<<20;
 DROP TABLE db2.t;
 COMMIT;
 
@@ -110,7 +109,7 @@ SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
-{"gcPolicy": {"ttlSeconds": 14400}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
+{"gcPolicy": {"ttlSeconds": 14400}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
 
 statement ok
 CREATE TABLE db2.t2 (i INT PRIMARY KEY);
@@ -123,12 +122,12 @@ ALTER DATABASE db2 CONFIGURE ZONE USING gc.ttlseconds = 90001;
 
 # Both the dropped and the new table should eventually have span configurations
 # and they should both inherit from the database's GC TTL setting.
-query T retry,rowsort
+query T retry
 SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
-{"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
+{"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
 {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
 
 # Check that dropped relations can have their GC TTLs altered.

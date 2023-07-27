@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
@@ -47,7 +46,6 @@ func TestHotRangesStats(t *testing.T) {
 	defer cleanup()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
 			base.DefaultTestStoreSpec,
@@ -55,9 +53,7 @@ func TestHotRangesStats(t *testing.T) {
 		},
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
-					DisableReplicaRebalancing: true,
-				},
+				DisableReplicaRebalancing: true,
 			},
 		},
 	})

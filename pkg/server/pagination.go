@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -368,7 +368,7 @@ func (r *rpcNodePaginator) queryNode(ctx context.Context, nodeID roachpb.NodeID,
 		r.mu.currentIdx++
 		r.mu.turnCond.Broadcast()
 	}
-	if err := timeutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
+	if err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
 		var err error
 		client, err = r.dialFn(ctx, nodeID)
 		return err

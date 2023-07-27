@@ -21,7 +21,7 @@ statement ok
 ALTER ROLE testuser1 SET index_recommendations_enabled = false
 
 query TT
-SELECT role_name, settings FROM system.database_role_settings ORDER BY role_name
+SELECT role_name, settings FROM system.database_role_settings
 ----
 ·          {timezone=America/New_York}
 testuser1  {"application_name=my app",index_recommendations_enabled=false}

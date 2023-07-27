@@ -111,8 +111,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 
 			if e.options.Mode == tree.ExplainDistSQL {
 				flags := execinfrapb.DiagramFlags{
-					ShowInputTypes:    e.options.Flags[tree.ExplainFlagTypes],
-					MakeDeterministic: e.flags.Deflake.Has(explain.DeflakeAll) || params.p.execCfg.TestingKnobs.DeterministicExplain,
+					ShowInputTypes: e.options.Flags[tree.ExplainFlagTypes],
 				}
 				diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
 				if err != nil {
@@ -140,7 +139,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 	}
 	// Add index recommendations to output, if they exist.
-	if recs := params.p.instrumentation.explainIndexRecs; recs != nil {
+	if recs := params.p.instrumentation.indexRecs; recs != nil {
 		// First add empty row.
 		rows = append(rows, "")
 		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))

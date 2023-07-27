@@ -260,7 +260,6 @@ var fnCost = map[string]memo.Cost{
 	"st_askml":                    100 * cpuCostFactor,
 	"st_aslatlontext":             100 * cpuCostFactor,
 	"st_assvg":                    100 * cpuCostFactor,
-	"st_asmvtgeom":                100 * cpuCostFactor,
 	"st_astext":                   100 * cpuCostFactor,
 	"st_astwkb":                   1000 * cpuCostFactor,
 	"st_asx3d":                    100 * cpuCostFactor,
@@ -524,8 +523,6 @@ func (c *coster) MaybeGetBestCostRelation(
 // the cost based on Big-O estimated complexity. Most constant factors are
 // ignored for now.
 func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost {
-	opt.MaybeInjectOptimizerTestingPanic(c.ctx, c.evalCtx)
-
 	var cost memo.Cost
 	switch candidate.Op() {
 	case opt.TopKOp:

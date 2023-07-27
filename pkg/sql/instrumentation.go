@@ -147,11 +147,10 @@ type instrumentationHelper struct {
 	costEstimate float64
 
 	// indexRecs contains index recommendations for the planned statement. It
-	// will only be populated if recommendations are requested for the statement
-	// for populating the statement_statistics table.
+	// will only be populated if the statement is an EXPLAIN statement, or if
+	// recommendations are requested for the statement for populating the
+	// statement_statistics table.
 	indexRecs []indexrec.Rec
-	// explainIndexRecs contains index recommendations for EXPLAIN statements.
-	explainIndexRecs []indexrec.Rec
 
 	// maxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
@@ -557,7 +556,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 
 	if queryStats != nil {
 		if queryStats.KVRowsRead != 0 {
-			ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead, queryStats.KVPairsRead, queryStats.KVBatchRequestsIssued)
+			ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead, queryStats.KVBatchRequestsIssued)
 		}
 		if queryStats.KVTime != 0 {
 			ob.AddKVTime(queryStats.KVTime)
@@ -715,7 +714,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
 				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
 				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
-				nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
 				nodeStats.KVBatchRequestsIssued.MaybeAdd(stats.KV.BatchRequestsIssued)
 				nodeStats.UsedStreamer = stats.KV.UsedStreamer
@@ -789,29 +787,24 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		stmtType,
 		isInternal,
 	) {
-		// If the statement is an EXPLAIN, then we might have already generated
-		// the index recommendations. If so, we can skip generation here.
-		if ih.explainIndexRecs != nil {
-			recommendations = ih.explainIndexRecs
+		opc := &planner.optPlanningCtx
+		opc.reset(ctx)
+		f := opc.optimizer.Factory()
+		evalCtx := opc.p.EvalContext()
+		f.Init(ctx, evalCtx, opc.catalog)
+		f.FoldingControl().AllowStableFolds()
+		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
+		err := bld.Build()
+		if err != nil {
+			log.Warningf(ctx, "unable to build memo: %s", err)
 		} else {
-			opc := &planner.optPlanningCtx
-			opc.reset(ctx)
-			f := opc.optimizer.Factory()
-			evalCtx := opc.p.EvalContext()
-			f.Init(ctx, evalCtx, opc.catalog)
-			f.FoldingControl().AllowStableFolds()
-			bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
-			err := bld.Build()
+			err = opc.makeQueryIndexRecommendation(ctx)
 			if err != nil {
-				log.Warningf(ctx, "unable to build memo: %s", err)
-			} else {
-				recommendations, err = opc.makeQueryIndexRecommendation(ctx)
-				if err != nil {
-					log.Warningf(ctx, "unable to generate index recommendations: %s", err)
-				}
+				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
 			}
 		}
 		reset = true
+		recommendations = ih.indexRecs
 	}
 	ih.indexRecs = idxRec.UpdateIndexRecommendations(
 		ih.fingerprint,

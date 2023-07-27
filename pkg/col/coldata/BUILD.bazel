@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "coldata",
@@ -42,7 +42,7 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":coldata"],
-    tags = ["no-remote-exec"],  # keep
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
@@ -66,7 +66,6 @@ GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
 export PATH=$$GO_ABS_PATH:$$PATH
 export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
-export GOROOT=
 $(location //pkg/sql/colexec/execgen/cmd/execgen) \
     -fmt=false pkg/col/coldata/$@ > $@
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
@@ -76,7 +75,6 @@ $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@go_sdk//:bin/go",
     ],
-    tags = ["no-remote-exec"],  # keep
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

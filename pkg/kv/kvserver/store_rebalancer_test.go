@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	rload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -524,7 +523,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 		}
 		// NB: We set the index to 2 corresponding to the match in
 		// TestingRaftStatusFn. Matches that are 0 are considered behind.
-		repl.mu.state.TruncatedState = &kvserverpb.RaftTruncatedState{Index: 2}
+		repl.mu.state.TruncatedState = &roachpb.RaftTruncatedState{Index: 2}
 		for _, storeID := range r.nonVoters {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -540,7 +539,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 
 		acc.AddReplica(candidateReplica{
 			Replica: repl,
-			usage:   repl.RangeUsageInfo(),
+			usage:   RangeUsageInfoForRepl(repl),
 		})
 	}
 	rr.Update(acc)
@@ -749,30 +748,28 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			expectTarget: 5,
 		},
 
-		// NB: The lease has just enough load to be worthwhile rebalancing.
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
-			qps:          minLeaseLoadFraction * localDesc.Capacity.QueriesPerSecond,
-			reqCPU:       minLeaseLoadFraction * localDesc.Capacity.CPUPerSecond,
+			qps:          1.5,
+			reqCPU:       1.5 * float64(time.Millisecond),
 			expectTarget: 4,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
-			qps:          minLeaseLoadFraction * localDesc.Capacity.QueriesPerSecond,
-			reqCPU:       minLeaseLoadFraction * localDesc.Capacity.CPUPerSecond,
+			qps:          1.5,
+			reqCPU:       1.5 * float64(time.Millisecond),
 			expectTarget: 5,
 		},
-		// NB: The lease is no longer worth rebalancing.
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
-			qps:          minLeaseLoadFraction*localDesc.Capacity.QueriesPerSecond - 1,
-			reqCPU:       minLeaseLoadFraction*localDesc.Capacity.CPUPerSecond - 1,
+			qps:          1.49,
+			reqCPU:       1.49 * float64(time.Millisecond),
 			expectTarget: 0,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
-			qps:          minLeaseLoadFraction*localDesc.Capacity.QueriesPerSecond - 1,
-			reqCPU:       minLeaseLoadFraction*localDesc.Capacity.CPUPerSecond - 1,
+			qps:          1.49,
+			reqCPU:       1.49 * float64(time.Millisecond),
 			expectTarget: 0,
 		},
 		{

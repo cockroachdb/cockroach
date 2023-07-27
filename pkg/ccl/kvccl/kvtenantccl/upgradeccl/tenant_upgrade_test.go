@@ -64,8 +64,8 @@ func TestTenantUpgrade(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Settings:          settings,
+			DisableDefaultTestTenant: true,
+			Settings:                 settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -195,6 +195,7 @@ func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
 // between version upgrades.
 func TestTenantUpgradeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 98555, "flaky test")
 	defer log.Scope(t).Close(t)
 	// Contains information for starting a tenant
 	// and maintaining a stopper.
@@ -202,19 +203,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		v2onMigrationStopper *stop.Stopper
 		tenantArgs           *base.TestTenantArgs
 	}
-	v0 := clusterversion.TestingBinaryMinSupportedVersion
-	v2 := clusterversion.TestingBinaryVersion
-	// v1 needs to be between v0 and v2. Set it to the minor release
-	// after v0 and before v2.
-	var v1 roachpb.Version
-	for _, version := range clusterversion.ListBetween(v0, v2) {
-		if version.Minor != v0.Minor {
-			v1 = version
-			break
-		}
-	}
-	require.NotEqual(t, v1, roachpb.Version{})
-
+	v0, v1, v2 := v0v1v2()
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		v2,
@@ -226,8 +215,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test validates tenant behavior. No need for the default test
 			// tenant here.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Settings:          settings,
+			DisableDefaultTestTenant: true,
+			Settings:                 settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -260,7 +249,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Shorten the reclaim loop so that terminated SQL servers don't block
 		// the upgrade from succeeding.
 		instancestorage.ReclaimLoopInterval.Override(ctx, &settings.SV, 250*time.Millisecond)
-		slinstance.DefaultTTL.Override(ctx, &settings.SV, 15*time.Second)
+		slinstance.DefaultTTL.Override(ctx, &settings.SV, 3*time.Second)
 		slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 500*time.Millisecond)
 		v2onMigrationStopper := stop.NewStopper()
 		// Initialize the version to the minimum it could be.
@@ -278,6 +267,9 @@ func TestTenantUpgradeFailure(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					DontUseJobs: true,
+					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
+						return []roachpb.Version{v1, v2}
+					},
 					RegistryOverride: func(v roachpb.Version) (upgradebase.Upgrade, bool) {
 						switch v {
 						case v1:
@@ -300,7 +292,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 									return nil
 								}), true
 						default:
-							return nil, false
+							panic("Unexpected version number observed.")
 						}
 					},
 				},
@@ -312,7 +304,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	}
 
 	t.Run("upgrade tenant have it crash then resume", func(t *testing.T) {
-		skip.WithIssue(t, 106279)
 		// Create a tenant before upgrading anything and verify its version.
 		const initialTenantID = 10
 		tenantInfo := mkTenant(t, initialTenantID)
@@ -351,7 +342,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Ensure that the tenant still works and the target
 		// version wasn't reached.
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		initialTenantRunner.CheckQueryResults(t, "SELECT split_part(version, '-', 1) FROM [SHOW CLUSTER SETTING version]",
+		initialTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
 			[][]string{{v1.String()}})
 
 		// Restart the tenant and ensure that the version is correct.

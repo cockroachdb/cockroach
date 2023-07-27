@@ -123,10 +123,6 @@ StatementPhase stage 1 of 1 with 117 MutationType ops
     [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.SetConstraintName
-      ConstraintID: 5
-      Name: crdb_internal_constraint_5_name_placeholder
-      TableID: 109
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 2
       TableID: 109
@@ -193,6 +189,10 @@ StatementPhase stage 1 of 1 with 117 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 111
+    *scop.SetConstraintName
+      ConstraintID: 5
+      Name: crdb_internal_constraint_5_name_placeholder
+      TableID: 109
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 2
       OriginTableID: 109
@@ -708,10 +708,6 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
     [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.SetConstraintName
-      ConstraintID: 5
-      Name: crdb_internal_constraint_5_name_placeholder
-      TableID: 109
     *scop.MakePublicForeignKeyConstraintValidated
       ConstraintID: 2
       TableID: 109
@@ -778,6 +774,10 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
       TableID: 111
+    *scop.SetConstraintName
+      ConstraintID: 5
+      Name: crdb_internal_constraint_5_name_placeholder
+      TableID: 109
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 2
       OriginTableID: 109
@@ -1144,7 +1144,6 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1741,8 +1740,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: non-data dependents removed before descriptor
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT]
   to:   [CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
-  kind: Precedence
-  rule: Constraint should be hidden before name
+  kind: SameStagePrecedence
+  rule: dependents removed right before simple constraint
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1750,7 +1749,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: dependents removed before constraint
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1758,7 +1757,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: dependents removed before constraint
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1766,7 +1765,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   to:   [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: dependents removed before constraint
 - from: [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1786,7 +1785,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: constraint no longer public before dependents
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1798,7 +1797,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: constraint no longer public before dependents
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1810,7 +1809,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 4, ReferencedDescID: 104}, VALIDATED]
   to:   [ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers2, ConstraintID: 4}, ABSENT]
   kind: Precedence
-  rule: Constraint should be hidden before name
+  rule: constraint no longer public before dependents
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -2472,7 +2471,6 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -3701,7 +3699,6 @@ PreCommitPhase stage 2 of 2 with 59 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 113

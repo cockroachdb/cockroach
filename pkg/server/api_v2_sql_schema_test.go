@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +43,7 @@ func TestUsersV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"users/").String(), nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"users/", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -85,7 +84,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.NoError(t, err)
 	defer client.CloseIdleConnections()
 
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"databases/").String(), nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"databases/", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -98,7 +97,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 
 	require.Contains(t, dr.Databases, "testdb")
 
-	req, err = http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"databases/testdb/").String(), nil)
+	req, err = http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"databases/testdb/", nil)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -109,7 +108,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&ddr))
 	require.NoError(t, resp.Body.Close())
 
-	req, err = http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"databases/testdb/grants/").String(), nil)
+	req, err = http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"databases/testdb/grants/", nil)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -121,7 +120,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	require.NotEmpty(t, dgr.Grants)
 
-	req, err = http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"databases/testdb/tables/").String(), nil)
+	req, err = http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"databases/testdb/tables/", nil)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -134,7 +133,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.Contains(t, dtr.TableNames, "public.testtable")
 
 	// Test that querying the wrong db name returns 404.
-	req, err = http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"databases/testdb2/tables/").String(), nil)
+	req, err = http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"databases/testdb2/tables/", nil)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -142,7 +141,7 @@ func TestDatabasesTablesV2(t *testing.T) {
 	require.Equal(t, 404, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 
-	req, err = http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"databases/testdb/tables/public.testtable/").String(), nil)
+	req, err = http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"databases/testdb/tables/public.testtable/", nil)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -180,7 +179,7 @@ func TestEventsV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"events/").String(), nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"events/", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)

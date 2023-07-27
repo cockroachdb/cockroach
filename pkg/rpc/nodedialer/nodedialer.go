@@ -12,20 +12,31 @@ package nodedialer
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
+	"unsafe"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
+
+// No more than one failure to connect to a given node will be logged in the given interval.
+const logPerNodeFailInterval = time.Minute
+
+type wrappedBreaker struct {
+	*circuit.Breaker
+	log.EveryN
+}
 
 // An AddressResolver translates NodeIDs into addresses.
 type AddressResolver func(roachpb.NodeID) (net.Addr, error)
@@ -37,6 +48,8 @@ type Dialer struct {
 	rpcContext   *rpc.Context
 	resolver     AddressResolver
 	testingKnobs DialerTestingKnobs
+
+	breakers [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
 }
 
 // DialerOpt contains configuration options for a Dialer.
@@ -95,17 +108,20 @@ func (n *Dialer) Dial(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, errors.Wrap(ctxErr, "dial")
 	}
+	breaker := n.getBreaker(nodeID, class)
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
+		breaker.Fail(err)
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, true, class)
+	return n.dial(ctx, nodeID, addr, breaker, true /* checkBreaker */, class)
 }
 
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
-// trying to connect. This function should only be used when there is good
-// reason to believe that the node is reachable.
+// trying to connect. The breaker is notified of the outcome. This function
+// should only be used when there is good reason to believe that the node is
+// reachable.
 func (n *Dialer) DialNoBreaker(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
@@ -114,9 +130,12 @@ func (n *Dialer) DialNoBreaker(
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
+		if ctx.Err() == nil {
+			n.getBreaker(nodeID, class).Fail(err)
+		}
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, false, class)
+	return n.dial(ctx, nodeID, addr, n.getBreaker(nodeID, class), false /* checkBreaker */, class)
 }
 
 // DialInternalClient is a specialization of DialClass for callers that
@@ -145,20 +164,20 @@ func (n *Dialer) DialInternalClient(
 		return nil, errors.Wrap(err, "resolver error")
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, err := n.dial(ctx, nodeID, addr, true, class)
+	conn, err := n.dial(ctx, nodeID, addr, n.getBreaker(nodeID, class), true /* checkBreaker */, class)
 	if err != nil {
 		return nil, err
 	}
 	return TracingInternalClient{InternalClient: kvpb.NewInternalClient(conn)}, nil
 }
 
-// dial performs the dialing of the remote connection. If checkBreaker
-// is set (which it usually is), circuit breakers for the peer will be
-// checked.
+// dial performs the dialing of the remote connection. If breaker is nil,
+// then perform this logic without using any breaker functionality.
 func (n *Dialer) dial(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	addr net.Addr,
+	breaker *wrappedBreaker,
 	checkBreaker bool,
 	class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
@@ -167,21 +186,38 @@ func (n *Dialer) dial(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
-	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class)
-	connect := rpcConn.Connect
-	if !checkBreaker {
-		connect = rpcConn.ConnectNoBreaker
+	if checkBreaker && !breaker.Ready() {
+		err = errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
+		return nil, err
 	}
-	conn, err := connect(ctx)
+	defer func() {
+		// Enforce a minimum interval between warnings for failed connections.
+		if err != nil && ctx.Err() == nil && breaker != nil && breaker.ShouldLog() {
+			log.Health.Warningf(ctx, "unable to connect to n%d: %s", nodeID, err)
+		}
+	}()
+	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, errors.Wrap(ctxErr, ctxWrapMsg)
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
+		if breaker != nil {
+			breaker.Fail(err)
+		}
 		return nil, err
 	}
 
+	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
+	// behavior in this file. Note that this different behavior causes problems
+	// for higher-levels in the system. For example, DistSQL checks for
+	// ConnHealth when scheduling processors, but can then see attempts to send
+	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
+	// as a stop-gap before the reconciliation occurs.
+	if breaker != nil {
+		breaker.Success()
+	}
 	return conn, nil
 }
 
@@ -192,6 +228,11 @@ func (n *Dialer) dial(
 func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
+	}
+	// NB: Don't call Ready(). The breaker protocol would require us to follow
+	// that up with a dial, which we won't do as this is called in hot paths.
+	if n.getBreaker(nodeID, class).Tripped() {
+		return circuit.ErrBreakerOpen
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
@@ -214,12 +255,10 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // "hint" to use a connection if it already exists, but simultaneously kick off
 // a connection attempt in the background if it doesn't and always return
 // immediately. It is only used today by DistSQL and it should probably be
-// removed and moved into that code. Also, as of #99191, we have stateful
-// circuit breakers that probe in the background and so whatever exactly it
-// is the caller really wants can likely be achieved by more direct means.
+// removed and moved into that code.
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
-	if err == nil {
+	if err == nil || !n.getBreaker(nodeID, class).Ready() {
 		return err
 	}
 	addr, err := n.resolver(nodeID)
@@ -236,12 +275,19 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 // dialing to that node through this NodeDialer.
 func (n *Dialer) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) (*circuit2.Breaker, bool) {
-	addr, err := n.resolver(nodeID)
-	if err != nil {
-		return nil, false
+) *circuit.Breaker {
+	return n.getBreaker(nodeID, class).Breaker
+}
+
+func (n *Dialer) getBreaker(nodeID roachpb.NodeID, class rpc.ConnectionClass) *wrappedBreaker {
+	breakers := &n.breakers[class]
+	value, ok := breakers.Load(int64(nodeID))
+	if !ok {
+		name := fmt.Sprintf("rpc %v [n%d]", n.rpcContext.Config.Addr, nodeID)
+		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
+		value, _ = breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
-	return n.rpcContext.GetBreakerForAddr(nodeID, class, addr)
+	return (*wrappedBreaker)(value)
 }
 
 // Latency returns the exponentially weighted moving average latency to the

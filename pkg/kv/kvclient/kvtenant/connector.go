@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
@@ -160,11 +160,6 @@ type connector struct {
 	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
 
-	earlyShutdownIfMissingTenantRecord bool
-
-	startCh  chan struct{} // closed when connector has started up
-	startErr error
-
 	mu struct {
 		syncutil.RWMutex
 		client               *client
@@ -187,7 +182,7 @@ type connector struct {
 		receivedFirstSpecificOverrides bool
 		specificOverrides              map[string]settings.EncodedValue
 
-		// notifyCh is closed when there are changes to overrides.
+		// notifyCh receives an event when there are changes to overrides.
 		notifyCh chan struct{}
 	}
 }
@@ -253,8 +248,6 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 		rpcRetryOptions: cfg.RPCRetryOptions,
 		defaultZoneCfg:  cfg.DefaultZoneConfig,
 		addrs:           addrs,
-
-		earlyShutdownIfMissingTenantRecord: cfg.ShutdownTenantConnectorEarlyIfNoRecordPresent,
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
@@ -262,7 +255,6 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
-	c.settingsMu.notifyCh = make(chan struct{})
 	return c
 }
 
@@ -284,38 +276,12 @@ func (connectorFactory) NewConnector(
 	return NewConnector(cfg, []string{addressConfig.LoopbackAddress}), nil
 }
 
-// WaitForStart waits until the connector has started.
-func (c *connector) WaitForStart(ctx context.Context) error {
-	// Fast path check.
-	select {
-	case <-c.startCh:
-		return c.startErr
-	default:
-	}
-	if c.startCh == nil {
-		return errors.AssertionFailedf("Start() was not yet called")
-	}
-	select {
-	case <-c.startCh:
-		return c.startErr
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
 // Start launches the connector's worker thread and waits for it to successfully
 // connect to a KV node. Start returns once the connector has determined the
 // cluster's ID and set connector.rpcContext.ClusterID.
 func (c *connector) Start(ctx context.Context) error {
-	c.startCh = make(chan struct{})
-	c.startErr = c.internalStart(ctx)
-	close(c.startCh)
-	return c.startErr
-}
-
-func (c *connector) internalStart(ctx context.Context) error {
 	gossipStartupCh := make(chan struct{})
-	settingsStartupCh := make(chan error)
+	settingsStartupCh := make(chan struct{})
 	bgCtx := c.AnnotateCtx(context.Background())
 
 	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-gossip", func(ctx context.Context) {
@@ -343,13 +309,9 @@ func (c *connector) internalStart(ctx context.Context) error {
 		case <-gossipStartupCh:
 			log.Infof(ctx, "kv connector gossip subscription started")
 			gossipStartupCh = nil
-		case err := <-settingsStartupCh:
-			settingsStartupCh = nil
-			if err != nil {
-				log.Infof(ctx, "kv connector initialization error: %v", err)
-				return err
-			}
+		case <-settingsStartupCh:
 			log.Infof(ctx, "kv connector tenant settings started")
+			settingsStartupCh = nil
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.rpcContext.Stopper.ShouldQuiesce():
@@ -942,7 +904,7 @@ func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.Clien
 	if c.rpcDialTimeout == 0 {
 		return c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
 	}
-	err = timeutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
+	err = contextutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
 		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
 		return err
 	})

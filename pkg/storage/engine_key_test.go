@@ -11,9 +11,7 @@
 package storage
 
 import (
-	"encoding/hex"
 	"fmt"
-	"math"
 	"math/rand"
 	"testing"
 	"unsafe"
@@ -24,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -91,6 +88,7 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 		{key: MVCCKey{Key: roachpb.Key("a")}},
 		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
 		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
+		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -132,34 +130,6 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	}
 }
 
-// TestMVCCAndEngineKeyDecodeSyntheticTimestamp tests decoding an MVCC key with
-// a synthetic timestamp. The synthetic timestamp bit is now ignored during key
-// encoding and decoding, but synthetic timestamps may still be present in the
-// wild, so they must not confuse decoding.
-func TestMVCCAndEngineKeyDecodeSyntheticTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	key := MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}
-	keyNoSynthetic := key
-	keyNoSynthetic.Timestamp.Synthetic = false
-
-	// encodedStr was computed from key using a previous version of the code that
-	// that included synthetic timestamps in the MVCC key encoding.
-	encodedStr := "6261720000000000000000630000002d010e"
-	encoded, err := hex.DecodeString(encodedStr)
-	require.NoError(t, err)
-
-	// Decode to demonstrate that the synthetic timestamp can be decoded.
-	eKeyDecoded, ok := DecodeEngineKey(encoded)
-	require.True(t, ok)
-	require.False(t, eKeyDecoded.IsLockTableKey())
-	require.True(t, eKeyDecoded.IsMVCCKey())
-	require.NoError(t, eKeyDecoded.Validate())
-	keyDecoded, err := eKeyDecoded.ToMVCCKey()
-	require.NoError(t, err)
-	require.Equal(t, keyNoSynthetic, keyDecoded)
-}
-
 func TestEngineKeyValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	uuid1 := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
@@ -171,6 +141,7 @@ func TestEngineKeyValidate(t *testing.T) {
 		{key: MVCCKey{Key: roachpb.Key("a")}},
 		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
 		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
+		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
 
 		// Valid LockTableKeys.
 		{
@@ -195,7 +166,7 @@ func TestEngineKeyValidate(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprint(tc.key), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			var ek EngineKey
 			switch k := tc.key.(type) {
 			case EngineKey:
@@ -207,73 +178,13 @@ func TestEngineKeyValidate(t *testing.T) {
 				ek = key
 			}
 
-			err := ek.Validate()
-			if tc.invalid {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				// Ensure EngineKey.Validate doesn't allocate for valid keys.
-				// Regression test for #106464.
-				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
-					_ = ek.Validate()
-				}))
+			if err := ek.Validate(); err != nil {
+				require.True(t, tc.invalid)
+				return
 			}
+			require.False(t, tc.invalid)
 		})
 	}
-
-	// Test randomly generated valid keys.
-	rng, _ := randutil.NewTestRand()
-	t.Run("randomized", func(t *testing.T) {
-		t.Run("MVCCKey", func(t *testing.T) {
-			for i := 0; i < 100; i++ {
-				k := randomMVCCKey(rng)
-				ek := EngineKey{Key: k.Key, Version: encodeMVCCTimestamp(k.Timestamp)}
-				if err := ek.Validate(); err != nil {
-					t.Errorf("%q.Validate() = %q, want nil", ek, err)
-				}
-				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
-					_ = ek.Validate()
-				}))
-			}
-		})
-		t.Run("LockTableKey", func(t *testing.T) {
-			var buf []byte
-			for i := 0; i < 100; i++ {
-				k := randomLockTableKey(rng)
-				ek, _ := k.ToEngineKey(buf)
-				if err := ek.Validate(); err != nil {
-					t.Errorf("%q.Validate() = %q, want nil", ek, err)
-				}
-				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
-					_ = ek.Validate()
-				}))
-				buf = ek.Key[:0]
-			}
-		})
-	})
-}
-
-func randomMVCCKey(r *rand.Rand) MVCCKey {
-	k := MVCCKey{
-		Key:       randutil.RandBytes(r, randutil.RandIntInRange(r, 1, 12)),
-		Timestamp: hlc.Timestamp{WallTime: r.Int63()},
-	}
-	if r.Intn(2) == 1 {
-		k.Timestamp.Logical = r.Int31()
-	}
-	k.Timestamp.Synthetic = r.Intn(5) == 1
-	return k
-}
-
-func randomLockTableKey(r *rand.Rand) LockTableKey {
-	k := LockTableKey{
-		Key:      randutil.RandBytes(r, randutil.RandIntInRange(r, 1, 12)),
-		Strength: lock.Exclusive,
-	}
-	var txnID uuid.UUID
-	txnID.DeterministicV4(r.Uint64(), math.MaxUint64)
-	k.TxnUUID = txnID[:]
-	return k
 }
 
 func engineKey(key string, ts int) EngineKey {

@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/errors/oserror"
-	slugify "github.com/mozillazg/go-slugify"
+	"github.com/mozillazg/go-slugify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -195,11 +195,8 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 	},
 }
 
-var includeAllSettings bool
+var includeReservedSettings bool
 var excludeSystemSettings bool
-var showSettingClass bool
-var classHeaderLabel string
-var classLabels []string
 
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list",
@@ -237,7 +234,8 @@ Output the list of cluster settings known to this binary.
 				continue
 			}
 
-			if !includeAllSettings && setting.Visibility() != settings.Public {
+			if setting.Visibility() != settings.Public {
+				// We don't document non-public settings at this time.
 				continue
 			}
 
@@ -271,39 +269,11 @@ This session variable default should now be configured using %s`,
 			}
 
 			row := []string{wrapDivSlug(name), typ, wrapCode(defaultVal), settingDesc}
-			if showSettingClass {
-				class := "unknown"
-				switch setting.Class() {
-				case settings.SystemOnly:
-					class = classLabels[0]
-				case settings.TenantReadOnly:
-					class = classLabels[1]
-				case settings.TenantWritable:
-					class = classLabels[2]
-				}
-				row = append(row, class)
-			}
-			if includeAllSettings {
-				if setting.Visibility() == settings.Public {
-					row = append(row, "public")
-				} else {
-					row = append(row, "reserved")
-				}
-			}
 			rows = append(rows, row)
 		}
 
+		sliceIter := clisqlexec.NewRowSliceIter(rows, "dddd")
 		cols := []string{"Setting", "Type", "Default", "Description"}
-		align := "dddd"
-		if showSettingClass {
-			cols = append(cols, classHeaderLabel)
-			align += "d"
-		}
-		if includeAllSettings {
-			cols = append(cols, "Visibility")
-			align += "d"
-		}
-		sliceIter := clisqlexec.NewRowSliceIter(rows, align)
 		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
 	},
 }
@@ -336,19 +306,10 @@ func init() {
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
 	GenEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
 		"Overwrite key if it exists")
-
-	f := genSettingsListCmd.PersistentFlags()
-	f.BoolVar(&includeAllSettings, "all-settings", false,
-		"include undocumented 'internal' settings")
-	f.BoolVar(&excludeSystemSettings, "without-system-only", false,
+	genSettingsListCmd.PersistentFlags().BoolVar(&includeReservedSettings, "include-reserved", false,
+		"include undocumented 'reserved' settings")
+	genSettingsListCmd.PersistentFlags().BoolVar(&excludeSystemSettings, "without-system-only", false,
 		"do not list settings only applicable to system tenant")
-	f.BoolVar(&showSettingClass, "show-class", false,
-		"show the setting class")
-	f.StringVar(&classHeaderLabel, "class-header-label", "Class",
-		"label to use in the output for the class column")
-	f.StringSliceVar(&classLabels, "class-labels",
-		[]string{"system-only", "tenant-ro", "tenant-rw"},
-		"label to use in the output for the various setting classes")
 
 	genCmd.AddCommand(genCmds...)
 }

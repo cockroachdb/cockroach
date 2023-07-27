@@ -36,7 +36,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
-        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -52,7 +51,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":cdcevent"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",

@@ -34,6 +34,7 @@ go_library(
         "//pkg/security/certmgr",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/httputil",
         "//pkg/util/log",
@@ -75,7 +76,6 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

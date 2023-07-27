@@ -104,19 +104,22 @@ type createStatsNode struct {
 // createStatsRun contains the run-time state of createStatsNode during local
 // execution.
 type createStatsRun struct {
-	errCh chan error
+	resultsCh chan tree.Datums
+	errCh     chan error
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
+	n.run.resultsCh = make(chan tree.Datums)
 	n.run.errCh = make(chan error)
 	go func() {
-		err := n.startJob(params.ctx)
+		err := n.startJob(params.ctx, n.run.resultsCh)
 		select {
 		case <-params.ctx.Done():
 		case n.run.errCh <- err:
 		}
 		close(n.run.errCh)
+		close(n.run.resultsCh)
 	}()
 	return nil
 }
@@ -127,6 +130,8 @@ func (n *createStatsNode) Next(params runParams) (bool, error) {
 		return false, params.ctx.Err()
 	case err := <-n.run.errCh:
 		return false, err
+	case <-n.run.resultsCh:
+		return true, nil
 	}
 }
 
@@ -134,7 +139,7 @@ func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }
 
 // startJob starts a CreateStats job to plan and execute statistics creation.
-func (n *createStatsNode) startJob(ctx context.Context) error {
+func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	record, err := n.makeJobRecord(ctx)
 	if err != nil {
 		return err

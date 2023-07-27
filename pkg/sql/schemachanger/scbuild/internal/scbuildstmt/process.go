@@ -62,8 +62,6 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateFunction)(nil)):      {fn: CreateFunction, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, on: true, checks: isV232Active},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, on: true, checks: isV232Active},
 }
 
 func init() {
@@ -185,8 +183,4 @@ var isV222Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMo
 
 var isV231Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
 	return activeVersion.IsActive(clusterversion.V23_1)
-}
-
-var isV232Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V23_2)
 }

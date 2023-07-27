@@ -82,8 +82,6 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
-var backupTestingBucket = testutils.BackupTestingBucket()
-
 func destinationName(c cluster.Cluster) string {
 	dest := c.Name()
 	if c.IsLocal() {
@@ -306,18 +304,11 @@ func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ve
 				gatewayDB := c.Conn(ctx, t.L(), nodeID)
 				defer gatewayDB.Close()
 
-				var runningJobIDs []jobspb.JobID
-				row, err := gatewayDB.Query(fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS] WHERE status = 'running' AND coordinator_id = %d`, nodeID))
-				require.NoError(t, err)
-				for row.Next() {
-					var jobID int64
-					require.NoError(t, row.Scan(&jobID))
-					runningJobIDs = append(runningJobIDs, jobspb.JobID(jobID))
-				}
-				require.NoError(t, row.Close())
-
-				if len(runningJobIDs) != 0 {
-					return errors.Newf("node is still running %d jobs: %v", len(runningJobIDs), runningJobIDs)
+				row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
+				var count int
+				require.NoError(t, row.Scan(&count))
+				if count != 0 {
+					return errors.Newf("node is still running %d jobs", count)
 				}
 				return nil
 			})
@@ -413,7 +404,7 @@ func registerBackup(r registry.Registry) {
 				// the average MB/sec per node.
 				tick()
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				BACKUP bank.bank TO 'gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit'"`)
+				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`?AUTH=implicit'"`)
 				tick()
 
 				// Upload the perf artifacts to any one of the nodes so that the test
@@ -540,10 +531,9 @@ func registerBackup(r registry.Registry) {
 	for _, item := range []struct {
 		kmsProvider string
 		machine     string
-		tags        map[string]struct{}
 	}{
 		{kmsProvider: "GCS", machine: spec.GCE},
-		{kmsProvider: "AWS", machine: spec.AWS, tags: registry.Tags("aws")},
+		{kmsProvider: "AWS", machine: spec.AWS},
 	} {
 		item := item
 		r.Add(registry.TestSpec{
@@ -552,7 +542,6 @@ func registerBackup(r registry.Registry) {
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
-			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
@@ -700,7 +689,7 @@ func registerBackup(r registry.Registry) {
 			}
 			warehouses := 10
 
-			backupDir := "gs://" + backupTestingBucket + "/" + c.Name() + "?AUTH=implicit"
+			backupDir := "gs://cockroachdb-backup-testing/" + c.Name() + "?AUTH=implicit"
 			// Use inter-node file sharing on 20.1+.
 			if t.BuildVersion().AtLeast(version.MustParse(`v20.1.0-0`)) {
 				backupDir = "nodelocal://1/" + c.Name()
@@ -909,14 +898,6 @@ type mvccRangeTombstoneConfig struct {
 
 	// TODO(msbutler): delete once tenants can back up to nodelocal.
 	skipBackupRestore bool
-
-	// short configures the test to only read from the first 3 tpch files, and conduct
-	// 1 import rollback.
-	short bool
-
-	// debugSkipRollback configures the test to return after the first import,
-	// skipping rollback steps.
-	debugSkipRollback bool
 }
 
 // runBackupMVCCRangeTombstones tests that backup and restore works in the
@@ -1043,16 +1024,10 @@ revert=2'`)
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit`,
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit`,
 	}
-	if config.short {
-		files = files[:2]
-	}
 	_, err = conn.ExecContext(ctx, fmt.Sprintf(
 		`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|'`, strings.Join(files, "', '")))
 	require.NoError(t, err)
 
-	if config.debugSkipRollback {
-		return
-	}
 	// Fingerprint for restore comparison.
 	name, ts, fpInitial := fingerprint("initial", "tpch", "orders")
 	restores = append(restores, restore{
@@ -1077,9 +1052,6 @@ revert=2'`)
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit`,
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit`,
 	}
-	if config.short {
-		files = files[:1]
-	}
 
 	_, err = conn.ExecContext(ctx,
 		`SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest'`)
@@ -1087,10 +1059,6 @@ revert=2'`)
 
 	var jobID string
 	for i := 0; i < 2; i++ {
-		if i > 0 && config.short {
-			t.L().Printf("skipping import rollback")
-			continue
-		}
 		t.Status("importing even-numbered files")
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
 			`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|', detached`,
@@ -1343,7 +1311,7 @@ func getGCSBackupPath(dest string) (string, error) {
 
 	// Set AUTH to specified
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
-	uri := fmt.Sprintf("gs://"+backupTestingBucket+"/gcs/%s?%s", dest, q.Encode())
+	uri := fmt.Sprintf("gs://cockroachdb-backup-testing/gcs/%s?%s", dest, q.Encode())
 
 	return uri, nil
 }
@@ -1365,5 +1333,5 @@ func getAWSBackupPath(dest string) (string, error) {
 	}
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 
-	return fmt.Sprintf("s3://"+backupTestingBucket+"/%s?%s", dest, q.Encode()), nil
+	return fmt.Sprintf("s3://cockroachdb-backup-testing/%s?%s", dest, q.Encode()), nil
 }

@@ -28,9 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -259,18 +258,18 @@ func (t *tlsInitHandshaker) onTrustInit(
 	select {
 	case t.trustedPeers <- challenge:
 	case <-ctx.Done():
-		srverrors.APIV2InternalError(req.Context(), ctx.Err(), res)
+		apiV2InternalError(req.Context(), ctx.Err(), res)
 		return
 	}
 
 	// Acknowledge validation to the client.
 	ack, err := createNodeHostnameAndCA(t.listenAddr, t.tempCerts.CACertificate, t.token)
 	if err != nil {
-		srverrors.APIV2InternalError(req.Context(), err, res)
+		apiV2InternalError(req.Context(), err, res)
 		return
 	}
 	if err := json.NewEncoder(res).Encode(ack); err != nil {
-		srverrors.APIV2InternalError(req.Context(), err, res)
+		apiV2InternalError(req.Context(), err, res)
 		return
 	}
 }
@@ -663,7 +662,7 @@ func InitHandshake(
 ) error {
 	// TODO(bilal): Allow defaultInitLifespan to be configurable, possibly through
 	// base.Config.
-	return timeutil.RunWithTimeout(ctx, "init handshake", defaultInitLifespan, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "init handshake", defaultInitLifespan, func(ctx context.Context) error {
 		ctx = logtags.AddTag(ctx, "init-tls-handshake", nil)
 		return initHandshakeHelper(ctx, reporter, cfg, token, numExpectedNodes, peers, certsDir, listener)
 	})

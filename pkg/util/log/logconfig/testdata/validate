@@ -76,53 +76,6 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Check that default format propagates.
-yaml
-file-defaults:
-  format: crdb-v1
-sinks:
-  file-groups:
-    custom:
-      channels: DEV
-----
-sinks:
-  file-groups:
-    custom:
-      channels: {INFO: all}
-      filter: INFO
-      format: crdb-v1
-  stderr:
-    filter: NONE
-capture-stray-errors:
-  enable: true
-  dir: /default-dir
-  max-group-size: 100MiB
-
-# Check that default format options propagate.
-yaml
-file-defaults:
-  format-options: {foo: bar}
-sinks:
-  file-groups:
-    custom:
-      channels: DEV
-----
-sinks:
-  file-groups:
-    custom:
-      channels: {INFO: all}
-      filter: INFO
-      format-options:
-        foo: bar
-  stderr:
-    filter: NONE
-    format-options:
-      foo: bar
-capture-stray-errors:
-  enable: true
-  dir: /default-dir
-  max-group-size: 100MiB
-
 # Check that fluent default network is filled.
 yaml
 sinks:

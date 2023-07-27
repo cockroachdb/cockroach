@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/kr/pretty"
 )
@@ -112,8 +111,6 @@ func TestComputeRollupFromData(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			defer log.Scope(t).Close(t)
-
 			rollups := computeRollupsFromData(tc.input, 50)
 			internal, err := rollups.toInternal(1000, 50)
 			if err != nil {
@@ -164,8 +161,6 @@ func TestComputeRollupFromData(t *testing.T) {
 
 func TestRollupBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
@@ -252,8 +247,6 @@ func TestRollupBasic(t *testing.T) {
 
 func TestRollupMemoryConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()

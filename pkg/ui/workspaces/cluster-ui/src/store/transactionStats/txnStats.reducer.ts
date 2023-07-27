@@ -11,15 +11,27 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
+import { TimeScale } from "../../timeScaleDropdown";
 import moment from "moment-timezone";
 import { StatementsResponse } from "../sqlStats";
-import { createInitialState, RequestState } from "src/api/types";
 
-// Note that we request transactions from the
-// statements api, hence the StatementsResponse type here.
-export type TxnStatsState = RequestState<StatementsResponse>;
+export type TxnStatsState = {
+  // Note that we request transactions from the
+  // statements api, hence the StatementsResponse type here.
+  data: StatementsResponse;
+  inFlight: boolean;
+  lastError: Error;
+  valid: boolean;
+  lastUpdated: moment.Moment | null;
+};
 
-const initialState = createInitialState<StatementsResponse>();
+const initialState: TxnStatsState = {
+  data: null,
+  inFlight: false,
+  lastError: null,
+  valid: false,
+  lastUpdated: null,
+};
 
 const txnStatsSlice = createSlice({
   name: `${DOMAIN_NAME}/txnStats`,
@@ -29,13 +41,13 @@ const txnStatsSlice = createSlice({
       state.inFlight = false;
       state.data = action.payload;
       state.valid = true;
-      state.error = null;
+      state.lastError = null;
       state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.inFlight = false;
       state.valid = false;
-      state.error = action.payload;
+      state.lastError = action.payload;
       state.lastUpdated = moment.utc();
     },
     invalidated: state => {

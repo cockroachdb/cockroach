@@ -1,6 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexecjoin",
@@ -49,7 +49,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":colexecjoin"],
-    tags = ["no-remote-exec"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

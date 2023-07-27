@@ -92,10 +92,6 @@ message TenantCapabilities {
   // CanCheckConsistency if set to true, grants the tenant the ability to run
   // range consistency checks.
   bool can_check_consistency = 10;
-
-  // CanDebugProcess, if set to true, grants the tenant the ability to
-  // set vmodule on the process and run pprof profiles and tools.
-  bool can_debug_process = 11;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

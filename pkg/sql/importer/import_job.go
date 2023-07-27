@@ -17,7 +17,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
@@ -88,11 +87,6 @@ func (r *importResumer) TestingSetAfterImportKnob(fn func(summary roachpb.RowCou
 var _ jobs.TraceableJob = &importResumer{}
 
 func (r *importResumer) ForceRealSpan() bool {
-	return true
-}
-
-// DumpTraceAfterRun implements the TraceableJob interface.
-func (r *importResumer) DumpTraceAfterRun() bool {
 	return true
 }
 
@@ -607,12 +601,10 @@ func prepareNewTablesForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	includePublicSchemaCreatePriv := sql.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
 	if err := ingesting.WriteDescriptors(
-		ctx, txn, p.User(), descsCol, nil /* databases */, nil /* schemas */, tableDescs,
-		nil /* types */, nil /* functions */, tree.RequestedDescriptors, seqValKVs,
-		"" /* inheritParentName */, includePublicSchemaCreatePriv,
-	); err != nil {
+		ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
+		nil /* databases */, nil /* schemas */, tableDescs, nil /* types */, nil, /* functions */
+		tree.RequestedDescriptors, seqValKVs, "" /* inheritParentName */); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
 
@@ -877,7 +869,7 @@ func parseAndCreateBundleTableDescs(
 	}
 	defer store.Close()
 
-	raw, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+	raw, err := store.ReadFile(ctx, "")
 	if err != nil {
 		return tableDescs, schemaDescs, err
 	}

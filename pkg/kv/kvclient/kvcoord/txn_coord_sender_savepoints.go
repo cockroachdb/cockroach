@@ -57,7 +57,7 @@ func (s *savepoint) Initial() bool {
 	return !s.active
 }
 
-// CreateSavepoint is part of the kv.TxnSender interface.
+// CreateSavepoint is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (kv.SavepointToken, error) {
 	if tc.typ != kv.RootTxn {
 		return nil, errors.AssertionFailedf("cannot get savepoint in non-root txn")
@@ -92,7 +92,7 @@ func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (kv.SavepointToke
 	return s, nil
 }
 
-// RollbackToSavepoint is part of the kv.TxnSender interface.
+// RollbackToSavepoint is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.SavepointToken) error {
 	if tc.typ != kv.RootTxn {
 		return errors.AssertionFailedf("cannot rollback savepoint in non-root txn")
@@ -151,7 +151,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 	return nil
 }
 
-// ReleaseSavepoint is part of the kv.TxnSender interface.
+// ReleaseSavepoint is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointToken) error {
 	if tc.typ != kv.RootTxn {
 		return errors.AssertionFailedf("cannot release savepoint in non-root txn")

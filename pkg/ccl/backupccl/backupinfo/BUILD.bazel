@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "backupinfo",
@@ -64,7 +64,6 @@ go_test(
         "manifest_handling_test.go",
     ],
     args = ["-test.timeout=295s"],
-    tags = ["ccl_test"],
     deps = [
         ":backupinfo",
         "//pkg/base",

@@ -51,7 +51,7 @@ const (
 	bytesUsedMetric    = "targetBytesUsed"
 
 	// Used to calculate estimated decommission time. Should remain in sync with
-	// setting `kv.snapshot_rebalance.max_rate` in store_snapshot.go.
+	// setting `kv.snapshot_recovery.max_rate` in store_snapshot.go.
 	defaultSnapshotRateMb = 32
 
 	// Skip message for tests not meant to be run nightly.
@@ -402,6 +402,8 @@ func setupDecommissionBench(
 		if benchSpec.snapshotRate != 0 {
 			for _, stmt := range []string{
 				fmt.Sprintf(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='%dMiB'`,
+					benchSpec.snapshotRate),
+				fmt.Sprintf(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='%dMiB'`,
 					benchSpec.snapshotRate),
 			} {
 				t.Status(stmt)

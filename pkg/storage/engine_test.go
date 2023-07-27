@@ -18,7 +18,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -28,7 +27,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -43,7 +41,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -151,7 +148,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 		iter.SeekGE(key)
 
-		if err := batch.ClearUnversioned(key.Key, ClearOptions{}); err != nil {
+		if err := batch.ClearUnversioned(key.Key); err != nil {
 			t.Fatal(err)
 		}
 
@@ -246,7 +243,7 @@ func TestEngineBatch(t *testing.T) {
 
 	apply := func(rw ReadWriter, d data) error {
 		if d.value == nil {
-			return rw.ClearUnversioned(d.key.Key, ClearOptions{})
+			return rw.ClearUnversioned(d.key.Key)
 		} else if d.merge {
 			return rw.Merge(d.key, d.value)
 		}
@@ -277,7 +274,7 @@ func TestEngineBatch(t *testing.T) {
 			currentBatch[k] = batch[shuffledIndices[k]]
 		}
 		// Reset the key
-		if err := engine.ClearUnversioned(key.Key, ClearOptions{}); err != nil {
+		if err := engine.ClearUnversioned(key.Key); err != nil {
 			t.Fatal(err)
 		}
 		// Run it once with individual operations and remember the result.
@@ -291,7 +288,7 @@ func TestEngineBatch(t *testing.T) {
 		// Run the whole thing as a batch and compare.
 		b := engine.NewBatch()
 		defer b.Close()
-		if err := b.ClearUnversioned(key.Key, ClearOptions{}); err != nil {
+		if err := b.ClearUnversioned(key.Key); err != nil {
 			t.Fatal(err)
 		}
 		for _, op := range currentBatch {
@@ -350,9 +347,9 @@ func TestEnginePutGetDelete(t *testing.T) {
 	for i, err := range []error{
 		engine.PutUnversioned(mvccKey("").Key, []byte("")),
 		engine.PutUnversioned(NilKey.Key, []byte("")),
-		engine.ClearUnversioned(NilKey.Key, ClearOptions{}),
-		engine.ClearUnversioned(NilKey.Key, ClearOptions{}),
-		engine.ClearUnversioned(mvccKey("").Key, ClearOptions{}),
+		engine.ClearUnversioned(NilKey.Key),
+		engine.ClearUnversioned(NilKey.Key),
+		engine.ClearUnversioned(mvccKey("").Key),
 	} {
 		if err == nil {
 			t.Fatalf("%d: illegal handling of empty key", i)
@@ -382,10 +379,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 		if !bytes.Equal(val, c.value) {
 			t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 		}
-		if err := engine.ClearUnversioned(c.key.Key, ClearOptions{
-			ValueSizeKnown: true,
-			ValueSize:      uint32(len(val)),
-		}); err != nil {
+		if err := engine.ClearUnversioned(c.key.Key); err != nil {
 			t.Errorf("delete: expected no error, but got %s", err)
 		}
 		val = mvccGetRaw(t, engine, c.key)
@@ -1078,7 +1072,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 	}
 
 	checkpointRootDir := filepath.Join(dir, "checkpoint")
-	require.NoError(t, db.FS.MkdirAll(checkpointRootDir, os.ModePerm))
+	require.NoError(t, db.MkdirAll(checkpointRootDir))
 
 	var checkpointNum int
 	checkpointSpan := func(s roachpb.Span) string {
@@ -1166,6 +1160,12 @@ func TestIngestDelayLimit(t *testing.T) {
 	}
 }
 
+type stringSorter []string
+
+func (s stringSorter) Len() int               { return len(s) }
+func (s stringSorter) Swap(i int, j int)      { s[i], s[j] = s[j], s[i] }
+func (s stringSorter) Less(i int, j int) bool { return strings.Compare(s[i], s[j]) < 0 }
+
 func TestEngineFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1218,7 +1218,7 @@ func TestEngineFS(t *testing.T) {
 		"9h: delete /dir1",
 	}
 
-	var f vfs.File
+	var f fs.File
 	for _, tc := range testCases {
 		s := strings.Split(tc, " ")[1:]
 
@@ -1236,14 +1236,14 @@ func TestEngineFS(t *testing.T) {
 		}
 
 		var (
-			g   vfs.File
+			g   fs.File
 			err error
 		)
 		switch s[0] {
 		case "create":
 			g, err = e.Create(s[1])
 		case "create-with-sync":
-			g, err = fs.CreateWithSync(e, s[1], 1)
+			g, err = e.CreateWithSync(s[1], 1)
 		case "link":
 			err = e.Link(s[1], s[2])
 		case "open":
@@ -1255,13 +1255,13 @@ func TestEngineFS(t *testing.T) {
 		case "rename":
 			err = e.Rename(s[1], s[2])
 		case "create-dir":
-			err = e.MkdirAll(s[1], os.ModePerm)
+			err = e.MkdirAll(s[1])
 		case "list-dir":
 			result, err := e.List(s[1])
 			if err != nil {
 				break
 			}
-			sort.Strings(result)
+			sort.Sort(stringSorter(result))
 			got := strings.Join(result, ",")
 			want := s[3]
 			if got != want {
@@ -1408,7 +1408,6 @@ func TestFS(t *testing.T) {
 				t.Helper()
 
 				got, err := fs.List(dir)
-				sort.Strings(got)
 				require.NoError(t, err)
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("fs.List(%q) = %#v, want %#v", dir, got, want)
@@ -1416,7 +1415,7 @@ func TestFS(t *testing.T) {
 			}
 
 			// Create a/ and assert that it's empty.
-			require.NoError(t, fs.MkdirAll(path("a"), os.ModePerm))
+			require.NoError(t, fs.MkdirAll(path("a")))
 			expectLS(path("a"), []string{})
 			if _, err := fs.Stat(path("a/b/c")); !oserror.IsNotExist(err) {
 				t.Fatal(`fs.Stat("a/b/c") should not exist`)
@@ -1424,8 +1423,8 @@ func TestFS(t *testing.T) {
 
 			// Create a/b/ and a/b/c/ in a single MkdirAll call.
 			// Then ensure that a duplicate call returns a nil error.
-			require.NoError(t, fs.MkdirAll(path("a/b/c"), os.ModePerm))
-			require.NoError(t, fs.MkdirAll(path("a/b/c"), os.ModePerm))
+			require.NoError(t, fs.MkdirAll(path("a/b/c")))
+			require.NoError(t, fs.MkdirAll(path("a/b/c")))
 			expectLS(path("a"), []string{"b"})
 			expectLS(path("a/b"), []string{"c"})
 			expectLS(path("a/b/c"), []string{})
@@ -1605,7 +1604,7 @@ func TestEngineClearRange(t *testing.T) {
 	// However, certain clearers cannot clear intents, range keys, or point keys.
 	writeInitialData := func(t *testing.T, rw ReadWriter) {
 		var localTS hlc.ClockTimestamp
-		txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, wallTS(6), 1, 1)
+		txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, wallTS(6), 1, 1)
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("c"), wallTS(1), localTS, stringValue("c1").Value, nil))
 		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("d", "h", 1), MVCCValue{}))
 		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("a", "f", 2), MVCCValue{}))

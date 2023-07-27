@@ -65,11 +65,7 @@ function makeDataProvider(
   );
 }
 
-function makeMetricsRequest(
-  timeInfo: QueryTimeInfo,
-  sources?: string[],
-  tenantSource?: string,
-) {
+function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
   return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
     start_nanos: timeInfo.start,
     end_nanos: timeInfo.end,
@@ -78,9 +74,6 @@ function makeMetricsRequest(
       {
         name: "test.metric.1",
         sources: sources,
-        tenant_id: tenantSource
-          ? { id: Long.fromString(tenantSource) }
-          : undefined,
         downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX,
         source_aggregator:
           protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
@@ -89,9 +82,6 @@ function makeMetricsRequest(
       {
         name: "test.metric.2",
         sources: sources,
-        tenant_id: tenantSource
-          ? { id: Long.fromString(tenantSource) }
-          : undefined,
         downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX,
         source_aggregator:
           protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
@@ -100,9 +90,6 @@ function makeMetricsRequest(
       {
         name: "test.metric.3",
         sources: sources,
-        tenant_id: tenantSource
-          ? { id: Long.fromString(tenantSource) }
-          : undefined,
         downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX,
         source_aggregator:
           protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
@@ -116,9 +103,8 @@ function makeMetricsQuery(
   id: string,
   timeSpan: QueryTimeInfo,
   sources?: string[],
-  tenantSource?: string,
 ): MetricsQuery {
-  const request = makeMetricsRequest(timeSpan, sources, tenantSource);
+  const request = makeMetricsRequest(timeSpan, sources);
   const data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
     results: _.map(request.queries, q => {
       return {

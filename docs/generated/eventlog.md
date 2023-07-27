@@ -438,7 +438,6 @@ is directly or indirectly a member of the admin role) executes a query.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `role_based_audit_event`
 
@@ -474,7 +473,6 @@ cluster setting.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `sensitive_table_access`
 
@@ -510,7 +508,6 @@ a table marked as audited.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ## SQL Execution Log
 
@@ -553,7 +550,6 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ## SQL Logical Schema Changes
 
@@ -769,8 +765,7 @@ AlterIndex is recorded when an index visibility is altered.
 |--|--|--|
 | `TableName` | The name of the table containing the affected index. | yes |
 | `IndexName` | The name of the affected index. | yes |
-| `NotVisible` | Set true if index is not visible. NOTE: THIS FIELD IS DEPRECATED in favor of invisibility. | no |
-| `Invisibility` | The new invisibility of the affected index. | no |
+| `NotVisible` | Set true if index is not visible. | no |
 
 
 #### Common fields
@@ -2354,7 +2349,6 @@ set to a non-zero value, AND
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `txn_rows_read_limit`
 
@@ -2475,7 +2469,6 @@ the "slow query" condition.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `txn_rows_read_limit_internal`
 
@@ -2720,7 +2713,6 @@ Note that because stats are scoped to the lifetime of the process, counters
 | `FlushIngestCount` |  | no |
 | `FlushIngestTableCount` |  | no |
 | `FlushIngestTableBytes` |  | no |
-| `IngestCount` | ingest_count is the number of successful ingest operations (counter). | no |
 | `MemtableSize` | memtable_size is the total size allocated to all memtables and (large) batches, in bytes (gauge). | no |
 | `MemtableCount` | memtable_count is the count of memtables (gauge). | no |
 | `MemtableZombieCount` | memtable_zombie_count is the count of memtables no longer referenced by the current DB state, but still in use by an iterator (gauge). | no |
@@ -2969,7 +2961,6 @@ contains common SQL event/execution details.
 | `MaxMemUsage` | The maximum amount of memory usage by nodes for this query. | no |
 | `MaxDiskUsage` | The maximum amount of disk usage by nodes for this query. | no |
 | `KVBytesRead` | The number of bytes read at the KV layer for this query. | no |
-| `KVPairsRead` | The number of key-value pairs read at the KV layer for this query. | no |
 | `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
 | `NetworkMessages` | The number of network messages sent by nodes for this query. | no |
 | `IndexRecommendations` | Generated index recommendations for this query. | no |
@@ -3002,7 +2993,6 @@ contains common SQL event/execution details.
 | `MvccRangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
 | `MvccRangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
 | `SchemaChangerMode` | SchemaChangerMode is the mode that was used to execute the schema change, if any. | no |
-| `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instance id used in this statements execution. | no |
 
 
 #### Common fields
@@ -3027,7 +3017,6 @@ contains common SQL event/execution details.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
 ### `schema_descriptor`
 
@@ -3164,7 +3153,6 @@ authentication failure.
 | 5 | PRE_HOOK_ERROR | occurs when the authentication handshake encountered a protocol error. |
 | 6 | CREDENTIALS_INVALID | occurs when the client-provided credentials were invalid. |
 | 7 | CREDENTIALS_EXPIRED | occur when the credentials provided by the client are expired. |
-| 8 | NO_REPLICATION_ROLEOPTION | occurs when the connection requires a replication role option, but the user does not have it. |
 
 
 

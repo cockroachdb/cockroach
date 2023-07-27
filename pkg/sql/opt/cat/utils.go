@@ -133,16 +133,12 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValue
 		mutation = " (mutation)"
 	}
 
-	idxVisibililty := ""
-	if invisibility := idx.GetInvisibility(); invisibility != 0.0 {
-		if invisibility == 1.0 {
-			idxVisibililty = " NOT VISIBLE"
-		} else {
-			idxVisibililty = " VISIBILITY " + fmt.Sprintf("%.2f", 1-invisibility)
-		}
+	isNotVisible := ""
+	if idx.IsNotVisible() {
+		isNotVisible = " NOT VISIBLE"
 	}
 
-	child := tp.Childf("%sINDEX %s%s%s", idxType, idx.Name(), mutation, idxVisibililty)
+	child := tp.Childf("%sINDEX %s%s%s", idxType, idx.Name(), mutation, isNotVisible)
 
 	var buf bytes.Buffer
 	colCount := idx.ColumnCount()

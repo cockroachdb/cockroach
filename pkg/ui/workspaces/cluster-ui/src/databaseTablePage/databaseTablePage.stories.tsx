@@ -26,10 +26,10 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: randomName(),
-  automaticStatsCollectionEnabled: true,
   schemaName: randomName(),
   indexUsageStatsEnabled: false,
   showIndexRecommendations: false,
+  automaticStatsCollectionEnabled: true,
   details: {
     loading: true,
     loaded: false,
@@ -72,10 +72,10 @@ const name = randomName();
 const withData: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: name,
-  automaticStatsCollectionEnabled: true,
   schemaName: randomName(),
   indexUsageStatsEnabled: true,
   showIndexRecommendations: true,
+  automaticStatsCollectionEnabled: true,
   details: {
     loading: false,
     loaded: true,

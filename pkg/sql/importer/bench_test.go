@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
@@ -40,7 +39,6 @@ import (
 
 // BenchmarkConvertToKVs/tpcc/warehouses=1-8         1        3558824936 ns/op          22.46 MB/s
 func BenchmarkConvertToKVs(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	skip.UnderShort(b, "skipping long benchmark")
 
 	tpccGen := tpcc.FromWarehouses(1)

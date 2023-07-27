@@ -5,9 +5,12 @@ statement error column b of type int is not allowed as the last column in an inv
 CREATE TABLE m_err (k INT PRIMARY KEY, a INT, b INT, geom GEOMETRY, INVERTED INDEX (a, b))
 
 # Err if a non-last column is not a non-invertable type.
-statement error column geom1 of type geometry is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
-CREATE TABLE m_err (k INT PRIMARY KEY, geom1 GEOMETRY , geom GEOMETRY, INVERTED INDEX (geom1, geom))
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE m_err (k INT PRIMARY KEY, j JSON, geom GEOMETRY, INVERTED INDEX (j, geom))
 
+# Err if a non-last column is not a non-invertable type.
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE m_err (k INT PRIMARY KEY, a INT, j JSON, geom GEOMETRY, INVERTED INDEX (a, j, geom))
 
 statement ok
 CREATE TABLE l (k INT PRIMARY KEY, a INT, j JSON, INVERTED INDEX (a, j ASC))
@@ -320,106 +323,3 @@ query ITT
 SELECT * FROM backfill_d@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON
 ----
 2  bar  [7, 0, 7]
-
-# Test selecting, inserting, updating, and deleting on a table with a
-# multi-column JSON inverted index.
-skipif config local-mixed-22.2-23.1
-statement ok
-CREATE TABLE d (
-  id INT PRIMARY KEY,
-  foo JSONB,
-  bar JSONB,
-  INVERTED INDEX idx (foo, bar)
-);
-
-# On 22.2 these inverted indexes could not be created, so skip this
-# test by making a normal index
-onlyif config local-mixed-22.2-23.1
-statement ok
-CREATE TABLE d (
-  id INT PRIMARY KEY,
-  foo JSONB,
-  bar JSONB,
-  INDEX idx (id)
-);
-
-# Testing inserting
-statement ok
-INSERT into d VALUES
-    (1, '"foo"', '[7]'),
-    (2, '"bar"', '[7, 0, 7]'),
-    (3, '"baz"', '{"a": "b"}'),
-    (4, '"foo"', '[7, 8, 9, 10]'),
-    (5, '"foo"', '[[0], [7, 8, 9, 10]]')
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 = '7' ORDER BY id
-----
-1  "foo"  [7]
-4  "foo"  [7, 8, 9, 10]
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->1 = '0' ORDER BY id
-----
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->1 = '8' ORDER BY id
-----
-4  "foo"  [7, 8, 9, 10]
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 @> '[0]' ORDER BY id
-----
-5  "foo"  [[0], [7, 8, 9, 10]]
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 <@ '[0]' ORDER BY id
-----
-5  "foo"  [[0], [7, 8, 9, 10]]
-
-# Testing deleting
-statement ok
-DELETE FROM d WHERE  id = 5
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 <@ '[0]' ORDER BY id
-----
-
-# Testing updating
-statement ok
-UPDATE d SET foo = '"updated"' WHERE id = 2
-
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"updated"' AND bar->0 @> '7' ORDER BY id
-----
-2  "updated"  [7, 0, 7]
-
-# Backfill this multi-column inverted index.
-
-statement ok
-DROP INDEX d@idx
-
-statement ok
-INSERT into d VALUES
-    (6, '"backfilling"', '[[0], [1], 2, 3]'),
-    (7, '"q"', '[[0], [1], [2], []]'),
-    (8, '"backfilling"', '[[0], [1], [2], []]')
-
-
-skipif config local-mixed-22.2-23.1
-statement ok
-CREATE INVERTED INDEX idx on d (foo, bar)
-
-skipif config local-mixed-22.2-23.1
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"backfilling"' AND bar->2 @> '2' ORDER BY id
-----
-6  "backfilling"  [[0], [1], 2, 3]
-8  "backfilling"  [[0], [1], [2], []]
-
-skipif config local-mixed-22.2-23.1
-query ITT
-SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 = '7' ORDER BY id
-----
-1  "foo"  [7]
-4  "foo"  [7, 8, 9, 10]

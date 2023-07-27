@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.2-23.1
+
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
@@ -7,7 +9,7 @@ SELECT id FROM system.namespace WHERE name='a'
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM test
 ----
 public  a  table  root  0  NULL

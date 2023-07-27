@@ -148,7 +148,7 @@ SELECT enum_first(null::dbs)
 ----
 postgres
 
-query T rowsort
+query T
 SELECT enum_first(val) FROM unnest(array_append(enum_range(null::dbs),null)) val
 ----
 postgres
@@ -1164,7 +1164,7 @@ statement ok
 ROLLBACK
 
 query TTTT colnames
-SELECT * FROM [SHOW ENUMS] ORDER BY name
+SHOW ENUMS
 ----
 schema  name        values                              owner
 public  _collision  NULL                                root
@@ -1179,7 +1179,7 @@ public  int         {Z,"S of int"}                      root
 public  notbad      {dup,DUP}                           root
 public  t           NULL                                root
 
-query TTT colnames,rowsort
+query TTT colnames
 SHOW TYPES
 ----
 schema  name        owner
@@ -1200,7 +1200,7 @@ CREATE SCHEMA uds;
 CREATE TYPE uds.typ AS ENUM ('schema')
 
 query TTTT colnames
-SELECT * FROM [SHOW ENUMS] ORDER BY name
+SHOW ENUMS
 ----
 schema  name        values                              owner
 public  _collision  NULL                                root
@@ -1318,7 +1318,7 @@ public  greeting  {hi}    root
 statement ok
 USE test_57196
 
-query TTTT colnames,rowsort
+query TTTT colnames
 SHOW ENUMS
 ----
 schema  name      values   owner

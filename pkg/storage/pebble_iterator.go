@@ -277,16 +277,11 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
 		// [min, max), i.e., exclusive on the upper bound.
-		//
-		// NB: PointKeyFilters documents that when set to non-empty, the capacity
-		// of the slice should be at least one more than the length, for a
-		// Pebble-internal performance optimization.
-		pkf := [2]pebble.BlockPropertyFilter{
+		p.options.PointKeyFilters = []pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
 				uint64(opts.MinTimestampHint.WallTime),
 				uint64(opts.MaxTimestampHint.WallTime)+1),
 		}
-		p.options.PointKeyFilters = pkf[:1:2]
 		// NB: We disable range key block filtering because of complications in
 		// MVCCIncrementalIterator.maybeSkipKeys: the TBI may see different range
 		// key fragmentation than the main iterator due to the filtering. This would

@@ -224,7 +224,33 @@ func TestHttpGet(t *testing.T) {
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
 			limit := tc
-			s := httptest.NewServer(http.HandlerFunc(newTestingRangeHandler(t, data, limit)))
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				start, err := rangeStart(r.Header.Get("Range"))
+				if start < 0 || start >= len(data) {
+					t.Errorf("invalid start offset %d in range header %s",
+						start, r.Header.Get("Range"))
+				}
+				end := start + limit
+				if end > len(data) {
+					end = len(data)
+				}
+
+				w.Header().Add("Accept-Ranges", "bytes")
+				w.Header().Add("Content-Length", strconv.Itoa(len(data)-start))
+
+				if start > 0 {
+					w.Header().Add(
+						"Content-Range",
+						fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+				}
+
+				if err == nil {
+					_, err = w.Write(data[start:end])
+				}
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
 
 			// Start antagonist function that aggressively closes client connections.
 			ctx, cancelAntagonist := context.WithCancel(context.Background())
@@ -260,7 +286,7 @@ func TestHttpGet(t *testing.T) {
 			}()
 
 			// Read the file and verify results.
-			file, _, err = store.ReadFile(ctx, "/something", cloud.ReadOptions{NoFileSize: true})
+			file, err = store.ReadFile(ctx, "/something")
 			require.NoError(t, err)
 
 			b, err := ioctx.ReadAll(ctx, file)
@@ -288,7 +314,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, _, err = store.ReadFile(ctx, "/something", cloud.ReadOptions{NoFileSize: true})
+	_, err = store.ReadFile(ctx, "/something")
 	require.Error(t, context.Canceled, err)
 }
 
@@ -360,7 +386,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
-	stream, _, err := s.ReadFile(context.Background(), "file", cloud.ReadOptions{NoFileSize: true})
+	stream, err := s.ReadFile(context.Background(), "file")
 	require.NoError(t, err)
 	defer stream.Close(ctx)
 	data, err := ioctx.ReadAll(ctx, stream)
@@ -415,81 +441,6 @@ func TestExhaustRetries(t *testing.T) {
 		require.NoError(t, store.Close())
 	}()
 
-	_, _, err = store.ReadFile(context.Background(), "/something", cloud.ReadOptions{NoFileSize: true})
+	_, err = store.ReadFile(context.Background(), "/something")
 	require.Error(t, err)
-}
-
-func newTestingRangeHandler(
-	t *testing.T, data []byte, maxReadLen int,
-) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		start, err := rangeStart(r.Header.Get("Range"))
-		if start < 0 || start >= len(data) {
-			t.Errorf("invalid start offset %d in range header %s",
-				start, r.Header.Get("Range"))
-		}
-		end := start + maxReadLen
-		if end > len(data) {
-			end = len(data)
-		}
-
-		w.Header().Add("Accept-Ranges", "bytes")
-		w.Header().Add("Content-Length", strconv.Itoa(len(data)-start))
-
-		if start > 0 {
-			w.Header().Add(
-				"Content-Range",
-				fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
-		}
-
-		if err == nil {
-			_, err = w.Write(data[start:end])
-		}
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-	}
-
-}
-
-// TestReadFileAtReturnsSize tests that ReadFileAt returns
-// a cloud.ResumingReader that contains the size of the file.
-func TestReadFileAtReturnsSize(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	testSettings := cluster.MakeTestingClusterSettings()
-	file := "testfile"
-	data := []byte("hello world")
-
-	server := httptest.NewServer(http.HandlerFunc(newTestingRangeHandler(t, data, 2)))
-	defer server.Close()
-
-	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: server.URL}}
-	args := cloud.ExternalStorageContext{
-		IOConf:          base.ExternalIODirConfig{},
-		Settings:        testSettings,
-		DB:              nil,
-		Options:         nil,
-		Limiters:        nil,
-		MetricsRecorder: cloud.NilMetrics,
-	}
-	s, err := MakeHTTPStorage(ctx, args, conf)
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, s.Close())
-	}()
-
-	w, err := s.Writer(ctx, file)
-	require.NoError(t, err)
-
-	_, err = w.Write(data)
-	require.NoError(t, err)
-	require.NoError(t, w.Close())
-	reader, _, err := s.ReadFile(ctx, file, cloud.ReadOptions{})
-	require.NoError(t, err)
-
-	rr, ok := reader.(*cloud.ResumingReader)
-	require.True(t, ok)
-	require.Equal(t, int64(len(data)), rr.Size)
 }

@@ -1418,8 +1418,8 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase:       "d",
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		UseDatabase:              "d",
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(ctx)
 

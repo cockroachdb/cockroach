@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bench",
-    testonly = 1,
     srcs = ["doc.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/bench",
     visibility = ["//visibility:public"],

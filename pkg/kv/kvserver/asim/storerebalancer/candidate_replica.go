@@ -13,7 +13,6 @@ package storerebalancer
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -41,7 +40,7 @@ func newSimulatorReplica(repl state.Replica, s state.State) *simulatorReplica {
 	sr := &simulatorReplica{
 		rng:   rng,
 		repl:  repl,
-		usage: s.RangeUsageInfo(repl.Range(), repl.StoreID()),
+		usage: s.ReplicaLoad(repl.Range(), repl.StoreID()).Load(),
 		state: s,
 	}
 	return sr
@@ -71,7 +70,7 @@ func (sr *simulatorReplica) RaftStatus() *raft.Status {
 
 // GetFirstIndex returns the index of the first entry in the replica's Raft
 // log.
-func (sr *simulatorReplica) GetFirstIndex() kvpb.RaftIndex {
+func (sr *simulatorReplica) GetFirstIndex() uint64 {
 	// TODO(kvoli): We always return 2 here as RaftStatus is unimplemented.
 	// When it is implmeneted, this may become variable.
 	return 2

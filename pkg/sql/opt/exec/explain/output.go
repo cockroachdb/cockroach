@@ -316,18 +316,12 @@ func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
 	ob.AddTopLevelField("execution time", string(humanizeutil.Duration(delta)))
 }
 
-// AddKVReadStats adds a top-level field for the bytes/rows/KV pairs read from
-// KV as well as for the number of BatchRequests issued.
-func (ob *OutputBuilder) AddKVReadStats(rows, bytes, kvPairs, batchRequests int64) {
-	var kvs string
-	if kvPairs != rows || ob.flags.Verbose {
-		// Only show the number of KVs when it's different from the number of
-		// rows or if verbose output is requested.
-		kvs = fmt.Sprintf("%s KVs, ", humanizeutil.Count(uint64(kvPairs)))
-	}
-	ob.AddTopLevelField("rows decoded from KV", fmt.Sprintf(
-		"%s (%s, %s%s gRPC calls)", humanizeutil.Count(uint64(rows)),
-		humanizeutil.IBytes(bytes), kvs, humanizeutil.Count(uint64(batchRequests)),
+// AddKVReadStats adds a top-level field for the bytes/rows read from KV as well
+// as for the number of BatchRequests issued.
+func (ob *OutputBuilder) AddKVReadStats(rows, bytes, batchRequests int64) {
+	ob.AddTopLevelField("rows read from KV", fmt.Sprintf(
+		"%s (%s, %s gRPC calls)", humanizeutil.Count(uint64(rows)),
+		humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(batchRequests)),
 	))
 }
 

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/marusama/semaphore"
 )
 
@@ -95,7 +95,7 @@ type ServerConfig struct {
 
 	// TempFS is used by the vectorized execution engine to store columns when the
 	// working set is larger than can be stored in memory.
-	TempFS vfs.FS
+	TempFS fs.FS
 
 	// VecFDSemaphore is a weighted semaphore that restricts the number of open
 	// file descriptors in the vectorized engine.
@@ -111,10 +111,6 @@ type ServerConfig struct {
 	// Child monitor of the bulk monitor which will be used to monitor the memory
 	// used during backup.
 	BackupMonitor *mon.BytesMonitor
-
-	// Child monitor of the bulk monitor which will be used to monitor the memory
-	// used during restore.
-	RestoreMonitor *mon.BytesMonitor
 
 	// BulkSenderLimiter is the concurrency limiter that is shared across all of
 	// the processes in a given sql server when sending bulk ingest (AddSST) reqs.
@@ -202,10 +198,6 @@ type ServerConfig struct {
 
 	// *sql.ExecutorConfig exposed as an interface (due to dependency cycles).
 	ExecutorConfig interface{}
-
-	// RootSQLMemoryPoolSize is the size in bytes of the root SQL memory
-	// monitor.
-	RootSQLMemoryPoolSize int64
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
@@ -283,9 +275,6 @@ type TestingKnobs struct {
 
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
-
-	// Export contains testing knobs for `EXPORT INTO ...`.
-	Export base.ModuleTestingKnobs
 
 	// Flowinfra contains testing knobs specific to the flowinfra system
 	Flowinfra base.ModuleTestingKnobs

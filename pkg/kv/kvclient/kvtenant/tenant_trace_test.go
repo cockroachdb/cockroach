@@ -55,7 +55,9 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 	recCh := make(chan tracingpb.Recording, 1)
 
 	args := base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		// Test hangs within a tenant. More investigation is required.
+		// Tracked with #76378.
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -77,11 +79,12 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 	}
 
 	s, db, _ := serverutils.StartServer(t, args)
+	if redactable {
+		runner := sqlutils.MakeSQLRunner(db)
+		runner.Exec(t, "SET CLUSTER SETTING trace.redactable.enabled = true")
+	}
 	defer db.Close()
 	defer s.Stopper().Stop(ctx)
-
-	runner := sqlutils.MakeSQLRunner(db)
-	runner.Exec(t, "SET CLUSTER SETTING trace.redactable.enabled = $1", redactable)
 
 	// Queries from the system tenant will receive unredacted traces
 	// since the tracer will not have the redactable flag set.

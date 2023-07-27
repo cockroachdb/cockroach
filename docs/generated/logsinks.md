@@ -81,7 +81,6 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
-| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -164,7 +163,6 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
-| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -232,7 +230,6 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
-| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -282,7 +279,7 @@ Type-specific configuration options:
 | Field | Description |
 |--|--|
 | `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
-| `no-color` | forces the omission of VT color codes in the output even when stderr is a terminal. This option is deprecated; its effects are equivalent to 'format-options: {colors: none}'. |
+| `no-color` | forces the omission of VT color codes in the output even when stderr is a terminal. |
 
 
 Configuration options shared across all sink types:
@@ -291,7 +288,6 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
-| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |

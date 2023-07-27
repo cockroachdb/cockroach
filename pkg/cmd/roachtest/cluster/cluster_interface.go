@@ -139,34 +139,4 @@ type Cluster interface {
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
 	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
-
-	// Volume snapshot related APIs.
-	//
-	// NB: The --local case for these snapshot APIs are that they all no-op. But
-	// it should be transparent to roachtests. The assumption this interface
-	// makes is that the calling roachtest that needed to CreateSnapshot will
-	// proceed with then using the already populated disks. Disks that it
-	// populated having not found any existing snapshots. So --local runs don't
-	// rely on the remaining snapshot methods to actually do anything.
-
-	// CreateSnapshot creates volume snapshots of the cluster using the given
-	// prefix. These snapshots can later be retrieved, deleted or applied to
-	// already instantiated clusters.
-	//
-	CreateSnapshot(ctx context.Context, snapshotPrefix string) ([]vm.VolumeSnapshot, error)
-	// ListSnapshots lists the individual volume snapshots that satisfy the
-	// search criteria.
-	ListSnapshots(ctx context.Context, vslo vm.VolumeSnapshotListOpts) ([]vm.VolumeSnapshot, error)
-	// DeleteSnapshots permanently deletes the given snapshots.
-	DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error
-	// ApplySnapshots applies the given volume snapshots to the underlying
-	// cluster. This is a destructive operation as far as existing state is
-	// concerned - all already-attached volumes are detached and deleted to make
-	// room for new snapshot-derived volumes. The new volumes are created using
-	// the same specs (size, disk type, etc.) as the original cluster.
-	//
-	// TODO(irfansharif): The implementation tacitly assumes one volume
-	// per-node, but this could be changed. Another assumption is that all
-	// volumes are created identically.
-	ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error
 }

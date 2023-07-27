@@ -664,19 +664,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
-		replIdent := "d" // default;
 		if table.IsView() {
 			relKind = relKindView
 			if table.MaterializedView() {
 				relKind = relKindMaterializedView
-			} else {
-				replIdent = "n"
 			}
 			relAm = oidZero
 		} else if table.IsSequence() {
 			relKind = relKindSequence
 			relAm = oidZero
-			replIdent = "n"
 		}
 		relPersistence := relPersistencePermanent
 		if table.IsTemporary() {
@@ -728,13 +724,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DNull,      // relacl
 			relOptions,      // reloptions
 			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull,                 // relforcerowsecurity
-			tree.DNull,                 // relispartition
-			tree.DNull,                 // relispopulated
-			tree.NewDString(replIdent), // relreplident
-			tree.DNull,                 // relrewrite
-			tree.DNull,                 // relrowsecurity
-			tree.DNull,                 // relpartbound
+			tree.DNull, // relforcerowsecurity
+			tree.DNull, // relispartition
+			tree.DNull, // relispopulated
+			tree.DNull, // relreplident
+			tree.DNull, // relrewrite
+			tree.DNull, // relrowsecurity
+			tree.DNull, // relpartbound
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.DNull, // relminmxid
 		); err != nil {
@@ -788,13 +784,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull,      // relacl
 				tree.DNull,      // reloptions
 				// These columns were automatically created by pg_catalog_test's missing column generator.
-				tree.DNull,           // relforcerowsecurity
-				tree.DNull,           // relispartition
-				tree.DNull,           // relispopulated
-				tree.NewDString("n"), // relreplident
-				tree.DNull,           // relrewrite
-				tree.DNull,           // relrowsecurity
-				tree.DNull,           // relpartbound
+				tree.DNull, // relforcerowsecurity
+				tree.DNull, // relispartition
+				tree.DNull, // relispopulated
+				tree.DNull, // relreplident
+				tree.DNull, // relrewrite
+				tree.DNull, // relrowsecurity
+				tree.DNull, // relpartbound
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // relminmxid
 			)
@@ -1297,23 +1293,13 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					// the RoleHasAllPrivilegesOnX flag and skip. We still have to take
 					// into consideration the PublicHasUsageOnTypes flag.
 					if objectType == privilege.Types {
-						// if the objectType is Types, we only omit the entry
+						// if the objectType is tree.Types, we only omit the entry
 						// if both the role has ALL privileges AND public has USAGE.
 						// This is the "default" state for default privileges on types
 						// in Postgres.
 						if (!defaultPrivilegesForRole.IsExplicitRole() ||
 							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types)) &&
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
-							continue
-						}
-					} else if objectType == privilege.Functions {
-						// if the objectType is Functions, we only omit the entry
-						// if both the role has ALL privileges AND public has EXECUTE.
-						// This is the "default" state for default privileges on functions
-						// in Postgres.
-						if (!defaultPrivilegesForRole.IsExplicitRole() ||
-							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions)) &&
-							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
 							continue
 						}
 					} else if !defaultPrivilegesForRole.IsExplicitRole() ||
@@ -1370,11 +1356,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					}
 				}
 
-				// Special cases to handle for types and functions.
+				// Special cases to handle for types.
 				// If one of RoleHasAllPrivilegesOnTypes or PublicHasUsageOnTypes is false
 				// and the other is true, we do not omit the entry since the default
 				// state has changed. We have to produce an entry by expanding the
-				// privileges. Similarly, we need to check EXECUTE for functions.
+				// privileges.
 				if defaultPrivilegesForRole.IsExplicitRole() {
 					if objectType == privilege.Types {
 						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types) &&
@@ -1391,33 +1377,6 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						}
 						if !catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) &&
 							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes {
-							defaclItem, err := createDefACLItem(
-								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
-								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
-							)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
-								return err
-							}
-						}
-					}
-					if objectType == privilege.Functions {
-						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions) &&
-							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
-							defaclItem, err := createDefACLItem(
-								"" /* public role */, privilege.List{privilege.EXECUTE}, privilege.List{}, privilegeObjectType,
-							)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
-								return err
-							}
-						}
-						if !catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) &&
-							defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions {
 							defaclItem, err := createDefACLItem(
 								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
 								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
@@ -1993,43 +1952,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html`,
 	unimplemented: true,
 }
 
-// Match the OIDs that Postgres uses for languages.
-var languageInternalOid = tree.NewDOidWithName(oid.Oid(12), types.Oid, "internal")
-var languageSqlOid = tree.NewDOidWithName(oid.Oid(14), types.Oid, "sql")
-var languagePlpgsqlOid = tree.NewDOidWithName(oid.Oid(14024), types.Oid, "plpgsql")
-
 var pgCatalogLanguageTable = virtualSchemaTable{
-	comment: `available languages
+	comment: `available languages (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 	schema: vtable.PGCatalogLanguage,
 	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		for _, lang := range []*tree.DOid{languageInternalOid, languageSqlOid, languagePlpgsqlOid} {
-			isPl := tree.DBoolFalse
-			if lang == languagePlpgsqlOid {
-				isPl = tree.DBoolTrue
-			}
-
-			isTrusted := tree.DBoolFalse
-			if lang == languagePlpgsqlOid || lang == languageSqlOid {
-				isTrusted = tree.DBoolTrue
-			}
-			if err := addRow(
-				lang,                                // oid
-				tree.NewDString(lang.Name()),        // lanname
-				h.UserOid(username.AdminRoleName()), // lanowner
-				isPl,                                // lanispl
-				isTrusted,                           // lanpltrusted
-				tree.WrapAsZeroOid(types.Oid),       // lanplcallfoid
-				tree.WrapAsZeroOid(types.Oid),       // laninline
-				tree.WrapAsZeroOid(types.Oid),       // lanvalidator
-				tree.DNull,                          // lanacl
-			); err != nil {
-				return err
-			}
-		}
+		// Languages to write functions and stored procedures are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogLocksTable = virtualSchemaTable{
@@ -2043,7 +1974,7 @@ https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
 }
 
 var pgCatalogMatViewsTable = virtualSchemaTable{
-	comment: `available materialized views
+	comment: `available materialized views (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 	schema: vtable.PGCatalogMatViews,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2450,7 +2381,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			dName,                                    // proname
 			nspOid,                                   // pronamespace
 			tree.DNull,                               // proowner
-			languageInternalOid,                      // prolang
+			oidZero,                                  // prolang
 			tree.DNull,                               // procost
 			tree.DNull,                               // prorows
 			variadicType,                             // provariadic
@@ -2519,25 +2450,21 @@ func addPgProcUDFRow(
 		argNames = argNamesArray
 	}
 
-	lang := languageInternalOid
-	if fnDesc.GetLanguage() == catpb.Function_PLPGSQL {
-		lang = languagePlpgsqlOid
-	} else if fnDesc.GetLanguage() == catpb.Function_SQL {
-		lang = languageSqlOid
-	}
 	return addRow(
 		tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
 		tree.NewDName(fnDesc.GetName()),                 // proname
 		schemaOid(scDesc.GetID()),                       // pronamespace
 		h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
-		lang,            // prolang
-		tree.DNull,      // procost
-		tree.DNull,      // prorows
-		oidZero,         // provariadic
-		tree.DNull,      // protransform
-		tree.DBoolFalse, // proisagg
-		tree.DBoolFalse, // proiswindow
-		tree.DBoolFalse, // prosecdef
+		// In postgres oid of sql language is 14, need to add a mapping if
+		// we are going to support more languages.
+		tree.NewDOid(14), // prolang
+		tree.DNull,       // procost
+		tree.DNull,       // prorows
+		oidZero,          // provariadic
+		tree.DNull,       // protransform
+		tree.DBoolFalse,  // proisagg
+		tree.DBoolFalse,  // proiswindow
+		tree.DBoolFalse,  // prosecdef
 		tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),            // proleakproof
 		tree.MakeDBool(tree.DBool(isStrict)),                         // proisstrict
 		tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset
@@ -4450,7 +4377,6 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.ArrayFamily:       typCategoryArray,
 	types.TupleFamily:       typCategoryPseudo,
 	types.OidFamily:         typCategoryNumeric,
-	types.PGLSNFamily:       typCategoryUserDefined,
 	types.UuidFamily:        typCategoryUserDefined,
 	types.INetFamily:        typCategoryNetworkAddr,
 	types.UnknownFamily:     typCategoryUnknown,

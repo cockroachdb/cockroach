@@ -28,7 +28,7 @@ func registerSecure(r registry.Registry) {
 	for _, numNodes := range []int{1, 3} {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("smoketest/secure/nodes=%d", numNodes),
-			Tags:    registry.Tags("smoketest", "weekly"),
+			Tags:    []string{"smoketest", "weekly"},
 			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Leases:  registry.MetamorphicLeases,

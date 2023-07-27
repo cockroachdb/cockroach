@@ -23,9 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -162,10 +160,6 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
 				}
-				currDuration := unloadedDuration
-				if d.HasArg("loaded") {
-					currDuration = loadedDuration
-				}
 
 				ioll.pebbleMetricsTick(ctx, StoreMetrics{
 					Metrics:         &metrics,
@@ -186,8 +180,8 @@ func TestIOLoadListener(t *testing.T) {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()
 				}
-				for i := 0; i < int(currDuration.ticksInAdjustmentInterval()); i++ {
-					ioll.allocateTokensTick(currDuration.ticksInAdjustmentInterval() - int64(i))
+				for i := 0; i < ticksInAdjustmentInterval; i++ {
+					ioll.allocateTokensTick()
 					if i == 0 || !printOnlyFirstTick {
 						fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					}
@@ -216,8 +210,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		// Override the totalNumByteTokens manually to trigger the overflow bug.
 		ioll.totalNumByteTokens = math.MaxInt64 - i
 		ioll.byteTokensAllocated = 0
-		for j := 0; j < int(unloadedDuration.ticksInAdjustmentInterval()); j++ {
-			ioll.allocateTokensTick(unloadedDuration.ticksInAdjustmentInterval() - i)
+		for j := 0; j < ticksInAdjustmentInterval; j++ {
+			ioll.allocateTokensTick()
 		}
 	}
 	// Bug2: overflow when bytes added delta is 0.
@@ -228,7 +222,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	}
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
-	ioll.allocateTokensTick(unloadedDuration.ticksInAdjustmentInterval())
+	ioll.allocateTokensTick()
 }
 
 // TODO(sumeer): we now do more work outside adjustTokensInner, so the parts
@@ -317,8 +311,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			Metrics:   &m,
 			DiskStats: d,
 		})
-		for j := 0; j < int(loadedDuration.ticksInAdjustmentInterval()); j++ {
-			ioll.allocateTokensTick(loadedDuration.ticksInAdjustmentInterval() - int64(i))
+		for j := 0; j < ticksInAdjustmentInterval; j++ {
+			ioll.allocateTokensTick()
 			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
 			require.LessOrEqual(t, float64(0), ioll.smoothedCompactionByteTokens)
 			require.LessOrEqual(t, float64(0), ioll.smoothedNumFlushTokens)
@@ -361,14 +355,11 @@ type testGranterWithIOTokens struct {
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
 func (g *testGranterWithIOTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, maxIOTokens int64, maxElasticTokens int64,
+	ioTokens int64, elasticDiskBandwidthTokens int64,
 ) (tokensUsed int64) {
-	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s max-byte-tokens=%s max-disk-bw-tokens=%s",
+	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s",
 		tokensForTokenTickDurationToString(ioTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
-		tokensForTokenTickDurationToString(maxIOTokens),
-		tokensForTokenTickDurationToString(maxElasticTokens),
-	)
+		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens))
 	if g.allTokensUsed {
 		return ioTokens * 2
 	}
@@ -379,7 +370,7 @@ func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWo
 	return g.diskBandwidthTokensUsed
 }
 
-func (g *testGranterWithIOTokens) setLinearModels(
+func (g *testGranterWithIOTokens) setAdmittedDoneModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
@@ -392,7 +383,7 @@ func (g *testGranterWithIOTokens) setLinearModels(
 }
 
 func tokensForTokenTickDurationToString(tokens int64) string {
-	if tokens >= unlimitedTokens/loadedDuration.ticksInAdjustmentInterval() {
+	if tokens >= unlimitedTokens/ticksInAdjustmentInterval {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
@@ -407,7 +398,7 @@ type testGranterNonNegativeTokens struct {
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, _ int64, _ int64,
+	ioTokens int64, elasticDiskBandwidthTokens int64,
 ) (tokensUsed int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
@@ -418,7 +409,7 @@ func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.
 	return [admissionpb.NumWorkClasses]int64{}
 }
 
-func (g *testGranterNonNegativeTokens) setLinearModels(
+func (g *testGranterNonNegativeTokens) setAdmittedDoneModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)
@@ -427,76 +418,4 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), l0IngestLM.constant)
 	require.LessOrEqual(g.t, 0.5, ingestLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
-}
-
-// Tests if the tokenAllocationTicker produces correct adjustment interval
-// durations for both loaded and unloaded systems.
-func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
-	// TODO(bananabrick): We might want to use a timeutil.TimeSource and
-	// ManualTime for the tokenAllocationTicker, so that we can run this test
-	// without any worry about flakes.
-	skip.IgnoreLint(t)
-
-	ticker := tokenAllocationTicker{}
-	defer ticker.stop()
-	currTime := timeutil.Now()
-	ticker.adjustmentStart(true /* loaded */)
-	adjustmentChanged := false
-	for {
-		ticker.tick()
-		remainingTicks := ticker.remainingTicks()
-		if remainingTicks == 0 {
-			if adjustmentChanged {
-				break
-			}
-			abs := func(diff time.Duration) time.Duration {
-				if diff < 0 {
-					return -diff
-				}
-				return diff
-			}
-			timeElapsed := timeutil.Since(currTime)
-			diff := abs(timeElapsed - (15 * time.Second))
-			if diff > 1*time.Second {
-				t.FailNow()
-			}
-			ticker.adjustmentStart(false /* loaded */)
-			currTime = timeutil.Now()
-			adjustmentChanged = true
-		}
-		time.Sleep(1 * time.Millisecond)
-	}
-}
-
-func TestTokenAllocationTicker(t *testing.T) {
-	// TODO(bananabrick): This might be flaky, in which case we should use a
-	// timeutil.TimeSource and ManualTime in the tokenAllocationTicker for these
-	// tests.
-	ticker := tokenAllocationTicker{}
-	defer ticker.stop()
-
-	// Test remainingTicks calculations.
-	ticker.adjustmentStart(false /* loaded */)
-	require.Equal(t, 60, int(ticker.remainingTicks()))
-	time.Sleep(1 * time.Second)
-	// At least one second has passed, we assume that 2 seconds could've passed.
-	// So, we have 13-14 seconds remaining.
-	remaining := ticker.remainingTicks()
-	if remaining < 52 || remaining > 56 {
-		t.FailNow()
-	}
-
-	ticker.adjustmentStart(true /* unloaded */)
-	require.Equal(t, 15000, int(ticker.remainingTicks()))
-	time.Sleep(1 * time.Second)
-	// At least one second has passed. Assume an error of at most one seconds, so
-	// at most 2 seconds have passed. So, we have 13-14 seconds remaining.
-	remaining = ticker.remainingTicks()
-	if remaining > 14000 || remaining < 13000 {
-		t.FailNow()
-	}
-
-	// Skip to the future in which case remainingTicks must be exhausted.
-	ticker.adjustmentIntervalStartTime = timeutil.Now().Add(-17 * time.Second)
-	require.Equal(t, 0, int(ticker.remainingTicks()))
 }

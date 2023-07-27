@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,7 +36,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/errors"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -64,8 +67,17 @@ type pkg struct {
 	tests []string
 }
 
-func pkgsForSHA(ctx context.Context, sha string) (map[string]pkg, error) {
-	diff, err := getDiff(ctx, sha)
+func pkgsFromGithubPRForSHA(
+	ctx context.Context, org string, repo string, sha string,
+) (map[string]pkg, error) {
+	client := ghClient(ctx)
+	currentPull := findPullRequest(ctx, client, org, repo, sha)
+	if currentPull == nil {
+		log.Printf("SHA %s not found in open pull requests, skipping stress", sha)
+		return nil, nil
+	}
+
+	diff, err := getDiff(ctx, client, org, repo, *currentPull.Number)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +126,7 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			if !bytes.HasPrefix(line, []byte{'-'}) {
 				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
 			}
-		case bytes.HasPrefix(line, []byte{'-'}) && (bytes.Contains(line, []byte(".Skip")) || bytes.Contains(line, []byte("skip."))):
+		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")) || bytes.Contains(line, []byte("skip.")):
 			if curPkgName != "" && len(curTestName) > 0 {
 				curPkg := pkgs[curPkgName]
 				curPkg.tests = append(curPkg.tests, curTestName)
@@ -124,19 +136,54 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	}
 }
 
-func getDiff(ctx context.Context, sha string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "merge-base", "origin/master", sha)
-	baseShaBytes, err := cmd.Output()
-	if err != nil {
-		return "", err
+func findPullRequest(
+	ctx context.Context, client *github.Client, org, repo, sha string,
+) *github.PullRequest {
+	opts := &github.PullRequestListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	baseSha := strings.TrimSpace(string(baseShaBytes))
-	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--")
-	outputBytes, err := cmd.Output()
-	if err != nil {
-		return "", err
+	for {
+		pulls, resp, err := client.PullRequests.List(ctx, org, repo, opts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, pull := range pulls {
+			if *pull.Head.SHA == sha {
+				return pull
+			}
+		}
+
+		if resp.NextPage == 0 {
+			return nil
+		}
+		opts.Page = resp.NextPage
 	}
-	return strings.TrimSpace(string(outputBytes)), nil
+}
+
+func ghClient(ctx context.Context) *github.Client {
+	var httpClient *http.Client
+	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
+		httpClient = oauth2.NewClient(ctx, oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		))
+	} else {
+		log.Printf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
+	}
+	return github.NewClient(httpClient)
+}
+
+func getDiff(
+	ctx context.Context, client *github.Client, org, repo string, prNum int,
+) (string, error) {
+	diff, _, err := client.PullRequests.GetRaw(
+		ctx,
+		org,
+		repo,
+		prNum,
+		github.RawOptions{Type: github.Diff},
+	)
+	return diff, err
 }
 
 func parsePackagesFromEnvironment(input string) (map[string]pkg, error) {
@@ -201,7 +248,9 @@ func main() {
 
 	} else {
 		ctx := context.Background()
-		pkgs, err = pkgsForSHA(ctx, sha)
+		const org = "cockroachdb"
+		const repo = "cockroach"
+		pkgs, err = pkgsFromGithubPRForSHA(ctx, org, repo, sha)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -233,7 +282,6 @@ func main() {
 			var args []string
 			if bazel.BuiltWithBazel() || forceBazel {
 				args = append(args, "test")
-
 				// NB: We use a pretty dumb technique to list the bazel test
 				// targets: we ask bazel query to enumerate all the tests in this
 				// package. bazel queries can take a second or so to run, so it's
@@ -244,20 +292,10 @@ func main() {
 				// to strip out the unnecessary calls to `bazel`, but that might
 				// better be saved for when we no longer need `make` support and
 				// don't have to worry about accidentally breaking it.
-				out, err := exec.Command(
-					"bazel",
-					"query",
-					fmt.Sprintf("kind(go_test, //%s:all) except attr(tags, \"integration\", //%s:all)", name, name),
-					"--output=label").Output()
+				out, err := exec.Command("bazel", "query", fmt.Sprintf("kind(go_test, //%s:all)", name), "--output=label").Output()
 				if err != nil {
-					var stderr []byte
-					if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-						stderr = exitErr.Stderr
-					}
-					fmt.Printf("bazel query over pkg %s failed; got stdout %s, stderr %s\n", name, string(out), string(stderr))
 					log.Fatal(err)
 				}
-
 				numTargets := 0
 				for _, target := range strings.Split(string(out), "\n") {
 					target = strings.TrimSpace(target)

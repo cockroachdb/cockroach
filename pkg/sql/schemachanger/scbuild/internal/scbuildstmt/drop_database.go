@@ -46,7 +46,7 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	}
 	// Implicitly DROP RESTRICT the public schema as well.
 	var publicSchemaID catid.DescID
-	b.BackReferences(db.DatabaseID).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	b.BackReferences(db.DatabaseID).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Schema:
 			if t.IsPublic {

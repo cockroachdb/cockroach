@@ -29,20 +29,11 @@ import { cockroach } from "src/js/protos";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
-  const {
-    nodeIDs,
-    storeSources,
-    nodeDisplayNameByID,
-    storeIDsByNodeID,
-    tenantSource,
-  } = props;
+  const { nodeIDs, storeSources, nodeDisplayNameByID, storeIDsByNodeID } =
+    props;
 
   return [
-    <LineGraph
-      title="Ranges"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Ranges" sources={storeSources}>
       <Axis label="ranges">
         <Metric name="cr.store.ranges" title="Ranges" />
         <Metric name="cr.store.replicas.leaders" title="Leaders" />
@@ -62,7 +53,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Replicas per Node"
-      tenantSource={tenantSource}
       tooltip={`The number of replicas on each node.`}
     >
       <Axis label="replicas">
@@ -79,7 +69,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Leaseholders per Node"
-      tenantSource={tenantSource}
       tooltip={`The number of leaseholder replicas on each node. A leaseholder replica is the one that
           receives and coordinates all read and write requests for its range.`}
     >
@@ -97,7 +86,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Average Replica Queries per Node"
-      tenantSource={tenantSource}
       tooltip={`Moving average of the number of KV batch requests processed by
          leaseholder replicas on each node per second. Tracks roughly the last
          30 minutes of requests. Used for load-based rebalancing decisions.`}
@@ -116,7 +104,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Average Replica CPU per Node"
-      tenantSource={tenantSource}
       tooltip={`Moving average of all replica CPU usage on each node per second.
          Tracks roughly the last 30 minutes of usage. Used for load-based
          rebalancing decisions.`}
@@ -135,7 +122,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Logical Bytes per Node"
-      tenantSource={tenantSource}
       tooltip={<LogicalBytesGraphTooltip />}
     >
       <Axis units={AxisUnits.Bytes} label="logical store size">
@@ -150,22 +136,14 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Replica Quiescence"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Replica Quiescence" sources={storeSources}>
       <Axis label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
         <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Range Operations"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Range Operations" sources={storeSources}>
       <Axis label="ranges">
         <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
         <Metric name="cr.store.range.merges" title="Merges" nonNegativeRate />
@@ -189,11 +167,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Snapshots"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Snapshots" sources={storeSources}>
       <Axis label="snapshots">
         <Metric
           name="cr.store.range.snapshots.generated"
@@ -223,11 +197,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Snapshot Data Received"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Snapshot Data Received" sources={storeSources}>
       <Axis label="bytes" units={AxisUnits.Bytes}>
         {nodeIDs.map(nid => (
           <>
@@ -252,7 +222,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Receiver Snapshots Queued"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={ReceiverSnapshotsQueuedTooltip}
     >
       <Axis label="snapshots" units={AxisUnits.Count}>
@@ -269,7 +238,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Circuit Breaker Tripped Replicas"
-      tenantSource={tenantSource}
       tooltip={CircuitBreakerTrippedReplicasTooltip}
     >
       <Axis label="replicas">
@@ -287,7 +255,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Paused Followers"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={PausedFollowersTooltip}
     >
       <Axis label="replicas">
@@ -305,7 +272,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Replicate Queue Actions: Successes"
       sources={storeSources}
-      tenantSource={tenantSource}
     >
       <Axis label="replicas" units={AxisUnits.Count}>
         <Metric
@@ -340,11 +306,7 @@ export default function (props: GraphDashboardProps) {
         />
       </Axis>
     </LineGraph>,
-    <LineGraph
-      title="Replicate Queue Actions: Failures"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Replicate Queue Actions: Failures" sources={storeSources}>
       <Axis label="replicas" units={AxisUnits.Count}>
         <Metric
           name="cr.store.queue.replicate.addreplica.error"
@@ -378,11 +340,7 @@ export default function (props: GraphDashboardProps) {
         />
       </Axis>
     </LineGraph>,
-    <LineGraph
-      title="Decommissioning Errors"
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Decommissioning Errors" sources={storeSources}>
       <Axis label="replicas" units={AxisUnits.Count}>
         {nodeIDs.map(nid => (
           <Metric

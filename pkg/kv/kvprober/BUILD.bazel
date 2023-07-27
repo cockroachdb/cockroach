@@ -13,11 +13,10 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/util",
+        "//pkg/util/contextutil",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
@@ -66,6 +65,5 @@ go_test(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
-        "@org_golang_google_grpc//codes",
     ],
 )

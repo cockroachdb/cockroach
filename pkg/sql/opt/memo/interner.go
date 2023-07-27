@@ -361,7 +361,7 @@ func (h *hasher) HashDatum(val tree.Datum) {
 	case *tree.DString:
 		h.HashString(string(*t))
 	case *tree.DBytes:
-		h.HashBytes(t.UnsafeBytes())
+		h.HashBytes([]byte(*t))
 	case *tree.DDate:
 		h.HashUint64(uint64(t.PGEpochDays()))
 	case *tree.DTime:
@@ -657,6 +657,13 @@ func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
+func (h *hasher) HashRelListExpr(val RelListExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].RelExpr)
+		h.HashPhysProps(val[i].PhysProps)
+	}
+}
+
 func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -758,10 +765,6 @@ func (h *hasher) HashLiteralRows(val *opt.LiteralRows) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
-func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
-	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
-}
-
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -840,7 +843,7 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 		return lt.Locale == rt.Locale && h.IsStringEqual(lt.Contents, rt.Contents)
 	case *tree.DBytes:
 		rt := r.(*tree.DBytes)
-		return bytes.Equal(lt.UnsafeBytes(), rt.UnsafeBytes())
+		return bytes.Equal([]byte(*lt), []byte(*rt))
 	case *tree.DDate:
 		rt := r.(*tree.DDate)
 		return lt.Date == rt.Date
@@ -1073,6 +1076,19 @@ func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
 	return l == r
 }
 
+func (h *hasher) IsRelListExprEqual(l, r RelListExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !h.IsRelExprEqual(l[i].RelExpr, r[i].RelExpr) ||
+			!h.IsPhysPropsEqual(l[i].PhysProps, r[i].PhysProps) {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {
 	return l == r
 }
@@ -1217,21 +1233,6 @@ func (h *hasher) IsVolatilityEqual(l, r volatility.V) bool {
 
 func (h *hasher) IsLiteralRowsEqual(l, r *opt.LiteralRows) bool {
 	return l == r
-}
-
-func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
-	if len(l.Body) != len(r.Body) {
-		return false
-	}
-	for i := range l.Body {
-		if !h.IsRelExprEqual(l.Body[i], r.Body[i]) {
-			return false
-		}
-		if !h.IsPhysPropsEqual(l.BodyProps[i], r.BodyProps[i]) {
-			return false
-		}
-	}
-	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

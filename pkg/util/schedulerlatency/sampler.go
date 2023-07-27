@@ -233,7 +233,7 @@ func sample() *metrics.Float64Histogram {
 	metrics.Read(m)
 	v := &m[0].Value
 	if v.Kind() != metrics.KindFloat64Histogram {
-		panic(fmt.Sprintf("unexpected metric type: %d (v=%+v m=%+v)", v.Kind(), v, m))
+		panic("unexpected metric type")
 	}
 	h := v.Float64Histogram()
 	return h

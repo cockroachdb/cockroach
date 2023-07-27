@@ -31,7 +31,7 @@ func readArchivePackages(archivePath string) ([]string, error) {
 	}
 
 	reader := io.Reader(file)
-	if strings.HasSuffix(archivePath, ".gz") {
+	if strings.HasSuffix(*flagBinaries, ".gz") {
 		reader, err = gzip.NewReader(reader)
 		if err != nil {
 			return nil, err

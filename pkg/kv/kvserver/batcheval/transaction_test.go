@@ -63,7 +63,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	}
 	as := abortspan.New(desc.RangeID)
 
-	txn := roachpb.MakeTransaction("test", txnKey, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 1)
+	txn := roachpb.MakeTransaction("test", txnKey, 0, hlc.Timestamp{WallTime: 1}, 0, 1)
 	newTxnAbortSpanEntry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
 		Timestamp: txn.WriteTimestamp,
@@ -735,9 +735,11 @@ func TestUpdateAbortSpan(t *testing.T) {
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()
+			st := makeClusterSettingsUsingEngineIntentsSetting(db)
 			evalCtx := &MockEvalCtx{
-				Desc:      &desc,
-				AbortSpan: as,
+				ClusterSettings: st,
+				Desc:            &desc,
+				AbortSpan:       as,
 			}
 			ms := enginepb.MVCCStats{}
 			if c.before != nil {

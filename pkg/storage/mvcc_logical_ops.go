@@ -123,7 +123,6 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 		ol.recordOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:           details.Txn.ID,
 			TxnKey:          details.Txn.Key,
-			TxnIsoLevel:     details.Txn.IsoLevel,
 			TxnMinTimestamp: details.Txn.MinTimestamp,
 			Timestamp:       details.Timestamp,
 		})

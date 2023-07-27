@@ -103,7 +103,7 @@ func registerPop(r registry.Registry) {
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Tags:    []string{`default`, `orm`},
 		Run:     runPop,
 	})
 }

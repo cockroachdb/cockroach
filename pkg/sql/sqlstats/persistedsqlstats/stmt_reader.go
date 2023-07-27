@@ -28,7 +28,7 @@ import (
 
 // IterateStatementStats implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) IterateStatementStats(
-	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) (err error) {
 	// We override the sorting options since otherwise we would need to implement
 	// sorted and unsorted merge separately. We can revisit this decision if
@@ -79,7 +79,7 @@ func (s *PersistedSQLStats) IterateStatementStats(
 }
 
 func (s *PersistedSQLStats) persistedStmtStatsIter(
-	ctx context.Context, options sqlstats.IteratorOptions,
+	ctx context.Context, options *sqlstats.IteratorOptions,
 ) (iter isql.Rows, expectedColCnt int, err error) {
 	query, expectedColCnt := s.getFetchQueryForStmtStatsTable(ctx, options)
 
@@ -99,7 +99,7 @@ func (s *PersistedSQLStats) persistedStmtStatsIter(
 }
 
 func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
-	ctx context.Context, options sqlstats.IteratorOptions,
+	ctx context.Context, options *sqlstats.IteratorOptions,
 ) (query string, colCnt int) {
 	selectedColumns := []string{
 		"aggregated_ts",
@@ -192,7 +192,7 @@ func rowToStmtStats(row tree.Datums) (*appstatspb.CollectedStatementStatistics, 
 	recommendations := tree.MustBeDArray(row[9])
 	var indexRecommendations []string
 	for _, s := range recommendations.Array {
-		indexRecommendations = util.CombineUnique(indexRecommendations, []string{string(tree.MustBeDString(s))})
+		indexRecommendations = util.CombineUniqueString(indexRecommendations, []string{string(tree.MustBeDString(s))})
 	}
 	stats.Stats.IndexRecommendations = indexRecommendations
 

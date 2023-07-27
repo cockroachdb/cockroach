@@ -7,13 +7,6 @@ CREATE TABLE t (
 ----
 
 exec-ddl
-CREATE TABLE t_cast (
-  a STRING PRIMARY KEY,
-  v CHAR AS (a) VIRTUAL
-)
-----
-
-exec-ddl
 CREATE TABLE t_idx (
   a INT PRIMARY KEY,
   b INT,
@@ -94,22 +87,6 @@ project
       └── projections
            └── a:1 + b:2 [as=v:3]
 
-# The projection for v should be casted to match the column type.
-build
-SELECT * FROM t_cast
-----
-project
- ├── columns: a:1!null v:2!null
- └── project
-      ├── columns: v:2!null a:1!null crdb_internal_mvcc_timestamp:3 tableoid:4
-      ├── scan t_cast
-      │    ├── columns: a:1!null crdb_internal_mvcc_timestamp:3 tableoid:4
-      │    └── computed column expressions
-      │         └── v:2
-      │              └── a:1::CHAR
-      └── projections
-           └── a:1::CHAR [as=v:2]
-
 # -- INSERT tests --
 
 build
@@ -177,24 +154,6 @@ project
            │    └── (1, 1)
            └── projections
                 └── column1:6 + column2:7 [as=v_comp:8]
-
-# The projection for v should be casted to match the column type.
-build
-INSERT INTO t_cast VALUES ('foo')
-----
-insert t_cast
- ├── columns: <none>
- ├── insert-mapping:
- │    ├── column1:5 => a:1
- │    └── v_cast:6 => v:2
- └── project
-      ├── columns: v_cast:6!null column1:5!null
-      ├── values
-      │    ├── columns: column1:5!null
-      │    └── ('foo',)
-      └── projections
-           └── assignment-cast: CHAR [as=v_cast:6]
-                └── column1:5
 
 build
 INSERT INTO t_idx VALUES (1, 1)
@@ -351,28 +310,6 @@ project
            │         └── a:6 + b:7 [as=v:8]
            └── filters
                 └── v:8 = 1
-
-# The projection for v should be casted to match the column type.
-build
-DELETE FROM t_cast RETURNING v
-----
-project
- ├── columns: v:2!null
- └── delete t_cast
-      ├── columns: a:1!null v:2!null
-      ├── fetch columns: a:5 v:6
-      ├── return-mapping:
-      │    ├── a:5 => a:1
-      │    └── v:6 => v:2
-      └── project
-           ├── columns: v:6!null a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           ├── scan t_cast
-           │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    └── computed column expressions
-           │         └── v:6
-           │              └── a:5::CHAR
-           └── projections
-                └── a:5::CHAR [as=v:6]
 
 build
 DELETE FROM t_idx WHERE a > 1
@@ -583,40 +520,6 @@ update t
       │         └── a:6 + 1 [as=a_new:11]
       └── projections
            └── a_new:11 + b:7 [as=v_comp:12]
-
-# The projections for v should be casted to match the column type.
-build
-UPDATE t_cast SET a = 'foo' RETURNING v
-----
-project
- ├── columns: v:2!null
- └── update t_cast
-      ├── columns: a:1!null v:2!null
-      ├── fetch columns: a:5 v:6
-      ├── update-mapping:
-      │    ├── a_new:9 => a:1
-      │    └── v_cast:10 => v:2
-      ├── return-mapping:
-      │    ├── a_new:9 => a:1
-      │    └── v_cast:10 => v:2
-      └── project
-           ├── columns: v_cast:10!null a:5!null v:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 a_new:9!null
-           ├── project
-           │    ├── columns: a_new:9!null a:5!null v:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    ├── project
-           │    │    ├── columns: v:6!null a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    │    ├── scan t_cast
-           │    │    │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    │    │    └── computed column expressions
-           │    │    │         └── v:6
-           │    │    │              └── a:5::CHAR
-           │    │    └── projections
-           │    │         └── a:5::CHAR [as=v:6]
-           │    └── projections
-           │         └── 'foo' [as=a_new:9]
-           └── projections
-                └── assignment-cast: CHAR [as=v_cast:10]
-                     └── a_new:9
 
 build
 UPDATE t_idx SET a=a+1
@@ -916,26 +819,6 @@ project
            └── projections
                 └── column1:6 + column2:7 [as=v_comp:8]
 
-# The projection for v should be casted to match the column type.
-build
-UPSERT INTO t_cast VALUES ('foo') RETURNING v
-----
-project
- ├── columns: v:2!null
- └── upsert t_cast
-      ├── columns: a:1!null v:2!null
-      ├── upsert-mapping:
-      │    ├── column1:5 => a:1
-      │    └── v_cast:6 => v:2
-      └── project
-           ├── columns: v_cast:6!null column1:5!null
-           ├── values
-           │    ├── columns: column1:5!null
-           │    └── ('foo',)
-           └── projections
-                └── assignment-cast: CHAR [as=v_cast:6]
-                     └── column1:5
-
 build
 UPSERT INTO t_check VALUES (1, 1)
 ----
@@ -1006,50 +889,6 @@ project
                 │    └── column2:7
                 └── first-agg [as=v_comp:8]
                      └── v_comp:8
-
-# The projections for v should be casted to match the column type.
-build
-INSERT INTO t_cast VALUES ('foo') ON CONFLICT DO NOTHING RETURNING v
-----
-project
- ├── columns: v:2!null
- └── insert t_cast
-      ├── columns: a:1!null v:2!null
-      ├── arbiter indexes: t_cast_pkey
-      ├── insert-mapping:
-      │    ├── column1:5 => a:1
-      │    └── v_cast:6 => v:2
-      ├── return-mapping:
-      │    ├── column1:5 => a:1
-      │    └── v_cast:6 => v:2
-      └── upsert-distinct-on
-           ├── columns: column1:5!null v_cast:6!null
-           ├── grouping columns: column1:5!null
-           ├── anti-join (hash)
-           │    ├── columns: column1:5!null v_cast:6!null
-           │    ├── project
-           │    │    ├── columns: v_cast:6!null column1:5!null
-           │    │    ├── values
-           │    │    │    ├── columns: column1:5!null
-           │    │    │    └── ('foo',)
-           │    │    └── projections
-           │    │         └── assignment-cast: CHAR [as=v_cast:6]
-           │    │              └── column1:5
-           │    ├── project
-           │    │    ├── columns: v:8!null a:7!null
-           │    │    ├── scan t_cast
-           │    │    │    ├── columns: a:7!null
-           │    │    │    ├── computed column expressions
-           │    │    │    │    └── v:8
-           │    │    │    │         └── a:7::CHAR
-           │    │    │    └── flags: disabled not visible index feature
-           │    │    └── projections
-           │    │         └── a:7::CHAR [as=v:8]
-           │    └── filters
-           │         └── column1:5 = a:7
-           └── aggregations
-                └── first-agg [as=v_cast:6]
-                     └── v_cast:6
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING

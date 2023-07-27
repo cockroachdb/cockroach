@@ -543,11 +543,18 @@ EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cu
 distribution: local
 vectorized: true
 ·
-• render
+• merge join
+│ equality: (cust) = (id)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: cards@cards_cust_idx
+│     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: cards@cards_pkey
+      table: customers@customers_pkey
       spans: FULL SCAN
 
 # Tests for filter propagation through joins.
@@ -939,30 +946,32 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b)
+EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
 distribution: local
 vectorized: true
 ·
 • project
-│ columns: (a, b, c, d, c, d)
+│ columns: (a, b, c, d, d)
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 100 (missing stats)
-    │ equality: (b, a) = (b, a)
-    │ merge ordering: +"(b=b)",+"(a=a)"
+    │ estimated row count: 1 (missing stats)
+    │ equality: (b, a, c) = (b, a, c)
+    │ left cols are key
+    │ right cols are key
+    │ merge ordering: +"(b=b)",+"(a=a)",+"(c=c)"
     │
     ├── • scan
     │     columns: (a, b, c, d)
-    │     ordering: +b,+a
+    │     ordering: +b,+a,+c
     │     estimated row count: 1,000 (missing stats)
     │     table: pkbac@pkbac_pkey
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
-          ordering: +b,+a
+          ordering: +b,+a,+c
           estimated row count: 1,000 (missing stats)
           table: pkbac@pkbac_pkey
           spans: FULL SCAN
@@ -2211,9 +2220,16 @@ EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = car
 distribution: local
 vectorized: true
 ·
-• render
+• hash join
+│ equality: (cust) = (id)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: cards@cards_pkey
+│     spans: FULL SCAN
 │
 └── • scan
       missing stats
-      table: cards@cards_pkey
+      table: customers@customers_pkey
       spans: FULL SCAN

@@ -1,10 +1,11 @@
+# LogicTest: default-configs local-mixed-22.2-23.1
 statement ok
 CREATE DATABASE db
 
 statement ok
 COMMENT ON DATABASE db IS 'A'
 
-query TTTTTTT colnames,rowsort
+query TTTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -17,7 +18,7 @@ test           root   NULL            NULL              {}       NULL           
 statement ok
 COMMENT ON DATABASE db IS 'AAA'
 
-query TTTTTTT colnames,rowsort
+query TTTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -30,7 +31,7 @@ test           root   NULL            NULL              {}       NULL           
 statement ok
 COMMENT ON DATABASE db IS NULL;
 
-query TTTTTTT colnames,rowsort
+query TTTTTTT colnames
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment

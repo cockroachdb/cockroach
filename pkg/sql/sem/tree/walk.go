@@ -760,9 +760,6 @@ func (expr *DInterval) Walk(_ Visitor) Expr { return expr }
 func (expr *DBox2D) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr *DPGLSN) Walk(_ Visitor) Expr { return expr }
-
-// Walk implements the Expr interface.
 func (expr *DGeography) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
@@ -1266,16 +1263,6 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 		}
 	}
 
-	if stmt.Options.ExecutionLocality != nil {
-		rh, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
-		if changed {
-			if ret == stmt {
-				ret = stmt.copyNode()
-			}
-			ret.Options.ExecutionLocality = rh
-		}
-	}
-
 	return ret
 }
 
@@ -1551,16 +1538,6 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 				ret = stmt.copyNode()
 			}
 			ret.Options.IncludeAllSecondaryTenants = include
-		}
-	}
-
-	if stmt.Options.ExecutionLocality != nil {
-		include, changed := WalkExpr(v, stmt.Options.ExecutionLocality)
-		if changed {
-			if ret == stmt {
-				ret = stmt.copyNode()
-			}
-			ret.Options.ExecutionLocality = include
 		}
 	}
 

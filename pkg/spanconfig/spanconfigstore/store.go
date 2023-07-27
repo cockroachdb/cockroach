@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package spanconfigstore exposes utilities for storing and retrieving
-// SpanConfigs associated with a single span.
 package spanconfigstore
 
 import (
@@ -55,8 +53,8 @@ var boundsEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.bounds.enabled",
 	"dictates whether span config bounds are consulted when serving span configs for secondary tenants",
-	true,
-).WithPublic()
+	false,
+)
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
 // update the span configuration state. Internally, it makes use of an interval
@@ -125,13 +123,11 @@ func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, 
 }
 
 // ComputeSplitKey is part of the spanconfig.StoreReader interface.
-func (s *Store) ComputeSplitKey(
-	ctx context.Context, start, end roachpb.RKey,
-) (roachpb.RKey, error) {
+func (s *Store) ComputeSplitKey(_ context.Context, start, end roachpb.RKey) (roachpb.RKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.mu.spanConfigStore.computeSplitKey(ctx, start, end)
+	return s.mu.spanConfigStore.computeSplitKey(start, end)
 }
 
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.

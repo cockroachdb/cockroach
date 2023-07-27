@@ -302,7 +302,7 @@ project
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
-memo (optimized, ~7KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
+memo (optimized, ~6KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
  ├── G1: (project G2 G3 x y)
  │    ├── [presentation: y:2,z:7] [ordering: +1,-2]
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)
@@ -702,7 +702,7 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
 ----
-memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +8])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +8])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +8]
  │    │    ├── best: (sort G1)
@@ -725,7 +725,7 @@ memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +8])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
-memo (optimized, ~8KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
@@ -2238,15 +2238,21 @@ sort
       │         │    ├── cardinality: [0 - 2]
       │         │    ├── key: (6-8)
       │         │    ├── fd: (6-8)-->(11-13)
-      │         │    ├── top-k
+      │         │    ├── ensure-upsert-distinct-on
       │         │    │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    │    ├── internal-ordering: +7,+8
-      │         │    │    ├── k: 2
+      │         │    │    ├── grouping columns: x:6!null y:7!null z:8!null
+      │         │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (6-8)
-      │         │    │    └── scan xyz
+      │         │    │    └── top-k
       │         │    │         ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         └── key: (6-8)
+      │         │    │         ├── internal-ordering: +7,+8
+      │         │    │         ├── k: 2
+      │         │    │         ├── cardinality: [0 - 2]
+      │         │    │         ├── key: (6-8)
+      │         │    │         └── scan xyz
+      │         │    │              ├── columns: x:6!null y:7!null z:8!null
+      │         │    │              └── key: (6-8)
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a:11 IS NULL THEN x:6 ELSE 10 END [as=upsert_a:17, outer=(6,11)]
@@ -2983,7 +2989,7 @@ CREATE TABLE table87806 (
 );
 ----
 
-opt format=hide-all disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+opt format=hide-all
 SELECT tab_171969.col1_3
 FROM table87806 AS tab_171967
 JOIN table87806 AS tab_171968
@@ -3010,8 +3016,7 @@ project
       │    │    │    └── filters
       │    │    │         └── tab_171969.col1_3 = tab_171969.tableoid
       │    │    └── filters
-      │    │         ├── tab_171968.col1_3 = tab_171969.col1_3
-      │    │         └── tab_171968.tableoid = tab_171969.col1_3
+      │    │         └── tab_171968.col1_3 = tab_171969.col1_3
       │    └── projections
       │         └── true
       └── filters (true)
@@ -3140,46 +3145,3 @@ project
       └── aggregations
            └── const-agg [as=c2:2, outer=(2)]
                 └── c2:2
-
-# Regression test for #106678 - sort the output of a top-k operator when the
-# top-k ordering is a prefix of the required ordering.
-exec-ddl
-CREATE TABLE t106678 (a INT, b INT);
-----
-
-# There should be a segmented sort on top of the top-k operator.
-opt
-SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b;
-----
-sort (segmented)
- ├── columns: a:1 b:2
- ├── cardinality: [0 - 3]
- ├── ordering: +1,+2
- └── top-k
-      ├── columns: a:1 b:2
-      ├── internal-ordering: +1
-      ├── k: 3
-      ├── cardinality: [0 - 3]
-      ├── ordering: +1
-      └── scan t106678
-           └── columns: a:1 b:2
-
-# The top limit should become a top-k as well, since the inner top-k does not
-# provide an ordering on (a, b).
-opt
-SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b LIMIT 1
-----
-top-k
- ├── columns: a:1 b:2
- ├── internal-ordering: +1,+2
- ├── k: 1
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(1,2)
- └── top-k
-      ├── columns: a:1 b:2
-      ├── internal-ordering: +1
-      ├── k: 3
-      ├── cardinality: [0 - 3]
-      └── scan t106678
-           └── columns: a:1 b:2

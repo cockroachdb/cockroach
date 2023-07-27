@@ -83,12 +83,10 @@ function queryFromProps(
   } else if (metricProps.aggregateAvg) {
     sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
   }
-  const tenantSource =
-    metricProps.tenantSource || graphProps.tenantSource || undefined;
+
   return {
     name: metricProps.name,
     sources: metricProps.sources || graphProps.sources || undefined,
-    tenant_id: tenantSource ? { id: Long.fromString(tenantSource) } : undefined,
     downsampler: downsampler,
     source_aggregator: sourceAggregator,
     derivative: derivative,

@@ -25,9 +25,8 @@ type Test interface {
 	Name() string
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"
-	SnapshotPrefix() string
 	Helper()
-	// Spec returns the *registry.TestSpec as an interface{}.
+	// Spec() returns the *registry.TestSpec as an interface{}.
 	//
 	// TODO(tbg): cleaning this up is mildly tricky. TestSpec has the Run field
 	// which depends both on `test` (and `cluster`, though this matters less), so

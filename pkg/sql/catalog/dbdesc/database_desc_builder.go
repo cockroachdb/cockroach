@@ -163,7 +163,7 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, descpb.InvalidID, ddb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, ddb.maybeModified.DeclarativeSchemaChangerState) {
 		ddb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil

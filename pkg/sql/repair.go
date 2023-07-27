@@ -787,7 +787,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 		return nil, err
 	}
 
-	file, _, err := conn.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+	file, err := conn.ReadFile(ctx, "")
 	if err != nil {
 		return nil, err
 	}

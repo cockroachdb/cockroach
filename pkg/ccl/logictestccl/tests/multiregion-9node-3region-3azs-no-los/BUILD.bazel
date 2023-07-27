@@ -4,19 +4,13 @@ go_test(
     name = "multiregion-9node-3region-3azs-no-los_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
+    args = ["-test.timeout=3595s"],
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
     ],
-    shard_count = 19,
-    tags = [
-        "ccl_test",
-        "cpu:4",
-    ],
+    shard_count = 16,
+    tags = ["cpu:4"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",

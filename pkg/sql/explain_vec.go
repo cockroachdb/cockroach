@@ -75,14 +75,14 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return errors.New("vectorize is set to 'off'")
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	flowCtx.Local = !physPlan.Distribution.WillDistribute()
+	willDistribute := physPlan.Distribution.WillDistribute()
 	// When running EXPLAIN (VEC) we choose the option of "not recording stats"
 	// since we don't know whether the next invocation of the explained
 	// statement would result in the collection of execution stats or not.
 	const recordingStats = false
 	n.run.lines, err = colflow.ExplainVec(
 		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
-		distSQLPlanner.gatewaySQLInstanceID, verbose, recordingStats,
+		distSQLPlanner.gatewaySQLInstanceID, verbose, willDistribute, recordingStats,
 	)
 	if err != nil {
 		return err

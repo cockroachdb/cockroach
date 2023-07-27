@@ -56,8 +56,6 @@ func GetValueByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) (Value, err
 		return (*boolValue)(&t.ExemptFromRateLimiting), nil
 	case TenantSpanConfigBounds:
 		return &spanConfigBoundsValue{b: &t.SpanConfigBounds}, nil
-	case CanDebugProcess:
-		return (*boolValue)(&t.CanDebugProcess), nil
 	default:
 		return nil, errors.AssertionFailedf("unknown capability: %q", id.String())
 	}

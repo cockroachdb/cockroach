@@ -49,7 +49,6 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":cdctest"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

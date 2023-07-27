@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
@@ -24,10 +23,10 @@ import (
 func (s *statusServer) ResetSQLStats(
 	ctx context.Context, req *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {
-	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 

@@ -72,10 +72,6 @@ type progressTracker struct {
 	}
 	useFrontier        bool
 	inFlightSpanFeeder chan execinfrapb.RestoreSpanEntry
-
-	// endTime is the restore as of timestamp. This can be empty, and an empty timestamp
-	// indicates a restore of the latest revision.
-	endTime hlc.Timestamp
 }
 
 func makeProgressTracker(
@@ -83,7 +79,6 @@ func makeProgressTracker(
 	persistedSpans []jobspb.RestoreProgress_FrontierEntry,
 	useFrontier bool,
 	maxBytes int64,
-	endTime hlc.Timestamp,
 ) (*progressTracker, error) {
 
 	var (
@@ -116,7 +111,6 @@ func makeProgressTracker(
 	pt.maxBytes = maxBytes
 	pt.useFrontier = useFrontier
 	pt.inFlightSpanFeeder = inFlightSpanFeeder
-	pt.endTime = endTime
 	return pt, nil
 }
 
@@ -194,30 +188,16 @@ func (pt *progressTracker) updateJobCallback(
 }
 
 // ingestUpdate updates the progressTracker after a progress update returns from
-// the distributed processors. ingestUpdate returns true if the update indicates
-// the completion of a span, false otherwise.
+// the distributed processors.
 func (pt *progressTracker) ingestUpdate(
 	ctx context.Context, rawProgress *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) (bool, error) {
+) error {
 	var progDetails backuppb.RestoreProgress
 	if err := pbtypes.UnmarshalAny(&rawProgress.ProgressDetails, &progDetails); err != nil {
 		log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 	}
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
-
-	// After the change to bound the memory used by SST iterator, we can now
-	// get a progress entry for a partially completed span. Do not mark the
-	// span as done when receiving these entries.
-	//
-	// NB: progDetails with empty CompleteUpTo timestamps always denote the
-	// completion of a span, as either we've received details from a
-	// processor that does not memory monitor, or the restore's endTime was
-	// empty.
-	if !progDetails.CompleteUpTo.IsEmpty() && !progDetails.CompleteUpTo.Equal(pt.endTime) {
-		return false, nil
-	}
-
 	pt.mu.res.Add(progDetails.Summary)
 	if pt.useFrontier {
 		updateSpan := progDetails.DataSpan.Clone()
@@ -261,7 +241,7 @@ func (pt *progressTracker) ingestUpdate(
 			updateSpan.EndKey = newEndKey
 		}
 		if _, err := pt.mu.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
-			return false, err
+			return err
 		}
 	} else {
 		idx := progDetails.ProgressIdx
@@ -272,7 +252,7 @@ func (pt *progressTracker) ingestUpdate(
 				if !ok {
 					// The channel has been closed, there is nothing left to do.
 					log.Infof(ctx, "exiting restore checkpoint loop as the import span channel has been closed")
-					return true, nil
+					return nil
 				}
 				pt.mu.inFlightImportSpans[i] = importSpan.Span
 			}
@@ -282,7 +262,7 @@ func (pt *progressTracker) ingestUpdate(
 		if sp, ok := pt.mu.inFlightImportSpans[idx]; ok {
 			// Assert that we're actually marking the correct span done. See #23977.
 			if !sp.Key.Equal(progDetails.DataSpan.Key) {
-				return false, errors.Newf("request %d for span %v does not match import span for same idx: %v",
+				return errors.Newf("request %d for span %v does not match import span for same idx: %v",
 					idx, progDetails.DataSpan, sp,
 				)
 			}
@@ -297,5 +277,5 @@ func (pt *progressTracker) ingestUpdate(
 			}
 		}
 	}
-	return true, nil
+	return nil
 }

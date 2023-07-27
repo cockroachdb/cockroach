@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -73,11 +75,11 @@ func distChangefeedFlow(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	localState *cachedState,
+	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,
 ) error {
+
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
-	progress := localState.progress
 
 	// NB: A non-empty high water indicates that we have checkpointed a resolved
 	// timestamp. Skipping the initial scan is equivalent to starting the
@@ -122,8 +124,13 @@ func distChangefeedFlow(
 		}
 	}
 
+	var checkpoint jobspb.ChangefeedProgress_Checkpoint
+	if cf := progress.GetChangefeed(); cf != nil && cf.Checkpoint != nil {
+		checkpoint = *cf.Checkpoint
+	}
+
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh)
+		ctx, execCtx, jobID, schemaTS, details, initialHighWater, checkpoint, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -154,9 +161,6 @@ func fetchTableDescriptors(
 		})
 	}
 	if err := sql.DescsTxn(ctx, execCfg, fetchSpans); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			return nil, changefeedbase.WithTerminalError(err)
-		}
 		return nil, err
 	}
 	return targetDescs, nil
@@ -203,13 +207,28 @@ func fetchSpansForTables(
 
 	// SessionData is nil if the changefeed was created prior to
 	// clusterversion.V23_1_ChangefeedExpressionProductionReady
-	sd := sql.NewInternalSessionData(ctx, execCtx.ExecCfg().Settings, "changefeed-fetchSpansForTables")
+	var sd sessiondatapb.SessionData
 	if details.SessionData != nil {
-		sd.SessionData = *details.SessionData
+		sd = *details.SessionData
 	}
 	return cdceval.SpansForExpression(ctx, execCtx.ExecCfg(), execCtx.User(),
 		sd, tableDescs[0], initialHighwater, target, sc)
 }
+
+var replanChangefeedThreshold = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"changefeed.replan_flow_threshold",
+	"fraction of initial flow instances that would be added or updated above which a redistribution would occur (0=disabled)",
+	0.0,
+)
+
+var replanChangefeedFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.replan_flow_frequency",
+	"frequency at which changefeed checks to see if redistributing would change its physical execution plan",
+	10*time.Minute,
+	settings.PositiveDuration,
+)
 
 // startDistChangefeed starts distributed changefeed execution.
 func startDistChangefeed(
@@ -219,7 +238,7 @@ func startDistChangefeed(
 	schemaTS hlc.Timestamp,
 	details jobspb.ChangefeedDetails,
 	initialHighWater hlc.Timestamp,
-	localState *cachedState,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 	resultsCh chan<- tree.Datums,
 ) error {
 	execCfg := execCtx.ExecCfg()
@@ -235,7 +254,7 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
-	localState.trackedSpans = trackedSpans
+	cfKnobs := execCfg.DistSQLSrv.TestingKnobs.Changefeed
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
@@ -243,39 +262,36 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
-	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
-	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
-		checkpoint = progress.Checkpoint
-	}
-	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater,
-		trackedSpans, checkpoint, localState.drainingNodes)(ctx, dsp)
+	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans)(ctx, dsp)
 	if err != nil {
 		return err
 	}
 
+	replanOracle := sql.ReplanOnChangedFraction(
+		func() float64 {
+			return replanChangefeedThreshold.Get(execCtx.ExecCfg().SV())
+		},
+	)
+	if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.ShouldReplan != nil {
+		replanOracle = knobs.ShouldReplan
+	}
+
+	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
+		p,
+		makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans),
+		execCtx,
+		replanOracle,
+		func() time.Duration { return replanChangefeedFrequency.Get(execCtx.ExecCfg().SV()) },
+	)
+
 	execPlan := func(ctx context.Context) error {
+		defer stopReplanner()
 		// Derive a separate context so that we can shut down the changefeed
 		// as soon as we see an error.
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		// clear out previous drain/shutdown information.
-		localState.drainingNodes = localState.drainingNodes[:0]
-		localState.aggregatorFrontier = localState.aggregatorFrontier[:0]
-
-		resultRows := sql.NewMetadataCallbackWriter(
-			makeChangefeedResultWriter(resultsCh, cancel),
-			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
-				if meta.Changefeed != nil {
-					if meta.Changefeed.DrainInfo != nil {
-						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
-					}
-					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
-				}
-				return nil
-			},
-		)
-
+		resultRows := makeChangefeedResultWriter(resultsCh, cancel)
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
 			resultRows,
@@ -308,7 +324,11 @@ func startDistChangefeed(
 		return resultRows.Err()
 	}
 
-	return ctxgroup.GoAndWait(ctx, execPlan)
+	if err = ctxgroup.GoAndWait(ctx, execPlan, replanner); errors.Is(err, sql.ErrPlanChanged) {
+		execCtx.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).ReplanCount.Inc(1)
+	}
+
+	return err
 }
 
 var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
@@ -324,9 +344,8 @@ func makePlan(
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	initialHighWater hlc.Timestamp,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 	trackedSpans []roachpb.Span,
-	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
-	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		var blankTxn *kv.Txn
@@ -349,15 +368,6 @@ func makePlan(
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err
-		}
-
-		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
-		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil &&
-			knobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
-			spanPartitions, err = knobs.FilterDrainingNodes(spanPartitions, drainingNodes)
-			if err != nil {
-				return nil, nil, err
-			}
 		}
 
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -384,14 +394,13 @@ func makePlan(
 		// Use the same checkpoint for all aggregators; each aggregator will only look at
 		// spans that are assigned to it.
 		// We could compute per-aggregator checkpoint, but that's probably an overkill.
-		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
-		var checkpointSpanGroup roachpb.SpanGroup
-
-		if checkpoint != nil {
-			checkpointSpanGroup.Add(checkpoint.Spans...)
-			aggregatorCheckpoint.Spans = checkpoint.Spans
-			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+		aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
+			Spans:     checkpoint.Spans,
+			Timestamp: checkpoint.Timestamp,
 		}
+
+		var checkpointSpanGroup roachpb.SpanGroup
+		checkpointSpanGroup.Add(checkpoint.Spans...)
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
@@ -428,6 +437,7 @@ func makePlan(
 			UserProto:    execCtx.User().EncodeProto(),
 		}
 
+		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
 		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.OnDistflowSpec != nil {
 			knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
 		}
@@ -487,15 +497,7 @@ func (w *changefeedResultWriter) SetRowsAffected(ctx context.Context, n int) {
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
-	switch {
-	case errors.Is(err, changefeedbase.ErrNodeDraining):
-		// Let drain signal proceed w/out cancellation.
-		// We want to make sure change frontier processor gets a chance
-		// to send out cancellation to the aggregator so that everything
-		// transitions to "drain metadata" stage.
-	default:
-		w.cancel()
-	}
+	w.cancel()
 }
 
 func (w *changefeedResultWriter) Err() error {
@@ -521,8 +523,7 @@ type distResolver struct {
 func (r *distResolver) getRangesForSpans(
 	ctx context.Context, spans []roachpb.Span,
 ) ([]roachpb.Span, error) {
-	spans, _, err := kvfeed.AllRangeSpans(ctx, r.DistSender, spans)
-	return spans, err
+	return kvfeed.AllRangeSpans(ctx, r.DistSender, spans)
 }
 
 func rebalanceSpanPartitions(

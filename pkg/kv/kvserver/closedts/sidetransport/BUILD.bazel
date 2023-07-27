@@ -13,7 +13,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb",
@@ -23,7 +22,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
-        "//pkg/util/netutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -42,7 +40,6 @@ go_test(
     embed = [":sidetransport"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb",

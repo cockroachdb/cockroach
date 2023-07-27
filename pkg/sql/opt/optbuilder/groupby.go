@@ -924,12 +924,9 @@ func newGroupingError(name tree.Name) error {
 }
 
 // allowImplicitGroupingColumn returns true if col is part of a table and the
-// groupby metadata indicates that we are grouping on the entire PK, an entire
-// unique index key, or an entire unique without index key of that table. In
-// that case, we can allow col as an "implicit" grouping column, even if it is
-// not specified in the query.
-// In the unique index or unique without index cases, all key columns must be
-// marked as NOT NULL to allow the implicit grouping.
+// the groupby metadata indicates that we are grouping on the entire PK of that
+// table. In that case, we can allow col as an "implicit" grouping column, even
+// if it is not specified in the query.
 func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bool {
 	md := b.factory.Metadata()
 	colMeta := md.ColumnMeta(colID)
@@ -938,7 +935,6 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	}
 	// Get all the PK columns.
 	tab := md.Table(colMeta.Table)
-	tabMeta := md.TableMeta(colMeta.Table)
 	var pkCols opt.ColSet
 	if tab.IndexCount() == 0 {
 		// Virtual tables have no indexes.
@@ -953,51 +949,5 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	for i := range groupingCols {
 		pkCols.Remove(groupingCols[i].id)
 	}
-	if pkCols.Empty() {
-		return true
-	}
-	// Check UNIQUE WITHOUT INDEX constraints.
-	for i := 0; i < tab.UniqueCount(); i++ {
-		uniqueConstraint := tab.Unique(i)
-		var uniqueCols opt.ColSet
-		nullable := false
-		for j := 0; j < uniqueConstraint.ColumnCount(); j++ {
-			column := tab.Column(uniqueConstraint.ColumnOrdinal(tab, j))
-			if column.IsNullable() {
-				nullable = true
-			}
-			columnID := tabMeta.MetaID.ColumnID(uniqueConstraint.ColumnOrdinal(tab, j))
-			uniqueCols.Add(columnID)
-		}
-		if nullable {
-			// There may be duplicate rows with nulls in unique constraint columns, so
-			// we cannot treat the constraint as truly unique if any of its columns is
-			// nullable.
-			continue
-		}
-		for k := range groupingCols {
-			uniqueCols.Remove(groupingCols[k].id)
-		}
-		if uniqueCols.Empty() {
-			return true
-		}
-	}
-	// Check UNIQUE INDEX constraints.
-	for i := 1; i < tab.IndexCount(); i++ {
-		index := tab.Index(i)
-		if !index.IsUnique() || index.IsInverted() {
-			continue
-		}
-		// If any of the key columns is nullable, uniqueCols is suffixed with the
-		// primary key columns, so we don't have to explicitly check for nullable
-		// columns here.
-		uniqueCols := tabMeta.IndexKeyColumns(i)
-		for j := range groupingCols {
-			uniqueCols.Remove(groupingCols[j].id)
-		}
-		if uniqueCols.Empty() {
-			return true
-		}
-	}
-	return false
+	return pkCols.Empty()
 }

@@ -190,7 +190,7 @@ func (ib *IndexBackfillPlanner) plan(
 	if err := DescsTxn(ctx, ib.execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
-		sd := NewInternalSessionData(ctx, ib.execCfg.Settings, "plan-index-backfill")
+		sd := NewFakeSessionData(ib.execCfg.SV(), "plan-index-backfill")
 		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx,
 			nil /* planner */, txn.KV(), DistributionTypeSystemTenantOnly)

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	gogotypes "github.com/gogo/protobuf/types"
 )
 
 var backupOutputTypes = []*types.T{}
@@ -129,10 +129,6 @@ type backupDataProcessor struct {
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
 	agg *bulk.TracingAggregator
-
-	// completedSpans tracks how many spans have been successfully backed up by
-	// the backup processor.
-	completedSpans int32
 }
 
 var (
@@ -212,29 +208,10 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		return nil, bp.DrainHelper()
 	}
 
-	prog, ok := <-bp.progCh
-	if ok {
+	for prog := range bp.progCh {
 		// Take a copy so that we can send the progress address to the output
 		// processor.
 		p := prog
-		p.NodeID = bp.flowCtx.NodeID.SQLInstanceID()
-		p.FlowID = bp.flowCtx.ID
-
-		// Annotate the progress with the fraction completed by this backupDataProcessor.
-		progDetails := backuppb.BackupManifest_Progress{}
-		if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
-			log.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
-		} else {
-			totalSpans := int32(len(bp.spec.Spans) + len(bp.spec.IntroducedSpans))
-			bp.completedSpans += progDetails.CompletedSpans
-			if totalSpans != 0 {
-				if p.CompletedFraction == nil {
-					p.CompletedFraction = make(map[int32]float32)
-				}
-				p.CompletedFraction[bp.ProcessorID] = float32(bp.completedSpans) / float32(totalSpans)
-			}
-		}
-
 		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
 	}
 
@@ -462,7 +439,7 @@ func runBackupProcessor(
 					var recording tracingpb.Recording
 					var pErr *kvpb.Error
 					requestSentAt := timeutil.Now()
-					exportRequestErr := timeutil.RunWithTimeout(ctx,
+					exportRequestErr := contextutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 							sp := tracing.SpanFromContext(ctx)
@@ -472,9 +449,11 @@ func runBackupProcessor(
 								opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
 							}
 							ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.ExportRequest", opts...)
+							defer func() {
+								recording = exportSpan.FinishAndGetConfiguredRecording()
+							}()
 							rawResp, pErr = kv.SendWrappedWithAdmission(
 								ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
-							recording = exportSpan.FinishAndGetConfiguredRecording()
 							if pErr != nil {
 								return pErr.GoError()
 							}
@@ -493,7 +472,7 @@ func runBackupProcessor(
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
 						// message so use that instead.
-						if errors.HasType(exportRequestErr, (*timeutil.TimeoutError)(nil)) {
+						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
 							if recording != nil {
 								log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 							}
@@ -558,11 +537,6 @@ func runBackupProcessor(
 						log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 					}
 
-					// Even if the ExportRequest did not export any data we want to report
-					// the span as completed for accurate progress tracking.
-					if len(resp.Files) == 0 {
-						sink.writeWithNoData(exportedSpan{completedSpans: completedSpans})
-					}
 					for i, file := range resp.Files {
 						entryCounts := countRows(file.Exported, spec.PKIDs)
 

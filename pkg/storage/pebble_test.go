@@ -15,13 +15,11 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -440,6 +438,10 @@ func makeRandEncodedKeys() [][]byte {
 			// 20% of keys have a logical component.
 			k.Timestamp.Logical = rng.Int31n(4) + 1
 		}
+		if rng.Int31n(1000) == 0 && !k.Timestamp.IsEmpty() {
+			// 0.1% of keys have a synthetic component.
+			k.Timestamp.Synthetic = true
+		}
 		keys[i] = EncodeMVCCKey(k)
 	}
 	return keys
@@ -455,7 +457,7 @@ type testValue struct {
 func intent(key roachpb.Key, val string, ts hlc.Timestamp) testValue {
 	var value = roachpb.MakeValueFromString(val)
 	value.InitChecksum(key)
-	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, isolation.Serializable, roachpb.NormalUserPriority, ts, 1000, 99)
+	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, roachpb.NormalUserPriority, ts, 1000, 99)
 	var txn = &tx
 	return testValue{key, value, ts, txn}
 }
@@ -797,7 +799,7 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Clear a@5 and [c-d)@7 in a separate SST.
-	require.NoError(t, eng.ClearMVCC(pointKey("a", 5), ClearOptions{}))
+	require.NoError(t, eng.ClearMVCC(pointKey("a", 5)))
 	require.NoError(t, eng.ClearMVCCRangeKey(rangeKey("c", "d", 7)))
 	require.NoError(t, eng.Flush())
 
@@ -1302,12 +1304,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b))
 
 	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
-	require.Error(t, err)
-	msg := err.Error()
-	if !strings.Contains(msg, "is too old for running version") &&
-		!strings.Contains(msg, "cannot be opened by development version") {
-		t.Fatalf("unexpected error %v", err)
-	}
+	require.ErrorContains(t, err, "is too old for running version")
 }
 
 func TestNoMinVerFile(t *testing.T) {
@@ -1374,7 +1371,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	require.NoError(t, p.Flush())
 
 	approxBytes := func(span roachpb.Span) uint64 {
-		v, _, _, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
+		v, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
 		require.NoError(t, err)
 		t.Logf("%s (%x-%x): %d bytes", span, span.Key, span.EndKey, v)
 		return v

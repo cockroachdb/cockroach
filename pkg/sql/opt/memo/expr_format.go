@@ -160,10 +160,6 @@ type ExprFmtCtx struct {
 	// correspond to the tables that would be saved if the query were run
 	// with the session variable `save_tables_prefix` set to the same value.
 	nameGen *ExprNameGenerator
-
-	// seenUDFs is used to ensure that formatting of recursive UDFs does not
-	// infinitely recurse.
-	seenUDFs map[*UDFDefinition]struct{}
 }
 
 // makeExprFmtCtxForString creates an expression formatting context from a new
@@ -197,14 +193,8 @@ func MakeExprFmtCtxBuffer(
 		nameGen = NewExprNameGenerator(mem.saveTablesPrefix)
 	}
 	return ExprFmtCtx{
-		Ctx:              ctx,
-		Buffer:           buf,
-		Flags:            flags,
-		RedactableValues: redactableValues,
-		Memo:             mem,
-		Catalog:          catalog,
-		nameGen:          nameGen,
-		seenUDFs:         make(map[*UDFDefinition]struct{}),
+		Ctx: ctx, Buffer: buf, Flags: flags, RedactableValues: redactableValues, Memo: mem,
+		Catalog: catalog, nameGen: nameGen,
 	}
 }
 
@@ -238,6 +228,10 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	md := f.Memo.Metadata()
 	required := e.RequiredPhysical()
+	if r, ok := e.(RelRequiredPropsExpr); ok {
+		e = r.RelExpr
+		required = r.PhysProps
+	}
 	relational := e.Relational()
 	if required == nil {
 		// required can be nil before optimization has taken place.
@@ -924,31 +918,21 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
-	formatUDFInputAndBody := func(udf *UDFCallExpr, tp treeprinter.Node) {
+	formatUDFInputAndBody := func(udf *UDFExpr, tp treeprinter.Node) {
 		var n treeprinter.Node
-		if !udf.Def.CalledOnNullInput {
+		if !udf.CalledOnNullInput {
 			tp.Child("strict")
 		}
-		if len(udf.Args) > 0 {
+		if len(udf.Params) > 0 {
+			f.formatColList(tp, "params:", udf.Params, opt.ColSet{} /* notNullCols */)
 			n = tp.Child("args")
 			for i := range udf.Args {
 				f.formatExpr(udf.Args[i], n)
 			}
 		}
-		if _, seen := f.seenUDFs[udf.Def]; !seen {
-			// Ensure that the definition of the UDF is not printed out again if it
-			// is recursively called.
-			f.seenUDFs[udf.Def] = struct{}{}
-			if len(udf.Def.Params) > 0 {
-				f.formatColList(tp, "params:", udf.Def.Params, opt.ColSet{} /* notNullCols */)
-			}
-			n = tp.Child("body")
-			for i := range udf.Def.Body {
-				f.formatExpr(udf.Def.Body[i], n)
-			}
-			delete(f.seenUDFs, udf.Def)
-		} else {
-			tp.Child("recursive-call")
+		n = tp.Child("body")
+		for i := range udf.Body {
+			f.formatExpr(udf.Body[i], n)
 		}
 	}
 
@@ -1006,9 +990,9 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		}
 		return
 
-	case opt.UDFCallOp:
-		udf := scalar.(*UDFCallExpr)
-		fmt.Fprintf(f.Buffer, "udf: %s", udf.Def.Name)
+	case opt.UDFOp:
+		udf := scalar.(*UDFExpr)
+		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
 		f.FormatScalarProps(scalar)
 		tp = tp.Child(f.Buffer.String())
 		formatUDFInputAndBody(udf, tp)
@@ -1063,11 +1047,11 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 
 	var intercepted bool
-	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
+	if udf, ok := scalar.(*UDFExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
 		// A UDF function body will be printed after the scalar props, so
 		// pre-emptively set intercepted=true to avoid the default
 		// formatScalarPrivate formatting below.
-		fmt.Fprintf(f.Buffer, "udf: %s", udf.Def.Name)
+		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
 		intercepted = true
 	}
 	if !intercepted && f.HasFlags(ExprFmtHideScalars) && ScalarFmtInterceptor != nil {
@@ -1087,7 +1071,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 	tp = tp.Child(f.Buffer.String())
 
-	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
+	if udf, ok := scalar.(*UDFExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
 		formatUDFInputAndBody(udf, tp)
 	}
 
@@ -1248,9 +1232,6 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 			f.Buffer.WriteString(string(col.ColName()))
 		}
 		f.Buffer.WriteByte(')')
-
-	case *UDFCallExpr:
-		private = nil
 
 	default:
 		private = scalar.Private()

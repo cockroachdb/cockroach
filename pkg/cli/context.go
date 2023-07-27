@@ -631,8 +631,8 @@ var demoCtx = struct {
 // test that exercises command-line parsing.
 func setDemoContextDefaults() {
 	demoCtx.NumNodes = 1
-	demoCtx.SQLPoolMemorySize = 256 << 20 // 256MiB, chosen to fit 9 nodes on 4GB machine.
-	demoCtx.CacheSize = 64 << 20          // 64MiB, chosen to fit 9 nodes on 4GB machine.
+	demoCtx.SQLPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.CacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.UseEmptyDatabase = false
 	demoCtx.SimulateLatency = false
 	demoCtx.RunWorkload = false
@@ -645,7 +645,7 @@ func setDemoContextDefaults() {
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
-	demoCtx.Multitenant = true
+	demoCtx.Multitenant = false
 	demoCtx.DisableServerController = false
 	demoCtx.DefaultEnableRangefeeds = true
 	demoCtx.AutoConfigProvider = acprovider.NoTaskProvider{}

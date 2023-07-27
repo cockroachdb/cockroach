@@ -8,8 +8,10 @@ spawn /bin/bash
 send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
-send "$argv sql --no-line-editor --host=127.0.0.1\r"
+send "$argv sql --no-line-editor --host=localhost\r"
 eexpect root@
+
+###START tests prompt customization
 
 start_test "Check that invalid prompt patterns cause an error."
 send "\\set prompt1 %?\r"
@@ -25,10 +27,10 @@ send "\\set prompt1 abc%%def\r"
 eexpect "abc%def"
 
 send "\\set prompt1 abc%Mdef\r"
-eexpect abc127.0.0.1def
+eexpect abclocalhost:26257def
 
 send "\\set prompt1 abc%mdef\r"
-eexpect abc127def
+eexpect abclocalhostdef
 
 send "\\set prompt1 abc%>def\r"
 eexpect abc26257def

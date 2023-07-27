@@ -53,7 +53,7 @@ PREPARE right_no_cols AS OPT PLAN '
   (NoOrdering)
 )'
 
-query IT nosort
+query IT
 EXECUTE right_no_cols
 ----
 2  two
@@ -206,7 +206,7 @@ EXECUTE f
 
 # Another test of subqueries within an apply join.
 
-query I rowsort
+query I
 SELECT
 	(SELECT * FROM (VALUES ((SELECT x FROM (VALUES (1)) AS s (x)) + y)))
 FROM
@@ -404,7 +404,7 @@ WHERE t1.b IN (
 
 # Regression tests for not handling the subqueries in the "inner" plans
 # correctly (#39433).
-query I rowsort
+query I
 SELECT
   (
     SELECT
@@ -467,7 +467,7 @@ VALUES
           FROM
             (VALUES (tab_54747.col_95055)) AS tab_54752 (col_95061)
           WHERE
-            (SELECT random()::INT) < tab_54752.col_95061
+            (SELECT 0) < tab_54752.col_95061
         )
       FROM
         (VALUES (0:::OID), (3790322641:::OID)) AS tab_54747 (col_95055)

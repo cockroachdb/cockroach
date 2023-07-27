@@ -44,6 +44,10 @@ func genSpanEncoder(inputFileContents string, wr io.Writer) error {
 	for _, asc := range []bool{true, false} {
 		info := spanEncoderDirectionInfo{Asc: asc}
 		for _, family := range supportedCanonicalTypeFamilies {
+			if family == types.JsonFamily {
+				// We are currently unable to encode JSON as a table key.
+				continue
+			}
 			familyInfo := spanEncoderTypeFamilyInfo{TypeFamily: familyToString(family)}
 			for _, width := range supportedWidthsByCanonicalTypeFamily[family] {
 				overload := spanEncoderTmplInfo{
@@ -141,18 +145,6 @@ func (info spanEncoderTmplInfo) AssignSpanEncoding(appendTo, valToEncode string)
 				colexecerror.ExpectedError(err)
 			}
     `, appendTo, funcName, valToEncode)
-	case types.JsonFamily:
-		dir := "encoding.Ascending"
-		if !info.Asc {
-			dir = "encoding.Descending"
-		}
-		return fmt.Sprintf(`
-			var err error
-			%[1]s, err = %[2]s.EncodeForwardIndex(%[1]s, %[3]s)
-			if err != nil {
-				colexecerror.ExpectedError(err)
-			}
-    `, appendTo, valToEncode, dir)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		dir := "encoding.Ascending"
 		if !info.Asc {

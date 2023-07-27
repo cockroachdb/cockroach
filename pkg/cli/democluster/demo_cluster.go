@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -891,7 +890,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		EnableDemoLoginEndpoint: true,
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
@@ -950,7 +949,7 @@ func TestingForceRandomizeDemoPorts() func() {
 }
 
 func (c *transientCluster) Close(ctx context.Context) {
-	if err := timeutil.RunWithTimeout(ctx, "save-web-sessions", 10*time.Second, func(ctx context.Context) error {
+	if err := contextutil.RunWithTimeout(ctx, "save-web-sessions", 10*time.Second, func(ctx context.Context) error {
 		if err := c.saveWebSessions(ctx); err != nil {
 			return err
 		}
@@ -1900,21 +1899,26 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			}
 
 			rpcAddr := c.tenantServers[i].RPCAddr()
-			tenantUiURL := c.tenantServers[i].AdminURL()
-			tenantSqlURL, err := c.getNetworkURLForServer(context.Background(), i,
-				false /* includeAppName */, forSecondaryTenant)
+			tenantUiURLstr := c.tenantServers[i].AdminURL()
+			tenantUiURL, err := url.Parse(tenantUiURLstr)
 			if err != nil {
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
 			} else {
-				// Only include a separate HTTP URL if there's no server
-				// controller.
-				includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
-
-				socketDetails, err := c.sockForServer(i, forSecondaryTenant)
+				tenantSqlURL, err := c.getNetworkURLForServer(context.Background(), i,
+					false /* includeAppName */, forSecondaryTenant)
 				if err != nil {
-					fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for tenant server"))
+					fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
+				} else {
+					// Only include a separate HTTP URL if there's no server
+					// controller.
+					includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
+
+					socketDetails, err := c.sockForServer(i, forSecondaryTenant)
+					if err != nil {
+						fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for tenant server"))
+					}
+					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, socketDetails, rpcAddr, verbose, includeHTTP)
 				}
-				c.printURLs(w, ew, tenantSqlURL, tenantUiURL.URL, socketDetails, rpcAddr, verbose, includeHTTP)
 			}
 			fmt.Fprintln(w)
 			if verbose {
@@ -2003,7 +2007,7 @@ func (c *transientCluster) addDemoLoginToURL(uiURL *url.URL, includeTenantName b
 		// in that case.
 		q.Add("username", c.adminUser.Normalized())
 		q.Add("password", c.adminPassword)
-		uiURL.Path = authserver.DemoLoginPath
+		uiURL.Path = server.DemoLoginPath
 	}
 
 	if !includeTenantName {

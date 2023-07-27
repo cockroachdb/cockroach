@@ -23,61 +23,30 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
-  const {
-    storeSources,
-    nodeIDs,
-    nodeDisplayNameByID,
-    storeIDsByNodeID,
-    tenantSource,
-  } = props;
+  const { storeSources, nodeIDs, nodeDisplayNameByID, storeIDsByNodeID } =
+    props;
 
   return [
     <LineGraph
-      title="Changefeed Status"
+      title="Max Changefeed Latency"
       isKvGraph={false}
       sources={storeSources}
-      tenantSource={tenantSource}
     >
-      <Axis units={AxisUnits.Count} label="count">
+      <Axis units={AxisUnits.Duration} label="time">
         <Metric
-          name="cr.node.jobs.changefeed.currently_running"
-          title="Running"
+          name="cr.node.changefeed.max_behind_nanos"
+          title="Max Changefeed Latency"
+          downsampleMax
+          aggregateMax
         />
-        <Metric
-          name="cr.node.jobs.changefeed.currently_paused"
-          title="Paused"
-        />
-        <Metric name="cr.node.jobs.changefeed.resume_failed" title="Failed" />
       </Axis>
     </LineGraph>,
 
     <LineGraph
-      title="Commit Latency"
-      tooltip={`The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink.`}
+      title="Sink Byte Traffic"
       isKvGraph={false}
       sources={storeSources}
-      tenantSource={tenantSource}
     >
-      <Axis units={AxisUnits.Duration} label="latency">
-        <Metric
-          name="cr.node.changefeed.commit_latency-p99"
-          title="99th Percentile"
-          downsampleMax
-        />
-        <Metric
-          name="cr.node.changefeed.commit_latency-p90"
-          title="90th Percentile"
-          downsampleMax
-        />
-        <Metric
-          name="cr.node.changefeed.commit_latency-p50"
-          title="50th Percentile"
-          downsampleMax
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph title="Emitted Bytes" isKvGraph={false} sources={storeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
           name="cr.node.changefeed.emitted_bytes"
@@ -87,12 +56,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Sink Counts"
-      isKvGraph={false}
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Sink Counts" isKvGraph={false} sources={storeSources}>
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.node.changefeed.emitted_messages"
@@ -107,79 +71,30 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph
-      title="Max Checkpoint Latency"
-      isKvGraph={false}
-      tooltip={`The most any changefeed's persisted checkpoint is behind the present.  Larger values indicate issues with successfully ingesting or emitting changes.  If errors cause a changefeed to restart, or the changefeed is paused and unpaused, emitted data up to the last checkpoint may be re-emitted.`}
-      tenantSource={tenantSource}
-    >
+    <LineGraph title="Sink Timings" isKvGraph={false} sources={storeSources}>
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
-          name="cr.node.changefeed.max_behind_nanos"
-          title="Max Checkpoint Latency"
-          downsampleMax
-          aggregateMax
+          name="cr.node.changefeed.emit_nanos"
+          title="Message Emit Time"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.changefeed.flush_nanos"
+          title="Flush Time"
+          nonNegativeRate
         />
       </Axis>
     </LineGraph>,
 
     <LineGraph
       title="Changefeed Restarts"
-      tooltip={`The rate of transient non-fatal errors, such as temporary connectivity issues or a rolling upgrade. This rate constantly becoming non-zero may indicate a more persistent issue.`}
       isKvGraph={false}
       sources={storeSources}
-      tenantSource={tenantSource}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.node.changefeed.error_retries"
           title="Retryable Errors"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Oldest Protected Timestamp"
-      tooltip={`The oldest data that any changefeed is protecting from being able to be automatically garbage collected.`}
-      isKvGraph={false}
-      sources={storeSources}
-    >
-      <Axis units={AxisUnits.Duration} label="time">
-        <Metric
-          name="cr.node.jobs.changefeed.protected_age_sec"
-          title="Protected Timestamp Age"
-          scale={1_000_000_000}
-          downsampleMax
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Backfill Pending Ranges"
-      tooltip={`The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline.`}
-      isKvGraph={false}
-      sources={storeSources}
-    >
-      <Axis units={AxisUnits.Count} label="count">
-        <Metric
-          name="cr.node.changefeed.backfill_pending_ranges"
-          title="Backfill Pending Ranges"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Schema Registry Registrations"
-      tooltip={`The rate of schema registration requests made by CockroachDB nodes to a configured schema registry endpoint (ex: A Kafka feed pointing to a Confluent Schema Registry)`}
-      isKvGraph={false}
-      sources={storeSources}
-    >
-      <Axis units={AxisUnits.Count} label="action">
-        <Metric
-          name="cr.node.changefeed.schema_registry_registrations"
-          title="Schema Registry Registrations"
           nonNegativeRate
         />
       </Axis>

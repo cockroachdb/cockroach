@@ -283,7 +283,7 @@ export const calculateActiveFilters = (filters: Filters): number => {
 };
 
 export const getTimeValueInSeconds = (filters: Filters): number | "empty" => {
-  if (filters.timeNumber === "0" || filters.timeNumber == null) return "empty";
+  if (filters.timeNumber === "0") return "empty";
   switch (filters.timeUnit) {
     case "seconds":
       return Number(filters.timeNumber);

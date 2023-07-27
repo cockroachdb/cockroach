@@ -6,7 +6,7 @@ new-txn txn=txn1 ts=10,1 epoch=0
 
 # req1 will acquire locks for txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=none@a,b+exclusive@c,f
+new-request r=req1 txn=txn1 ts=10,1 spans=r@a,b+w@c,f
 ----
 
 scan r=req1
@@ -17,27 +17,30 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 
-acquire r=req1 k=c durability=u strength=exclusive
+acquire r=req1 k=c durability=u
 ----
-num=1
+global: num=1
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
-acquire r=req1 k=e durability=u strength=exclusive
+acquire r=req1 k=e durability=u
 ----
-num=2
+global: num=2
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 dequeue r=req1
 ----
-num=2
+global: num=2
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 query span=a,d
 ----
@@ -51,32 +54,34 @@ num locks: 1, bytes returned: 41, resume reason: RESUME_UNKNOWN, resume span: <n
 
 # req2 is also for txn1 and will not wait for locks that are held by self.
 
-new-request r=req2 txn=txn1 ts=10,2 spans=exclusive@b,d+none@d,g
+new-request r=req2 txn=txn1 ts=10,2 spans=w@b,d+r@d,g
 ----
 
 scan r=req2
 ----
 start-waiting: false
 
-acquire r=req2 k=b durability=u strength=exclusive
+acquire r=req2 k=b durability=u
 ----
-num=3
+global: num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 dequeue r=req2
 ----
-num=3
+global: num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 # make sure query limits work
 
@@ -109,7 +114,7 @@ new-txn txn=txn2 ts=8,12 epoch=0
 # req3 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
 # not conflict with lock on e since wants to read there and the read is at a lower timestamp
 # than the lock.
-new-request r=req3 txn=txn2 ts=8,12 spans=intent@a,d+none@d,g
+new-request r=req3 txn=txn2 ts=8,12 spans=w@a,d+r@d,g
 ----
 
 scan r=req3
@@ -120,7 +125,7 @@ new-txn txn=txn3 ts=9,1 epoch=0
 ----
 
 # req4 from txn3 will conflict with locks on e since wants to write to [d, g).
-new-request r=req4 txn=txn3 ts=9,1 spans=intent@d,g
+new-request r=req4 txn=txn3 ts=9,1 spans=w@d,g
 ----
 
 scan r=req4
@@ -133,19 +138,20 @@ time-tick ms=200
 
 print
 ----
-num=3
+global: num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 4
+local: num=0
 
 query span=a,/Max max-bytes=100
 ----

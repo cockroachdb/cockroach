@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -46,10 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
-	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
-	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
@@ -62,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -69,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
@@ -104,11 +99,11 @@ type SQLServerWrapper struct {
 	runtime    *status.RuntimeStatSampler
 
 	http            *httpServer
-	adminAuthzCheck privchecker.CheckerForRPCHandlers
+	adminAuthzCheck *adminPrivilegeChecker
 	tenantAdmin     *adminServer
 	tenantStatus    *statusServer
 	drainServer     *drainServer
-	authentication  authserver.Server
+	authentication  *authenticationServer
 	// eventsExporter exports data to the Observability Service.
 	eventsExporter obs.EventsExporterInterface
 	stopper        *stop.Stopper
@@ -268,7 +263,11 @@ func newTenantServer(
 	// Instantiate the API privilege checker.
 	//
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminAuthzCheck := privchecker.NewChecker(args.circularInternalExecutor, args.Settings)
+	adminAuthzCheck := &adminPrivilegeChecker{
+		ie:          args.circularInternalExecutor,
+		st:          args.Settings,
+		makePlanner: nil,
+	}
 
 	// Instantiate the HTTP server.
 	// These callbacks help us avoid a dependency on gossip in httpServer.
@@ -360,23 +359,22 @@ func newTenantServer(
 	sqlServer.migrationServer = tms // only for testing via TestTenant
 
 	// Tell the authz server how to connect to SQL.
-	adminAuthzCheck.SetAuthzAccessorFactory(func(opName string) (sql.AuthorizationAccessor, func()) {
+	adminAuthzCheck.makePlanner = func(opName string) (interface{}, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
 		txn := args.db.NewTxn(ctx, "check-system-privilege")
-		p, cleanup := sql.NewInternalPlanner(
+		return sql.NewInternalPlanner(
 			opName,
 			txn,
 			username.RootUserName(),
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
-			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
+			sessiondatapb.SessionData{},
 		)
-		return p.(sql.AuthorizationAccessor), cleanup
-	})
+	}
 
 	// Create the authentication RPC server (login/logout).
-	sAuth := authserver.NewServer(baseCfg.Config, sqlServer)
+	sAuth := newAuthenticationServer(baseCfg.Config, sqlServer)
 
 	// Create a drain server.
 	drainServer := newDrainServer(baseCfg, args.stopper, args.stopTrigger, args.grpc, sqlServer)
@@ -409,11 +407,6 @@ func newTenantServer(
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
 
-	var processCapAuthz tenantcapabilities.Authorizer = &tenantcapabilitiesauthorizer.AllowEverythingAuthorizer{}
-	if lsi := sqlCfg.LocalKVServerInfo; lsi != nil {
-		processCapAuthz = lsi.SameProcessCapabilityAuthorizer
-	}
-
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		baseCfg.AmbientCtx,
@@ -421,8 +414,6 @@ func newTenantServer(
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
 		nil, /* serverTickleFn */
-		sqlCfg.TenantID,
-		processCapAuthz,
 	)
 
 	return &SQLServerWrapper{
@@ -640,16 +631,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		})
 	})
 
-	// Init a log metrics registry.
-	logRegistry := logmetrics.NewRegistry()
-	if logRegistry == nil {
-		panic(errors.AssertionFailedf("nil log metrics registry at server startup"))
-	}
-
 	// We can now add the node registry.
 	s.recorder.AddNode(
 		s.registry,
-		logRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},
@@ -729,9 +713,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.runtime,         /* runtimeStatsSampler */
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
-		}),
 		newAPIV2Server(workersCtx, &apiV2ServerOpts{
 			admin:            s.tenantAdmin,
 			status:           s.tenantStatus,
@@ -838,12 +819,8 @@ func (s *SQLServerWrapper) serveConn(
 	pgServer := s.PGServer()
 	switch status.State {
 	case pgwire.PreServeCancel:
-		// Cancel requests are unauthenticated so run the cancel async to prevent
-		// the client from deriving any info about the cancel based on how long it
-		// takes.
-		return s.stopper.RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
-			pgServer.HandleCancel(ctx, status.CancelKey)
-		})
+		pgServer.HandleCancel(ctx, status.CancelKey)
+		return nil
 	case pgwire.PreServeReady:
 		return pgServer.ServeConn(ctx, conn, status)
 	default:
@@ -983,10 +960,8 @@ func makeTenantSQLServerArgs(
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 
 	var rpcTestingKnobs rpc.ContextTestingKnobs
-	var testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent bool
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		rpcTestingKnobs = p.ContextTestingKnobs
-		testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent = p.ShutdownTenantConnectorEarlyIfNoRecordPresent
 	}
 
 	// This tenant's SQL server only serves SQL connections and SQL-to-SQL
@@ -1051,8 +1026,6 @@ func makeTenantSQLServerArgs(
 		RPCContext:        rpcContext,
 		RPCRetryOptions:   rpcRetryOptions,
 		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
-
-		ShutdownTenantConnectorEarlyIfNoRecordPresent: testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent,
 	}
 	kvAddressConfig := kvtenant.KVAddressConfig{RemoteAddresses: sqlCfg.TenantKVAddrs, LoopbackAddress: sqlCfg.TenantLoopbackAddr}
 	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, kvAddressConfig)
@@ -1227,7 +1200,6 @@ func makeTenantSQLServerArgs(
 			nodeIDContainer:      deps.instanceIDContainer,
 			spanConfigKVAccessor: tenantConnect,
 			kvStoresIterator:     kvserverbase.UnsupportedStoresIterator{},
-			inspectzServer:       inspectz.Unsupported{},
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			spanLimiterFactory: deps.spanLimiterFactory,

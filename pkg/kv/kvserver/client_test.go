@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,7 +102,7 @@ func incrementArgs(key roachpb.Key, inc int64) *kvpb.IncrementRequest {
 	}
 }
 
-func truncateLogArgs(index kvpb.RaftIndex, rangeID roachpb.RangeID) *kvpb.TruncateLogRequest {
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *kvpb.TruncateLogRequest {
 	return &kvpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,
@@ -199,7 +198,7 @@ func assertRecomputedStats(
 
 func waitForTombstone(
 	t *testing.T, reader storage.Reader, rangeID roachpb.RangeID,
-) (tombstone kvserverpb.RangeTombstone) {
+) (tombstone roachpb.RangeTombstone) {
 	testutils.SucceedsSoon(t, func() error {
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := storage.MVCCGetProto(

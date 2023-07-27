@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -230,7 +231,7 @@ func completeProducerJob(
 	ctx context.Context, ingestionJob *jobs.Job, internalDB *sql.InternalDB, successfulIngestion bool,
 ) {
 	streamID := ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID
-	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
+	if err := contextutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
 			client, err := connectToActiveClient(ctx, ingestionJob, internalDB)
 			if err != nil {
@@ -307,7 +308,7 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		const msgFmt = "waiting before retrying error: %s"
+		const msgFmt = "stream ingestion waits for retrying after error: %s"
 		log.Warningf(ctx, msgFmt, err)
 		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
 			fmt.Sprintf(msgFmt, err))
@@ -315,9 +316,6 @@ func ingestWithRetries(
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
 			lastReplicatedTime = newReplicatedTime
-		}
-		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
-			knobs.AfterRetryIteration(err)
 		}
 	}
 	if err != nil {
@@ -734,10 +732,8 @@ func (c *cutoverProgressTracker) onCompletedCallback(
 	return nil
 }
 
-func (s *streamIngestionResumer) ForceRealSpan() bool     { return true }
-func (s *streamIngestionResumer) DumpTraceAfterRun() bool { return true }
+func (s *streamIngestionResumer) ForceRealSpan() bool { return true }
 
-var _ jobs.TraceableJob = &streamIngestionResumer{}
 var _ jobs.Resumer = &streamIngestionResumer{}
 
 func init() {

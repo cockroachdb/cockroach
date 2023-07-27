@@ -1,6 +1,6 @@
 # Legacy schema changer is also skipped because mutation IDs throughout log
 # entries will differ. "event_log_legacy" file is for the legacy schema changer.
-# LogicTest: !local-legacy-schema-changer !local-mixed-22.2-23.1
+# LogicTest: !local-legacy-schema-changer
 # knob-opt: sync-event-log
 
 # For some reason, some of the queries produce non-deterministic results if
@@ -708,8 +708,8 @@ FROM system.eventlog
 WHERE "eventType" = 'create_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA test.sc", "Tag": "CREATE SCHEMA", "User": "root"}
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA test.s", "Tag": "CREATE SCHEMA", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA \"\".sc", "Tag": "CREATE SCHEMA", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA \"\".s", "Tag": "CREATE SCHEMA", "User": "root"}
 1  {"EventType": "create_schema", "Owner": "u", "SchemaName": "test.u", "Statement": "CREATE SCHEMA AUTHORIZATION u", "Tag": "CREATE SCHEMA", "User": "root"}
 
 statement ok
@@ -808,7 +808,7 @@ SELECT jdesc->'schema'->>'name' AS schema, jdesc->'schema'->'privileges'->>'owne
        FROM descs
 ORDER BY 1,2,3,4,5,6
 
-query TTTTTT rowsort
+query TTTTTT
 EXECUTE showOwners('atest')
 ----
 NULL    NULL      NULL  NULL      s     testuser
@@ -834,7 +834,7 @@ ALTER DATABASE atest OWNER TO u;
 # See: https://github.com/cockroachdb/cockroach/issues/57965
 
 # Observe/verify the ownership change.
-query TTTTTT rowsort
+query TTTTTT
 EXECUTE showOwners('atest')
 ----
 NULL    NULL   NULL  NULL  s     testuser
@@ -852,9 +852,9 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
  WHERE "eventType" LIKE '%_owner'
 ORDER BY "timestamp", info
 ----
-1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE", "User": "root"}
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE OWNER", "User": "root"}
 1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "Tag": "ALTER SCHEMA", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE OWNER", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc.ty", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc._ty", "User": "root"}
 
@@ -874,7 +874,7 @@ statement ok
 REASSIGN OWNED BY testuser TO v
 
 # Observe/verify the ownership change.
-query TTTTTT rowsort
+query TTTTTT
 EXECUTE showOwners('atest')
 ----
 NULL    NULL   NULL  NULL  s     v
@@ -1046,9 +1046,9 @@ ORDER BY "timestamp", info
 ----
 1  {"DescriptorName": "defaultdb.public.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.eventlog", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "Tag": "ALTER TYPE", "User": "root"}
 1  {"DescriptorName": "defaultdb.testing.eventlog", "DescriptorType": "type", "EventType": "set_schema", "NewDescriptorName": "defaultdb.public.eventlog", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "Tag": "ALTER TYPE", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.a", "DescriptorType": "table", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.a", "Statement": "ALTER TABLE a SET SCHEMA testing", "Tag": "ALTER TABLE", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.s", "DescriptorType": "sequence", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.s", "Statement": "ALTER SEQUENCE s SET SCHEMA testing", "Tag": "ALTER SEQUENCE", "User": "root"}
-1  {"DescriptorName": "defaultdb.public.v", "DescriptorType": "view", "EventType": "set_schema", "NewDescriptorName": "defaultdb.test_sc.v", "Statement": "ALTER VIEW v SET SCHEMA test_sc", "Tag": "ALTER VIEW", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.a", "DescriptorType": "table", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.a", "Statement": "ALTER TABLE a SET SCHEMA testing", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.s", "DescriptorType": "sequence", "EventType": "set_schema", "NewDescriptorName": "defaultdb.testing.s", "Statement": "ALTER SEQUENCE s SET SCHEMA testing", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
+1  {"DescriptorName": "defaultdb.public.v", "DescriptorType": "view", "EventType": "set_schema", "NewDescriptorName": "defaultdb.test_sc.v", "Statement": "ALTER VIEW v SET SCHEMA test_sc", "Tag": "ALTER TABLE SET SCHEMA", "User": "root"}
 
 
 # Test the event logs generated by commands that drop views.
@@ -1119,22 +1119,3 @@ ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
 1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.vv"], "EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE defaultdb.public.x DROP COLUMN b CASCADE", "TableName": "defaultdb.public.x", "Tag": "ALTER TABLE", "User": "root"}
-
-# This subtests test event logs of creating and dropping functions.
-subtest eventlog_create_drop_functions
-
-statement ok
-create function f (input int) returns int stable language sql as $$ select 123$$;
-
-statement ok
-drop function f
-
-query TT
-SELECT "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog
-WHERE "eventType" IN ('create_function', 'drop_function')
-ORDER BY "timestamp" DESC, info
-LIMIT 2
-----
-drop_function    {"EventType": "drop_function", "FunctionName": "defaultdb.public.f", "Statement": "DROP FUNCTION \"\".\"\".f", "Tag": "DROP FUNCTION", "User": "root"}
-create_function  {"EventType": "create_function", "FunctionName": "defaultdb.public.f", "Statement": "CREATE FUNCTION defaultdb.public.f(IN input INT8)\n\tRETURNS INT8\n\tSTABLE\n\tLANGUAGE SQL\n\tAS $$SELECT 123;$$", "Tag": "CREATE FUNCTION", "User": "root"}

@@ -174,7 +174,7 @@ EXECUTE i(4.3::int)
 ----
 5
 
-query I colnames,rowsort
+query I colnames
 EXECUTE s
 ----
 a
@@ -247,7 +247,7 @@ ALTER TABLE f ADD COLUMN t int
 statement error cached plan must not change result type
 EXECUTE y (3, 4)
 
-query III rowsort
+query III
 SELECT * FROM f
 ----
 1 2 NULL
@@ -436,7 +436,7 @@ EXECUTE x21701a(NULL)
 statement ok
 PREPARE x21701b AS SELECT * FROM kv WHERE k IS DISTINCT FROM $1
 
-query II rowsort
+query II
 EXECUTE x21701b(NULL)
 ----
 1  1
@@ -1146,7 +1146,7 @@ PREPARE b AS OPT PLAN '
   (OrderingChoice "+str")
 )'
 
-query IT nosort
+query IT
 EXECUTE b
 ----
 5  five
@@ -1176,7 +1176,7 @@ PREPARE e AS OPT PLAN '
   (NoOrdering)
 )'
 
-query T nosort
+query T
 EXECUTE e
 ----
 select
@@ -1469,7 +1469,7 @@ statement ok
 EXECUTE args_deduce_type(1,2,3,4);
 EXECUTE args_deduce_type('1','2',3,'4');
 
-query ITI rowsort
+query ITI
 SELECT * FROM t;
 ----
 1  2  3
@@ -1565,6 +1565,7 @@ PREPARE pscs13 AS SELECT $1::bigint, 13
 query T
 SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 ----
+pscs08
 pscs09
 pscs10
 pscs11
@@ -1581,6 +1582,7 @@ PREPARE pscs14 AS SELECT $1::int, 14
 query T
 SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 ----
+pscs08
 pscs09
 pscs11
 pscs12
@@ -1606,6 +1608,7 @@ query T
 SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 ----
 pscs11
+pscs13
 pscs14
 pscs15
 pscs16
@@ -1625,7 +1628,7 @@ statement ok
 BEGIN;
 INSERT INTO prep_stmts SELECT 1, name FROM pg_catalog.pg_prepared_statements;
 PREPARE pscs18 AS SELECT $1::inet, 18;
-EXECUTE pscs11(11);
+EXECUTE pscs14(14);
 PREPARE pscs19 AS SELECT $1::string, 19;
 INSERT INTO prep_stmts SELECT 2, name FROM pg_catalog.pg_prepared_statements;
 SELECT IF(nextval('s') <= 3, crdb_internal.force_retry('1 hour'), 0);
@@ -1643,11 +1646,13 @@ query IT
 SELECT which, name FROM prep_stmts ORDER BY which, name
 ----
 1  pscs11
+1  pscs13
 1  pscs14
 1  pscs15
 1  pscs16
 1  pscs17
-2  pscs11
+2  pscs14
+2  pscs15
 2  pscs16
 2  pscs17
 2  pscs18

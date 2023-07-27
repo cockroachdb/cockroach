@@ -7,9 +7,10 @@ END
 ----
 DECLARE
 BEGIN
-johnny := NULL;
-gyro := 7 + 7;
+ASSIGN johnny := null
+ASSIGN gyro := 7 + 7
 END
+<NOT DONE YET>
 
 parse
 DECLARE
@@ -19,8 +20,9 @@ END
 ----
 DECLARE
 BEGIN
-a := NULL;
+ASSIGN a := null
 END
+<NOT DONE YET>
 
 
 feature-count

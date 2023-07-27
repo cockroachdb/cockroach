@@ -136,7 +136,7 @@ vectorized: true
       table: child_rbr@child_rbr_pkey
       spans: FULL SCAN
 
-query IIIIITI rowsort
+query IIIIITI
 SELECT *
 FROM child_rbr
 INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id
@@ -200,7 +200,7 @@ vectorized: true
               table: child_rbr@child_rbr_pkey
               spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 
-query IIIIITI rowsort
+query IIIIITI
 SELECT *
 FROM child_rbr
 INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id AND c_int + c_int2 = p_int WHERE c_int2 > -1

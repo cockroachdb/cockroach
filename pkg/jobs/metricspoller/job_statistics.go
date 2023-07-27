@@ -170,8 +170,12 @@ func processJobPTSRecord(
 	}
 
 	// If MaximumPTSAge is set on the job payload, verify if PTS record
-	// timestamp is fresh enough.
-	if p.MaximumPTSAge > 0 &&
+	// timestamp is fresh enough.  Note: we only look at paused jobs.
+	// If the running job wants to enforce an invariant wrt to PTS age,
+	// it can do so itself.  This check here is a safety mechanism to detect
+	// paused jobs that own protected timestamp records.
+	if j.Status() == jobs.StatusPaused &&
+		p.MaximumPTSAge > 0 &&
 		rec.Timestamp.GoTime().Add(p.MaximumPTSAge).Before(timeutil.Now()) {
 		stats.expired++
 		ptsExpired := errors.Newf(

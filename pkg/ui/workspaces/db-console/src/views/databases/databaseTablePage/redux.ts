@@ -58,7 +58,6 @@ export const mapStateToProps = (
     util.minDate,
   );
   const nodeRegions = nodeRegionsByIDSelector(state);
-
   return {
     databaseName: database,
     name: table,

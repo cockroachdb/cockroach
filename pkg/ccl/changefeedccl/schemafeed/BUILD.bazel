@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/storage",
+        "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
@@ -54,7 +55,6 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":schemafeed"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

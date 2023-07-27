@@ -18,8 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -115,7 +113,7 @@ type replicaTruncatorTest struct {
 	rangeID         roachpb.RangeID
 	buf             *strings.Builder
 	stateLoader     stateloader.StateLoader
-	truncState      kvserverpb.RaftTruncatedState
+	truncState      roachpb.RaftTruncatedState
 	pendingTruncs   pendingLogTruncations
 	sideloadedFreed int64
 	sideloadedErr   error
@@ -135,7 +133,7 @@ func (r *replicaTruncatorTest) getRangeID() roachpb.RangeID {
 	return r.rangeID
 }
 
-func (r *replicaTruncatorTest) getTruncatedState() kvserverpb.RaftTruncatedState {
+func (r *replicaTruncatorTest) getTruncatedState() roachpb.RaftTruncatedState {
 	fmt.Fprintf(r.buf, "r%d.getTruncatedState\n", r.rangeID)
 	return r.truncState
 }
@@ -151,7 +149,7 @@ func (r *replicaTruncatorTest) setTruncationDeltaAndTrusted(deltaBytes int64, is
 }
 
 func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
-	_ context.Context, from, to kvpb.RaftIndex,
+	_ context.Context, from, to uint64,
 ) (freed int64, _ error) {
 	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n", r.rangeID, from, to)
 	return r.sideloadedFreed, r.sideloadedErr
@@ -163,9 +161,7 @@ func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 }
 
 func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
-	_ context.Context,
-	truncState *kvserverpb.RaftTruncatedState,
-	expectedFirstIndexPreTruncation kvpb.RaftIndex,
+	_ context.Context, truncState *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
 ) (expectedFirstIndexWasAccurate bool) {
 	expectedFirstIndexWasAccurate = r.truncState.Index+1 == expectedFirstIndexPreTruncation
 	r.truncState = *truncState
@@ -176,17 +172,17 @@ func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
-	t *testing.T, eng storage.Engine, truncIndex kvpb.RaftIndex, lastLogEntry kvpb.RaftIndex,
+	t *testing.T, eng storage.Engine, truncIndex uint64, lastLogEntry uint64,
 ) {
 	require.NoError(t, r.stateLoader.SetRaftTruncatedState(context.Background(), eng,
-		&kvserverpb.RaftTruncatedState{Index: truncIndex}))
+		&roachpb.RaftTruncatedState{Index: truncIndex}))
 	for i := truncIndex + 1; i <= lastLogEntry; i++ {
 		require.NoError(t, eng.PutUnversioned(r.stateLoader.RaftLogKey(i), []byte("something")))
 	}
 }
 
 func (r *replicaTruncatorTest) writeRaftAppliedIndex(
-	t *testing.T, eng storage.Engine, raftAppliedIndex kvpb.RaftIndex, flush bool,
+	t *testing.T, eng storage.Engine, raftAppliedIndex uint64, flush bool,
 ) {
 	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
 		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, hlc.Timestamp{}, nil))
@@ -303,8 +299,8 @@ func TestRaftLogTruncator(t *testing.T) {
 				var lastLogEntry uint64
 				d.ScanArgs(t, "last-log-entry", &lastLogEntry)
 				r := makeReplicaTT(rangeID, &buf)
-				r.truncState.Index = kvpb.RaftIndex(truncIndex)
-				r.writeRaftStateToEngine(t, eng, kvpb.RaftIndex(truncIndex), kvpb.RaftIndex(lastLogEntry))
+				r.truncState.Index = truncIndex
+				r.writeRaftStateToEngine(t, eng, truncIndex, lastLogEntry)
 				store.replicas[rangeID] = r
 				return flushAndReset()
 
@@ -330,7 +326,7 @@ func TestRaftLogTruncator(t *testing.T) {
 				}
 				r.sideloadedFreed = int64(sideloadedBytes)
 				truncator.addPendingTruncation(context.Background(), r,
-					kvserverpb.RaftTruncatedState{Index: kvpb.RaftIndex(truncIndex)}, kvpb.RaftIndex(firstIndex), int64(deltaBytes))
+					roachpb.RaftTruncatedState{Index: truncIndex}, firstIndex, int64(deltaBytes))
 				printTruncatorState(t, &buf, truncator)
 				r.sideloadedErr = nil
 				return flushAndReset()
@@ -352,7 +348,7 @@ func TestRaftLogTruncator(t *testing.T) {
 				if d.HasArg("no-flush") {
 					d.ScanArgs(t, "no-flush", &noFlush)
 				}
-				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, kvpb.RaftIndex(raftAppliedIndex), !noFlush)
+				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, raftAppliedIndex, !noFlush)
 				return flushAndReset()
 
 			case "add-replica-to-truncator":

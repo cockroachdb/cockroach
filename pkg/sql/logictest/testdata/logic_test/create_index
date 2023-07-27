@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -23,14 +25,14 @@ CREATE INDEX bar ON t (c)
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON t (b, b);
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-t           foo         true        1             b            b           ASC        false    false     true     1
-t           foo         true        2             a            a           ASC        false    true      true     1
-t           t_pkey      false       1             a            a           ASC        false    false     true     1
-t           t_pkey      false       2             b            b           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           foo         true        1             b            b           ASC        false    false     true
+t           foo         true        2             a            a           ASC        false    true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             b            b           N/A        true     false     true
 
 statement ok
 INSERT INTO t VALUES (2,1)
@@ -38,14 +40,14 @@ INSERT INTO t VALUES (2,1)
 statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-t           foo         true        1             b            b           ASC        false    false     true     1
-t           foo         true        2             a            a           ASC        false    true      true     1
-t           t_pkey      false       1             a            a           ASC        false    false     true     1
-t           t_pkey      false       2             b            b           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           foo         true        1             b            b           ASC        false    false     true
+t           foo         true        2             a            a           ASC        false    true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             b            b           N/A        true     false     true
 
 # test for DESC index
 
@@ -68,18 +70,18 @@ CREATE INDEX b_desc ON t (b DESC)
 statement ok
 CREATE INDEX b_asc ON t (b ASC, c DESC)
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-t           b_asc       true        1             b            b           ASC        false    false     true     1
-t           b_asc       true        2             c            c           DESC       false    false     true     1
-t           b_asc       true        3             a            a           ASC        false    true      true     1
-t           b_desc      true        1             b            b           DESC       false    false     true     1
-t           b_desc      true        2             a            a           ASC        false    true      true     1
-t           t_pkey      false       1             a            a           ASC        false    false     true     1
-t           t_pkey      false       2             b            b           N/A        true     false     true     1
-t           t_pkey      false       3             c            c           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           b_asc       true        1             b            b           ASC        false    false     true
+t           b_asc       true        2             c            c           DESC       false    false     true
+t           b_asc       true        3             a            a           ASC        false    true      true
+t           b_desc      true        1             b            b           DESC       false    false     true
+t           b_desc      true        2             a            a           ASC        false    true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             b            b           N/A        true     false     true
+t           t_pkey      false       3             c            c           N/A        true     false     true
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -101,18 +103,19 @@ statement error must be owner of table privs or have CREATE privilege on table p
 CREATE INDEX foo ON privs (b)
 
 onlyif config local-legacy-schema-changer
+onlyif config local-mixed-22.2-23.1
 statement error user testuser does not have CREATE privilege on relation privs
 CREATE INDEX foo ON privs (b)
 
 
 user root
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
-privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+privs       privs_pkey  false       1             a            a           ASC        false    false     true
+privs       privs_pkey  false       2             b            b           N/A        true     false     true
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -122,14 +125,14 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-privs       foo         true        1             b            b           ASC        false    false     true     1
-privs       foo         true        2             a            a           ASC        false    true      true     1
-privs       privs_pkey  false       1             a            a           ASC        false    false     true     1
-privs       privs_pkey  false       2             b            b           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+privs       foo         true        1             b            b           ASC        false    false     true
+privs       foo         true        2             a            a           ASC        false    true      true
+privs       privs_pkey  false       1             a            a           ASC        false    false     true
+privs       privs_pkey  false       2             b            b           N/A        true     false     true
 
 
 user root
@@ -276,7 +279,6 @@ SELECT 'tbl'::regclass::int
 # hold the json text for the resume spans we want. We'll verify them below.
 # This is some really low-level mucking around. Things to know are that 0xfe
 # is the tenant prefix.
-skipif config local-mixed-22.2-23.1
 let $spans
   WITH span AS (
                 SELECT j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0 AS span
@@ -326,7 +328,6 @@ SELECT json_build_array(
 # spans that both the wrong tenant ID or no tenant ID before resuming it to make
 # sure that on resume it re-keys the spans correctly. We pretty_key these below
 # to confirm/show what is in them.
-skipif config local-mixed-22.2-23.1
 statement ok
 UPDATE system.job_info
   SET value = crdb_internal.json_to_pb(
@@ -341,7 +342,6 @@ WHERE info_key = 'legacy_payload' AND crdb_internal.pb_to_json('cockroach.sql.jo
 
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
-skipif config local-mixed-22.2-23.1
 query TTTT
 SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),

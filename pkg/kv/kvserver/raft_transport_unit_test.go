@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -78,10 +77,6 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
 		stopper,
-		kvflowdispatch.NewDummyDispatch(),
-		NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{},
-		nil, /* knobs */
 	)
 
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, &util.UnresolvedAddr{NetworkField: "tcp", AddressField: "localhost:0"})

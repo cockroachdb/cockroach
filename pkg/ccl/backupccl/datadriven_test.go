@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -45,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -133,15 +134,15 @@ func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 }
 
 type clusterCfg struct {
-	name              string
-	iodir             string
-	nodes             int
-	splits            int
-	ioConf            base.ExternalIODirConfig
-	localities        string
-	beforeVersion     string
-	testingKnobCfg    string
-	defaultTestTenant base.DefaultTestTenantOptions
+	name           string
+	iodir          string
+	nodes          int
+	splits         int
+	ioConf         base.ExternalIODirConfig
+	localities     string
+	beforeVersion  string
+	testingKnobCfg string
+	disableTenant  bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -149,8 +150,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	var cleanup func()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
-
-	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
+	params.ServerArgs.DisableDefaultTestTenant = cfg.disableTenant
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		TenantTestingKnobs: &sql.TenantTestingKnobs{
@@ -286,7 +286,7 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
 //   - disable-tenant : ensures the test is never run in a multitenant environment by
-//     setting testserverargs.DefaultTestTenant to base.TODOTestTenantDisabled.
+//     setting testserverargs.DisableDefaultTestTenant to true.
 //
 //   - "upgrade-cluster version=<version>"
 //     Upgrade the cluster version of the active cluster to the passed in
@@ -396,485 +396,486 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //
 //   - "sleep ms=TIME"
 //     Sleep for TIME milliseconds.
-//
-//lint:ignore U1000 unused
-func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
+func TestDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "takes ~3mins to run")
+
 	// This test uses this mock HTTP server to pass the backup files between tenants.
-	//lint:ignore SA4006 unused
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
 
-	//lint:ignore SA4006 unused
 	ctx := context.Background()
-	path, err := bazel.Runfile(testFilePathFromWorkspace)
-	require.NoError(t, err)
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
+		var lastCreatedCluster string
+		ds := newDatadrivenTestState()
+		defer ds.cleanup(ctx, t)
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
-	var lastCreatedCluster string
-	ds := newDatadrivenTestState()
-	defer ds.cleanup(ctx, t)
-	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-		execWithTagAndPausePoint := func(jobType jobspb.Type) string {
-			const user = "root"
-			sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
-			// First, run the schema change.
+			execWithTagAndPausePoint := func(jobType jobspb.Type) string {
+				const user = "root"
+				sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
+				// First, run the schema change.
 
-			_, err := sqlDB.Exec(d.Input)
+				_, err := sqlDB.Exec(d.Input)
 
-			var jobID jobspb.JobID
-			{
-				const qFmt = `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`
-				errJob := sqlDB.QueryRow(fmt.Sprintf(qFmt, jobType)).Scan(&jobID)
-				if !errors.Is(errJob, gosql.ErrNoRows) {
-					require.NoError(t, errJob)
-				}
-				require.NotZerof(t, jobID, "job not found for %q: %+v", d.Input, err)
-			}
-
-			// Tag the job.
-			if d.HasArg("tag") {
-				var jobTag string
-				d.ScanArgs(t, "tag", &jobTag)
-				if _, exists := ds.jobTags[jobTag]; exists {
-					t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
-				}
-				ds.jobTags[jobTag] = jobID
-			}
-
-			// Check if we expect a pausepoint error.
-			if d.HasArg("expect-pausepoint") {
-				// Check if we are expecting a pausepoint error.
-				require.NotNilf(t, err, "expected pause point error")
-				require.Regexp(t, "pause point .* hit$", err.Error())
-				jobutils.WaitForJobToPause(t, sqlutils.MakeSQLRunner(sqlDB), jobID)
-				ret := append(ds.noticeBuffer, "job paused at pausepoint")
-				return strings.Join(ret, "\n")
-			}
-
-			// All other errors are bad.
-			require.NoError(t, err)
-			return ""
-		}
-
-		for v := range ds.vars {
-			d.Input = strings.Replace(d.Input, v, ds.vars[v], -1)
-			d.Expected = strings.Replace(d.Expected, v, ds.vars[v], -1)
-		}
-		switch d.Cmd {
-		case "skip":
-			var issue int
-			d.ScanArgs(t, "issue-num", &issue)
-			skip.WithIssue(t, issue)
-			return ""
-
-		case "reset":
-			ds.cleanup(ctx, t)
-			ds = newDatadrivenTestState()
-			return ""
-
-		case "new-cluster":
-			var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
-			var splits int
-			var defaultTestTenant base.DefaultTestTenantOptions
-			nodes := singleNode
-			var io base.ExternalIODirConfig
-			d.ScanArgs(t, "name", &name)
-			if d.HasArg("share-io-dir") {
-				d.ScanArgs(t, "share-io-dir", &shareDirWith)
-			}
-			if shareDirWith != "" {
-				iodir = ds.getIODir(t, shareDirWith)
-			}
-			if d.HasArg("allow-implicit-access") {
-				io.EnableNonAdminImplicitAndArbitraryOutbound = true
-			}
-			if d.HasArg("disable-http") {
-				io.DisableHTTP = true
-			}
-			if d.HasArg("localities") {
-				d.ScanArgs(t, "localities", &localities)
-			}
-			if d.HasArg("nodes") {
-				d.ScanArgs(t, "nodes", &nodes)
-			}
-			if d.HasArg("splits") {
-				d.ScanArgs(t, "splits", &splits)
-			}
-			if d.HasArg("beforeVersion") {
-				d.ScanArgs(t, "beforeVersion", &beforeVersion)
-				if !d.HasArg("disable-tenant") {
-					// TODO(msbutler): figure out why test tenants don't mix with version testing
-					t.Fatal("tests that use beforeVersion must use disable-tenant")
-				}
-			}
-			if d.HasArg("testingKnobCfg") {
-				d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
-			}
-			if d.HasArg("disable-tenant") {
-				defaultTestTenant = base.TODOTestTenantDisabled
-			}
-
-			lastCreatedCluster = name
-			cfg := clusterCfg{
-				name:              name,
-				iodir:             iodir,
-				nodes:             nodes,
-				splits:            splits,
-				ioConf:            io,
-				localities:        localities,
-				beforeVersion:     beforeVersion,
-				testingKnobCfg:    testingKnobCfg,
-				defaultTestTenant: defaultTestTenant,
-			}
-			err := ds.addCluster(t, cfg)
-			if err != nil {
-				return err.Error()
-			}
-			return ""
-
-		case "switch-cluster":
-			var name string
-			d.ScanArgs(t, "name", &name)
-			lastCreatedCluster = name
-			return ""
-
-		case "upgrade-cluster":
-			cluster := lastCreatedCluster
-			user := "root"
-
-			var version string
-			if d.HasArg("version") {
-				d.ScanArgs(t, "version", &version)
-			}
-			key, ok := clusterVersionKeys[version]
-			if !ok {
-				t.Fatalf("clusterVersion %s does not exist in data driven global map", version)
-			}
-			clusterVersion := clusterversion.ByKey(key)
-			_, err := ds.getSQLDB(t, cluster, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
-			require.NoError(t, err)
-			return ""
-
-		case "exec-sql":
-			cluster := lastCreatedCluster
-			user := "root"
-			if d.HasArg("cluster") {
-				d.ScanArgs(t, "cluster", &cluster)
-			}
-			if d.HasArg("user") {
-				d.ScanArgs(t, "user", &user)
-			}
-			ds.noticeBuffer = nil
-			checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
-			d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_server/", httpAddr)
-			_, err := ds.getSQLDB(t, cluster, user).Exec(d.Input)
-			ret := ds.noticeBuffer
-
-			if d.HasArg("ignore-notice") {
-				ret = nil
-			}
-
-			// Check if we are expecting a pausepoint error.
-			if d.HasArg("expect-pausepoint") {
-				require.NotNilf(t, err, "expected pause point error")
-				require.True(t, strings.Contains(err.Error(), "job requested it be paused"))
-
-				// Find job ID of the pausepoint job.
 				var jobID jobspb.JobID
-				require.NoError(t,
-					ds.getSQLDB(t, cluster, user).QueryRow(
-						`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID))
-				fmt.Printf("expecting pausepoint, found job ID %d\n\n\n", jobID)
-
-				runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
-				jobutils.WaitForJobToPause(t, runner, jobID)
-				ret = append(ds.noticeBuffer, "job paused at pausepoint")
-				ret = append(ret, "")
-				return strings.Join(ret, "\n")
-			}
-
-			// Check if we are expecting an error, and want to ignore outputting it.
-			if d.HasArg("expect-error-ignore") {
-				require.NotNilf(t, err, "expected error")
-				ret = append(ret, "ignoring expected error")
-				return strings.Join(ret, "\n")
-			}
-
-			// Check if we are expecting an error, and want to match it against a
-			// regex.
-			if d.HasArg("expect-error-regex") {
-				require.NotNilf(t, err, "expected error")
-				var expectErrorRegex string
-				d.ScanArgs(t, "expect-error-regex", &expectErrorRegex)
-				require.True(t,
-					testutils.IsError(err, expectErrorRegex),
-					"Regex `%s` did not match `%s`",
-					expectErrorRegex,
-					err)
-				ret = append(ret, "regex matches error")
-				return strings.Join(ret, "\n")
-			}
-
-			// Check for other errors.
-			if err != nil {
-				if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-					ret = append(ds.noticeBuffer, err.Error())
-					if pqErr.Detail != "" {
-						ret = append(ret, "DETAIL: "+pqErr.Detail)
+				{
+					const qFmt = `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`
+					errJob := sqlDB.QueryRow(fmt.Sprintf(qFmt, jobType)).Scan(&jobID)
+					if !errors.Is(errJob, gosql.ErrNoRows) {
+						require.NoError(t, errJob)
 					}
-					if pqErr.Hint != "" {
-						ret = append(ret, "HINT: "+pqErr.Hint)
-					}
-				} else {
-					t.Errorf("failed to execute stmt %s due to %s", d.Input, err.Error())
+					require.NotZerof(t, jobID, "job not found for %q: %+v", d.Input, err)
 				}
-			}
-			return strings.Join(ret, "\n")
 
-		case "query-sql":
-			cluster := lastCreatedCluster
-			user := "root"
-			if d.HasArg("cluster") {
-				d.ScanArgs(t, "cluster", &cluster)
-			}
-			if d.HasArg("user") {
-				d.ScanArgs(t, "user", &user)
-			}
-			checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
-			rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
-			if err != nil {
-				return err.Error()
-			}
-			output, err := sqlutils.RowsToDataDrivenOutput(rows)
-			require.NoError(t, err)
-			if d.HasArg("regex") {
-				var pattern string
-				d.ScanArgs(t, "regex", &pattern)
-				matched, err := regexp.MatchString(pattern, output)
+				// Tag the job.
+				if d.HasArg("tag") {
+					var jobTag string
+					d.ScanArgs(t, "tag", &jobTag)
+					if _, exists := ds.jobTags[jobTag]; exists {
+						t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
+					}
+					ds.jobTags[jobTag] = jobID
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					// Check if we are expecting a pausepoint error.
+					require.NotNilf(t, err, "expected pause point error")
+					require.Regexp(t, "pause point .* hit$", err.Error())
+					jobutils.WaitForJobToPause(t, sqlutils.MakeSQLRunner(sqlDB), jobID)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
 				require.NoError(t, err)
-				if matched {
-					return "true"
+				return ""
+			}
+
+			for v := range ds.vars {
+				d.Input = strings.Replace(d.Input, v, ds.vars[v], -1)
+				d.Expected = strings.Replace(d.Expected, v, ds.vars[v], -1)
+			}
+			switch d.Cmd {
+			case "skip":
+				var issue int
+				d.ScanArgs(t, "issue-num", &issue)
+				skip.WithIssue(t, issue)
+				return ""
+
+			case "reset":
+				ds.cleanup(ctx, t)
+				ds = newDatadrivenTestState()
+				return ""
+
+			case "new-cluster":
+				var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
+				var splits int
+				var disableTenant bool
+				nodes := singleNode
+				var io base.ExternalIODirConfig
+				d.ScanArgs(t, "name", &name)
+				if d.HasArg("share-io-dir") {
+					d.ScanArgs(t, "share-io-dir", &shareDirWith)
 				}
-				return "false"
-			}
-			return output
-		case "set-cluster-setting":
-			var setting, value string
-			d.ScanArgs(t, "setting", &setting)
-			d.ScanArgs(t, "value", &value)
-			cluster := lastCreatedCluster
-			serverutils.SetClusterSetting(t, ds.clusters[cluster], setting, value)
-			return ""
-
-		case "let":
-			cluster := lastCreatedCluster
-			user := "root"
-			if len(d.CmdArgs) == 0 {
-				t.Fatalf("Must specify at least one variable name.")
-			}
-			rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
-			if err != nil {
-				return err.Error()
-			}
-			output, err := sqlutils.RowsToDataDrivenOutput(rows)
-			output = strings.TrimSpace(output)
-			values := strings.Split(output, "\n")
-			if len(values) != len(d.CmdArgs) {
-				t.Fatalf("Expecting %d vars, found %d", len(d.CmdArgs), len(values))
-			}
-			for i := range values {
-				key := d.CmdArgs[i].Key
-				if !strings.HasPrefix(key, "$") {
-					t.Fatalf("Vars must start with `$`.")
+				if shareDirWith != "" {
+					iodir = ds.getIODir(t, shareDirWith)
 				}
-				ds.vars[key] = values[i]
-			}
-			require.NoError(t, err)
-
-			return ""
-
-		case "sleep":
-			var msStr string
-			if d.HasArg("ms") {
-				d.ScanArgs(t, "ms", &msStr)
-			} else {
-				t.Fatalf("must specify sleep time in ms")
-			}
-			ms, err := strconv.ParseInt(msStr, 10, 64)
-			if err != nil {
-				t.Fatalf("invalid sleep time: %v", err)
-			}
-			time.Sleep(time.Duration(ms) * time.Millisecond)
-			return ""
-
-		case "backup":
-			return execWithTagAndPausePoint(jobspb.TypeBackup)
-
-		case "import":
-			return execWithTagAndPausePoint(jobspb.TypeImport)
-
-		case "restore":
-			if d.HasArg("aost") {
-				var aost string
-				d.ScanArgs(t, "aost", &aost)
-				var ts string
-				var ok bool
-				if ts, ok = ds.clusterTimestamps[aost]; !ok {
-					t.Fatalf("no cluster timestamp found for %s", aost)
+				if d.HasArg("allow-implicit-access") {
+					io.EnableNonAdminImplicitAndArbitraryOutbound = true
+				}
+				if d.HasArg("disable-http") {
+					io.DisableHTTP = true
+				}
+				if d.HasArg("localities") {
+					d.ScanArgs(t, "localities", &localities)
+				}
+				if d.HasArg("nodes") {
+					d.ScanArgs(t, "nodes", &nodes)
+				}
+				if d.HasArg("splits") {
+					d.ScanArgs(t, "splits", &splits)
+				}
+				if d.HasArg("beforeVersion") {
+					d.ScanArgs(t, "beforeVersion", &beforeVersion)
+					if !d.HasArg("disable-tenant") {
+						// TODO(msbutler): figure out why test tenants don't mix with version testing
+						t.Fatal("tests that use beforeVersion must use disable-tenant")
+					}
+				}
+				if d.HasArg("testingKnobCfg") {
+					d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
+				}
+				if d.HasArg("disable-tenant") {
+					disableTenant = true
 				}
 
-				// Replace the ts tag with the actual timestamp.
-				d.Input = strings.Replace(d.Input, aost,
-					fmt.Sprintf("'%s'", ts), 1)
-			}
-			return execWithTagAndPausePoint(jobspb.TypeRestore)
-
-		case "new-schema-change":
-			return execWithTagAndPausePoint(jobspb.TypeNewSchemaChange)
-
-		case "schema-change":
-			return execWithTagAndPausePoint(jobspb.TypeSchemaChange)
-
-		case "job":
-			cluster := lastCreatedCluster
-			const user = "root"
-
-			if d.HasArg("cancel") {
-				var cancelJobTag string
-				d.ScanArgs(t, "cancel", &cancelJobTag)
-				var jobID jobspb.JobID
-				var ok bool
-				if jobID, ok = ds.jobTags[cancelJobTag]; !ok {
-					t.Fatalf("could not find job with tag %s", cancelJobTag)
+				lastCreatedCluster = name
+				cfg := clusterCfg{
+					name:           name,
+					iodir:          iodir,
+					nodes:          nodes,
+					splits:         splits,
+					ioConf:         io,
+					localities:     localities,
+					beforeVersion:  beforeVersion,
+					testingKnobCfg: testingKnobCfg,
+					disableTenant:  disableTenant,
 				}
-				runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
-				runner.Exec(t, `CANCEL JOB $1`, jobID)
-				jobutils.WaitForJobToCancel(t, runner, jobID)
-			} else if d.HasArg("resume") {
-				var resumeJobTag string
-				d.ScanArgs(t, "resume", &resumeJobTag)
-				var jobID jobspb.JobID
-				var ok bool
-				if jobID, ok = ds.jobTags[resumeJobTag]; !ok {
-					t.Fatalf("could not find job with tag %s", resumeJobTag)
-				}
-				runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
-				runner.Exec(t, `RESUME JOB $1`, jobID)
-			} else if d.HasArg("wait-for-state") {
-				var tag string
-				d.ScanArgs(t, "tag", &tag)
-				var jobID jobspb.JobID
-				var ok bool
-				if jobID, ok = ds.jobTags[tag]; !ok {
-					t.Fatalf("could not find job with tag %s", tag)
-				}
-				runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
-				var state string
-				d.ScanArgs(t, "wait-for-state", &state)
-				switch state {
-				case "succeeded":
-					jobutils.WaitForJobToSucceed(t, runner, jobID)
-				case "cancelled":
-					jobutils.WaitForJobToCancel(t, runner, jobID)
-				case "paused":
-					jobutils.WaitForJobToPause(t, runner, jobID)
-				case "failed":
-					jobutils.WaitForJobToFail(t, runner, jobID)
-				case "reverting":
-					jobutils.WaitForJobReverting(t, runner, jobID)
-				default:
-					t.Fatalf("unknown state %s", state)
-				}
-			}
-			return ""
-
-		case "kv":
-			var request string
-			d.ScanArgs(t, "request", &request)
-
-			var target string
-			d.ScanArgs(t, "target", &target)
-			handleKVRequest(ctx, t, lastCreatedCluster, ds, request, target)
-			return ""
-
-		case "save-cluster-ts":
-			cluster := lastCreatedCluster
-			const user = "root"
-			var timestampTag string
-			d.ScanArgs(t, "tag", &timestampTag)
-			if _, ok := ds.clusterTimestamps[timestampTag]; ok {
-				t.Fatalf("cannot reuse cluster ts tag %s", timestampTag)
-			}
-			var ts string
-			err := ds.getSQLDB(t, cluster, user).QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
-			require.NoError(t, err)
-			ds.clusterTimestamps[timestampTag] = ts
-			return ""
-
-		case "create-dummy-system-table":
-			db := ds.firstNode[lastCreatedCluster].DB()
-			execCfg := ds.firstNode[lastCreatedCluster].ExecutorConfig().(sql.ExecutorConfig)
-			testTenants := ds.firstNode[lastCreatedCluster].TestTenants()
-			if len(testTenants) > 0 {
-				execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
-			}
-			codec := execCfg.Codec
-			dummyTable := systemschema.SettingsTable
-			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
+				err := ds.addCluster(t, cfg)
 				if err != nil {
-					return err
+					return err.Error()
 				}
-				mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
-				mut.ID = id
-				mut.Name = fmt.Sprintf("%s_%d", "crdb_internal_copy", id)
-				tKey := catalogkeys.EncodeNameKey(codec, mut)
-				b := txn.NewBatch()
-				b.CPut(tKey, mut.GetID(), nil)
-				b.CPut(catalogkeys.MakeDescMetadataKey(codec, mut.GetID()), mut.DescriptorProto(), nil)
-				return txn.Run(ctx, b)
-			})
-			require.NoError(t, err)
-			return ""
+				return ""
 
-		case "corrupt-backup":
-			cluster := lastCreatedCluster
-			const user = "root"
-			var uri string
-			d.ScanArgs(t, "uri", &uri)
-			parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
-			require.NoError(t, err)
-			var filePath string
-			filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN %s] LIMIT 1", uri)
-			err = ds.getSQLDB(t, cluster, user).QueryRow(filePathQuery).Scan(&filePath)
-			require.NoError(t, err)
-			fullPath := filepath.Join(ds.getIODir(t, cluster), parsedURI.Path, filePath)
-			print(fullPath)
-			data, err := os.ReadFile(fullPath)
-			require.NoError(t, err)
-			data[20] ^= 1
-			if err := os.WriteFile(fullPath, data, 0644 /* perm */); err != nil {
-				t.Fatal(err)
+			case "switch-cluster":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				lastCreatedCluster = name
+				return ""
+
+			case "upgrade-cluster":
+				cluster := lastCreatedCluster
+				user := "root"
+
+				var version string
+				if d.HasArg("version") {
+					d.ScanArgs(t, "version", &version)
+				}
+				key, ok := clusterVersionKeys[version]
+				if !ok {
+					t.Fatalf("clusterVersion %s does not exist in data driven global map", version)
+				}
+				clusterVersion := clusterversion.ByKey(key)
+				_, err := ds.getSQLDB(t, cluster, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
+				require.NoError(t, err)
+				return ""
+
+			case "exec-sql":
+				cluster := lastCreatedCluster
+				user := "root"
+				if d.HasArg("cluster") {
+					d.ScanArgs(t, "cluster", &cluster)
+				}
+				if d.HasArg("user") {
+					d.ScanArgs(t, "user", &user)
+				}
+				ds.noticeBuffer = nil
+				checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
+				d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_server/", httpAddr)
+				_, err := ds.getSQLDB(t, cluster, user).Exec(d.Input)
+				ret := ds.noticeBuffer
+
+				if d.HasArg("ignore-notice") {
+					ret = nil
+				}
+
+				// Check if we are expecting a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					require.NotNilf(t, err, "expected pause point error")
+					require.True(t, strings.Contains(err.Error(), "job requested it be paused"))
+
+					// Find job ID of the pausepoint job.
+					var jobID jobspb.JobID
+					require.NoError(t,
+						ds.getSQLDB(t, cluster, user).QueryRow(
+							`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID))
+					fmt.Printf("expecting pausepoint, found job ID %d\n\n\n", jobID)
+
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
+					jobutils.WaitForJobToPause(t, runner, jobID)
+					ret = append(ds.noticeBuffer, "job paused at pausepoint")
+					ret = append(ret, "")
+					return strings.Join(ret, "\n")
+				}
+
+				// Check if we are expecting an error, and want to ignore outputting it.
+				if d.HasArg("expect-error-ignore") {
+					require.NotNilf(t, err, "expected error")
+					ret = append(ret, "ignoring expected error")
+					return strings.Join(ret, "\n")
+				}
+
+				// Check if we are expecting an error, and want to match it against a
+				// regex.
+				if d.HasArg("expect-error-regex") {
+					require.NotNilf(t, err, "expected error")
+					var expectErrorRegex string
+					d.ScanArgs(t, "expect-error-regex", &expectErrorRegex)
+					require.True(t,
+						testutils.IsError(err, expectErrorRegex),
+						"Regex `%s` did not match `%s`",
+						expectErrorRegex,
+						err)
+					ret = append(ret, "regex matches error")
+					return strings.Join(ret, "\n")
+				}
+
+				// Check for other errors.
+				if err != nil {
+					if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+						ret = append(ds.noticeBuffer, err.Error())
+						if pqErr.Detail != "" {
+							ret = append(ret, "DETAIL: "+pqErr.Detail)
+						}
+						if pqErr.Hint != "" {
+							ret = append(ret, "HINT: "+pqErr.Hint)
+						}
+					} else {
+						t.Errorf("failed to execute stmt %s due to %s", d.Input, err.Error())
+					}
+				}
+				return strings.Join(ret, "\n")
+
+			case "query-sql":
+				cluster := lastCreatedCluster
+				user := "root"
+				if d.HasArg("cluster") {
+					d.ScanArgs(t, "cluster", &cluster)
+				}
+				if d.HasArg("user") {
+					d.ScanArgs(t, "user", &user)
+				}
+				checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
+				rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
+				if err != nil {
+					return err.Error()
+				}
+				output, err := sqlutils.RowsToDataDrivenOutput(rows)
+				require.NoError(t, err)
+				if d.HasArg("regex") {
+					var pattern string
+					d.ScanArgs(t, "regex", &pattern)
+					matched, err := regexp.MatchString(pattern, output)
+					require.NoError(t, err)
+					if matched {
+						return "true"
+					}
+					return "false"
+				}
+				return output
+			case "set-cluster-setting":
+				var setting, value string
+				d.ScanArgs(t, "setting", &setting)
+				d.ScanArgs(t, "value", &value)
+				cluster := lastCreatedCluster
+				serverutils.SetClusterSetting(t, ds.clusters[cluster], setting, value)
+				return ""
+
+			case "let":
+				cluster := lastCreatedCluster
+				user := "root"
+				if len(d.CmdArgs) == 0 {
+					t.Fatalf("Must specify at least one variable name.")
+				}
+				rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
+				if err != nil {
+					return err.Error()
+				}
+				output, err := sqlutils.RowsToDataDrivenOutput(rows)
+				output = strings.TrimSpace(output)
+				values := strings.Split(output, "\n")
+				if len(values) != len(d.CmdArgs) {
+					t.Fatalf("Expecting %d vars, found %d", len(d.CmdArgs), len(values))
+				}
+				for i := range values {
+					key := d.CmdArgs[i].Key
+					if !strings.HasPrefix(key, "$") {
+						t.Fatalf("Vars must start with `$`.")
+					}
+					ds.vars[key] = values[i]
+				}
+				require.NoError(t, err)
+
+				return ""
+
+			case "sleep":
+				var msStr string
+				if d.HasArg("ms") {
+					d.ScanArgs(t, "ms", &msStr)
+				} else {
+					t.Fatalf("must specify sleep time in ms")
+				}
+				ms, err := strconv.ParseInt(msStr, 10, 64)
+				if err != nil {
+					t.Fatalf("invalid sleep time: %v", err)
+				}
+				time.Sleep(time.Duration(ms) * time.Millisecond)
+				return ""
+
+			case "backup":
+				return execWithTagAndPausePoint(jobspb.TypeBackup)
+
+			case "import":
+				return execWithTagAndPausePoint(jobspb.TypeImport)
+
+			case "restore":
+				if d.HasArg("aost") {
+					var aost string
+					d.ScanArgs(t, "aost", &aost)
+					var ts string
+					var ok bool
+					if ts, ok = ds.clusterTimestamps[aost]; !ok {
+						t.Fatalf("no cluster timestamp found for %s", aost)
+					}
+
+					// Replace the ts tag with the actual timestamp.
+					d.Input = strings.Replace(d.Input, aost,
+						fmt.Sprintf("'%s'", ts), 1)
+				}
+				return execWithTagAndPausePoint(jobspb.TypeRestore)
+
+			case "new-schema-change":
+				return execWithTagAndPausePoint(jobspb.TypeNewSchemaChange)
+
+			case "schema-change":
+				return execWithTagAndPausePoint(jobspb.TypeSchemaChange)
+
+			case "job":
+				cluster := lastCreatedCluster
+				const user = "root"
+
+				if d.HasArg("cancel") {
+					var cancelJobTag string
+					d.ScanArgs(t, "cancel", &cancelJobTag)
+					var jobID jobspb.JobID
+					var ok bool
+					if jobID, ok = ds.jobTags[cancelJobTag]; !ok {
+						t.Fatalf("could not find job with tag %s", cancelJobTag)
+					}
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
+					runner.Exec(t, `CANCEL JOB $1`, jobID)
+					jobutils.WaitForJobToCancel(t, runner, jobID)
+				} else if d.HasArg("resume") {
+					var resumeJobTag string
+					d.ScanArgs(t, "resume", &resumeJobTag)
+					var jobID jobspb.JobID
+					var ok bool
+					if jobID, ok = ds.jobTags[resumeJobTag]; !ok {
+						t.Fatalf("could not find job with tag %s", resumeJobTag)
+					}
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
+					runner.Exec(t, `RESUME JOB $1`, jobID)
+				} else if d.HasArg("wait-for-state") {
+					var tag string
+					d.ScanArgs(t, "tag", &tag)
+					var jobID jobspb.JobID
+					var ok bool
+					if jobID, ok = ds.jobTags[tag]; !ok {
+						t.Fatalf("could not find job with tag %s", tag)
+					}
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
+					var state string
+					d.ScanArgs(t, "wait-for-state", &state)
+					switch state {
+					case "succeeded":
+						jobutils.WaitForJobToSucceed(t, runner, jobID)
+					case "cancelled":
+						jobutils.WaitForJobToCancel(t, runner, jobID)
+					case "paused":
+						jobutils.WaitForJobToPause(t, runner, jobID)
+					case "failed":
+						jobutils.WaitForJobToFail(t, runner, jobID)
+					case "reverting":
+						jobutils.WaitForJobReverting(t, runner, jobID)
+					default:
+						t.Fatalf("unknown state %s", state)
+					}
+				}
+				return ""
+
+			case "kv":
+				var request string
+				d.ScanArgs(t, "request", &request)
+
+				var target string
+				d.ScanArgs(t, "target", &target)
+				handleKVRequest(ctx, t, lastCreatedCluster, ds, request, target)
+				return ""
+
+			case "save-cluster-ts":
+				cluster := lastCreatedCluster
+				const user = "root"
+				var timestampTag string
+				d.ScanArgs(t, "tag", &timestampTag)
+				if _, ok := ds.clusterTimestamps[timestampTag]; ok {
+					t.Fatalf("cannot reuse cluster ts tag %s", timestampTag)
+				}
+				var ts string
+				err := ds.getSQLDB(t, cluster, user).QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
+				require.NoError(t, err)
+				ds.clusterTimestamps[timestampTag] = ts
+				return ""
+
+			case "create-dummy-system-table":
+				db := ds.firstNode[lastCreatedCluster].DB()
+				execCfg := ds.firstNode[lastCreatedCluster].ExecutorConfig().(sql.ExecutorConfig)
+				testTenants := ds.firstNode[lastCreatedCluster].TestTenants()
+				if len(testTenants) > 0 {
+					execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
+				}
+				codec := execCfg.Codec
+				dummyTable := systemschema.SettingsTable
+				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
+					if err != nil {
+						return err
+					}
+					mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+					mut.ID = id
+					mut.Name = fmt.Sprintf("%s_%d", "crdb_internal_copy", id)
+					tKey := catalogkeys.EncodeNameKey(codec, mut)
+					b := txn.NewBatch()
+					b.CPut(tKey, mut.GetID(), nil)
+					b.CPut(catalogkeys.MakeDescMetadataKey(codec, mut.GetID()), mut.DescriptorProto(), nil)
+					return txn.Run(ctx, b)
+				})
+				require.NoError(t, err)
+				return ""
+
+			case "corrupt-backup":
+				cluster := lastCreatedCluster
+				const user = "root"
+				var uri string
+				d.ScanArgs(t, "uri", &uri)
+				parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
+				require.NoError(t, err)
+				var filePath string
+				filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN %s] LIMIT 1", uri)
+				err = ds.getSQLDB(t, cluster, user).QueryRow(filePathQuery).Scan(&filePath)
+				require.NoError(t, err)
+				fullPath := filepath.Join(ds.getIODir(t, cluster), parsedURI.Path, filePath)
+				print(fullPath)
+				data, err := os.ReadFile(fullPath)
+				require.NoError(t, err)
+				data[20] ^= 1
+				if err := os.WriteFile(fullPath, data, 0644 /* perm */); err != nil {
+					t.Fatal(err)
+				}
+				return ""
+			case "link-backup":
+				cluster := lastCreatedCluster
+				sourceRelativePath := ""
+				destRelativePath := ""
+				ioDir := ds.getIODir(t, cluster)
+				d.ScanArgs(t, "cluster", &cluster)
+				d.ScanArgs(t, "src-path", &sourceRelativePath)
+				d.ScanArgs(t, "dest-path", &destRelativePath)
+				splitSrcPath := strings.Split(sourceRelativePath, ",")
+				sourcePath, err := filepath.Abs(datapathutils.TestDataPath(t, splitSrcPath...))
+				require.NoError(t, err)
+				splitDestPath := strings.Split(destRelativePath, ",")
+				destPath := filepath.Join(ioDir, filepath.Join(splitDestPath...))
+				require.NoError(t, err)
+				require.NoError(t, os.Symlink(sourcePath, destPath))
+				return ""
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
-			return ""
-		case "link-backup":
-			cluster := lastCreatedCluster
-			sourceRelativePath := ""
-			destRelativePath := ""
-			ioDir := ds.getIODir(t, cluster)
-			d.ScanArgs(t, "cluster", &cluster)
-			d.ScanArgs(t, "src-path", &sourceRelativePath)
-			d.ScanArgs(t, "dest-path", &destRelativePath)
-			splitSrcPath := strings.Split(sourceRelativePath, ",")
-			sourcePath, err := filepath.Abs(datapathutils.TestDataPath(t, splitSrcPath...))
-			require.NoError(t, err)
-			splitDestPath := strings.Split(destRelativePath, ",")
-			destPath := filepath.Join(ioDir, filepath.Join(splitDestPath...))
-			require.NoError(t, err)
-			require.NoError(t, os.Symlink(sourcePath, destPath))
-			return ""
-		default:
-			return fmt.Sprintf("unknown command: %s", d.Cmd)
-		}
+		})
 	})
 }
 

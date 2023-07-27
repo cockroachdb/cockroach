@@ -271,8 +271,6 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 			h.t.Fatal(err)
 		}
 	}
-	// Wait to make sure the new constraints are read by all nodes.
-	time.Sleep(time.Minute)
 }
 
 func waitForZeroReplicasOnN3(ctx context.Context, t test.Test, db *gosql.DB) {

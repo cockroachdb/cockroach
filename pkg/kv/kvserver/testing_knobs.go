@@ -17,12 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,7 +45,6 @@ type StoreTestingKnobs struct {
 	EngineKnobs             []storage.ConfigOption
 	AllocatorKnobs          *allocator.TestingKnobs
 	GossipTestingKnobs      StoreGossipTestingKnobs
-	ReplicaPlannerKnobs     plan.ReplicaPlannerTestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -152,6 +148,9 @@ type StoreTestingKnobs struct {
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
+	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
+	// leaves the replicate queue operational.
+	DisableReplicaRebalancing bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
 	// LoadBasedSplittingOverrideKey returns a key which should be used for load
@@ -218,9 +217,6 @@ type StoreTestingKnobs struct {
 	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
-	// DisableQuiescence disables replica quiescence. This can also be
-	// set via COCKROACH_DISABLE_QUIESCENCE.
-	DisableQuiescence bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
 	// leadership when it diverges from the range's leaseholder. This can
 	// also be set via COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER.
@@ -251,10 +247,6 @@ type StoreTestingKnobs struct {
 	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft func(roachpb.StoreID) bool
-	// DisableLivenessMapConnHealth disables the ConnHealth check in
-	// updateIsLiveMap, which is useful in tests where we manipulate the node's
-	// liveness record but still keep the connection alive.
-	DisableLivenessMapConnHealth bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
 	// ReplicateQueueAcceptsUnsplit allows the replication queue to
@@ -298,10 +290,7 @@ type StoreTestingKnobs struct {
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
-	ReceiveSnapshot func(context.Context, *kvserverpb.SnapshotRequest_Header) error
-	// HandleSnapshotDone is run after the entirety of receiving a snapshot,
-	// regardless of whether it succeeds, gets cancelled, times out, or errors.
-	HandleSnapshotDone func()
+	ReceiveSnapshot func(*kvserverpb.SnapshotRequest_Header) error
 	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
 	// rollback that happens when either the initial snapshot or the promotion of
 	// a learner to a voter fails.
@@ -405,6 +394,14 @@ type StoreTestingKnobs struct {
 	// acquire any locks in this method.
 	OnRaftTimeoutCampaign func(roachpb.RangeID)
 
+	// LeaseRenewalSignalChan populates `Store.renewableLeasesSignal`.
+	LeaseRenewalSignalChan chan struct{}
+	// LeaseRenewalOnPostCycle is invoked after each lease renewal cycle.
+	LeaseRenewalOnPostCycle func()
+	// LeaseRenewalDurationOverride replaces the timer duration for proactively
+	// renewing expiration based leases.
+	LeaseRenewalDurationOverride time.Duration
+
 	// RangefeedValueHeaderFilter, if set, is invoked before each value emitted on
 	// the rangefeed, be it in steady state or during the catch-up scan.
 	//
@@ -431,12 +428,9 @@ type StoreTestingKnobs struct {
 	// BeforeSendSnapshotThrottle intercepts replicas before entering send
 	// snapshot throttling.
 	BeforeSendSnapshotThrottle func()
-	// AfterSnapshotThrottle intercepts replicas after receiving a spot in the
-	// send/recv snapshot semaphore.
-	AfterSnapshotThrottle func()
-	// BeforeRecvAcceptedSnapshot intercepts replicas before receiving the batches
-	// of a reserved and accepted snapshot.
-	BeforeRecvAcceptedSnapshot func()
+	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
+	// send snapshot semaphore.
+	AfterSendSnapshotThrottle func()
 	// SelectDelegateSnapshotSender returns an ordered list of replica which will
 	// be used as delegates for sending a snapshot.
 	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) []roachpb.ReplicaDescriptor
@@ -485,25 +479,6 @@ type StoreTestingKnobs struct {
 
 	// RangeLeaseAcquireTimeoutOverride overrides RaftConfig.RangeLeaseAcquireTimeout().
 	RangeLeaseAcquireTimeoutOverride time.Duration
-
-	// BaseQueueInterceptor is designed to intercept calls to baseQueue functions
-	// to validate base queue properties. Currently, it only intercepts
-	// baseQueue.MaybeAdd and ensure correct setting of the pprof label. However,
-	// it can be easily extended to validate other properties of baseQueue if
-	// required.
-	BaseQueueInterceptor func(ctx context.Context, bq *baseQueue)
-
-	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndex.
-	// If nil is returned, reproposal will be attempted.
-	InjectReproposalError func(p *ProposalData) error
-
-	// LeaseIndexFilter can return nonzero to override the automatically assigned
-	// LeaseAppliedIndex.
-	LeaseIndexFilter func(*ProposalData) kvpb.LeaseAppliedIndex
-
-	// FlowControlTestingKnobs provide fine-grained control over the various
-	// kvflowcontrol components for testing.
-	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -521,8 +496,6 @@ type NodeLivenessTestingKnobs struct {
 	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
 	// whether a node is live or not.
 	StorePoolNodeLivenessFn storepool.NodeLivenessFunc
-	// IsLiveCallback, will be called when a node becomes live.
-	IsLiveCallback liveness.IsLiveCallback
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}

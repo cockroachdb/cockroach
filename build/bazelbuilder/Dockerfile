@@ -49,7 +49,6 @@ RUN case ${TARGETPLATFORM} in \
 # git - Upgrade to a more modern version
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
-    apt-get clean && \
     curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
     unzip "git-2.29.2.zip" && \
     cd git-2.29.2 && \
@@ -62,14 +61,9 @@ RUN apt-get update && \
 
 RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
  && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
- && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
- && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    azure-cli \
-    google-cloud-sdk \
-    google-cloud-cli-gke-gcloud-auth-plugin \
-    && apt-get clean
+    google-cloud-sdk
 
 # chrome is needed for UI tests. Unfortunately it is only distributed for x86_64
 # and not for ARM. Chrome shouldn't need to be installed when we migrate away

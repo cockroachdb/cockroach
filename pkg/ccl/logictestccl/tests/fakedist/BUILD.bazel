@@ -4,19 +4,13 @@ go_test(
     name = "fakedist_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
+    args = ["-test.timeout=3595s"],
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
     ],
     shard_count = 6,
-    tags = [
-        "ccl_test",
-        "cpu:2",
-    ],
+    tags = ["cpu:2"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",

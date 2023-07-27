@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -100,6 +101,7 @@ func TestMapToUniqueUnorderedID(t *testing.T) {
 // by insertions guarantees a (somewhat) uniform distribution of the data.
 func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
 		"assumes large N")
@@ -109,7 +111,15 @@ func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	// This test can flake when the random data is not distributed evenly.
 	err := retry.WithMaxAttempts(ctx, retry.Options{}, attempts, func() error {
 
-		params := base.TestServerArgs{}
+		params := base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
+					// We disable the randomization of some batch sizes because
+					// with some low values the test takes much longer.
+					ForceProductionValues: true,
+				},
+			},
+		}
 		s, db, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 

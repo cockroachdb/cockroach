@@ -596,6 +596,9 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='512MiB'`); err != nil {
 				return err
 			}
+			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='512MiB'`); err != nil {
+				return err
+			}
 			// Set the range size to a multiple of what we expect the size of the
 			// bank table to be. This should result in the table fitting
 			// inside a single range.

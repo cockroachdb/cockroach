@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	otel_collector_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	otel_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
@@ -95,10 +94,6 @@ type EventExporterTestingKnobs struct {
 	// FlushTriggerByteSize, if set, overrides the default trigger value for the
 	// EventExporter.
 	FlushTriggerByteSize uint64
-	// TestConsumer, if set, sets the consumer to be used by the embedded ingest
-	// component used. This allows us to capture consumed events when running
-	// in embedded mode, so we can make assertions against them in tests.
-	TestConsumer obslib.EventConsumer
 }
 
 var _ base.ModuleTestingKnobs = &EventExporterTestingKnobs{}

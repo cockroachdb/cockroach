@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -67,8 +68,8 @@ type TestCluster struct {
 
 	// Connection to the storage cluster. Typically, the first connection in
 	// Conns, but could be different if we're transparently running in a test
-	// tenant (see the DefaultTestTenant flag of base.TestServerArgs for more
-	// detail).
+	// tenant (see the DisableDefaultTestTenant flag of base.TestServerArgs for
+	// more detail).
 	storageConn *gosql.DB
 	stopper     *stop.Stopper
 	mu          struct {
@@ -370,7 +371,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 	// (validated below).
 	probabilisticallyStartTestTenant := false
 	if !tc.Servers[0].Cfg.DisableDefaultTestTenant {
-		probabilisticallyStartTestTenant = serverutils.ShouldStartDefaultTestTenant(t, tc.serverArgs[0])
+		probabilisticallyStartTestTenant = serverutils.ShouldStartDefaultTestTenant(t)
 	}
 
 	startedTestTenant := true
@@ -409,10 +410,6 @@ func (tc *TestCluster) Start(t testing.TB) {
 			// unexpected order (#22342).
 			tc.WaitForNStores(t, i+1, tc.Servers[0].Gossip())
 		}
-	}
-
-	if tc.StartedDefaultTestTenant() {
-		t.Log(serverutils.DefaultTestTenantMessage)
 	}
 
 	if tc.clusterArgs.ParallelStart {
@@ -586,12 +583,6 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 	}
 	s := srv.(*server.TestServer)
 
-	// If we only allowed probabilistic starting of the test tenant, we disable
-	// starting additional tenants, even if we didn't start the test tenant.
-	if serverArgs.DefaultTestTenant == base.TestTenantProbabilisticOnly {
-		s.DisableStartTenant(serverutils.PreventStartTenantError)
-	}
-
 	tc.Servers = append(tc.Servers, s)
 	tc.serverArgs = append(tc.serverArgs, serverArgs)
 
@@ -732,23 +723,6 @@ func (tc *TestCluster) SplitRangeOrFatal(
 		t.Fatalf(`splitting at %s: %+v`, splitKey, err)
 	}
 	return lhsDesc, rhsDesc
-}
-
-// MergeRanges merges the range containing leftKey with the range to its right.
-func (tc *TestCluster) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
-	return tc.Servers[0].MergeRanges(leftKey)
-}
-
-// MergeRangesOrFatal is the same as MergeRanges but will Fatal the test on
-// error.
-func (tc *TestCluster) MergeRangesOrFatal(
-	t testing.TB, leftKey roachpb.Key,
-) roachpb.RangeDescriptor {
-	mergedDesc, err := tc.MergeRanges(leftKey)
-	if err != nil {
-		t.Fatalf(`merging at %s: %+v`, leftKey, err)
-	}
-	return mergedDesc
 }
 
 // Target returns a ReplicationTarget for the specified server.
@@ -1555,9 +1529,6 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 			if (liveness == livenesspb.Liveness{}) {
 				return fmt.Errorf("no liveness record")
 			}
-			if liveness.Epoch < 1 {
-				return fmt.Errorf("liveness not incremented")
-			}
 			fmt.Printf("n%d: found liveness\n", s.NodeID())
 		}
 		return nil
@@ -1739,7 +1710,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	// node. This is useful to avoid flakes: the newly restarted node is now on a
 	// different port, and a cycle of gossip is necessary to make all other nodes
 	// aware.
-	return timeutil.RunWithTimeout(
+	return contextutil.RunWithTimeout(
 		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {
 			r := retry.StartWithCtx(ctx, retry.Options{
@@ -1906,7 +1877,29 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 	t *testing.T, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
 ) {
 	for i, ts := range tc.Servers {
-		serverutils.WaitForTenantCapabilities(t, ts, tenID, targetCaps, fmt.Sprintf("server %d", i))
+		testutils.SucceedsSoon(t, func() error {
+			if tenID.IsSystem() {
+				return nil
+			}
+
+			if len(targetCaps) > 0 {
+				missingCapabilityError := func(capID tenantcapabilities.ID) error {
+					return errors.Newf("server=%d tenant %s cap %q not at expected value", i, tenID, capID)
+				}
+				capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
+				if !found {
+					return errors.Newf("capabilities not ready for tenant %s", tenID)
+				}
+
+				for capID, expectedValue := range targetCaps {
+					curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
+					if curVal != expectedValue {
+						return missingCapabilityError(capID)
+					}
+				}
+			}
+			return nil
+		})
 	}
 }
 

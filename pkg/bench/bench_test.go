@@ -13,7 +13,6 @@ package bench
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -304,36 +304,6 @@ func runBenchmarkInsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 
 }
 
-// runBenchmarkInsertLarge benchmarks inserting count large rows into a table
-// where large means rows with a 1k string and 1k BYTES object.
-func runBenchmarkInsertLarge(b *testing.B, db *sqlutils.SQLRunner, count int) {
-	defer func() {
-		db.Exec(b, `DROP TABLE IF EXISTS bench.insert`)
-	}()
-
-	db.Exec(b, `CREATE TABLE bench.insert (k INT PRIMARY KEY, s STRING, b BYTES)`)
-	bigstr := strings.Repeat("x", 1<<10)
-	bigbytes := bytes.Repeat([]byte("x"), 1<<10)
-
-	b.ResetTimer()
-	var buf bytes.Buffer
-	val := 0
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		buf.WriteString(`INSERT INTO bench.insert VALUES `)
-		for j := 0; j < count; j++ {
-			if j > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, "(%d, '%s', '%s')", val, bigstr, bigbytes)
-			val++
-		}
-		db.Exec(b, buf.String())
-	}
-	b.StopTimer()
-
-}
-
 // runBenchmarkInsertFK benchmarks inserting count rows into a table with a
 // present foreign key into another table.
 func runBenchmarkInsertFK(b *testing.B, db *sqlutils.SQLRunner, count int) {
@@ -449,7 +419,6 @@ func BenchmarkSQL(b *testing.B) {
 		for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
 			runBenchmarkDelete,
 			runBenchmarkInsert,
-			runBenchmarkInsertLarge,
 			runBenchmarkInsertDistinct,
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
@@ -998,28 +967,6 @@ CREATE TABLE bench.insert_distinct (
 `
 	db.Exec(b, schema)
 
-	// When running against SQL databases, create all the connections in advance.
-	// Without this, if the workers use the connection pool directly, on OSX and
-	// FreeBSD the server cannot accept connections fast enough and so opening
-	// some connections fails. This happens when we attempt to open 1000
-	// connections concurrently because of the default kernel limit of
-	// kern.ipc.somaxconn=128.
-	ctx := context.Background()
-	conns := make([]sqlutils.DBHandle, numUsers)
-	for i := 0; i < numUsers; i++ {
-		sqldb, ok := db.DB.(*gosql.DB)
-		if ok {
-			conn, err := sqldb.Conn(ctx)
-			require.NoError(b, err)
-			defer func() {
-				_ = conn.Close()
-			}()
-			conns[i] = conn
-		} else {
-			conns[i] = db.DB
-		}
-	}
-
 	b.ResetTimer()
 
 	errChan := make(chan error)
@@ -1053,7 +1000,7 @@ CREATE TABLE bench.insert_distinct (
 						fmt.Fprintf(&buf, "(%d, %d)", zipf.Uint64(), n)
 					}
 
-					if _, err := conns[i].ExecContext(context.Background(), buf.String()); err != nil {
+					if _, err := db.DB.ExecContext(context.Background(), buf.String()); err != nil {
 						return err
 					}
 				}
@@ -1505,15 +1452,14 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "type-check-benchmark")
-	sd.Database = "defaultdb"
-	p, cleanup := sql.NewInternalPlanner(
-		"type-check-benchmark",
+	p, cleanup := sql.NewInternalPlanner("type-check-benchmark",
 		kvDB.NewTxn(ctx, "type-check-benchmark-planner"),
 		username.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
-		sd,
+		sessiondatapb.SessionData{
+			Database: "defaultdb",
+		},
 	)
 
 	defer cleanup()

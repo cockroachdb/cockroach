@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -244,7 +243,7 @@ func (r *Replica) updateTimestampCacheAndDropLatches(
 	pErr *kvpb.Error,
 	st kvserverpb.LeaseStatus,
 ) {
-	ec := makeUnreplicatedEndCmds(r, g, st)
+	ec := endCmds{repl: r, g: g, st: st}
 	ec.done(ctx, ba, br, pErr)
 }
 
@@ -470,7 +469,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// retry at a higher timestamp because it is not isolated at higher
 		// timestamps.
 		latchesHeld := g != nil
-		if !latchesHeld || !canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{}) {
+		if !latchesHeld || !canDoServersideRetry(ctx, pErr, ba, br, g, hlc.Timestamp{}) {
 			// TODO(aayush,arul): These metrics are incorrect at the moment since
 			// hitting this branch does not mean that we won't serverside retry, it
 			// just means that we will have to reacquire latches.
@@ -523,7 +522,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 // and uses that to compute the latch and lock spans.
 func (r *Replica) collectSpansRead(
 	ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
-) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet, _ error) {
+) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
 	baCopy := *ba
 	baCopy.Requests = make([]kvpb.RequestUnion, 0, len(ba.Requests))
 	for i := 0; i < len(ba.Requests); i++ {

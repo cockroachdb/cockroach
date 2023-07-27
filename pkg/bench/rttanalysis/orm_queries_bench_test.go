@@ -434,47 +434,5 @@ LEFT JOIN LATERAL
     WHERE "column".attrelid = "table".oid
   ) columns ON true;`,
 		},
-
-		{
-			Name:  "column descriptions json agg",
-			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
-			Stmt: `SELECT
-	jsonb_build_object(
-		'oid', "table".oid::INT8,
-		'columns', COALESCE(columns.info, '[]')
-	)::JSONB AS info
-FROM
-	pg_catalog.pg_class AS "table"
-	JOIN pg_catalog.pg_namespace AS schema ON schema.oid = "table".relnamespace
-	-- description
-	LEFT JOIN pg_catalog.pg_description AS description ON
-			description.classoid = 'pg_catalog.pg_class'::REGCLASS
-			AND description.objoid = "table".oid
-			AND description.objsubid = 0
-	-- columns
-	LEFT JOIN LATERAL (
-			SELECT
-				jsonb_agg(
-					jsonb_build_object(
-						'description', pg_catalog.col_description("table".oid, "column".attnum)
-					)
-				)
-					AS info
-			FROM
-				pg_catalog.pg_attribute AS "column"
-				LEFT JOIN pg_catalog.pg_type AS type ON type.oid = "column".atttypid
-				LEFT JOIN pg_catalog.pg_type AS base_type ON
-						type.typtype = 'd' AND base_type.oid = type.typbasetype
-			WHERE
-				"column".attrelid = "table".oid
-				-- columns where attnum <= 0 are special, system-defined columns
-				AND "column".attnum > 0
-				-- dropped columns still exist in the system catalog as "zombie"columns, so ignore those
-				AND NOT "column".attisdropped
-		)
-			AS columns ON true
-WHERE
-	"table".relkind IN ('r')`,
-		},
 	})
 }

@@ -33,7 +33,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":stmtdiagnostics"],
-    tags = ["no-remote-exec"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

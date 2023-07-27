@@ -124,7 +124,7 @@ func getNumQueriesInFile(filename, url string) (int, error) {
 		_ = os.Remove(tempFile.Name())
 	}()
 
-	queries, err := querybench.GetQueries(tempFile.Name(), "")
+	queries, err := querybench.GetQueries(tempFile.Name())
 	if err != nil {
 		return 0, err
 	}

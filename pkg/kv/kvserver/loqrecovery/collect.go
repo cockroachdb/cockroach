@@ -16,7 +16,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -195,7 +194,7 @@ func visitStoreReplicas(
 			NodeID:                   nodeID,
 			Desc:                     desc,
 			RaftAppliedIndex:         rstate.RaftAppliedIndex,
-			RaftCommittedIndex:       kvpb.RaftIndex(hstate.Commit),
+			RaftCommittedIndex:       hstate.Commit,
 			RaftLogDescriptorChanges: rangeUpdates,
 			LocalAssumesLeaseholder:  localIsLeaseholder,
 		})
@@ -209,7 +208,7 @@ func visitStoreReplicas(
 // lo (inclusive) and hi (exclusive) and searches for changes to range
 // descriptors, as identified by presence of a commit trigger.
 func GetDescriptorChangesFromRaftLog(
-	rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, reader storage.Reader,
+	rangeID roachpb.RangeID, lo, hi uint64, reader storage.Reader,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
 	if err := raftlog.Visit(reader, rangeID, lo, hi, func(ent raftpb.Entry) error {

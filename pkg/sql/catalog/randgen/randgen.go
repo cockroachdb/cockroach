@@ -54,7 +54,7 @@ func NewTestSchemaGenerator(
 ) TestSchemaGenerator {
 	dbPrivs := catpb.NewBaseDatabasePrivilegeDescriptor(callingUser)
 	dbDefaultPrivs := catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
-	publicSchemaPrivs := catpb.NewPublicSchemaPrivilegeDescriptor(true /*includeCreatePriv*/)
+	publicSchemaPrivs := catpb.NewPublicSchemaPrivilegeDescriptor()
 	publicSchemaPrivs.SetOwner(callingUser)
 	g := &testSchemaGenerator{
 		rand: rand,

@@ -10,7 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { flatMap, merge, groupBy } from "lodash";
+import { flatMap, merge } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Delayed } from "src/delayed";
@@ -77,14 +77,8 @@ import moment from "moment-timezone";
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
-  SqlStatsResponse,
-  StatementDiagnosticsResponse,
 } from "../api";
-import {
-  filteredStatementsData,
-  convertRawStmtsToAggregateStatisticsMemoized,
-  getAppsFromStmtsResponseMemoized,
-} from "../sqlActivity/util";
+import { filteredStatementsData } from "../sqlActivity/util";
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -94,7 +88,6 @@ import {
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-import { RequestState } from "src/api/types";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 
 const cx = classNames.bind(styles);
@@ -138,11 +131,17 @@ export interface StatementsPageDispatchProps {
   onRequestTimeChange: (t: moment.Moment) => void;
 }
 export interface StatementsPageStateProps {
-  statementsResponse: RequestState<SqlStatsResponse>;
+  statements: AggregateStatistics[];
+  isDataValid: boolean;
+  isReqInFlight: boolean;
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
+  statementsError: Error | null;
+  apps: string[];
   databases: string[];
+  lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
   sortSetting: SortSetting;
@@ -152,7 +151,6 @@ export interface StatementsPageStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   stmtsTotalRuntimeSecs: number;
-  statementDiagnostics: StatementDiagnosticsResponse | null;
   requestTime: moment.Moment;
 }
 
@@ -182,6 +180,29 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
     limit: params.limit,
     sort: params.reqSortSetting,
   });
+}
+
+// filterBySearchQuery returns true if a search query matches the statement.
+export function filterBySearchQuery(
+  statement: AggregateStatistics,
+  search: string,
+): boolean {
+  const matchString = statement.label.toLowerCase();
+  const matchFingerPrintId = statement.aggregatedFingerprintHexID;
+
+  // If search term is wrapped by quotes, do the exact search term.
+  if (search.startsWith('"') && search.endsWith('"')) {
+    search = search.substring(1, search.length - 1);
+
+    return matchString.includes(search) || matchFingerPrintId.includes(search);
+  }
+
+  return search
+    .toLowerCase()
+    .split(" ")
+    .every(
+      val => matchString.includes(val) || matchFingerPrintId.includes(val),
+    );
 }
 
 export class StatementsPage extends React.Component<
@@ -344,9 +365,9 @@ export class StatementsPage extends React.Component<
     if (ts !== this.props.timeScale) {
       this.changeTimeScale(ts);
     } else if (
-      !this.props.statementsResponse.valid ||
-      !this.props.statementsResponse.data ||
-      !this.props.statementsResponse.lastUpdated
+      !this.props.isDataValid ||
+      !this.props.lastUpdated ||
+      !this.props.statements
     ) {
       this.refreshStatements();
     }
@@ -512,9 +533,7 @@ export class StatementsPage extends React.Component<
     return found;
   };
 
-  renderStatements = (
-    statements: AggregateStatistics[],
-  ): React.ReactElement => {
+  renderStatements = (): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
       onSelectDiagnosticsReportDropdownOption,
@@ -526,15 +545,18 @@ export class StatementsPage extends React.Component<
       hasViewActivityRedactedRole,
       sortSetting,
       search,
+      apps,
       databases,
       hasAdminRole,
     } = this.props;
-    const data = filteredStatementsData(filters, search, statements, isTenant);
-
-    const apps = getAppsFromStmtsResponseMemoized(
-      this.props.statementsResponse?.data,
+    const statements = this.props.statements ?? [];
+    const data = filteredStatementsData(
+      filters,
+      search,
+      statements,
+      nodeRegions,
+      isTenant,
     );
-
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     const nodes = Object.keys(nodeRegions)
       .map(n => Number(n))
@@ -714,23 +736,7 @@ export class StatementsPage extends React.Component<
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
-      statementDiagnostics,
     } = this.props;
-
-    const diagnosticsByStatement = groupBy(
-      statementDiagnostics,
-      sd => sd.statement_fingerprint,
-    );
-
-    const statements = convertRawStmtsToAggregateStatisticsMemoized(
-      this.props.statementsResponse?.data?.statements,
-    ).map(
-      (s): AggregateStatistics => ({
-        ...s,
-        diagnosticsReports: diagnosticsByStatement[s.label] || [],
-      }),
-    );
-
     const longLoadingMessage = (
       <Delayed delay={STATS_LONG_LOADING_DURATION}>
         <InlineAlert
@@ -754,19 +760,19 @@ export class StatementsPage extends React.Component<
         />
         <div className={cx("table-area")}>
           <Loading
-            loading={this.props.statementsResponse.inFlight}
+            loading={this.props.isReqInFlight}
             page={"statements"}
-            error={this.props.statementsResponse.error}
-            render={() => this.renderStatements(statements)}
+            error={this.props.statementsError}
+            render={() => this.renderStatements()}
             renderError={() =>
               LoadingError({
                 statsType: "statements",
-                error: this.props.statementsResponse?.error,
+                error: this.props.statementsError,
               })
             }
           />
-          {this.props.statementsResponse.inFlight &&
-            getValidErrorsList(this.props.statementsResponse.error) == null &&
+          {this.props.isReqInFlight &&
+            getValidErrorsList(this.props.statementsError) == null &&
             longLoadingMessage}
           <ActivateStatementDiagnosticsModal
             ref={this.activateDiagnosticsRef}

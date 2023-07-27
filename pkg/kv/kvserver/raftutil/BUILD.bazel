@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "@io_etcd_go_raft_v3//:raft",
         "@io_etcd_go_raft_v3//tracker",

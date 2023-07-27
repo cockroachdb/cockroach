@@ -48,22 +48,20 @@ go_library(
 
 go_test(
     name = "scexec_test",
-    size = "medium",
+    size = "small",
     srcs = [
         "exec_backfill_test.go",
         "executor_external_test.go",
         "main_test.go",
         ":mock_scexec",  # keep
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=55s"],
     deps = [
         ":scexec",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
@@ -97,6 +95,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",

@@ -14,9 +14,9 @@ with t=A
   put k=k2 v=v
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 data: "k1"/10.000000000,0 -> /BYTES/v
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/10.000000000,0 -> /BYTES/v
 
 # Test cases:
@@ -37,7 +37,7 @@ run error
 get k=k1 ts=9,0 failOnMoreRecent
 ----
 get: "k1" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; must write at or above 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 get k=k1 ts=10,0
@@ -48,7 +48,7 @@ run error
 get k=k1 ts=10,0 failOnMoreRecent
 ----
 get: "k1" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 get k=k1 ts=11,0
@@ -69,7 +69,7 @@ run error
 scan k=k1 end=k2 ts=9,0 failOnMoreRecent
 ----
 scan: "k1"-"k2" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; must write at or above 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 scan k=k1 end=k2 ts=10,0
@@ -80,7 +80,7 @@ run error
 scan k=k1 end=k2 ts=10,0 failOnMoreRecent
 ----
 scan: "k1"-"k2" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 scan k=k1 end=k2 ts=11,0
@@ -180,7 +180,7 @@ run error
 scan k=k1 end=k3 ts=9,0 failOnMoreRecent
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; must write at or above 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
 
 run error
 scan k=k1 end=k3 ts=10,0
@@ -192,7 +192,7 @@ run error
 scan k=k1 end=k3 ts=10,0 failOnMoreRecent
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; must write at or above 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
 
 run error
 scan k=k1 end=k3 ts=11,0
@@ -234,23 +234,23 @@ data: "a"/11.000000000,0 -> /BYTES/v
 data: "b"/13.000000000,0 -> /BYTES/v
 data: "c"/12.000000000,0 -> /BYTES/v
 data: "k1"/10.000000000,0 -> /BYTES/v
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/10.000000000,0 -> /BYTES/v
 
 run error
 scan k=a end=b_next ts=9,0 failOnMoreRecent
 ----
 scan: "a"-"b_next" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
 
 run error
 scan k=a end=c_next ts=9,0 failOnMoreRecent
 ----
 scan: "a"-"c_next" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
 
 run error
 scan k=b end=c_next ts=9,0 failOnMoreRecent
 ----
 scan: "b"-"c_next" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "b" at timestamp 9.000000000,0 too old; must write at or above 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "b" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1

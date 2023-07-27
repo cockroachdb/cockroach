@@ -85,17 +85,17 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 }
 
 // GetFirstIndex returns the first index.
-func (rec *SpanSetReplicaEvalContext) GetFirstIndex() kvpb.RaftIndex {
+func (rec *SpanSetReplicaEvalContext) GetFirstIndex() uint64 {
 	return rec.i.GetFirstIndex()
 }
 
 // GetTerm returns the term for the given index in the Raft log.
-func (rec *SpanSetReplicaEvalContext) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+func (rec *SpanSetReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
 	return rec.i.GetTerm(i)
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
-func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
+func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
 	return rec.i.GetLeaseAppliedIndex()
 }
 

@@ -12,8 +12,8 @@ go_library(
         "editor_bimodal.go",
         "editor_bubbline.go",
         "editor_bufio.go",
+        "editor_editline.go",
         "parser.go",
-        "scan_local_cmd.go",
         "sql.go",
         "statement_diag.go",
         "statements_value.go",
@@ -45,6 +45,7 @@ go_library(
         "@com_github_knz_bubbline//computil",
         "@com_github_knz_bubbline//editline",
         "@com_github_knz_bubbline//history",
+        "@com_github_knz_go_libedit//:go-libedit",
     ],
 )
 
@@ -55,7 +56,6 @@ go_test(
         "describe_test.go",
         "editor_bubbline_test.go",
         "main_test.go",
-        "scan_local_cmd_test.go",
         "sql_internal_test.go",
         "sql_test.go",
     ],
@@ -67,7 +67,6 @@ go_test(
         "//pkg/build",
         "//pkg/cli",
         "//pkg/cli/clicfg",
-        "//pkg/cli/clierror",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
         "//pkg/security/securityassets",

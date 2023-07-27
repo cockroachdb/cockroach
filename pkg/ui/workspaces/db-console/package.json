@@ -7,6 +7,8 @@
   "scripts": {
     "lint": "eslint './{src,ccl}/**/*.{tsx,ts,js}'",
     "lint:fix": "eslint './{src,ccl}/**/*.{tsx,ts,js}' --fix",
+    "karma": "karma start",
+    "karma:watch": "karma start --no-single-run --auto-watch",
     "storybook": "start-storybook -p 9009",
     "test": "DEBUG_PRINT_LIMIT=1000000 jest"
   },

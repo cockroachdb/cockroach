@@ -26,19 +26,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
 )
 
 var rootCmd = &cobra.Command{
@@ -251,26 +246,20 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
-
+		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern)
 		if err != nil {
 			return err
 		}
 
 		// sort by cluster names for stable output.
 		names := make([]string, len(filteredCloud.Clusters))
-		maxClusterName := 0
 		i := 0
 		for name := range filteredCloud.Clusters {
 			names[i] = name
-			if len(name) > maxClusterName {
-				maxClusterName = len(name)
-			}
 			i++
 		}
 		sort.Strings(names)
 
-		p := message.NewPrinter(language.English)
 		if listJSON {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
@@ -278,81 +267,17 @@ hosts file.
 				return err
 			}
 		} else {
-			machineType := func(clusterVMs vm.List) string {
-				res := clusterVMs[0].MachineType
-				// Display CPU architecture, other than amd64 (default).
-				if arch := clusterVMs[0].Labels["arch"]; arch != "" && arch != string(vm.ArchAMD64) {
-					res += fmt.Sprintf(" [%s]", arch)
-				}
-				return res
-			}
 			// Align columns left and separate with at least two spaces.
-			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
-			// N.B. colors use escape codes which don't play nice with tabwriter [1].
-			// We use a hacky workaround below to color the empty string.
-			// [1] https://github.com/golang/go/issues/12073
-
-			// Print header.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"Cluster", "Clouds", "Size", "VM",
-				color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
-				color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
-				color.HiWhiteString("$/TTL"))
-			// Print separator.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"", "", "",
-				color.HiWhiteString(""), color.HiWhiteString(""),
-				color.HiWhiteString(""), color.HiWhiteString(""),
-				color.HiWhiteString(""))
-			totalCostPerHour := 0.0
+			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
 			for _, name := range names {
 				c := filteredCloud.Clusters[name]
 				if listDetails {
 					c.PrintDetails(config.Logger)
 				} else {
-					// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
-					// so we make it left-aligned.
-					fmt.Fprintf(tw, "%s\t%s\t%d\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
-						len(c.VMs), machineType(c.VMs))
+					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
+
 					if !c.IsLocal() {
-						colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
-							switch {
-							case cost <= 100:
-								return color.HiGreenString
-							case cost <= 1000:
-								return color.HiBlueString
-							default:
-								return color.HiRedString
-							}
-						}
-						timeRemaining := c.LifetimeRemaining().Round(time.Second)
-						formatTTL := func(ttl time.Duration) string {
-							if c.VMs[0].Preemptible {
-								return color.HiMagentaString(ttl.String())
-							} else {
-								return color.HiBlueString(ttl.String())
-							}
-						}
-						cost := c.CostPerHour
-						totalCostPerHour += cost
-						alive := timeutil.Since(c.CreatedAt).Round(time.Minute)
-						costSinceCreation := cost * float64(alive) / float64(time.Hour)
-						costRemaining := cost * float64(timeRemaining) / float64(time.Hour)
-						if cost > 0 {
-							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
-								color.HiGreenString(p.Sprintf("$%.2f", cost)),
-								colorByCostBucket(costSinceCreation)(p.Sprintf("$%.2f", costSinceCreation)),
-								color.HiWhiteString(alive.String()),
-								formatTTL(timeRemaining),
-								colorByCostBucket(costRemaining)(p.Sprintf("$%.2f", costRemaining)))
-						} else {
-							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
-								color.HiGreenString(""),
-								color.HiGreenString(""),
-								color.HiWhiteString(alive.String()),
-								formatTTL(timeRemaining),
-								color.HiGreenString(""))
-						}
+						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
 					} else {
 						fmt.Fprintf(tw, "\t(-)")
 					}
@@ -361,10 +286,6 @@ hosts file.
 			}
 			if err := tw.Flush(); err != nil {
 				return err
-			}
-
-			if totalCostPerHour > 0 {
-				_, _ = p.Printf("\nTotal cost per hour: $%.2f\n", totalCostPerHour)
 			}
 
 			// Optionally print any dangling instances with errors
@@ -596,7 +517,6 @@ The "status" command outputs the binary and PID for the specified nodes:
 			if status.Err != nil {
 				config.Logger.Printf("  %2d: %s %s\n", status.NodeID, status.Err.Error())
 			} else if !status.Running {
-				// TODO(irfansharif): Surface the staged version here?
 				config.Logger.Printf("  %2d: not running\n", status.NodeID)
 			} else {
 				config.Logger.Printf("  %2d: %s %s\n", status.NodeID, status.Version, status.Pid)
@@ -1076,113 +996,6 @@ var grafanaURLCmd = &cobra.Command{
 	}),
 }
 
-var snapshotCmd = &cobra.Command{
-	Use:   `snapshot`,
-	Short: "snapshot enables creating/listing/deleting/applying cluster snapshots",
-	Args:  cobra.MinimumNArgs(1),
-}
-
-var snapshotCreateCmd = &cobra.Command{
-	Use:   `create <cluster> <name> <description>`,
-	Short: "snapshot a named cluster, using the given snapshot name and description",
-	Args:  cobra.ExactArgs(3),
-	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		cluster := args[0]
-		name := args[1]
-		desc := args[2]
-		snapshots, err := roachprod.CreateSnapshot(context.Background(), config.Logger, cluster, vm.VolumeSnapshotCreateOpts{
-			Name:        name,
-			Description: desc,
-		})
-		if err != nil {
-			return err
-		}
-		for _, snapshot := range snapshots {
-			config.Logger.Printf("created snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
-		}
-		return nil
-	}),
-}
-
-var snapshotListCmd = &cobra.Command{
-	Use:   `list <provider> [<name>]`,
-	Short: "list all snapshots for the given cloud provider, optionally filtering by the given name",
-	Args:  cobra.RangeArgs(1, 2),
-	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
-		var name string
-		if len(args) == 2 {
-			name = args[1]
-		}
-		snapshots, err := roachprod.ListSnapshots(context.Background(), config.Logger, provider,
-			vm.VolumeSnapshotListOpts{
-				NamePrefix: name,
-			},
-		)
-		if err != nil {
-			return err
-		}
-		for _, snapshot := range snapshots {
-			config.Logger.Printf("found snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
-		}
-		return nil
-	}),
-}
-
-var snapshotDeleteCmd = &cobra.Command{
-	Use:   `delete <provider> <name>`,
-	Short: "delete all snapshots for the given cloud provider optionally filtering by the given name",
-	Args:  cobra.ExactArgs(2),
-	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-		provider, name := args[0], args[1]
-		snapshots, err := roachprod.ListSnapshots(ctx, config.Logger, provider,
-			vm.VolumeSnapshotListOpts{
-				NamePrefix: name,
-			},
-		)
-		if err != nil {
-			return err
-		}
-
-		for _, snapshot := range snapshots {
-			config.Logger.Printf("deleting snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
-		}
-		if !dryrun {
-			if err := roachprod.DeleteSnapshots(ctx, config.Logger, provider, snapshots...); err != nil {
-				return err
-			}
-		}
-		config.Logger.Printf("done")
-		return nil
-	}),
-}
-
-var snapshotApplyCmd = &cobra.Command{
-	Use:   `apply <provider> <name> <cluster> `,
-	Short: "apply the named snapshots from the given cloud provider to the named cluster",
-	Args:  cobra.ExactArgs(3),
-	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-		provider, name, cluster := args[0], args[1], args[2]
-		snapshots, err := roachprod.ListSnapshots(ctx, config.Logger, provider,
-			vm.VolumeSnapshotListOpts{
-				NamePrefix: name,
-			},
-		)
-		if err != nil {
-			return err
-		}
-
-		return roachprod.ApplySnapshots(ctx, config.Logger, cluster, snapshots, vm.VolumeCreateOpts{
-			Size: 500, // TODO(irfansharif): Make this configurable?
-			Labels: map[string]string{
-				vm.TagUsage: "roachprod",
-			},
-		})
-	}),
-}
-
 var rootStorageCmd = &cobra.Command{
 	Use:   `storage`,
 	Short: "storage enables administering storage related commands and configurations",
@@ -1253,11 +1066,7 @@ var storageSnapshotCmd = &cobra.Command{
 		cluster := args[0]
 		name := args[1]
 		desc := args[2]
-		_, err := roachprod.CreateSnapshot(context.Background(), config.Logger, cluster, vm.VolumeSnapshotCreateOpts{
-			Name:        name,
-			Description: desc,
-		})
-		return err
+		return roachprod.SnapshotVolume(context.Background(), config.Logger, cluster, name, desc)
 	}),
 }
 
@@ -1290,45 +1099,6 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 	}
 }
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "check TeamCity for a new roachprod binary and update if available",
-	Long: "Will attempt to download the latest master branch roachprod binary from teamcity" +
-		" and swap the current roachprod with it. The current roachprod binary will be backed up" +
-		" and can be restored via `roachprod update --revert`.",
-	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		currentBinary, err := os.Executable()
-		if err != nil {
-			return err
-		}
-
-		if revertUpdate {
-			if upgrade.PromptYesNo("Revert to previous version? Note: this will replace the" +
-				" current roachprod binary with a previous roachprod.bak binary.") {
-				if err := upgrade.SwapBinary(currentBinary, currentBinary+".bak"); err != nil {
-					return err
-				}
-				fmt.Println("roachprod successfully reverted, run `roachprod -v` to confirm.")
-			}
-			return nil
-		}
-
-		newBinary := currentBinary + ".new"
-		if err := upgrade.DownloadLatestRoadprod(newBinary); err != nil {
-			return err
-		}
-
-		if upgrade.PromptYesNo("Continue with update? This will overwrite any existing roachprod.bak binary.") {
-			if err := upgrade.SwapBinary(currentBinary, newBinary); err != nil {
-				return errors.WithDetail(err, "unable to update binary")
-			}
-
-			fmt.Println("Update successful: run `roachprod -v` to confirm.")
-		}
-		return nil
-	}),
-}
-
 func main() {
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
@@ -1345,6 +1115,7 @@ func main() {
 		syncCmd,
 		gcCmd,
 		setupSSHCmd,
+
 		statusCmd,
 		monitorCmd,
 		startCmd,
@@ -1376,8 +1147,6 @@ func main() {
 		grafanaDumpCmd,
 		grafanaURLCmd,
 		rootStorageCmd,
-		snapshotCmd,
-		updateCmd,
 	)
 	setBashCompletionFunction()
 

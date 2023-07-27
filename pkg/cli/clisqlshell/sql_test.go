@@ -159,13 +159,14 @@ func Example_sql_config() {
 	// 123
 	// # 1 row
 	// sql --set unknownoption -e select 123 as "123"
-	// ERROR: -e: unknown variable name: "unknownoption"
+	// invalid syntax: \set unknownoption. Try \? for help.
+	// ERROR: -e: invalid syntax
 	// sql --set display_format=invalidvalue -e select 123 as "123"
-	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
+	// \set display_format=invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
-	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
+	// \set display_format=invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 }
 
 func Example_sql_watch() {
@@ -347,7 +348,7 @@ func Example_includes() {
 	// ?column?
 	// 123
 	// sql -f testdata/i_maxrecursion.sql
-	// ERROR: \i: too many recursion levels (max 10)
+	// \i: too many recursion levels (max 10)
 	// ERROR: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: \i: too many recursion levels (max 10)
 }
 

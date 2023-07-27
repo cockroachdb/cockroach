@@ -18,11 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -96,40 +92,6 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 		"for each store. It can be over-ridden on a per-store basis using the --store flag",
 	0).WithPublic()
 
-// FlowTokenDropInterval determines the frequency at which we check for pending
-// flow token dispatches to nodes we're no longer connected to, in order to drop
-// them.
-var FlowTokenDropInterval = settings.RegisterDurationSetting(
-	settings.SystemOnly,
-	"kvadmission.flow_token.drop_interval",
-	"the interval at which the raft transport checks for pending flow token dispatches "+
-		"to nodes we're no longer connected to, in order to drop them; set to 0 to disable the mechanism",
-	30*time.Second,
-	settings.NonNegativeDuration,
-)
-
-// FlowTokenDispatchInterval determines the frequency at which we check for
-// pending flow token dispatches from idle connections, in order to deliver
-// them.
-var FlowTokenDispatchInterval = settings.RegisterDurationSetting(
-	settings.SystemOnly,
-	"kvadmission.flow_token.dispatch_interval",
-	"the interval at which the raft transport checks for pending flow token dispatches "+
-		"from idle connections and delivers them",
-	time.Second,
-	settings.PositiveDuration, settings.NonNegativeDurationWithMaximum(time.Minute),
-)
-
-// ConnectedStoreExpiration controls how long the RaftTransport layers considers
-// a stream connected without it having observed any messages from it.
-var ConnectedStoreExpiration = settings.RegisterDurationSetting(
-	settings.SystemOnly,
-	"kvadmission.raft_transport.connected_store_expiration",
-	"the interval at which the raft transport prunes its set of connected stores; set to 0 to disable the mechanism",
-	5*time.Minute,
-	settings.NonNegativeDuration,
-)
-
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -185,18 +147,13 @@ type TenantWeightsForStore struct {
 
 // controllerImpl implements Controller interface.
 type controllerImpl struct {
-	nodeID *base.NodeIDContainer
-
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowController           kvflowcontrol.Controller
-	kvflowHandles              kvflowcontrol.Handles
-
-	settings *cluster.Settings
-	every    log.EveryN
+	settings                   *cluster.Settings
+	every                      log.EveryN
 }
 
 var _ Controller = &controllerImpl{}
@@ -210,42 +167,23 @@ type Handle struct {
 	tenantID             roachpb.TenantID
 	storeAdmissionQ      *admission.StoreWorkQueue
 	storeWorkHandle      admission.StoreWorkHandle
-	elasticCPUWorkHandle *admission.ElasticCPUWorkHandle
-	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
+	ElasticCPUWorkHandle *admission.ElasticCPUWorkHandle
 
 	callAdmittedWorkDoneOnKVAdmissionQ bool
-}
-
-// AnnotateCtx annotates the given context with request-scoped admission
-// data, plumbed through the KV stack using context.Contexts.
-func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
-	if h.elasticCPUWorkHandle != nil {
-		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, h.elasticCPUWorkHandle)
-	}
-	if h.raftAdmissionMeta != nil {
-		ctx = kvflowcontrol.ContextWithMeta(ctx, h.raftAdmissionMeta)
-	}
-	return ctx
 }
 
 // MakeController returns a Controller. All three parameters must together be
 // nil or non-nil.
 func MakeController(
-	nodeID *base.NodeIDContainer,
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
-	kvflowController kvflowcontrol.Controller,
-	kvflowHandles kvflowcontrol.Handles,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
-		nodeID:                     nodeID,
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
-		kvflowController:           kvflowController,
-		kvflowHandles:              kvflowHandles,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}
@@ -300,44 +238,22 @@ func (n *controllerImpl) AdmitKVWork(
 	// to continue even when throttling since there are often significant
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-		if !bypassAdmission &&
-			kvflowcontrol.Enabled.Get(&n.settings.SV) &&
-			n.settings.Version.IsActive(ctx, clusterversion.V23_2_UseACRaftEntryEntryEncodings) {
-			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
-			if !found {
-				return Handle{}, nil
-			}
-			if err := kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime)); err != nil {
+		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+		if storeAdmissionQ != nil {
+			storeWorkHandle, err := storeAdmissionQ.Admit(
+				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
+			if err != nil {
 				return Handle{}, err
 			}
-			// NB: It's possible for us to be waiting for available flow tokens
-			// for a different set of streams that the ones we'll eventually
-			// deduct tokens from, if the range experiences a split between now
-			// and the point of deduction. That's ok, there's no strong
-			// synchronization needed between these two points.
-			ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-				AdmissionPriority:   int32(admissionInfo.Priority),
-				AdmissionCreateTime: admissionInfo.CreateTime,
-				AdmissionOriginNode: n.nodeID.Get(),
-			}
-		} else {
-			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
-			if storeAdmissionQ != nil {
-				storeWorkHandle, err := storeAdmissionQ.Admit(
-					ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
-				if err != nil {
-					return Handle{}, err
-				}
-				admissionEnabled = storeWorkHandle.UseAdmittedWorkDone()
-				if admissionEnabled {
-					defer func() {
-						if retErr != nil {
-							// No bytes were written.
-							_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
-						}
-					}()
-					ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
-				}
+			admissionEnabled = storeWorkHandle.UseAdmittedWorkDone()
+			if admissionEnabled {
+				defer func() {
+					if retErr != nil {
+						// No bytes were written.
+						_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
+					}
+				}()
+				ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
 			}
 		}
 	}
@@ -361,11 +277,11 @@ func (n *controllerImpl) AdmitKVWork(
 			if err != nil {
 				return Handle{}, err
 			}
-			ah.elasticCPUWorkHandle = elasticWorkHandle
+			ah.ElasticCPUWorkHandle = elasticWorkHandle
 			defer func() {
 				if retErr != nil {
 					// No elastic work was done.
-					n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
+					n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
 				}
 			}()
 		} else {
@@ -381,7 +297,7 @@ func (n *controllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the Controller interface.
 func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
-	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
+	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
@@ -512,21 +428,6 @@ func (n *controllerImpl) AdmitRaftEntry(
 	if err != nil {
 		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
 		return
-	}
-
-	if log.V(1) {
-		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
-			admissionpb.WorkPriority(meta.AdmissionPriority),
-			meta.AdmissionCreateTime,
-			meta.AdmissionOriginNode,
-			n.nodeID.Get(),
-			storeID,
-			tenantID.ToUint64(),
-			kvflowcontrol.Tokens(len(entry.Data)),
-			typ.IsSideloaded(),
-			entry.Term,
-			entry.Index,
-		)
 	}
 
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))

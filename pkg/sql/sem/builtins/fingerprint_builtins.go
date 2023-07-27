@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,9 +44,8 @@ func verboseFingerprint(
 		return nil, err
 	}
 
-	// The startTime can either be a timestampTZ or a decimal.
 	var startTimestamp hlc.Timestamp
-	if parsedDecimal, ok := tree.AsDDecimal(args[1]); ok {
+	if parsedDecimal, ok := parseDecimal(args[1]); ok {
 		startTimestamp, err = hlc.DecimalToHLC(&parsedDecimal.Decimal)
 		if err != nil {
 			return nil, err
@@ -56,6 +57,16 @@ func verboseFingerprint(
 
 	allRevisions := bool(tree.MustBeDBool(args[2]))
 	return fingerprint(ctx, evalCtx, span, startTimestamp, allRevisions /* stripped */, false)
+}
+
+// parseDecimal is a copy of tree.AsDDecimal() which is available on later versions
+// of cockroach.
+func parseDecimal(e tree.Expr) (*tree.DDecimal, bool) {
+	switch t := e.(type) {
+	case *tree.DDecimal:
+		return t, true
+	}
+	return nil, false
 }
 
 func fingerprint(
@@ -87,6 +98,13 @@ func fingerprint(
 	}
 	header := kvpb.Header{
 		Timestamp: evalCtx.Txn.ReadTimestamp(),
+		// We set WaitPolicy to Error, so that the export will return an error
+		// to us instead of a blocking wait if it hits any other txns.
+		//
+		// TODO(adityamaru): We might need to handle WriteIntentErrors
+		// specially in the future so as to allow the fingerprint to complete
+		// in the face of intents.
+		WaitPolicy: lock.WaitPolicy_Error,
 		// TODO(ssd): Setting this disables async sending in
 		// DistSender so it likely substantially impacts
 		// performance.
@@ -120,14 +138,16 @@ func fingerprint(
 			var rawResp kvpb.Response
 			var recording tracingpb.Recording
 			var pErr *kvpb.Error
-			exportRequestErr := timeutil.RunWithTimeout(ctx,
+			exportRequestErr := contextutil.RunWithTimeout(ctx,
 				fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
 					EndKey: span.EndKey}),
 				5*time.Minute, func(ctx context.Context) error {
 					sp := tracing.SpanFromContext(ctx)
 					ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "fingerprint.ExportRequest", tracing.WithParent(sp))
+					defer func() {
+						recording = exportSpan.FinishAndGetConfiguredRecording()
+					}()
 					rawResp, pErr = kv.SendWrappedWithAdmission(ctx, evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
-					recording = exportSpan.FinishAndGetConfiguredRecording()
 					if pErr != nil {
 						return pErr.GoError()
 					}

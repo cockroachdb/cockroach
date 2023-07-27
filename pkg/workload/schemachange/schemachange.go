@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package schemachange implements the schemachange workload.
 package schemachange
 
 import (
@@ -54,36 +53,32 @@ import (
 //For example, an attempt to do something we don't support should be swallowed (though if we can detect that maybe we should just not do it, e.g). It will be hard to use this test for anything more than liveness detection until we go through the tedious process of classifying errors.:
 
 const (
-	defaultMaxOpsPerWorker                 = 5
-	defaultErrorRate                       = 10
-	defaultEnumPct                         = 10
-	defaultMaxSourceTables                 = 3
-	defaultSequenceOwnedByPct              = 25
-	defaultFkParentInvalidPct              = 5
-	defaultFkChildInvalidPct               = 5
-	defaultDeclarativeSchemaChangerPct     = 25
-	defaultDeclarativeSchemaMaxStmtsPerTxn = 1
+	defaultMaxOpsPerWorker    = 5
+	defaultErrorRate          = 10
+	defaultEnumPct            = 10
+	defaultMaxSourceTables    = 3
+	defaultSequenceOwnedByPct = 25
+	defaultFkParentInvalidPct = 5
+	defaultFkChildInvalidPct  = 5
 )
 
 type schemaChange struct {
-	flags                           workload.Flags
-	connFlags                       *workload.ConnFlags
-	dbOverride                      string
-	maxOpsPerWorker                 int
-	errorRate                       int
-	enumPct                         int
-	verbose                         int
-	dryRun                          bool
-	maxSourceTables                 int
-	sequenceOwnedByPct              int
-	logFilePath                     string
-	logFile                         *os.File
-	dumpLogsOnce                    *sync.Once
-	workers                         []*schemaChangeWorker
-	fkParentInvalidPct              int
-	fkChildInvalidPct               int
-	declarativeSchemaChangerPct     int
-	declarativeSchemaMaxStmtsPerTxn int
+	flags              workload.Flags
+	connFlags          *workload.ConnFlags
+	dbOverride         string
+	maxOpsPerWorker    int
+	errorRate          int
+	enumPct            int
+	verbose            int
+	dryRun             bool
+	maxSourceTables    int
+	sequenceOwnedByPct int
+	logFilePath        string
+	logFile            *os.File
+	dumpLogsOnce       *sync.Once
+	workers            []*schemaChangeWorker
+	fkParentInvalidPct int
+	fkChildInvalidPct  int
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -113,12 +108,6 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times to choose an invalid parent column in a fk constraint.`)
 		s.flags.IntVar(&s.fkChildInvalidPct, `fk-child-invalid-pct`, defaultFkChildInvalidPct,
 			`Percentage of times to choose an invalid child column in a fk constraint.`)
-		s.flags.IntVar(&s.declarativeSchemaChangerPct, `declarative-schema-changer-pct`,
-			defaultDeclarativeSchemaChangerPct,
-			`Percentage of the declarative schema changer is used.`)
-		s.flags.IntVar(&s.declarativeSchemaMaxStmtsPerTxn, `declarative-schema-changer-stmt-per-txn`,
-			defaultDeclarativeSchemaMaxStmtsPerTxn,
-			`Number of statements per-txn used by the declarative schema changer.`)
 
 		s.connFlags = workload.NewConnFlags(&s.flags)
 		return s
@@ -162,17 +151,6 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
-	// We will need double the concurrency, since we need watch
-	// dog connections. There is a danger of the pool emptying on
-	// termination (since we will cancel schema changes).
-	cfg.MaxConnsPerPool *= 2
-	cfg.MaxTotalConnections *= 2
-	// Disallow connection lifetime jittering and allow long
-	// life times for this test. Schema changes can drag for
-	// a long time on this workload and we have our own health
-	// checks for progress.
-	cfg.MaxConnLifetime = time.Hour
-	cfg.MaxConnIdleTime = time.Hour
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -187,17 +165,6 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
-	// A separate deck is constructed of only schema changes supported
-	// by the declarative schema changer. This deck has equal weights,
-	// only for supported schema changes.
-	declarativeOpWeights := make([]int, len(opWeights))
-	for idx, weight := range opWeights {
-		if opDeclarative[idx] {
-			declarativeOpWeights[idx] = weight
-		}
-	}
-	declarativeOps := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), declarativeOpWeights...)
-
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
 	stdoutLog := makeAtomicLog(os.Stdout)
@@ -220,7 +187,6 @@ func (s *schemaChange) Ops(
 			enumPct:            s.enumPct,
 			rng:                rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 			ops:                ops,
-			declarativeOps:     declarativeOps,
 			maxSourceTables:    s.maxSourceTables,
 			sequenceOwnedByPct: s.sequenceOwnedByPct,
 			fkParentInvalidPct: s.fkParentInvalidPct,
@@ -357,15 +323,10 @@ func (w *schemaChangeWorker) WrapWithErrorState(err error) error {
 	}
 }
 
-func (w *schemaChangeWorker) runInTxn(
-	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger bool,
-) error {
+func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 	w.logger.startLog(w.id)
 	w.logger.writeLog("BEGIN")
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
-	if useDeclarativeSchemaChanger && opsNum > w.workload.declarativeSchemaMaxStmtsPerTxn {
-		opsNum = w.workload.declarativeSchemaMaxStmtsPerTxn
-	}
 
 	for i := 0; i < opsNum; i++ {
 		// Terminating this loop early if there are expected commit errors prevents unexpected commit behavior from being
@@ -379,7 +340,7 @@ func (w *schemaChangeWorker) runInTxn(
 			break
 		}
 
-		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger)
+		op, err := w.opGen.randOp(ctx, tx)
 		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
 			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
@@ -427,22 +388,7 @@ func (w *schemaChangeWorker) runInTxn(
 }
 
 func (w *schemaChangeWorker) run(ctx context.Context) error {
-	conn, err := w.pool.Get().Acquire(ctx)
-	defer conn.Release()
-	if err != nil {
-		return errors.Wrap(err, "cannot get a connection")
-	}
-	useDeclarativeSchemaChanger := w.opGen.randIntn(100) > w.workload.declarativeSchemaChangerPct
-	if useDeclarativeSchemaChanger {
-		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='unsafe_always';"); err != nil {
-			return err
-		}
-	} else {
-		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='off';"); err != nil {
-			return err
-		}
-	}
-	tx, err := conn.Begin(ctx)
+	tx, err := w.pool.Get().Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
@@ -458,19 +404,16 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
-	err = w.runInTxn(ctx, tx, useDeclarativeSchemaChanger)
+	err = w.runInTxn(ctx, tx)
 
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
 		// error with a rollback error if necessary.
-		if !conn.Conn().IsClosed() {
-			if rbkErr := tx.Rollback(ctx); rbkErr != nil {
-				err = errors.Mark(
-					errors.Wrap(errors.WithSecondaryError(err,
-						rbkErr), "***UNEXPECTED ERROR DURING ROLLBACK;"),
-					errRunInTxnFatalSentinel,
-				)
-			}
+		if rbkErr := tx.Rollback(ctx); rbkErr != nil {
+			err = errors.Mark(
+				errors.Wrap(rbkErr, "***UNEXPECTED ERROR DURING ROLLBACK;"),
+				errRunInTxnFatalSentinel,
+			)
 		}
 
 		w.logger.flushLogWithError(tx, err)
@@ -492,11 +435,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
-			if errors.Is(err, io.ErrUnexpectedEOF) {
-				err = nil
-				w.logger.writeLog("WARNING: Connection failed at server")
-				return err
-			}
 			err = errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received a non pg error"),
 				errRunInTxnFatalSentinel,

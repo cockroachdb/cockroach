@@ -69,16 +69,17 @@ func TestImportMultiRegion(t *testing.T) {
 	noopDuringImportFunc := func() error { return nil }
 	duringImportFunc.Store(noopDuringImportFunc)
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(resumer jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).
+			TestingResumerCreationKnobs = map[jobspb.Type]func(jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(resumer jobs.Resumer) jobs.Resumer {
 				resumer.(interface {
 					TestingSetAfterImportKnob(fn func(summary roachpb.RowCount) error)
 				}).TestingSetAfterImportKnob(func(summary roachpb.RowCount) error {
 					return duringImportFunc.Load().(func() error)()
 				})
 				return resumer
-			})
+			},
+		}
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -387,10 +388,7 @@ func TestExportInsideTenant(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantProbabilistic,
-		ExternalIODir:     dir,
-	})
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
 	defer srv.Stopper().Stop(context.Background())
 
 	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -420,7 +418,7 @@ func TestImportInTenant(t *testing.T) {
 		ExternalIODir: baseDir,
 		// Test is designed to run inside a tenant so no need to
 		// probabilistically run it inside the default test tenant.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DisableDefaultTestTenant: true,
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -471,12 +469,7 @@ func TestImportInMultiServerTenant(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
-	args := base.TestServerArgs{
-		// Test is designed to run inside a tenant so no need to
-		// probabilistically run it inside the default test tenant.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     baseDir,
-	}
+	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 

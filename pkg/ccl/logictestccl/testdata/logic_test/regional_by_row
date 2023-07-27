@@ -261,7 +261,7 @@ regional_by_row_table_pkey   crdb_region  true
 regional_by_row_table_pkey   pk           false
 
 query TTTTIT colnames
-SELECT * FROM [SHOW TABLES] ORDER BY table_name
+SHOW TABLES
 ----
 schema_name  table_name                                         type   owner  estimated_row_count  locality
 public       parent_table                                       table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
@@ -390,7 +390,7 @@ statement ok
 ALTER TABLE regional_by_row_table DROP COLUMN unique_col
 
 # Insert some rows into the regional_by_row_table.
-query TI rowsort
+query TI
 INSERT INTO regional_by_row_table (pk, pk2, a, b, j) VALUES
 (1, 1, 2, 3, '{"a": "b"}'), (4, 4, 5, 6, '{"c": "d"}')
 RETURNING crdb_region, pk
@@ -682,7 +682,7 @@ DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZON
                                  voter_constraints = '{+region=ca-central-1: 2}',
                                  lease_preferences = '[[+region=ca-central-1]]'
 
-query TI rowsort
+query TI
 INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
 RETURNING crdb_region_col, pk
 ----
@@ -1700,7 +1700,7 @@ OFFSET
 ----
 7  7  8  9  ca-central-1
 
-query IIII rowsort
+query IIII
 SELECT
     pk, pk2, a, b
 FROM
@@ -1790,7 +1790,7 @@ CREATE TABLE regional_by_row_table_as1 (
 statement ok
 INSERT INTO regional_by_row_table_as1 (pk) VALUES (1), (2), (3), (10), (20)
 
-query IIITT rowsort
+query IIITT
 SELECT pk, a, b, crdb_region_col, crdb_region_col1 FROM regional_by_row_table_as1 LIMIT 3
 ----
 1  NULL  NULL  ca-central-1  ca-central-1

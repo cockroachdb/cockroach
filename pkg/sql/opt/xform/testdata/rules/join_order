@@ -312,7 +312,7 @@ New expression 3 of 3:
 memo set=reorder_joins_limit=0 expect-not=ReorderJoins
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~23KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
+memo (optimized, ~22KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
  ├── G1: (inner-join G2 G3 G4) (merge-join G2 G3 G5 inner-join,+1,+10)
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (merge-join G2="[ordering: +1]" G3 G5 inner-join,+1,+10)
@@ -360,7 +360,7 @@ memo (optimized, ~23KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
 memo set=reorder_joins_limit=2
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~34KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
+memo (optimized, ~33KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+10) (merge-join G3 G2 G8 inner-join,+10,+1) (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12)) (merge-join G5 G6 G8 inner-join,+5,+11) (merge-join G6 G5 G8 inner-join,+11,+5) (lookup-join G6 G8 cy,keyCols=[11],outCols=(1,2,5,6,9-12))
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12))
@@ -521,7 +521,7 @@ inner-join (cross)
 memo set=reorder_joins_limit=0
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
-memo (optimized, ~30KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
+memo (optimized, ~29KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
  ├── G1: (inner-join G2 G3 G4) (merge-join G2 G3 G5 inner-join,+2,+6)
  │    └── [presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16]
  │         ├── best: (inner-join G2 G3 G4)
@@ -587,7 +587,7 @@ memo (optimized, ~30KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
 memo set=reorder_joins_limit=3
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
-memo (optimized, ~65KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
+memo (optimized, ~63KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (inner-join G10 G11 G12) (inner-join G11 G10 G12) (inner-join G13 G14 G12) (inner-join G14 G13 G12) (inner-join G15 G16 G12) (inner-join G16 G15 G12) (inner-join G17 G18 G12) (inner-join G18 G17 G12) (merge-join G3 G2 G19 inner-join,+6,+2) (merge-join G6 G5 G19 inner-join,+10,+6) (merge-join G9 G8 G19 inner-join,+10,+6) (merge-join G11 G10 G19 inner-join,+13,+10) (merge-join G14 G13 G19 inner-join,+13,+10) (merge-join G16 G15 G19 inner-join,+13,+10) (lookup-join G17 G19 abc,keyCols=[10],outCols=(1,2,5,6,9,10,13-16)) (merge-join G18 G17 G19 inner-join,+13,+10)
  │    └── [presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16]
  │         ├── best: (inner-join G3 G2 G4)
@@ -752,7 +752,7 @@ exec-ddl
 CREATE TABLE a (id INT8 PRIMARY KEY)
 ----
 
-opt set=reorder_joins_limit=3 disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+opt set=reorder_joins_limit=3
 SELECT
     1
 FROM
@@ -1964,63 +1964,27 @@ full-join (hash)
  └── filters
       └── y = z
 
-exec-ddl
-CREATE TABLE abc2 (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  d INT
-)
-----
-
-exec-ddl
-CREATE TABLE abc3 (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  d INT
-)
-----
-
-exec-ddl
-CREATE TABLE abc4 (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  d INT
-)
-----
-
-exec-ddl
-CREATE TABLE abc5 (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  d INT
-)
-----
-
 # Iteratively reorder subtrees of up to size 2.
 reorderjoins set=reorder_joins_limit=2 format=hide-all
 SELECT * FROM abc AS a1
-INNER JOIN abc2 AS a2 ON a1.a = a2.a
-LEFT JOIN abc3 AS a3 ON a2.b = a3.b
-INNER JOIN abc4 AS a4 ON a3.a = a4.a
-WHERE EXISTS (SELECT * FROM abc5 AS a5 WHERE a2.c = a5.c)
+INNER JOIN abc AS a2 ON a1.a = a2.a
+LEFT JOIN abc AS a3 ON a2.b = a3.b
+INNER JOIN abc AS a4 ON a3.a = a4.a
+WHERE EXISTS (SELECT * FROM abc AS a5 WHERE a2.c = a5.c)
 ----
 --------------------------------------------------------------------------------
 Join Tree #1
 --------------------------------------------------------------------------------
   semi-join (hash)
-   ├── scan abc2 [as=a2]
-   ├── scan abc5 [as=a5]
+   ├── scan abc [as=a2]
+   ├── scan abc [as=a5]
    └── filters
         └── a2.c = a5.c
 Vertexes
   A:
-    scan abc2 [as=a2]
+    scan abc [as=a2]
   B:
-    scan abc5 [as=a5]
+    scan abc [as=a5]
 Edges
   a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
 Joining AB
@@ -2030,17 +1994,17 @@ Joins Considered: 1
 Join Tree #2
 --------------------------------------------------------------------------------
   inner-join (hash)
-   ├── scan abc2 [as=a2]
+   ├── scan abc [as=a2]
    ├── distinct-on
-   │    └── scan abc5 [as=a5]
+   │    └── scan abc [as=a5]
    └── filters
         └── a2.c = a5.c
 Vertexes
   A:
-    scan abc2 [as=a2]
+    scan abc [as=a2]
   C:
     distinct-on
-     └── scan abc5 [as=a5]
+     └── scan abc [as=a5]
 Edges
   a2.c = a5.c [inner, ses=AC, tes=AC, rules=()]
 Joining AC
@@ -2053,8 +2017,8 @@ Join Tree #3
   inner-join (hash)
    ├── scan abc [as=a1]
    ├── semi-join (hash)
-   │    ├── scan abc2 [as=a2]
-   │    ├── scan abc5 [as=a5]
+   │    ├── scan abc [as=a2]
+   │    ├── scan abc [as=a5]
    │    └── filters
    │         └── a2.c = a5.c
    └── filters
@@ -2063,9 +2027,9 @@ Vertexes
   D:
     scan abc [as=a1]
   A:
-    scan abc2 [as=a2]
+    scan abc [as=a2]
   B:
-    scan abc5 [as=a5]
+    scan abc [as=a5]
 Edges
   a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
   a1.a = a2.a [inner, ses=DA, tes=DA, rules=()]
@@ -2086,13 +2050,13 @@ Join Tree #4
    ├── inner-join (hash)
    │    ├── scan abc [as=a1]
    │    ├── semi-join (hash)
-   │    │    ├── scan abc2 [as=a2]
-   │    │    ├── scan abc5 [as=a5]
+   │    │    ├── scan abc [as=a2]
+   │    │    ├── scan abc [as=a5]
    │    │    └── filters
    │    │         └── a2.c = a5.c
    │    └── filters
    │         └── a1.a = a2.a
-   ├── scan abc3 [as=a3]
+   ├── scan abc [as=a3]
    └── filters
         └── a2.b = a3.b
 Vertexes
@@ -2100,12 +2064,12 @@ Vertexes
     scan abc [as=a1]
   E:
     semi-join (hash)
-     ├── scan abc2 [as=a2]
-     ├── scan abc5 [as=a5]
+     ├── scan abc [as=a2]
+     ├── scan abc [as=a5]
      └── filters
           └── a2.c = a5.c
   F:
-    scan abc3 [as=a3]
+    scan abc [as=a3]
 Edges
   a1.a = a2.a [inner, ses=DE, tes=DE, rules=()]
   a2.b = a3.b [inner, ses=EF, tes=EF, rules=()]
@@ -2129,16 +2093,16 @@ Join Tree #5
    │    ├── inner-join (hash)
    │    │    ├── scan abc [as=a1]
    │    │    ├── semi-join (hash)
-   │    │    │    ├── scan abc2 [as=a2]
-   │    │    │    ├── scan abc5 [as=a5]
+   │    │    │    ├── scan abc [as=a2]
+   │    │    │    ├── scan abc [as=a5]
    │    │    │    └── filters
    │    │    │         └── a2.c = a5.c
    │    │    └── filters
    │    │         └── a1.a = a2.a
-   │    ├── scan abc3 [as=a3]
+   │    ├── scan abc [as=a3]
    │    └── filters
    │         └── a2.b = a3.b
-   ├── scan abc4 [as=a4]
+   ├── scan abc [as=a4]
    └── filters
         └── a3.a = a4.a
 Vertexes
@@ -2146,16 +2110,16 @@ Vertexes
     inner-join (hash)
      ├── scan abc [as=a1]
      ├── semi-join (hash)
-     │    ├── scan abc2 [as=a2]
-     │    ├── scan abc5 [as=a5]
+     │    ├── scan abc [as=a2]
+     │    ├── scan abc [as=a5]
      │    └── filters
      │         └── a2.c = a5.c
      └── filters
           └── a1.a = a2.a
   F:
-    scan abc3 [as=a3]
+    scan abc [as=a3]
   H:
-    scan abc4 [as=a4]
+    scan abc [as=a4]
 Edges
   a2.b = a3.b [inner, ses=GF, tes=GF, rules=()]
   a3.a = a4.a [inner, ses=FH, tes=FH, rules=()]
@@ -2179,15 +2143,15 @@ inner-join (hash)
  │    └── inner-join (hash)
  │         ├── inner-join (merge)
  │         │    ├── scan abc [as=a1]
- │         │    ├── scan abc2 [as=a2]
+ │         │    ├── scan abc [as=a2]
  │         │    └── filters (true)
  │         ├── distinct-on
- │         │    └── scan abc5 [as=a5]
+ │         │    └── scan abc [as=a5]
  │         └── filters
  │              └── a2.c = a5.c
  ├── inner-join (merge)
- │    ├── scan abc3 [as=a3]
- │    ├── scan abc4 [as=a4]
+ │    ├── scan abc [as=a3]
+ │    ├── scan abc [as=a4]
  │    └── filters (true)
  └── filters
       └── a2.b = a3.b
@@ -2775,7 +2739,7 @@ SELECT (
 )
   FROM table80901_1 AS tab_42921;
 ----
-memo (optimized, ~68KB, required=[presentation: ?column?:50])
+memo (optimized, ~66KB, required=[presentation: ?column?:50])
  ├── G1: (project G2 G3)
  │    └── [presentation: ?column?:50]
  │         ├── best: (project G2 G3)
@@ -2948,18 +2912,18 @@ JOIN t88659 AS t4 ON (t3.a) = (t4.b) AND (t2.b) = (t4.a) AND (t2.a) = (t4.a);
 ----
 inner-join (lookup t88659)
  ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21
- ├── key columns: [7] = [19]
+ ├── key columns: [20] = [13]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,13,14,19,20), (8)==(2,7,13,14,19,20), (2)==(7,8,13,14,19,20), (13)-->(15), (3)==(9,15,21), (9)==(3,15,21), (15)==(3,9,21), (19)-->(21), (13)==(2,7,8,14,19,20), (20)==(2,7,8,13,14,19), (19)==(2,7,8,13,14,20), (21)==(3,9,15), (14)==(2,7,8,13,19,20)
+ ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (2)==(7,8,19), (13)-->(14,15), (3)==(9,15), (9)==(3,15), (15)==(3,9), (19)-->(20,21), (13)==(20), (20)==(13), (19)==(2,7,8)
  ├── inner-join (lookup t88659)
- │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null
- │    ├── key columns: [2] = [13]
+ │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:19!null b:20!null c:21
+ │    ├── key columns: [7] = [19]
  │    ├── lookup columns are key
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,13,14), (8)==(2,7,13,14), (13)-->(15), (9)==(3,15), (15)==(3,9), (13)==(2,7,8,14), (14)==(2,7,8,13), (2)==(7,8,13,14), (3)==(9,15)
+ │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (19)-->(20,21), (19)==(2,7,8), (2)==(7,8,19), (3)==(9), (9)==(3)
  │    ├── inner-join (lookup t88659)
  │    │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
  │    │    ├── key columns: [1] = [1]
@@ -2988,12 +2952,9 @@ inner-join (lookup t88659)
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── c:3 = c:9 [outer=(3,9), immutable, constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
- │    └── filters
- │         ├── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
- │         └── b:2 = b:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
+ │    └── filters (true)
  └── filters
-      ├── a:13 = b:20 [outer=(13,20), constraints=(/13: (/NULL - ]; /20: (/NULL - ]), fd=(13)==(20), (20)==(13)]
-      └── c:3 = c:21 [outer=(3,21), immutable, constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
+      └── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
 
 # Regression test for #90761 - don't drop LeftJoin filter when there are enough
 # InnerJoin edges to "link" all relations and the LeftJoin doesn't get
@@ -3159,300 +3120,3 @@ project
  │         └── t1.c = t2.c
  └── projections
       └── 1
-
-# Regression test for #105608 - don't infer an equality on nullable columns from
-# the top-level join's functional dependencies.
-exec-ddl
-CREATE TABLE patient (id INT8 NOT NULL, site_id INT8, PRIMARY KEY (id));
-----
-
-exec-ddl
-CREATE TABLE site (id INT8 NOT NULL, PRIMARY KEY (id));
-----
-
-exec-ddl
-CREATE TABLE task (id INT8 NOT NULL, description VARCHAR(255), patient_id INT8, PRIMARY KEY (id));
-----
-
-exec-ddl
-ALTER TABLE IF EXISTS patient ADD CONSTRAINT fkhty4ykfvf29xscswwd63mgdoc FOREIGN KEY (site_id) REFERENCES site;
-----
-
-exec-ddl
-ALTER TABLE IF EXISTS task ADD CONSTRAINT fkkk2ow88d08vqxqyvvvmys1j2m FOREIGN KEY (patient_id) REFERENCES patient;
-----
-
-# The edge "task0_.patient_id = task1_.patient_id" should not be created.
-reorderjoins
-SELECT task0_.id AS id1_2_, task0_.description AS descript2_2_, task0_.patient_id AS patient_3_2_
-FROM task AS task0_ WHERE EXISTS (
-	SELECT task1_.id FROM task AS task1_
-	LEFT JOIN patient AS patient2_
-	ON task1_.patient_id = patient2_.id
-	LEFT JOIN site AS site3_
-	ON patient2_.site_id = site3_.id
-	WHERE (task1_.id = task0_.id) AND ((patient2_.id IS NULL) OR (site3_.id IN (2, 1)))
-);
-----
---------------------------------------------------------------------------------
-Join Tree #1
---------------------------------------------------------------------------------
-  left-join (hash)
-   ├── scan task [as=task1_]
-   ├── scan patient [as=patient2_]
-   └── filters
-        └── task1_.patient_id = patient2_.id
-Vertexes
-  A:
-    scan task [as=task1_]
-  B:
-    scan patient [as=patient2_]
-Edges
-  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=()]
-Joining AB
-  A B [left, refs=AB]
-Joins Considered: 1
---------------------------------------------------------------------------------
-Join Tree #2
---------------------------------------------------------------------------------
-  left-join (hash)
-   ├── left-join (hash)
-   │    ├── scan task [as=task1_]
-   │    ├── scan patient [as=patient2_]
-   │    └── filters
-   │         └── task1_.patient_id = patient2_.id
-   ├── scan site [as=site3_]
-   └── filters
-        └── site_id = site3_.id
-Vertexes
-  A:
-    scan task [as=task1_]
-  B:
-    scan patient [as=patient2_]
-  C:
-    scan site [as=site3_]
-Edges
-  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=()]
-  site_id = site3_.id [left, ses=BC, tes=BC, rules=()]
-Joining AB
-  A B [left, refs=AB]
-Joining BC
-  B C [left, refs=BC]
-Joining ABC
-  A BC [left, refs=AB]
-  AB C [left, refs=BC]
-Joins Considered: 4
---------------------------------------------------------------------------------
-Join Tree #3
---------------------------------------------------------------------------------
-  semi-join (hash)
-   ├── scan task [as=task0_]
-   ├── select
-   │    ├── left-join (hash)
-   │    │    ├── left-join (hash)
-   │    │    │    ├── scan task [as=task1_]
-   │    │    │    ├── scan patient [as=patient2_]
-   │    │    │    └── filters
-   │    │    │         └── task1_.patient_id = patient2_.id
-   │    │    ├── scan site [as=site3_]
-   │    │    └── filters
-   │    │         └── site_id = site3_.id
-   │    └── filters
-   │         └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
-   └── filters
-        └── task1_.id = task0_.id
-Vertexes
-  D:
-    scan task [as=task0_]
-  E:
-    select
-     ├── left-join (hash)
-     │    ├── left-join (hash)
-     │    │    ├── scan task [as=task1_]
-     │    │    ├── scan patient [as=patient2_]
-     │    │    └── filters
-     │    │         └── task1_.patient_id = patient2_.id
-     │    ├── scan site [as=site3_]
-     │    └── filters
-     │         └── site_id = site3_.id
-     └── filters
-          └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
-Edges
-  task1_.id = task0_.id [semi, ses=DE, tes=DE, rules=()]
-Joining DE
-  D E [semi, refs=DE]
-Joins Considered: 1
---------------------------------------------------------------------------------
-Join Tree #4
---------------------------------------------------------------------------------
-  inner-join (hash)
-   ├── scan task [as=task0_]
-   ├── select
-   │    ├── left-join (hash)
-   │    │    ├── left-join (hash)
-   │    │    │    ├── scan task [as=task1_]
-   │    │    │    ├── scan patient [as=patient2_]
-   │    │    │    └── filters
-   │    │    │         └── task1_.patient_id = patient2_.id
-   │    │    ├── scan site [as=site3_]
-   │    │    └── filters
-   │    │         └── site_id = site3_.id
-   │    └── filters
-   │         └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
-   └── filters
-        └── task1_.id = task0_.id
-Vertexes
-  D:
-    scan task [as=task0_]
-  E:
-    select
-     ├── left-join (hash)
-     │    ├── left-join (hash)
-     │    │    ├── scan task [as=task1_]
-     │    │    ├── scan patient [as=patient2_]
-     │    │    └── filters
-     │    │         └── task1_.patient_id = patient2_.id
-     │    ├── scan site [as=site3_]
-     │    └── filters
-     │         └── site_id = site3_.id
-     └── filters
-          └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
-Edges
-  task1_.id = task0_.id [inner, ses=DE, tes=DE, rules=()]
-Joining DE
-  D E [inner, refs=DE]
-  E D [inner, refs=DE]
-Joins Considered: 2
-================================================================================
-Final Plan
-================================================================================
-project
- ├── columns: id1_2_:1!null descript2_2_:2 patient_3_2_:3
- ├── key: (1)
- ├── fd: (1)-->(2,3)
- └── project
-      ├── columns: task0_.id:1!null task0_.description:2 task0_.patient_id:3 task1_.id:6!null
-      ├── key: (6)
-      ├── fd: (1)-->(2,3), (6)-->(3), (1)==(6), (6)==(1)
-      └── inner-join (lookup task [as=task0_])
-           ├── columns: task0_.id:1!null task0_.description:2 task0_.patient_id:3 task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12 site3_.id:15
-           ├── key columns: [6] = [1]
-           ├── lookup columns are key
-           ├── key: (6)
-           ├── fd: (1)-->(2,3), (6)-->(8,11,12,15), (11)-->(12), (1)==(6), (6)==(1), (3)==(8), (8)==(3)
-           ├── select
-           │    ├── columns: task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12 site3_.id:15
-           │    ├── key: (6)
-           │    ├── fd: (6)-->(8,11,12,15), (11)-->(12)
-           │    ├── left-join (hash)
-           │    │    ├── columns: task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12 site3_.id:15
-           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-           │    │    ├── key: (6)
-           │    │    ├── fd: (6)-->(8,11,12,15), (11)-->(12)
-           │    │    ├── left-join (hash)
-           │    │    │    ├── columns: task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12
-           │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-           │    │    │    ├── key: (6)
-           │    │    │    ├── fd: (6)-->(8,11,12), (11)-->(12)
-           │    │    │    ├── scan task [as=task1_]
-           │    │    │    │    ├── columns: task1_.id:6!null task1_.patient_id:8
-           │    │    │    │    ├── key: (6)
-           │    │    │    │    └── fd: (6)-->(8)
-           │    │    │    ├── scan patient [as=patient2_]
-           │    │    │    │    ├── columns: patient2_.id:11!null site_id:12
-           │    │    │    │    ├── key: (11)
-           │    │    │    │    └── fd: (11)-->(12)
-           │    │    │    └── filters
-           │    │    │         └── task1_.patient_id:8 = patient2_.id:11 [outer=(8,11), constraints=(/8: (/NULL - ]; /11: (/NULL - ]), fd=(8)==(11), (11)==(8)]
-           │    │    ├── scan site [as=site3_]
-           │    │    │    ├── columns: site3_.id:15!null
-           │    │    │    └── key: (15)
-           │    │    └── filters
-           │    │         └── site_id:12 = site3_.id:15 [outer=(12,15), constraints=(/12: (/NULL - ]; /15: (/NULL - ]), fd=(12)==(15), (15)==(12)]
-           │    └── filters
-           │         └── (patient2_.id:11 IS NULL) OR (site3_.id:15 IN (1, 2)) [outer=(11,15)]
-           └── filters (true)
-
-# Regression test for #106371 - only infer self-join equalities if the original
-# equality columns form a key over the *base* table, not just the join inputs.
-exec-ddl
-CREATE TABLE t106371 (x INT NOT NULL, y INT NOT NULL);
-----
-
-# Don't add an "a.y = b.y" filter.
-reorderjoins
-SELECT * FROM (SELECT * FROM t106371 ORDER BY y LIMIT 1) a
-JOIN (SELECT DISTINCT ON (x) * FROM (SELECT * FROM t106371 WHERE y = 2)) b ON a.x = b.x;
-----
---------------------------------------------------------------------------------
-Join Tree #1
---------------------------------------------------------------------------------
-  inner-join (hash)
-   ├── limit
-   │    ├── scan t106371
-   │    └── 1
-   ├── distinct-on
-   │    ├── select
-   │    │    ├── scan t106371
-   │    │    └── filters
-   │    │         └── y = 2
-   │    └── aggregations
-   │         └── first-agg
-   │              └── y
-   └── filters
-        └── x = x
-Vertexes
-  A:
-    limit
-     ├── scan t106371
-     └── 1
-  B:
-    distinct-on
-     ├── select
-     │    ├── scan t106371
-     │    └── filters
-     │         └── y = 2
-     └── aggregations
-          └── first-agg
-               └── y
-Edges
-  x = x [inner, ses=AB, tes=AB, rules=()]
-Joining AB
-  A B [inner, refs=AB]
-  B A [inner, refs=AB]
-Joins Considered: 2
-================================================================================
-Final Plan
-================================================================================
-inner-join (hash)
- ├── columns: x:1!null y:2!null x:6!null y:7!null
- ├── cardinality: [0 - 1]
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: ()
- ├── fd: ()-->(1,2,6,7), (6)==(1), (1)==(6)
- ├── distinct-on
- │    ├── columns: x:6!null y:7!null
- │    ├── grouping columns: x:6!null
- │    ├── key: (6)
- │    ├── fd: ()-->(7)
- │    ├── select
- │    │    ├── columns: x:6!null y:7!null
- │    │    ├── fd: ()-->(7)
- │    │    ├── scan t106371
- │    │    │    └── columns: x:6!null y:7!null
- │    │    └── filters
- │    │         └── y:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
- │    └── aggregations
- │         └── first-agg [as=y:7, outer=(7)]
- │              └── y:7
- ├── top-k
- │    ├── columns: x:1!null y:2!null
- │    ├── internal-ordering: +2
- │    ├── k: 1
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(1,2)
- │    └── scan t106371
- │         └── columns: x:1!null y:2!null
- └── filters
-      └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]

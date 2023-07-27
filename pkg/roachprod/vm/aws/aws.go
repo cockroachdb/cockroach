@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package aws provides functionality for the aws provider.
 package aws
 
 import (
@@ -1165,7 +1164,7 @@ type attachJsonResponse struct {
 	Device     string `json:"Device"`
 }
 
-func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
+func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
 	// TODO(leon): what happens if this device already exists?
 	deviceName := "/dev/sdf"
 	args := []string{
@@ -1312,14 +1311,6 @@ func (p *Provider) CreateVolume(
 	return vol, err
 }
 
-func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	panic("unimplemented")
-}
-
-func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
-	return vm.NonBootAttachedVolumes, nil
-}
-
 type snapshotOutput struct {
 	Description string `json:"Description"`
 	Tags        []struct {
@@ -1336,40 +1327,25 @@ type snapshotOutput struct {
 	SnapshotID string    `json:"SnapshotId"`
 }
 
-func (p *Provider) CreateVolumeSnapshot(
-	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
-) (vm.VolumeSnapshot, error) {
+func (p *Provider) SnapshotVolume(
+	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
 	region := volume.Zone[:len(volume.Zone)-1]
+	labels["Name"] = name
 	var tags []string
-	for k, v := range vsco.Labels {
+	for k, v := range labels {
 		tags = append(tags, fmt.Sprintf("{Key=%s,Value=%s}", k, v))
 	}
-	tags = append(tags, fmt.Sprintf("{Key=%s,Value=%s}", "Name", vsco.Name))
 
 	args := []string{
 		"ec2", "create-snapshot",
-		"--description", vsco.Description,
+		"--description", description,
 		"--region", region,
 		"--volume-id", volume.ProviderResourceID,
 		"--tag-specifications", "ResourceType=snapshot,Tags=[" + strings.Join(tags, ",") + "]",
 	}
 
 	var so snapshotOutput
-	if err := p.runJSONCommand(l, args, &so); err != nil {
-		return vm.VolumeSnapshot{}, err
-	}
-	return vm.VolumeSnapshot{
-		ID:   so.SnapshotID,
-		Name: vsco.Name,
-	}, nil
-}
-
-func (p *Provider) ListVolumeSnapshots(
-	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
-) ([]vm.VolumeSnapshot, error) {
-	panic("unimplemented")
-}
-
-func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	panic("unimplemented")
+	err := p.runJSONCommand(l, args, &so)
+	return so.SnapshotID, err
 }

@@ -25,13 +25,3 @@ jobs:
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
           # A comma-separated list of labels to use as a filter for issue to be added
           labeled: T-cdc
-      - uses: actions/add-to-project@v0.4.0
-        with:
-          project-url: https://github.com/orgs/cockroachdb/projects/35
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
-          labeled: T-jobs
-      - uses: actions/add-to-project@v0.4.0
-        with:
-          project-url: https://github.com/orgs/cockroachdb/projects/45
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
-          labeled: T-sql-queries

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
-	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
 	"github.com/cockroachdb/cockroach/pkg/geo/twkb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -38,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -538,39 +536,13 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"postgis_full_version": makeBuiltin(
-		defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(
-					fmt.Sprintf(
-						`POSTGIS="3.0.1 ec2a9aa" [EXTENSION] PGSQL="120" GEOS="%s" PROJ="4.9.3" LIBXML="2.9.10" LIBJSON="0.13.1" LIBPROTOBUF="1.4.2" WAGYU="0.4.3 (Internal)"`,
-						geosVersion(),
-					),
-				), nil
-			},
-			Info:       compatFixedStringInfo,
-			Volatility: volatility.Immutable,
-		},
-	),
-	"postgis_geos_version": makeBuiltin(
-		defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(geosVersion()), nil
-			},
-			Info:       compatFixedStringInfo,
-			Volatility: volatility.Immutable,
-		},
-	),
-
 	"postgis_extensions_upgrade": returnCompatibilityFixedStringBuiltin(
 		"Upgrade completed, run SELECT postgis_full_version(); for details",
 	),
+	"postgis_full_version": returnCompatibilityFixedStringBuiltin(
+		`POSTGIS="3.0.1 ec2a9aa" [EXTENSION] PGSQL="120" GEOS="3.8.1-CAPI-1.13.3" PROJ="4.9.3" LIBXML="2.9.10" LIBJSON="0.13.1" LIBPROTOBUF="1.4.2" WAGYU="0.4.3 (Internal)"`,
+	),
+	"postgis_geos_version":       returnCompatibilityFixedStringBuiltin("3.8.1-CAPI-1.13.3"),
 	"postgis_libxml_version":     returnCompatibilityFixedStringBuiltin("2.9.10"),
 	"postgis_lib_build_date":     returnCompatibilityFixedStringBuiltin("2020-03-06 18:23:24"),
 	"postgis_lib_version":        returnCompatibilityFixedStringBuiltin("3.0.1"),
@@ -788,7 +760,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeometryFromGeoJSON(encoding.UnsafeConvertStringToBytes(*asString))
+				g, err := geo.ParseGeometryFromGeoJSON([]byte(*asString))
 				if err != nil {
 					return nil, err
 				}
@@ -1091,7 +1063,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeographyFromGeoJSON(encoding.UnsafeConvertStringToBytes(*asString))
+				g, err := geo.ParseGeographyFromGeoJSON([]byte(*asString))
 				if err != nil {
 					return nil, err
 				}
@@ -4577,120 +4549,6 @@ The paths themselves are given in the direction of the first geometry.`,
 	//
 	// Transformations
 	//
-	"st_asmvtgeom": makeBuiltin(
-		defProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "geometry", Typ: types.Geometry},
-				{Name: "bbox", Typ: types.Box2D},
-			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				g := tree.MustBeDGeometry(args[0]).Geometry
-				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, 4096, 256, true)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
-			},
-			Info: infoBuilder{
-				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
-Uses 256 as the buffer size in tile coordinate space for geometry clipping.
-Uses 4096 as the tile extent size in tile coordinate space.
-
-The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.`,
-			}.String(),
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "geometry", Typ: types.Geometry},
-				{Name: "bbox", Typ: types.Box2D},
-				{Name: "extent", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				g := tree.MustBeDGeometry(args[0]).Geometry
-				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
-				extent := int(tree.MustBeDInt(args[2]))
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, 256, true)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
-			},
-			Info: infoBuilder{
-				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
-Uses 256 as the buffer size in tile coordinate space for geometry clipping.
-
-The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.`,
-			}.String(),
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "geometry", Typ: types.Geometry},
-				{Name: "bbox", Typ: types.Box2D},
-				{Name: "extent", Typ: types.Int},
-				{Name: "buffer", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				g := tree.MustBeDGeometry(args[0]).Geometry
-				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
-				extent := int(tree.MustBeDInt(args[2]))
-				buffer := int(tree.MustBeDInt(args[3]))
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, buffer, true)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
-			},
-			Info: infoBuilder{
-				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
-
-The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.`,
-			}.String(),
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "geometry", Typ: types.Geometry},
-				{Name: "bbox", Typ: types.Box2D},
-				{Name: "extent", Typ: types.Int},
-				{Name: "buffer", Typ: types.Int},
-				{Name: "clip", Typ: types.Bool},
-			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				g := tree.MustBeDGeometry(args[0]).Geometry
-				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
-				extent := int(tree.MustBeDInt(args[2]))
-				buffer := int(tree.MustBeDInt(args[3]))
-				clip := bool(tree.MustBeDBool(args[4]))
-				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, buffer, clip)
-				if err != nil {
-					return nil, err
-				}
-				return &tree.DGeometry{Geometry: newGeom}, nil
-			},
-			Info: infoBuilder{
-				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds if required.
-
-The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry can be transformed, and clipped if required.`,
-			}.String(),
-			Volatility: volatility.Immutable,
-		},
-	),
 	"st_setsrid": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -7114,38 +6972,6 @@ Note that the top vertex of the segment touching another line does not count as 
 		},
 	),
 
-	"st_bdpolyfromtext": makeBuiltin(
-		defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "str", Typ: types.String}, {Name: "srid", Typ: types.Int}},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s := string(tree.MustBeDString(args[0]))
-				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
-				if err != nil {
-					return nil, err
-				}
-				polygon, err := geomfn.MakePolygonFromMultiLineString(g, srid)
-				if err != nil {
-					return nil, err
-				}
-				polygonT, err := polygon.AsGeomT()
-				if err != nil {
-					return tree.NewDGeometry(geo.Geometry{}), err
-				}
-				if _, ok := polygonT.(*geom.MultiPolygon); ok {
-					return tree.NewDGeometry(geo.Geometry{}), pgerror.Newf(pgcode.Internal, "function must not return a MULTIPOLYGON internally")
-				}
-				return tree.NewDGeometry(polygon), nil
-			},
-			Info: infoBuilder{
-				info: "Returns a Polygon from multilinestring WKT with a SRID. If the input is not a multilinestring an error will be thrown.",
-			}.String(),
-			Volatility: volatility.Immutable,
-		},
-	),
-
 	//
 	// Unimplemented.
 	//
@@ -7178,14 +7004,11 @@ Note that the top vertex of the segment touching another line does not count as 
 	"st_split":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_tileenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_wrapx":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
+	"st_bdpolyfromtext":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
 	"st_geomfromgml":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
 	"st_geomfromtwkb":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
 	"st_gmltosql":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
 }
-
-var compatFixedStringInfo = infoBuilder{
-	info: "Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.",
-}.String()
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
 // and returns the given fixed string.
@@ -7199,7 +7022,9 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(ret), nil
 			},
-			Info:       compatFixedStringInfo,
+			Info: infoBuilder{
+				info: "Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.",
+			}.String(),
 			Volatility: volatility.Immutable,
 		},
 	)
@@ -7889,12 +7714,4 @@ func stEnvelopeFromArgs(args tree.Datums) (tree.Datum, error) {
 	}
 
 	return tree.NewDGeometry(extent), nil
-}
-
-func geosVersion() string {
-	geosV, err := geos.Version()
-	if err != nil {
-		return fmt.Sprintf("failed to start with GEOS: %s", err.Error())
-	}
-	return geosV
 }

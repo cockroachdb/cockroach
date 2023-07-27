@@ -63,8 +63,6 @@ const (
 	CopyIn
 	// CopyOut indicates a COPY TO statement.
 	CopyOut
-	// Replication indicates a replication protocol statement.
-	Replication
 	// Unknown indicates that the statement does not have a known
 	// return style at the time of parsing. This is not first in the
 	// enumeration because it is more convenient to have Ack as a zero
@@ -255,7 +253,7 @@ func (*AlterDatabaseOwner) StatementReturnType() StatementReturnType { return DD
 func (*AlterDatabaseOwner) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABASE OWNER" }
 
 func (*AlterDatabaseOwner) hiddenFromShowQueries() {}
 
@@ -266,7 +264,7 @@ func (*AlterDatabaseAddRegion) StatementReturnType() StatementReturnType { retur
 func (*AlterDatabaseAddRegion) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseAddRegion) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabaseAddRegion) StatementTag() string { return "ALTER DATABASE ADD REGION" }
 
 func (*AlterDatabaseAddRegion) hiddenFromShowQueries() {}
 
@@ -277,7 +275,7 @@ func (*AlterDatabaseDropRegion) StatementReturnType() StatementReturnType { retu
 func (*AlterDatabaseDropRegion) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseDropRegion) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabaseDropRegion) StatementTag() string { return "ALTER DATABASE DROP REGION" }
 
 func (*AlterDatabaseDropRegion) hiddenFromShowQueries() {}
 
@@ -288,7 +286,7 @@ func (*AlterDatabasePrimaryRegion) StatementReturnType() StatementReturnType { r
 func (*AlterDatabasePrimaryRegion) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabasePrimaryRegion) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabasePrimaryRegion) StatementTag() string { return "ALTER DATABASE PRIMARY REGION" }
 
 func (*AlterDatabasePrimaryRegion) hiddenFromShowQueries() {}
 
@@ -299,7 +297,7 @@ func (*AlterDatabaseSurvivalGoal) StatementReturnType() StatementReturnType { re
 func (*AlterDatabaseSurvivalGoal) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE SURVIVE" }
 
 func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 
@@ -310,7 +308,7 @@ func (*AlterDatabasePlacement) StatementReturnType() StatementReturnType { retur
 func (*AlterDatabasePlacement) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabasePlacement) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabasePlacement) StatementTag() string { return "ALTER DATABASE PLACEMENT" }
 
 func (*AlterDatabasePlacement) hiddenFromShowQueries() {}
 
@@ -321,7 +319,7 @@ func (*AlterDatabaseAddSuperRegion) StatementReturnType() StatementReturnType { 
 func (*AlterDatabaseAddSuperRegion) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseAddSuperRegion) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabaseAddSuperRegion) StatementTag() string { return "ALTER DATABASE ADD SUPER REGION" }
 
 func (*AlterDatabaseAddSuperRegion) hiddenFromShowQueries() {}
 
@@ -332,7 +330,7 @@ func (*AlterDatabaseDropSuperRegion) StatementReturnType() StatementReturnType {
 func (*AlterDatabaseDropSuperRegion) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseDropSuperRegion) StatementTag() string { return "ALTER DATABASE" }
+func (*AlterDatabaseDropSuperRegion) StatementTag() string { return "ALTER DATABASE DROP SUPER REGION" }
 
 func (*AlterDatabaseDropSuperRegion) hiddenFromShowQueries() {}
 
@@ -344,7 +342,7 @@ func (*AlterDatabaseAlterSuperRegion) StatementType() StatementType { return Typ
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseAlterSuperRegion) StatementTag() string {
-	return "ALTER DATABASE"
+	return "ALTER DATABASE ALTER SUPER REGION"
 }
 
 func (*AlterDatabaseAlterSuperRegion) hiddenFromShowQueries() {}
@@ -357,7 +355,7 @@ func (*AlterDatabaseSecondaryRegion) StatementType() StatementType { return Type
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseSecondaryRegion) StatementTag() string {
-	return "ALTER DATABASE"
+	return "ALTER DATABASE SET SECONDARY REGION"
 }
 
 func (*AlterDatabaseSecondaryRegion) hiddenFromShowQueries() {}
@@ -370,7 +368,7 @@ func (*AlterDatabaseDropSecondaryRegion) StatementType() StatementType { return 
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseDropSecondaryRegion) StatementTag() string {
-	return "ALTER DATABASE"
+	return "ALTER DATABASE DROP SECONDARY REGION"
 }
 
 func (*AlterDatabaseDropSecondaryRegion) hiddenFromShowQueries() {}
@@ -383,7 +381,7 @@ func (*AlterDatabaseSetZoneConfigExtension) StatementType() StatementType { retu
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseSetZoneConfigExtension) StatementTag() string {
-	return "ALTER DATABASE"
+	return "ALTER DATABASE ALTER LOCALITY CONFIGURE ZONE"
 }
 
 func (*AlterDatabaseSetZoneConfigExtension) hiddenFromShowQueries() {}
@@ -437,7 +435,7 @@ func (*AlterTableLocality) StatementReturnType() StatementReturnType { return DD
 func (*AlterTableLocality) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE" }
+func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE SET LOCALITY" }
 
 func (*AlterTableLocality) hiddenFromShowQueries() {}
 
@@ -448,7 +446,7 @@ func (*AlterTableOwner) StatementReturnType() StatementReturnType { return DDL }
 func (*AlterTableOwner) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTableOwner) StatementTag() string { return "ALTER TABLE" }
+func (*AlterTableOwner) StatementTag() string { return "ALTER TABLE OWNER" }
 
 func (*AlterTableOwner) hiddenFromShowQueries() {}
 
@@ -459,17 +457,7 @@ func (*AlterTableSetSchema) StatementReturnType() StatementReturnType { return D
 func (*AlterTableSetSchema) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (n *AlterTableSetSchema) StatementTag() string {
-	if n.IsView {
-		if n.IsMaterialized {
-			return "ALTER MATERIALIZED VIEW"
-		}
-		return "ALTER VIEW"
-	} else if n.IsSequence {
-		return "ALTER SEQUENCE"
-	}
-	return "ALTER TABLE"
-}
+func (*AlterTableSetSchema) StatementTag() string { return "ALTER TABLE SET SCHEMA" }
 
 func (*AlterTableSetSchema) hiddenFromShowQueries() {}
 
@@ -1282,7 +1270,7 @@ func (*ReparentDatabase) StatementReturnType() StatementReturnType { return DDL 
 func (*ReparentDatabase) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ReparentDatabase) StatementTag() string { return "ALTER DATABASE" }
+func (*ReparentDatabase) StatementTag() string { return "CONVERT TO SCHEMA" }
 
 // StatementReturnType implements the Statement interface.
 func (*RenameIndex) StatementReturnType() StatementReturnType { return DDL }
@@ -1302,9 +1290,6 @@ func (*RenameTable) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (n *RenameTable) StatementTag() string {
 	if n.IsView {
-		if n.IsMaterialized {
-			return "ALTER MATERIALIZED VIEW"
-		}
 		return "ALTER VIEW"
 	} else if n.IsSequence {
 		return "ALTER SEQUENCE"

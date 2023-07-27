@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -201,7 +202,7 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	}()
 
 	tBegin := timeutil.Now()
-	err := timeutil.RunWithTimeout(ctx, opName, p.timeout, func(ctx context.Context) error {
+	err := contextutil.RunWithTimeout(ctx, opName, p.timeout, func(ctx context.Context) error {
 		var desc roachpb.RangeDescriptor
 		if err := rawKV.ValueProto(&desc); err != nil {
 			// NB: on error, p.curr.rangeID == 0.

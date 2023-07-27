@@ -38,7 +38,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":acl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",

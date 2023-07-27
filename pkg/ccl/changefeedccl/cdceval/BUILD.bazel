@@ -38,7 +38,6 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
-        "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util/ctxgroup",
@@ -63,7 +62,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":cdceval"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdcevent",

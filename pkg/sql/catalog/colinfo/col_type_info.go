@@ -124,14 +124,6 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 				"TSVector/TSQuery not supported until version 23.1")
 		}
 
-	case types.PGLSNFamily:
-		if !version.IsActive(ctx, clusterversion.V23_2) {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"pg_lsn not supported until version 23.2",
-			)
-		}
-
 	default:
 		return pgerror.Newf(pgcode.InvalidTableDefinition,
 			"value type %s cannot be used for table columns", t.String())
@@ -154,7 +146,7 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
-	case types.JsonFamily, types.ArrayFamily, types.StringFamily:
+	case types.ArrayFamily, types.StringFamily:
 		return true
 	}
 	return ColumnTypeIsOnlyInvertedIndexable(t)
@@ -170,6 +162,7 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 		t = t.ArrayContents()
 	}
 	switch t.Family() {
+	case types.JsonFamily:
 	case types.GeographyFamily:
 	case types.GeometryFamily:
 	case types.TSVectorFamily:
@@ -190,7 +183,7 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		default:
 			return MustBeValueEncoded(semanticType.ArrayContents())
 		}
-	case types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
 		return true
 	case types.TSVectorFamily, types.TSQueryFamily:
 		return true

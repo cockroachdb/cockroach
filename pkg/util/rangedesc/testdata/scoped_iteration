@@ -1,6 +1,6 @@
 scan
 ----
-- r1:/{Meta1-System/NodeLiveness}
+- r1:/{Meta1/-System/NodeLiveness}
 - r2:/System/NodeLiveness{-Max}
 - r3:/System/{NodeLivenessMax-tsd}
 - r4:/System{/tsd-tse}
@@ -77,13 +77,13 @@ scan through /System{/tsd-tse} (page-size=1) found 1/63 descriptors
 
 scan scope=3
 ----
-- r1:/{Meta1-System/NodeLiveness}
-scan through /M{in-eta2} (page-size=1) found 1/63 descriptors
+- r1:/{Meta1/-System/NodeLiveness}
+scan through /M{in-eta2/} (page-size=1) found 1/63 descriptors
 
 scan scope=4
 ----
-- r1:/{Meta1-System/NodeLiveness}
-scan through /{Meta1-System} (page-size=1) found 1/63 descriptors
+- r1:/{Meta1/-System/NodeLiveness}
+scan through /{Meta1/-System} (page-size=1) found 1/63 descriptors
 
 scan scope=5
 ----

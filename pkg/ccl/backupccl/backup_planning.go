@@ -6,7 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-// Package backupccl implements backup logic.
 package backupccl
 
 import (

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -375,11 +374,11 @@ func ParseDBool(s string) (*DBool, error) {
 // the beginning), and the escaped format, which supports "\\" and
 // octal escapes.
 func ParseDByte(s string) (*DBytes, error) {
-	res, err := lex.DecodeRawBytesToByteArrayAuto(encoding.UnsafeConvertStringToBytes(s))
+	res, err := lex.DecodeRawBytesToByteArrayAuto([]byte(s))
 	if err != nil {
 		return nil, MakeParseError(s, types.Bytes, err)
 	}
-	return NewDBytes(DBytes(encoding.UnsafeConvertBytesToString(res))), nil
+	return NewDBytes(DBytes(res)), nil
 }
 
 // ParseDUuidFromString parses and returns the *DUuid Datum value represented
@@ -1053,16 +1052,6 @@ func MustBeDDecimal(e Expr) DDecimal {
 	panic(errors.AssertionFailedf("expected *DDecimal, found %T", e))
 }
 
-// AsDDecimal attempts to retrieve a DDecimal from an Expr, returning a DDecimal and
-// a flag signifying whether the assertion was successful.
-func AsDDecimal(e Expr) (*DDecimal, bool) {
-	switch t := e.(type) {
-	case *DDecimal:
-		return t, true
-	}
-	return nil, false
-}
-
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
@@ -1160,16 +1149,9 @@ func (d *DDecimal) Next(ctx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
-var (
-	// DZeroDecimal is the decimal constant '0'.
-	DZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
-
-	// dNaNDecimal is the decimal constant 'NaN'.
-	dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
-
-	// dPosInfDecimal is the decimal constant 'inf'.
-	dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
-)
+var dZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
+var dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+var dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
 
 // IsMax implements the Datum interface.
 func (d *DDecimal) IsMax(ctx CompareContext) bool {
@@ -1367,13 +1349,6 @@ func (d *DString) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
 }
 
-// UnsafeBytes returns the raw bytes avoiding allocation. It is "Unsafe" because
-// the contract is that callers must not to mutate the bytes but there is
-// nothing stopping that from happening.
-func (d *DString) UnsafeBytes() []byte {
-	return encoding.UnsafeConvertStringToBytes(string(*d))
-}
-
 // DCollatedString is the Datum for strings with a locale. The struct members
 // are intended to be immutable.
 type DCollatedString struct {
@@ -1434,20 +1409,6 @@ func NewDCollatedString(
 	copy(d.Key, key)
 	env.buffer.Reset()
 	return &d, nil
-}
-
-// AsDCollatedString attempts to retrieve a DString from an Expr, returning a AsDCollatedString and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DCollatedString wrapped by a
-// *DOidWrapper is possible.
-func AsDCollatedString(e Expr) (DCollatedString, bool) {
-	switch t := e.(type) {
-	case *DCollatedString:
-		return *t, true
-	case *DOidWrapper:
-		return AsDCollatedString(t.Wrapped)
-	}
-	return DCollatedString{}, false
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -1526,13 +1487,6 @@ func (d *DCollatedString) Size() uintptr {
 // IsComposite implements the CompositeDatum interface.
 func (d *DCollatedString) IsComposite() bool {
 	return true
-}
-
-// UnsafeContentBytes returns the raw bytes avoiding allocation. It is "unsafe"
-// because the contract is that callers must not to mutate the bytes but there
-// is nothing stopping that from happening.
-func (d *DCollatedString) UnsafeContentBytes() []byte {
-	return encoding.UnsafeConvertStringToBytes(d.Contents)
 }
 
 // DBytes is the bytes Datum. The underlying type is a string because we want
@@ -1667,13 +1621,6 @@ func (d *DBytes) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
 }
 
-// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
-// the contract is that callers must not to mutate the bytes but there is
-// nothing stopping that from happening.
-func (d *DBytes) UnsafeBytes() []byte {
-	return encoding.UnsafeConvertStringToBytes(string(*d))
-}
-
 // DEncodedKey is a special Datum of types.EncodedKey type, used to pass through
 // encoded key data. It is similar to DBytes, except when it comes to
 // encoding/decoding. It is currently used to pass around inverted index keys,
@@ -1744,13 +1691,6 @@ func (d *DEncodedKey) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DEncodedKey) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
-}
-
-// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
-// the contract is that callers must not to mutate the bytes but there is
-// nothing stopping that from happening.
-func (d *DEncodedKey) UnsafeBytes() []byte {
-	return encoding.UnsafeConvertStringToBytes(string(*d))
 }
 
 // DUuid is the UUID Datum.
@@ -2350,20 +2290,6 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 	return &d
 }
 
-// AsDTime attempts to retrieve a DTime from an Expr, returning a DTimestamp and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTime wrapped by a
-// *DOidWrapper is possible.
-func AsDTime(e Expr) (DTime, bool) {
-	switch t := e.(type) {
-	case *DTime:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTime(t.Wrapped)
-	}
-	return DTime(timeofday.FromInt(0)), false
-}
-
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 //
@@ -2510,20 +2436,6 @@ func NewDTimeTZFromOffset(t timeofday.TimeOfDay, offsetSecs int32) *DTimeTZ {
 // NewDTimeTZFromLocation creates a DTimeTZ from a TimeOfDay and time.Location.
 func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
 	return &DTimeTZ{timetz.MakeTimeTZFromLocation(t, loc)}
-}
-
-// AsDTimeTZ attempts to retrieve a DTimeTZ from an Expr, returning a DTimeTZ and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTimeTZ wrapped by a
-// *DOidWrapper is possible.
-func AsDTimeTZ(e Expr) (DTimeTZ, bool) {
-	switch t := e.(type) {
-	case *DTimeTZ:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimeTZ(t.Wrapped)
-	}
-	return DTimeTZ{}, false
 }
 
 // ParseDTimeTZ parses and returns the *DTime Datum value represented by the
@@ -3161,16 +3073,12 @@ type DInterval struct {
 	duration.Duration
 }
 
-// AsDInterval attempts to retrieve a DInterval from an Expr, returning a DInterval and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInterval wrapped by a
-// *DOidWrapper is possible.
+// AsDInterval attempts to retrieve a DInterval from an Expr, panicking if the
+// assertion fails.
 func AsDInterval(e Expr) (*DInterval, bool) {
 	switch t := e.(type) {
 	case *DInterval:
 		return t, true
-	case *DOidWrapper:
-		return AsDInterval(t.Wrapped)
 	}
 	return nil, false
 }
@@ -3588,132 +3496,6 @@ func (d *DGeometry) Size() uintptr {
 	return d.Geometry.SpatialObjectRef().MemSize()
 }
 
-type DPGLSN struct {
-	lsn.LSN
-}
-
-// NewDPGLSN returns a new PGLSN Datum.
-func NewDPGLSN(l lsn.LSN) *DPGLSN {
-	return &DPGLSN{LSN: l}
-}
-
-// ParseDPGLSN attempts to pass `str` as a PGLSN type.
-func ParseDPGLSN(str string) (*DPGLSN, error) {
-	v, err := lsn.ParseLSN(str)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not parse pg_lsn")
-	}
-	return NewDPGLSN(v), nil
-}
-
-// AsDPGLSN attempts to retrieve a *DPGLSN from an Expr, returning a
-// *DPGLSN and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DPGLSN wrapped by a *DOidWrapper is possible.
-func AsDPGLSN(e Expr) (*DPGLSN, bool) {
-	switch t := e.(type) {
-	case *DPGLSN:
-		return t, true
-	case *DOidWrapper:
-		return AsDPGLSN(t.Wrapped)
-	}
-	return nil, false
-}
-
-// MustBeDPGLSN attempts to retrieve a *DPGLSN from an Expr, panicking
-// if the assertion fails.
-func MustBeDPGLSN(e Expr) *DPGLSN {
-	i, ok := AsDPGLSN(e)
-	if !ok {
-		panic(errors.AssertionFailedf("expected *DPGLSN, found %T", e))
-	}
-	return i
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (*DPGLSN) ResolvedType() *types.T {
-	return types.PGLSN
-}
-
-// Compare implements the Datum interface.
-func (d *DPGLSN) Compare(ctx CompareContext, other Datum) int {
-	res, err := d.CompareError(ctx, other)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
-
-// CompareError implements the Datum interface.
-func (d *DPGLSN) CompareError(ctx CompareContext, other Datum) (int, error) {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1, nil
-	}
-	v, ok := ctx.UnwrapDatum(other).(*DPGLSN)
-	if !ok {
-		return 0, makeUnsupportedComparisonMessage(d, other)
-	}
-	return d.LSN.Compare(v.LSN), nil
-}
-
-// Prev implements the Datum interface.
-func (d *DPGLSN) Prev(ctx CompareContext) (Datum, bool) {
-	if d.IsMin(ctx) {
-		return nil, false
-	}
-	return NewDPGLSN(d.LSN.Sub(1)), true
-}
-
-// Next implements the Datum interface.
-func (d *DPGLSN) Next(ctx CompareContext) (Datum, bool) {
-	if d.IsMax(ctx) {
-		return nil, false
-	}
-	return NewDPGLSN(d.LSN.Add(1)), true
-}
-
-// IsMax implements the Datum interface.
-func (d *DPGLSN) IsMax(ctx CompareContext) bool {
-	return d.LSN == math.MaxUint64
-}
-
-// IsMin implements the Datum interface.
-func (d *DPGLSN) IsMin(ctx CompareContext) bool {
-	return d.LSN == 0
-}
-
-// Max implements the Datum interface.
-func (d *DPGLSN) Max(ctx CompareContext) (Datum, bool) {
-	return NewDPGLSN(math.MaxUint64), false
-}
-
-// Min implements the Datum interface.
-func (d *DPGLSN) Min(ctx CompareContext) (Datum, bool) {
-	return NewDPGLSN(0), false
-}
-
-// AmbiguousFormat implements the Datum interface.
-func (*DPGLSN) AmbiguousFormat() bool { return true }
-
-// Format implements the NodeFormatter interface.
-func (d *DPGLSN) Format(ctx *FmtCtx) {
-	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
-	if !bareStrings {
-		ctx.WriteByte('\'')
-	}
-	ctx.WriteString(d.LSN.String())
-	if !bareStrings {
-		ctx.WriteByte('\'')
-	}
-}
-
-// Size implements the Datum interface.
-func (d *DPGLSN) Size() uintptr {
-	return unsafe.Sizeof(*d)
-}
-
 // DBox2D is the Datum representation of the Box2D type.
 type DBox2D struct {
 	geo.CartesianBoundingBox
@@ -3844,45 +3626,6 @@ func NewDJSON(j json.JSON) *DJSON {
 	return &DJSON{j}
 }
 
-// IsComposite implements the CompositeDatum interface.
-func (d *DJSON) IsComposite() bool {
-	switch d.JSON.Type() {
-	case json.NumberJSONType:
-		dec, ok := d.JSON.AsDecimal()
-		if !ok {
-			panic(errors.AssertionFailedf("could not convert into JSON Decimal"))
-		}
-		DDec := DDecimal{Decimal: *dec}
-		return DDec.IsComposite()
-	case json.ArrayJSONType:
-		jsonArray, ok := d.AsArray()
-		if !ok {
-			panic(errors.AssertionFailedf("could not extract the JSON Array"))
-		}
-		for _, elem := range jsonArray {
-			dJsonVal := DJSON{elem}
-			if dJsonVal.IsComposite() {
-				return true
-			}
-		}
-	case json.ObjectJSONType:
-		if it, err := d.ObjectIter(); it != nil && err == nil {
-			// Assumption: no collated strings are present as JSON keys.
-			// Thus, JSON keys are not being checked if they are
-			// composite or not.
-			for it.Next() {
-				valDJSON := NewDJSON(it.Value())
-				if valDJSON.IsComposite() {
-					return true
-				}
-			}
-		} else if err != nil {
-			panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not receive an ObjectKeyIterator"))
-		}
-	}
-	return false
-}
-
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
@@ -3997,7 +3740,7 @@ func AsJSON(
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
-		*DTSVector, *DTSQuery, *DPGLSN:
+		*DTSVector, *DTSQuery:
 		return json.FromString(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
@@ -5239,20 +4982,6 @@ func NewDEnum(e DEnum) *DEnum {
 	return &e
 }
 
-// AsDEnum attempts to retrieve a DEnum from an Expr, returning a DEnum and
-// a flag signifying whether the assertion was successful. The function should
-// // be used instead of direct type assertions wherever a *DEnum wrapped by a
-// // *DOidWrapper is possible.
-func AsDEnum(e Expr) (*DEnum, bool) {
-	switch t := e.(type) {
-	case *DEnum:
-		return t, true
-	case *DOidWrapper:
-		return AsDEnum(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
 func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (DEnum, error) {
@@ -5678,11 +5407,6 @@ func (d *DOid) Min(ctx CompareContext) (Datum, bool) {
 	return &DOid{0, d.semanticType, ""}, true
 }
 
-// Name returns the name associated with this DOid.
-func (d *DOid) Name() string {
-	return d.name
-}
-
 // DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
 // custom Oid values to be attached to the Datum and its types.T.
 // The reason the Datum type was introduced was to permit the introduction of Datum
@@ -5921,7 +5645,7 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	case types.FloatFamily:
 		return DZeroFloat, nil
 	case types.DecimalFamily:
-		return DZeroDecimal, nil
+		return dZeroDecimal, nil
 	case types.DateFamily:
 		return dEpochDate, nil
 	case types.TimestampFamily:
@@ -6080,7 +5804,6 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
 	types.GeographyFamily:      {unsafe.Sizeof(DGeography{}), variableSize},
 	types.GeometryFamily:       {unsafe.Sizeof(DGeometry{}), variableSize},
-	types.PGLSNFamily:          {unsafe.Sizeof(DPGLSN{}), fixedSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},

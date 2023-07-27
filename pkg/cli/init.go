@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -91,7 +91,7 @@ func dialAndCheckHealth(ctx context.Context) error {
 	}
 
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if err := timeutil.RunWithTimeout(
+		if err := contextutil.RunWithTimeout(
 			ctx, "init-open-conn", 5*time.Second, tryConnect,
 		); err != nil {
 			err = errors.Wrapf(err, "node not ready to perform cluster initialization")

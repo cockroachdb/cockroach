@@ -12,12 +12,6 @@ package admission
 
 import "github.com/cockroachdb/pebble"
 
-// TODO(irfansharif): This comment is a bit stale with replication admission
-// control where admission is asynchronous. AC is informed of the write when
-// it's being physically done, so we know its size then. We don't need upfront
-// estimates anymore. The AdmittedWorkDone interface and surrounding types
-// (StoreWorkDoneInfo for ex.) are no longer central.
-//
 // The logic in this file deals with token estimation for a store write in two
 // situations: (a) at admission time, (b) when the admitted work is done. At
 // (a) we have no information provided about the work size (NB: this choice is
@@ -111,11 +105,7 @@ const ingestMultiplierMin = 0.5
 const ingestMultiplierMax = 1.5
 
 type storePerWorkTokenEstimator struct {
-	atAdmissionWorkTokens int64
-
-	// NB: The linear model fitters below are used to determine how many tokens
-	// to consume once the size of the work is known.
-
+	atAdmissionWorkTokens           int64
 	atDoneL0WriteTokensLinearModel  tokensLinearModelFitter
 	atDoneL0IngestTokensLinearModel tokensLinearModelFitter
 	// Unlike the models above that model bytes into L0, this model computes all
@@ -248,7 +238,7 @@ func (e *storePerWorkTokenEstimator) getStoreRequestEstimatesAtAdmission() store
 	return storeRequestEstimates{writeTokens: e.atAdmissionWorkTokens}
 }
 
-func (e *storePerWorkTokenEstimator) getModelsAtDone() (
+func (e *storePerWorkTokenEstimator) getModelsAtAdmittedDone() (
 	l0WriteLM tokensLinearModel,
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,

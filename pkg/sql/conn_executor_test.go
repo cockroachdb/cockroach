@@ -315,12 +315,12 @@ func TestErrorOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	getTargetKey := func(s serverutils.TestServerInterface, tableID uint32) string {
-		if s.StartedDefaultTestTenant() {
-			return fmt.Sprintf("/Tenant/%d/Table/%d/1/1/0", serverutils.TestTenantID().ToUint64(), tableID)
-		}
-		return fmt.Sprintf("/Table/%d/1/1/0", tableID)
-	}
+	// We can't get the tableID programmatically here.
+	// The table id can be retrieved by doing.
+	// CREATE DATABASE test;
+	// CREATE TABLE test.t();
+	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
+	const targetKeyStringFmt string = "/Table/%d/1/1/0"
 	var targetKeyString atomic.Value
 	targetKeyString.Store("")
 	var injectedErr int64
@@ -363,7 +363,7 @@ CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `)
 	tableID := sqlutils.QueryTableID(t, sqlDB, "t", "public", "test")
-	targetKeyString.Store(getTargetKey(s, tableID))
+	targetKeyString.Store(fmt.Sprintf(targetKeyStringFmt, tableID))
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -774,7 +774,6 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	var retryCount int64
 	const numToRetry = 2 // only fail on the first two attempts
 	filter := newDynamicRequestFilter()
@@ -786,7 +785,6 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
 
 	conn, err := sqlDB.Conn(context.Background())
 	require.NoError(t, err)
@@ -805,7 +803,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 		}
 		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
 			put := req.(*kvpb.ConditionalPutRequest)
-			_, tableID, err := codec.DecodeTablePrefix(put.Key)
+			_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(put.Key)
 			if err != nil || tableID != fooTableId {
 				return nil
 			}
@@ -845,7 +843,6 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
 	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
@@ -883,7 +880,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		}
 		if req, ok := ba.GetArg(kvpb.Get); ok {
 			get := req.(*kvpb.GetRequest)
-			_, tableID, err := codec.DecodeTablePrefix(get.Key)
+			_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(get.Key)
 			if err != nil || tableID != keys.NamespaceTableID {
 				err = nil
 				return nil
@@ -1192,11 +1189,14 @@ func TestTransactionDeadline(t *testing.T) {
 			SessionOverride: sessionOverrideKnob,
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
-		Knobs:             knobs,
-	})
-	defer s.Stopper().Stop(ctx)
+	testClusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+	}
+	tc := serverutils.StartNewTestCluster(t, 1, testClusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0)
 
 	// Setup a dynamic session override which will be used in subsequent tests to ensure the transaction
 	// deadline is set accurately. Use clusterSQLLiveness for bootstrapping the tenant.

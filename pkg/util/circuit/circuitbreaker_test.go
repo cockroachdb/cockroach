@@ -384,54 +384,6 @@ func TestBreakerRealistic(t *testing.T) {
 	})
 }
 
-func TestBreaker_Probe(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	_, eh := testLogBridge(t)
-	defer eh.RequireNumTrippedEqualsNumResets(t)
-	var ran bool
-	br := NewBreaker(Options{
-		Name: "mybreaker",
-		AsyncProbe: func(report func(error), done func()) {
-			ran = true
-			done()
-		},
-		EventHandler: eh,
-	})
-	br.Probe()
-	testutils.SucceedsSoon(t, func() error {
-		if !ran {
-			return errors.New("probe did not run")
-		}
-		return nil
-	})
-}
-
-func TestTestingSetTripped(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	_, tl := testLogBridge(t)
-
-	// Spawn a never-terminating probe just to prove that we can simulate a
-	// breaker trip without communicating with the probe at all.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	br := NewBreaker(Options{
-		Name: "test",
-		AsyncProbe: func(report func(error), done func()) {
-			report(nil)
-			<-ctx.Done()
-		},
-		EventHandler: tl,
-	})
-
-	require.NoError(t, br.Signal().Err())
-	errBoom := errors.New("boom")
-	undo := TestingSetTripped(br, errBoom)
-	require.ErrorIs(t, br.Signal().Err(), errBoom)
-	undo()
-	require.NoError(t, br.Signal().Err())
-	require.Zero(t, tl.trip)
-}
-
 func BenchmarkBreaker_Signal(b *testing.B) {
 	br := NewBreaker(Options{
 		Name: redact.Sprint("Breaker"),

@@ -35,7 +35,7 @@ export type StatementDetailsResponseWithKey = {
   key: string;
 };
 
-export type SqlStatsResponse = cockroach.server.serverpb.IStatementsResponse;
+export type SqlStatsResponse = cockroach.server.serverpb.StatementsResponse;
 export const SqlStatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
 export type SqlStatsSortType = cockroach.server.serverpb.StatsSortOptions;
 

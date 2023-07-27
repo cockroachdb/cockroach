@@ -153,11 +153,6 @@ message MergeTrigger {
     (gogoproto.nullable) = false
   ];
 
-  storage.enginepb.MVCCStats right_range_id_local_mvcc_stats = 9 [
-    (gogoproto.customname) = "RightRangeIDLocalMVCCStats",
-    (gogoproto.nullable) = false
-  ];
-
   // FreezeStart is a timestamp that is guaranteed to be greater than the
   // timestamps at which any requests were serviced by the right-hand side range
   // before it stopped responding to requests altogether (in anticipation of
@@ -454,9 +449,6 @@ message Transaction {
   // with a bumped write timestamp, so this flag is only telling us that a
   // refresh is less likely to succeed than in other cases where
   // ReadTimestamp != WriteTimestamp.
-  //
-  // TODO(nvanbenschoten): this flag is no longer assigned by v23.2 nodes.
-  // Remove it when compatibility with v23.1 nodes is no longer a concern.
   bool write_too_old = 12;
   // Set of spans that the transaction has acquired locks within. These are
   // spans which must be resolved on txn completion. Note that these spans
@@ -546,15 +538,11 @@ message Intent {
 }
 
 // A LockAcquisition represents the action of a Transaction acquiring a lock
-// with a specified durability level and strength over a Span of keys.
+// with a specified durability level over a Span of keys.
 message LockAcquisition {
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   kv.kvserver.concurrency.lock.Durability durability = 3;
-  kv.kvserver.concurrency.lock.Strength strength = 4;
-  // IgnoredSeqNums is a list of sequence numbers that have been rolled back
-  // by the transaction at the time of the lock acquisition.
-  repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 }
 
 // A LockUpdate is a Span together with Transaction state. LockUpdate messages
@@ -661,7 +649,7 @@ message Lease {
   // (see Lease.Equivalent). Two adjacent leases that are equivalent will have
   // the same sequence number and two adjacent leases that are not equivalent
   // will have different sequence numbers.
-  uint64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
+  int64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
 
   // The type of acquisition event that result in this lease (transfer or
   // request).
@@ -714,7 +702,7 @@ message LeafTxnInputState {
   // Current read seqnum. When stepping_mode_enabled is true,
   // this field becomes the sequence number used for reads,
   // regardless of the current seqnum generated for writes. This is
-  // updated via the (kv.TxnSender).Step() operation.
+  // updated via the (client.TxnSender).Step() operation.
   int32 read_seq_num = 10 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
@@ -779,7 +767,7 @@ message ClientRangeInfo {
   int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
   // ExplicitlyRequested causes range info to be returned even if other fields
-  // are up-to-date or empty.
+  // are up-to-date.
   bool explicitly_requested = 4;
 }
 

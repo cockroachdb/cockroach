@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "kvbase",
-    srcs = [
-        "constants.go",
-        "metrics.go",
-    ],
+    srcs = ["constants.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvbase",
     visibility = ["//visibility:public"],
 )

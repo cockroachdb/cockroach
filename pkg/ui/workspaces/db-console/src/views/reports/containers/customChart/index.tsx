@@ -15,19 +15,18 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import {
-  refreshMetricMetadata,
-  refreshNodes,
-  refreshTenantsList,
-} from "src/redux/apiReducers";
+import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
-import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
+import {
+  AxisUnits,
+  TimeScaleDropdown,
+  TimeScale,
+} from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
   PageConfigItem,
@@ -38,11 +37,7 @@ import {
 } from "src/redux/metricMetadata";
 import { INodeStatus } from "src/util/proto";
 
-import {
-  CustomChartState,
-  CustomChartTable,
-  CustomMetricState,
-} from "./customMetric";
+import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 import { queryByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
@@ -53,21 +48,16 @@ import {
   setTimeScale,
 } from "src/redux/timeScale";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
-import { getCookieValue } from "src/redux/cookies";
-import { tenantDropdownOptions } from "src/redux/tenants";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
   nodesSummary: NodesSummary;
   refreshMetricMetadata: typeof refreshMetricMetadata;
-  refreshTenantsList: typeof refreshTenantsList;
   metricsMetadata: MetricsMetadata;
   setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   timeScale: TimeScale;
   setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
-  tenantOptions: ReturnType<() => DropdownOption[]>;
-  currentTenant: string | null;
 }
 
 interface UrlState {
@@ -132,7 +122,6 @@ export class CustomChart extends React.Component<
   componentDidMount() {
     this.refresh();
     this.props.refreshMetricMetadata();
-    this.props.refreshTenantsList();
   }
 
   componentDidUpdate() {
@@ -208,89 +197,12 @@ export class CustomChart extends React.Component<
     );
   };
 
-  // This function handles the logic related to creating Metric components
-  // based on perNode and perTenant flags.
-  renderMetricComponents = (metrics: CustomMetricState[], index: number) => {
-    const { nodesSummary, tenantOptions } = this.props;
-    const tenants = tenantOptions.length > 1 ? tenantOptions.slice(1) : [];
-    return metrics.map((m, i) => {
-      if (m.metric === "") {
-        return "";
-      }
-      if (m.perNode && m.perTenant) {
-        return _.flatMap(nodesSummary.nodeIDs, nodeID => {
-          return tenants.map(tenant => (
-            <Metric
-              key={`${index}${i}${nodeID}${tenant.value}`}
-              title={`${nodeID}-${tenant.value}: ${m.metric} (${i})`}
-              name={m.metric}
-              aggregator={m.aggregator}
-              downsampler={m.downsampler}
-              derivative={m.derivative}
-              sources={
-                isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                  ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n =>
-                      n.toString(),
-                    )
-                  : [nodeID]
-              }
-              tenantSource={tenant.value}
-            />
-          ));
-        });
-      } else if (m.perNode) {
-        return _.map(nodesSummary.nodeIDs, nodeID => (
-          <Metric
-            key={`${index}${i}${nodeID}`}
-            title={`${nodeID}: ${m.metric} (${i})`}
-            name={m.metric}
-            aggregator={m.aggregator}
-            downsampler={m.downsampler}
-            derivative={m.derivative}
-            sources={
-              isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n =>
-                    n.toString(),
-                  )
-                : [nodeID]
-            }
-            tenantSource={m.tenantSource}
-          />
-        ));
-      } else if (m.perTenant) {
-        return tenants.map(tenant => (
-          <Metric
-            key={`${index}${i}${tenant.value}`}
-            title={`${tenant.value}: ${m.metric} (${i})`}
-            name={m.metric}
-            aggregator={m.aggregator}
-            downsampler={m.downsampler}
-            derivative={m.derivative}
-            sources={m.source === "" ? [] : [m.source]}
-            tenantSource={tenant.value}
-          />
-        ));
-      } else {
-        return (
-          <Metric
-            key={`${index}${i}`}
-            title={`${m.metric} (${i}) `}
-            name={m.metric}
-            aggregator={m.aggregator}
-            downsampler={m.downsampler}
-            derivative={m.derivative}
-            sources={m.source === "" ? [] : [m.source]}
-            tenantSource={m.tenantSource}
-          />
-        );
-      }
-    });
-  };
-
   // Render a chart of the currently selected metrics.
   renderChart = (chart: CustomChartState, index: number) => {
     const metrics = chart.metrics;
     const units = chart.axisUnits;
+    const { nodesSummary } = this.props;
+
     return (
       <MetricsDataProvider
         id={`debug-custom-chart.${index}`}
@@ -301,7 +213,43 @@ export class CustomChart extends React.Component<
       >
         <LineGraph title={metrics.map(m => m.metric).join(", ")}>
           <Axis units={units} label={AxisUnits[units]}>
-            {this.renderMetricComponents(metrics, index)}
+            {metrics.map((m, i) => {
+              if (m.metric !== "") {
+                if (m.perNode) {
+                  return _.map(nodesSummary.nodeIDs, nodeID => (
+                    <Metric
+                      key={`${index}${i}${nodeID}`}
+                      title={`${nodeID}: ${m.metric} (${i})`}
+                      name={m.metric}
+                      aggregator={m.aggregator}
+                      downsampler={m.downsampler}
+                      derivative={m.derivative}
+                      sources={
+                        isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
+                          ? _.map(
+                              nodesSummary.storeIDsByNodeID[nodeID] || [],
+                              n => n.toString(),
+                            )
+                          : [nodeID]
+                      }
+                    />
+                  ));
+                } else {
+                  return (
+                    <Metric
+                      key={`${index}${i}`}
+                      title={`${m.metric} (${i}) `}
+                      name={m.metric}
+                      aggregator={m.aggregator}
+                      downsampler={m.downsampler}
+                      derivative={m.derivative}
+                      sources={m.source === "" ? [] : [m.source]}
+                    />
+                  );
+                }
+              }
+              return "";
+            })}
           </Axis>
         </LineGraph>
       </MetricsDataProvider>
@@ -321,8 +269,7 @@ export class CustomChart extends React.Component<
   // Render a table containing all of the currently added metrics, with editing
   // inputs for each metric.
   renderChartTables() {
-    const { nodesSummary, metricsMetadata, tenantOptions, currentTenant } =
-      this.props;
+    const { nodesSummary, metricsMetadata } = this.props;
     const charts = this.currentCharts();
 
     return (
@@ -331,8 +278,6 @@ export class CustomChart extends React.Component<
           <CustomChartTable
             metricOptions={this.metricOptions(nodesSummary, metricsMetadata)}
             nodeOptions={this.nodeOptions(nodesSummary)}
-            tenantOptions={tenantOptions}
-            currentTenant={currentTenant}
             index={i}
             key={i}
             chartState={chart}
@@ -385,14 +330,11 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesQueryValid: state.cachedData.nodes.valid,
   metricsMetadata: metricsMetadataSelector(state),
   timeScale: selectTimeScale(state),
-  tenantOptions: tenantDropdownOptions(state),
-  currentTenant: getCookieValue("tenant"),
 });
 
 const mapDispatchToProps = {
   refreshNodes,
   refreshMetricMetadata,
-  refreshTenantsList,
   setMetricsFixedWindow: setMetricsFixedWindow,
   setTimeScale: setTimeScale,
 };

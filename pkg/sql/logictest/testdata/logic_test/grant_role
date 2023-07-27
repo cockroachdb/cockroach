@@ -38,6 +38,9 @@ REVOKE testuser FROM public
 subtest grant_with_createrole
 
 statement ok
+SET CLUSTER SETTING sql.auth.createrole_allows_grant_role_membership.enabled = true
+
+statement ok
 CREATE USER grantor WITH CREATEROLE;
 CREATE ROLE transitiveadmin;
 GRANT admin TO transitiveadmin

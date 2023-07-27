@@ -6,7 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-// Package sqlproxyccl implements a server to proxy SQL connections.
 package sqlproxyccl
 
 import (

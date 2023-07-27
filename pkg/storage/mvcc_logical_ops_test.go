@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -89,9 +88,8 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	}
 
 	// Write another intent, push it, then abort it.
-	txn2 := makeTxn(*txn2, hlc.Timestamp{Logical: 5})
-	txn2.IsoLevel = isolation.ReadCommitted
-	if err := MVCCPut(ctx, ol, nil, testKey3, txn2.ReadTimestamp, hlc.ClockTimestamp{}, value4, txn2); err != nil {
+	txn2ts := makeTxn(*txn2, hlc.Timestamp{Logical: 5})
+	if err := MVCCPut(ctx, ol, nil, testKey3, txn2ts.ReadTimestamp, hlc.ClockTimestamp{}, value4, txn2ts); err != nil {
 		t.Fatal(err)
 	}
 	txn2Pushed := *txn2
@@ -130,7 +128,6 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		makeOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:           txn1.ID,
 			TxnKey:          txn1.Key,
-			TxnIsoLevel:     txn1.IsoLevel,
 			TxnMinTimestamp: txn1.MinTimestamp,
 			Timestamp:       hlc.Timestamp{Logical: 2},
 		}),
@@ -141,7 +138,6 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		makeOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:           txn1.ID,
 			TxnKey:          txn1.Key,
-			TxnIsoLevel:     txn1.IsoLevel,
 			TxnMinTimestamp: txn1.MinTimestamp,
 			Timestamp:       hlc.Timestamp{Logical: 4},
 		}),
@@ -158,7 +154,6 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		makeOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:           txn2.ID,
 			TxnKey:          txn2.Key,
-			TxnIsoLevel:     txn2.IsoLevel,
 			TxnMinTimestamp: txn2.MinTimestamp,
 			Timestamp:       hlc.Timestamp{Logical: 5},
 		}),

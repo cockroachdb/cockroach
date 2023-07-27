@@ -17,7 +17,6 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/cli/exit",
-        "//pkg/util/allstacks",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/logconfig",

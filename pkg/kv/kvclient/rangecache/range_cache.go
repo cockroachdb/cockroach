@@ -26,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -923,7 +923,7 @@ func tryLookupImpl(
 	// Since we don't inherit any other cancelation, let's put in a generous
 	// timeout as some protection against unavailable meta ranges.
 	var rs, preRs []roachpb.RangeDescriptor
-	if err := timeutil.RunWithTimeout(ctx, "range lookup", 10*time.Second,
+	if err := contextutil.RunWithTimeout(ctx, "range lookup", 10*time.Second,
 		func(ctx context.Context) error {
 			var err error
 			rs, preRs, err = rc.performRangeLookup(ctx, key, consistency, useReverseScan)

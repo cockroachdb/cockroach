@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
@@ -28,12 +27,10 @@ import (
 
 func makeMockTxnCommitter() (txnCommitter, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
-	metrics := MakeTxnMetrics(metric.TestSampleInterval)
 	return txnCommitter{
 		st:      cluster.MakeTestingClusterSettings(),
 		stopper: stop.NewStopper(),
 		wrapped: mockSender,
-		metrics: &metrics,
 		mu:      new(syncutil.Mutex),
 	}, mockSender
 }
@@ -405,10 +402,69 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 	<-explicitCommitCh
 }
 
-// TestTxnCommitterRetryAfterStaging verifies that txnCommitter performs a
-// parallel commit auto-retry when a write performed in parallel with staging a
-// transaction is pushed to a timestamp above the staging timestamp.
+// TestTxnCommitterRetryAfterStaging verifies that txnCommitter returns a retry
+// error when a write performed in parallel with staging a transaction is pushed
+// to a timestamp above the staging timestamp.
 func TestTxnCommitterRetryAfterStaging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	testutils.RunTrueAndFalse(t, "WriteTooOld", func(t *testing.T, writeTooOld bool) {
+		tc, mockSender := makeMockTxnCommitter()
+		defer tc.stopper.Stop(ctx)
+
+		txn := makeTxnProto()
+		keyA := roachpb.Key("a")
+
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+		etArgs := kvpb.EndTxnRequest{Commit: true}
+		putArgs.Sequence = 1
+		etArgs.Sequence = 2
+		etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
+		ba.Add(&putArgs, &etArgs)
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+			et := ba.Requests[1].GetInner().(*kvpb.EndTxnRequest)
+			require.True(t, et.Commit)
+			require.Len(t, et.InFlightWrites, 1)
+			require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.STAGING
+			br.Responses[1].GetInner().(*kvpb.EndTxnResponse).StagingTimestamp = br.Txn.WriteTimestamp
+
+			// Pretend the PutRequest was split and sent to a different Range. It
+			// could hit the timestamp cache, or a WriteTooOld error (which sets the
+			// WriteTooOld flag). The intent will be written but the response
+			// transaction's timestamp will be larger than the staging timestamp.
+			br.Txn.WriteTooOld = writeTooOld
+			br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(1, 0)
+			return br, nil
+		})
+
+		br, pErr := tc.SendLocked(ctx, ba)
+		require.Nil(t, br)
+		require.NotNil(t, pErr)
+		require.IsType(t, &kvpb.TransactionRetryError{}, pErr.GetDetail())
+		expReason := kvpb.RETRY_SERIALIZABLE
+		if writeTooOld {
+			expReason = kvpb.RETRY_WRITE_TOO_OLD
+		}
+		require.Equal(t, expReason, pErr.GetDetail().(*kvpb.TransactionRetryError).Reason)
+	})
+}
+
+// Test that parallel commits are inhibited on retries (i.e. after a successful
+// refresh caused by a parallel-commit batch). See comments in the interceptor
+// about why this is necessary.
+func TestTxnCommitterNoParallelCommitsOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -425,58 +481,28 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	putArgs.Sequence = 1
 	etArgs.Sequence = 2
 	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
+
+	// Pretend that this is a retry of the request (after a successful refresh). Having the key
+	// assigned is how the interceptor distinguishes retries.
+	etArgs.Key = keyA
+
 	ba.Add(&putArgs, &etArgs)
 
-	onFirstSend := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
-		require.Equal(t, roachpb.PENDING, ba.Txn.Status)
 		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
-		et := ba.Requests[1].GetEndTxn()
+		et := ba.Requests[1].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
-		require.Nil(t, et.LockSpans)
-		require.Len(t, et.InFlightWrites, 1)
-		require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
+		require.Len(t, et.InFlightWrites, 0, "expected parallel commit to be inhibited")
 
 		br := ba.CreateReply()
-		br.Txn = ba.Txn.Clone()
-		br.Txn.Status = roachpb.STAGING
-		br.Responses[1].GetEndTxn().StagingTimestamp = br.Txn.WriteTimestamp
-
-		// Pretend the PutRequest was split and sent to a different Range. It
-		// could hit the timestamp cache or a WriteTooOld error (which sets the
-		// WriteTooOld flag which is stripped by the txnSpanRefresher). The intent
-		// will be written but the response transaction's timestamp will be larger
-		// than the staging timestamp.
-		br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(1, 0)
-		return br, nil
-	}
-	sawRetry := false
-	onRetry := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		sawRetry = true
-		require.Len(t, ba.Requests, 1)
-		require.Equal(t, roachpb.PENDING, ba.Txn.Status)
-		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-
-		et := ba.Requests[0].GetEndTxn()
-		require.True(t, et.Commit)
-		require.Nil(t, et.InFlightWrites)
-		require.Len(t, et.LockSpans, 1)
-		require.Equal(t, roachpb.Span{Key: keyA}, et.LockSpans[0])
-
-		br := ba.CreateReply()
-		br.Txn = ba.Txn.Clone()
+		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
 		return br, nil
-	}
-	mockSender.ChainMockSend(onFirstSend, onRetry)
+	})
 
-	br, pErr := tc.SendLocked(ctx, ba)
+	_, pErr := tc.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.NotNil(t, br.Txn)
-	require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
-	require.True(t, sawRetry)
-	require.Equal(t, int64(1), tc.metrics.ParallelCommitAutoRetries.Count())
 }

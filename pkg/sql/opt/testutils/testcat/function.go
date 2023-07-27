@@ -62,13 +62,9 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		panic(fmt.Errorf("built-in function with name %q already exists", name))
 	}
 	if _, ok := tc.udfs[name]; ok {
-		if c.Replace {
-			delete(tc.udfs, name)
-		} else {
-			// TODO(mgartner): The test catalog should support multiple overloads
-			// with the same name if their arguments are different.
-			panic(fmt.Errorf("user-defined function with name %q already exists", name))
-		}
+		// TODO(mgartner): The test catalog should support multiple overloads
+		// with the same name if their arguments are different.
+		panic(fmt.Errorf("user-defined function with name %q already exists", name))
 	}
 	if c.RoutineBody != nil {
 		panic(fmt.Errorf("routine body of BEGIN ATOMIC is not supported"))
@@ -92,7 +88,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 	}
 
 	// Retrieve the function body, volatility, and calledOnNullInput.
-	body, v, calledOnNullInput, language := collectFuncOptions(c.Options)
+	body, v, calledOnNullInput := collectFuncOptions(c.Options)
 
 	if tc.udfs == nil {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
@@ -105,7 +101,6 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
-		Language:          language,
 	}
 	if c.ReturnType.IsSet {
 		overload.Class = tree.GeneratorClass
@@ -122,7 +117,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 
 func collectFuncOptions(
 	o tree.FunctionOptions,
-) (body string, v volatility.V, calledOnNullInput bool, language tree.FunctionLanguage) {
+) (body string, v volatility.V, calledOnNullInput bool) {
 	// The default volatility is VOLATILE.
 	v = volatility.Volatile
 
@@ -132,8 +127,6 @@ func collectFuncOptions(
 	// The default is CALLED ON NULL INPUT, which is equivalent to
 	// CalledOnNullInput=true in function overloads.
 	calledOnNullInput = true
-
-	language = tree.FunctionLangUnknown
 
 	for _, option := range o {
 		switch t := option.(type) {
@@ -161,7 +154,6 @@ func collectFuncOptions(
 			if t != tree.FunctionLangSQL && t != tree.FunctionLangPLpgSQL {
 				panic(fmt.Errorf("LANGUAGE must be SQL or plpgsql"))
 			}
-			language = t
 
 		default:
 			ctx := tree.NewFmtCtx(tree.FmtSimple)
@@ -176,7 +168,7 @@ func collectFuncOptions(
 		panic(fmt.Errorf("LEAKPROOF functions must be IMMUTABLE"))
 	}
 
-	return body, v, calledOnNullInput, language
+	return body, v, calledOnNullInput
 }
 
 // formatFunction nicely formats a function definition creating in the opt test

@@ -335,7 +335,7 @@ func dumpNewDepsBzl(
 
 	fmt.Println(`load("@bazel_gazelle//:deps.bzl", "go_repository")
 
-# PRO-TIP: You can inject temporary changes to any of these dependencies by
+# PRO-TIP: You can inject temorary changes to any of these dependencies by
 # by pointing to an alternate remote to clone from. Delete the ` + "`sha256`" + `,
 # ` + "`strip_prefix`, and `urls` parameters, and add `vcs = \"git\"`" + ` as well as a
 # custom ` + "`remote` and `commit`" + `. For example:

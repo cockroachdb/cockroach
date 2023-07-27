@@ -13,6 +13,7 @@ package main
 import (
 	"log"
 	"os"
+	"os/exec"
 )
 
 const (
@@ -23,6 +24,11 @@ const (
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("")
+
+	if _, err := exec.LookPath("bazel"); err != nil {
+		log.Printf("ERROR: bazel not found in $PATH")
+		os.Exit(1)
+	}
 
 	dev := makeDevCmd()
 

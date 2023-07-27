@@ -25,6 +25,21 @@ go_library(
     ],
 )
 
+genrule(
+    name = "gen-empty-index.html",
+    outs = ["index.html"],
+    cmd = """
+    cat >$@ <<EOF
+<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>
+EOF
+""",
+    visibility = ["//pkg/ui:__subpackages__"],
+)
+
 test_suite(
     name = "test",
     tests = [

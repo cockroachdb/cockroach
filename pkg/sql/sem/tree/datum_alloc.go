@@ -48,7 +48,6 @@ type DatumAlloc struct {
 	dtupleAlloc       []DTuple
 	doidAlloc         []DOid
 	dvoidAlloc        []DVoid
-	dpglsnAlloc       []DPGLSN
 	// stringAlloc is used by all datum types that are strings (DBytes, DString, DEncodedKey).
 	stringAlloc []string
 	env         CollationEnvironment
@@ -90,21 +89,6 @@ func (a *DatumAlloc) NewDInt(v DInt) *DInt {
 	buf := &a.dintAlloc
 	if len(*buf) == 0 {
 		*buf = make([]DInt, a.AllocSize)
-	}
-	r := &(*buf)[0]
-	*r = v
-	*buf = (*buf)[1:]
-	return r
-}
-
-// NewDPGLSN allocates a DPGLSN.
-func (a *DatumAlloc) NewDPGLSN(v DPGLSN) *DPGLSN {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
-	buf := &a.dpglsnAlloc
-	if len(*buf) == 0 {
-		*buf = make([]DPGLSN, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

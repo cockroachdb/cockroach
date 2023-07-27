@@ -1,5 +1,4 @@
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-22.2-23.1
 query IITI rowsort
 SELECT * FROM system.namespace
 ----
@@ -125,7 +124,7 @@ SELECT * FROM system.namespace
 104  0   public                           105
 
 # Verify format of system tables.
-query TTBTTTB rowsort
+query TTBTTTB
 SHOW COLUMNS FROM system.namespace
 ----
 parentID        INT8    false  NULL  ·  {primary}  false

@@ -17,73 +17,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
-
-// Enabled determines whether we use flow control for replication traffic in KV.
-var Enabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kvadmission.flow_control.enabled",
-	"determines whether we use flow control for replication traffic in KV",
-	true,
-)
-
-// Mode determines the 'mode' of flow control we use for replication traffic in
-// KV, if enabled.
-var Mode = settings.RegisterEnumSetting(
-	settings.SystemOnly,
-	"kvadmission.flow_control.mode",
-	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	ApplyToAll.String(),
-	map[int64]string{
-		int64(ApplyToElastic): modeDict[ApplyToElastic],
-		int64(ApplyToAll):     modeDict[ApplyToAll],
-	},
-)
-
-var modeDict = map[ModeT]string{
-	ApplyToElastic: "apply_to_elastic",
-	ApplyToAll:     "apply_to_all",
-}
-
-// ModeT represents the various modes of flow control for replication traffic.
-type ModeT int64
-
-const (
-	// ApplyToElastic uses flow control for only elastic traffic, i.e. only
-	// elastic work will wait for flow tokens to be available. All work is
-	// virtually enqueued in below-raft admission queues and dequeued in
-	// priority order, but only empty elastic flow token buckets above-raft will
-	// block further elastic traffic from being admitted.
-	//
-	// TODO(irfansharif): We're potentially risking OOMs doing all this tracking
-	// for regular work, without coalescing state. With a bit of plumbing, for
-	// requests that bypass flow control we could fallback to using the non-AC
-	// raft encodings and avoid the potential OOMs. Address this as part of
-	// #95563.
-	ApplyToElastic ModeT = iota
-	// ApplyToAll uses flow control for both elastic and regular traffic,
-	// i.e. all work will wait for flow tokens to be available.
-	ApplyToAll
-)
-
-func (m ModeT) String() string {
-	return redact.StringWithoutMarkers(m)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (m ModeT) SafeFormat(p redact.SafePrinter, verb rune) {
-	if s, ok := modeDict[m]; ok {
-		p.Print(s)
-		return
-	}
-	p.Print("unknown-mode")
-}
 
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the
@@ -130,12 +68,6 @@ type Controller interface {
 	// expected to have been deducted earlier with the same priority provided
 	// here.
 	ReturnTokens(context.Context, admissionpb.WorkPriority, Tokens, Stream)
-	// Inspect returns a snapshot of all underlying streams and their available
-	// {regular,elastic} tokens. It's used to power /inspectz.
-	Inspect(context.Context) []kvflowinspectpb.Stream
-	// InspectStream returns a snapshot of a specific underlying stream and its
-	// available {regular,elastic} tokens. It's used to power /inspectz.
-	InspectStream(context.Context, Stream) kvflowinspectpb.Stream
 
 	// TODO(irfansharif): We might need the ability to "disable" specific
 	// streams/corresponding token buckets when there are failures or
@@ -166,11 +98,13 @@ type Handle interface {
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it
 	// to end up in, log positions that monotonically increase. Requests are
-	// assumed to have been Admit()-ed first.
+	// assumed to have been Admit()-ed first. The returned time.Time parameter
+	// is to be used as the work item's CreateTime when enqueueing in IO
+	// admission queues.
 	DeductTokensFor(
-		context.Context, admissionpb.WorkPriority,
+		context.Context, admissionpb.WorkPriority, time.Time,
 		kvflowcontrolpb.RaftLogPosition, Tokens,
-	)
+	) time.Time
 	// ReturnTokensUpto returns all previously deducted tokens of a given
 	// priority for all log positions less than or equal to the one specified.
 	// It does for the specific stream. Once returned, subsequent attempts to
@@ -195,8 +129,7 @@ type Handle interface {
 	// DisconnectStream disconnects a stream from the handle. When disconnecting
 	// a stream, (a) all previously held flow tokens are released and (b) we
 	// unblock all requests waiting in Admit() for this stream's flow tokens in
-	// particular. It's a no-op if disconnecting something we're not connected
-	// to.
+	// particular.
 	//
 	// This is typically used when we're no longer replicating data to a member
 	// of the raft group, because (a) it crashed, (b) it's no longer part of the
@@ -206,49 +139,11 @@ type Handle interface {
 	// AdmittedRaftLogEntries between what it admitted last and its latest
 	// RaftLogPosition.
 	DisconnectStream(context.Context, Stream)
-	// ResetStreams resets all connected streams, i.e. it disconnects and
-	// re-connects to each one. It effectively unblocks all requests waiting in
-	// Admit(). It's only used when cluster settings change, settings that
-	// affect all work waiting for flow tokens.
-	ResetStreams(ctx context.Context)
-	// Inspect returns a serialized form of the underlying handle. It's used to
-	// power /inspectz.
-	Inspect(context.Context) kvflowinspectpb.Handle
 	// Close closes the handle and returns all held tokens back to the
 	// underlying controller. Typically used when the replica loses its lease
 	// and/or raft leadership, or ends up getting GC-ed (if it's being
 	// rebalanced, merged away, etc).
 	Close(context.Context)
-}
-
-// Handles represent a set of flow control handles. Note that handles are
-// typically held on replicas initiating replication traffic, so on a given node
-// they're uniquely identified by their range ID.
-type Handles interface {
-	// Lookup the kvflowcontrol.Handle for the specific range (or rather, the
-	// replica of the specific range that's locally held).
-	Lookup(roachpb.RangeID) (Handle, bool)
-	// ResetStreams resets all underlying streams for all underlying
-	// kvflowcontrol.Handles, i.e. disconnect and reconnect each one. It
-	// effectively unblocks all requests waiting in Admit().
-	ResetStreams(ctx context.Context)
-	// Inspect returns the set of ranges that have an embedded
-	// kvflowcontrol.Handle. It's used to power /inspectz.
-	Inspect() []roachpb.RangeID
-	// TODO(irfansharif): When fixing I1 and I2 from kvflowcontrol/node.go,
-	// we'll want to disconnect all streams for a specific node. Expose
-	// something like the following to disconnect all replication streams bound
-	// to the specific node. Back it by a reverse-lookup dictionary, keyed by
-	// StoreID (or NodeID, if we also maintain a mapping between NodeID ->
-	// []StoreID) and the set of Handles currently connected to it. Do it as
-	// part of #95563.
-	//
-	//   Iterate(roachpb.StoreID, func(context.Context, Handle, Stream))
-}
-
-// HandleFactory is used to construct new Handles.
-type HandleFactory interface {
-	NewHandle(roachpb.RangeID, roachpb.TenantID) Handle
 }
 
 // Dispatch is used (i) to dispatch information about admitted raft log entries
@@ -262,7 +157,7 @@ type Dispatch interface {
 // entries to specific nodes (typically where said entries originated, where
 // flow tokens were deducted and waiting to be returned).
 type DispatchWriter interface {
-	Dispatch(context.Context, roachpb.NodeID, kvflowcontrolpb.AdmittedRaftLogEntries)
+	Dispatch(roachpb.NodeID, kvflowcontrolpb.AdmittedRaftLogEntries)
 }
 
 // DispatchReader is used to read pending dispatches. It's used in the raft
@@ -304,28 +199,4 @@ func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
 		tenantSt = "1"
 	}
 	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
-}
-
-type raftAdmissionMetaKey struct{}
-
-// ContextWithMeta returns a Context wrapping the supplied raft admission meta,
-// if any.
-//
-// TODO(irfansharif): This causes a heap allocation. Revisit as part of #95563.
-func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMeta) context.Context {
-	if meta != nil {
-		ctx = context.WithValue(ctx, raftAdmissionMetaKey{}, meta)
-	}
-	return ctx
-}
-
-// MetaFromContext returns the raft admission meta embedded in the Context, if
-// any.
-func MetaFromContext(ctx context.Context) *kvflowcontrolpb.RaftAdmissionMeta {
-	val := ctx.Value(raftAdmissionMetaKey{})
-	h, ok := val.(*kvflowcontrolpb.RaftAdmissionMeta)
-	if !ok {
-		return nil
-	}
-	return h
 }

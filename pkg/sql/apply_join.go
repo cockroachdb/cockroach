@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -255,9 +254,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	}
 	plan := p.(*planComponents)
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
-	if err := runPlanInsidePlan(
-		ctx, params, plan, rowResultWriter, nil, /* deferredRoutineSender */
-	); err != nil {
+	if err := runPlanInsidePlan(ctx, params, plan, rowResultWriter); err != nil {
 		return err
 	}
 	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows)
@@ -267,11 +264,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 // runPlanInsidePlan is used to run a plan and gather the results in the
 // resultWriter, as part of the execution of an "outer" plan.
 func runPlanInsidePlan(
-	ctx context.Context,
-	params runParams,
-	plan *planComponents,
-	resultWriter rowResultWriter,
-	deferredRoutineSender eval.DeferredRoutineSender,
+	ctx context.Context, params runParams, plan *planComponents, resultWriter rowResultWriter,
 ) error {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
@@ -292,13 +285,9 @@ func runPlanInsidePlan(
 	// we make sure to unset pausablePortal field on the planner.
 	plannerCopy.pausablePortal = nil
 	evalCtxFactory := func() *extendedEvalContext {
-		plannerCopy.extendedEvalCtx = *params.p.ExtendedEvalContextCopy()
-		evalCtx := &plannerCopy.extendedEvalCtx
+		evalCtx := params.p.ExtendedEvalContextCopy()
 		evalCtx.Planner = &plannerCopy
 		evalCtx.StreamManagerFactory = &plannerCopy
-		if deferredRoutineSender != nil {
-			evalCtx.RoutineSender = deferredRoutineSender
-		}
 		return evalCtx
 	}
 

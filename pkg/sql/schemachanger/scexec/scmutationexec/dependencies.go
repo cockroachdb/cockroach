@@ -64,9 +64,6 @@ type ImmediateMutationStateUpdater interface {
 	// DeleteName marks a namespace entry as being drained.
 	DeleteName(id descpb.ID, nameInfo descpb.NameInfo)
 
-	// AddName adds a namespace entry.
-	AddName(id descpb.ID, nameInfo descpb.NameInfo)
-
 	// CreateDescriptor adds a descriptor for creation.
 	CreateDescriptor(desc catalog.MutableDescriptor)
 
@@ -78,9 +75,6 @@ type ImmediateMutationStateUpdater interface {
 
 	// AddComment adds comments for a descriptor.
 	AddComment(id descpb.ID, subID int, commentType catalogkeys.CommentType, comment string)
-
-	// InitSequence initializes a sequence.
-	InitSequence(id descpb.ID, startVal int64)
 
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.

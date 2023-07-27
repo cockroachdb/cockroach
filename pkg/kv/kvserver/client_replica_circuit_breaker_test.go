@@ -934,7 +934,7 @@ func (cbt *circuitBreakerTest) ExpireAllLeasesAndN1LivenessRecord(
 			testutils.SucceedsSoon(t, func() error {
 				self, ok := lv.Self()
 				require.True(t, ok)
-				if self.IsLive(cbt.Server(n2).Clock().Now()) {
+				if self.IsLive(cbt.Server(n2).Clock().Now().GoTime()) {
 					// Someone else must have incremented epoch.
 					return nil
 				}

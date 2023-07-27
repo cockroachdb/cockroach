@@ -30,7 +30,6 @@ def gen_eg_go_rules(targets):
             name = name,
             srcs = [template],
             outs = [target],
-            tags = ["no-remote-exec"],
             cmd = """
 GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
 GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
@@ -38,7 +37,6 @@ export PATH=$$GO_ABS_PATH:$$PATH
 export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
 export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
-export GOROOT=
 $(location :execgen) -template $(SRCS) \
         -fmt=false pkg/sql/colexec/$@ > $@
 $(location :goimports) -w $@

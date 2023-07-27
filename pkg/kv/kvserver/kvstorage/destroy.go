@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -133,7 +132,7 @@ func DestroyReplica(
 	// Failure to do so indicates that something is going wrong in the replica
 	// lifecycle.
 	{
-		var tombstone kvserverpb.RangeTombstone
+		var tombstone roachpb.RangeTombstone
 		if _, err := storage.MVCCGetProto(
 			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		); err != nil {
@@ -146,7 +145,7 @@ func DestroyReplica(
 		}
 	}
 
-	tombstone := kvserverpb.RangeTombstone{NextReplicaID: nextReplicaID}
+	tombstone := roachpb.RangeTombstone{NextReplicaID: nextReplicaID}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
 		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)

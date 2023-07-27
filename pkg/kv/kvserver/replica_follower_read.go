@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -137,7 +138,7 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.Batc
 func (r *Replica) getCurrentClosedTimestampLocked(
 	ctx context.Context, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
-	appliedLAI := r.mu.state.LeaseAppliedIndex
+	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	leaseholder := r.mu.state.Lease.Replica.NodeID
 	raftClosed := r.mu.state.RaftClosedTimestamp
 	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, sufficient)

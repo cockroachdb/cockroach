@@ -40,7 +40,8 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 		updateRaftProgressFromActivity(
 			ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
 			func(replicaID roachpb.ReplicaID) bool {
-				return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, timeutil.Now(), r.store.cfg.RangeLeaseDuration)
+				return r.mu.lastUpdateTimes.isFollowerActiveSince(
+					ctx, replicaID, timeutil.Now(), r.store.cfg.RangeLeaseDuration)
 			},
 		)
 	}
@@ -155,7 +156,6 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 
 		for replicaID, pr := range raftStatus.Progress {
 			if pr.State != tracker.StateReplicate {
-				// NB: RecentActive is populated by updateRaftProgressFromActivity().
 				if !pr.RecentActive {
 					if slept < tickDur {
 						// We don't want to delay splits for a follower who hasn't responded within a tick.

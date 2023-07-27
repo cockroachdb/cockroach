@@ -13,7 +13,6 @@ package issues
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
@@ -267,15 +267,17 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 
 			var buf strings.Builder
 			opts := opts // play it safe since we're mutating it below
-			opts.getBinaryVersion = func() string {
-				const v = "v3.3.0"
-				_, _ = fmt.Fprintf(&buf, "getBinaryVersion: result %s\n", v)
-				return v
+			opts.getLatestTag = func() (string, error) {
+				const tag = "v3.3.0"
+				_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
+				return tag, nil
 			}
 
+			l, err := logger.RootLogger("", false)
+			require.NoError(t, err)
 			p := &poster{
 				Options: &opts,
-				l:       log.Default(),
+				l:       l,
 			}
 
 			createdIssue := false
@@ -417,7 +419,10 @@ func TestPostEndToEnd(t *testing.T) {
 		HelpCommand: UnitTestHelpCommand(""),
 	}
 
-	require.NoError(t, Post(context.Background(), log.Default(), UnitTestFormatter, req))
+	l, err := logger.RootLogger("", false)
+	require.NoError(t, err)
+
+	require.NoError(t, Post(context.Background(), l, UnitTestFormatter, req))
 }
 
 // setEnv overrides the env variables corresponding to the input map. The

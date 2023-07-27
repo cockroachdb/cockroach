@@ -8,7 +8,7 @@ CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
 statement ok
 PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 
-query T nosort
+query T
 EXECUTE change_index
 ----
 distribution: local
@@ -25,7 +25,7 @@ vectorized: true
 statement ok
 CREATE INDEX bindex ON ab (b)
 
-query T nosort
+query T
 EXECUTE change_index
 ----
 distribution: local
@@ -39,7 +39,7 @@ vectorized: true
 statement ok
 DROP INDEX bindex
 
-query T nosort
+query T
 EXECUTE change_index
 ----
 distribution: local
@@ -60,7 +60,7 @@ CREATE TABLE cd (c INT PRIMARY KEY, d INT)
 statement ok
 PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 
-query T nosort
+query T
 EXECUTE change_stats
 ----
 distribution: local
@@ -87,7 +87,7 @@ CREATE STATISTICS s FROM ab
 # Now that the optimizer knows table ab has one row (and it assumes a much
 # higher number of rows for cd), it should choose lookup join.
 # We allow retry because stat cache invalidation happens asynchronously.
-query T retry,nosort
+query T retry
 EXECUTE change_stats
 ----
 distribution: local
@@ -115,7 +115,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+rows read from KV: 1 (8 B, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -126,8 +126,7 @@ regions: <hidden>
   actual row count: 1
   KV time: 0µs
   KV contention time: 0µs
-  KV rows decoded: 1
-  KV pairs read: 2
+  KV rows read: 1
   KV bytes read: 8 B
   KV gRPC calls: 1
   estimated max memory allocated: 0 B
@@ -152,7 +151,7 @@ regions: <hidden>
   actual row count: 0
   KV time: 0µs
   KV contention time: 0µs
-  KV rows decoded: 0
+  KV rows read: 0
   KV bytes read: 0 B
   KV gRPC calls: 0
   estimated max memory allocated: 0 B

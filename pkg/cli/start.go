@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -513,6 +514,10 @@ func runStartInternal(
 		return err
 	}
 	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
+
+	// We don't care about GRPCs fairly verbose logs in most client commands,
+	// but when actually starting a server, we enable them.
+	grpcutil.LowerSeverity(severity.WARNING)
 
 	// Tweak GOMAXPROCS if we're in a cgroup / container that has cpu limits set.
 	// The GO default for GOMAXPROCS is NumCPU(), however this is less

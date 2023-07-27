@@ -1,0 +1,229 @@
+/* setup */
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+
+/* test */
+CREATE INDEX id1
+  ON defaultdb.t1 (id, name)
+  STORING (money)
+  PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1));
+EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
+----
+• Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.public.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›));
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 11 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │
+    │   │   ├── • IndexPartitioning:{DescID: 104, IndexID: 2}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexName:{DescID: 104, Name: id1, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index no longer public before index name"
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │
+    │   │   ├── • IndexPartitioning:{DescID: 104, IndexID: 3}
+    │   │   │     TRANSIENT_ABSENT → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
+    │   │
+    │   └── • 11 Mutation operations
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     Ordinal: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 2
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 2
+    │       │     Name: crdb_internal_index_2_name_placeholder
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     Ordinal: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 4 elements transitioning toward ABSENT
+        │   │
+        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: id1, IndexID: 2}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexData:{DescID: 104, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • IndexData:{DescID: 104, IndexID: 3}
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 2}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
+        │
+        └── • 6 Mutation operations
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 2
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
+            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 104
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
+            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

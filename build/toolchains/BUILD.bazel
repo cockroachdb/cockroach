@@ -404,6 +404,13 @@ config_setting(
     },
 )
 
+config_setting(
+    name = "opt",
+    values = {
+        "compilation_mode": "opt",
+    },
+)
+
 bool_flag(
     name = "nogo_flag",
     build_setting_default = False,
@@ -510,13 +517,6 @@ config_setting(
         ":prebuild_cdeps_flag": "true",
     },
     visibility = ["//c-deps:__pkg__"],
-)
-
-config_setting(
-    name = "use_ci_timeouts",
-    values = {
-        "define": "use_ci_timeouts=true",
-    },
 )
 
 config_setting(

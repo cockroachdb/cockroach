@@ -116,6 +116,43 @@ func maybeDropIndex(
 	return sie
 }
 
+// panicIfColumnsAreNotStoredElseWhere detects if dropping an index will lose a stored
+// column. Previously, we had an issue where new columns were accidentally
+// added into secondary indexes. This could lead to wrong results and data
+// loss, so for safety we are going to block dropping these secondary indexes.
+func panicIfColumnsAreNotStoredElseWhere(b BuildCtx, sie *scpb.SecondaryIndex) {
+	tblElts := b.QueryByID(sie.TableID)
+	secondaryIdxElts := tblElts.Filter(hasIndexIDAttrFilter(sie.IndexID))
+	_, _, indexName := scpb.FindIndexName(secondaryIdxElts)
+	_, _, pie := scpb.FindPrimaryIndex(b.QueryByID(sie.TableID))
+	primaryIdxElts := tblElts.Filter(hasIndexIDAttrFilter(pie.IndexID))
+
+	foundColumns := make(map[catid.ColumnID]struct{})
+	primaryIdxElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		idxColumn, ok := (e).(*scpb.IndexColumn)
+		if !ok {
+			return
+		}
+		foundColumns[idxColumn.ColumnID] = struct{}{}
+	})
+	secondaryIdxElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		idxColumn, ok := (e).(*scpb.IndexColumn)
+		if !ok {
+			return
+		}
+		columnElts := tblElts.Filter(hasColumnIDAttrFilter(idxColumn.ColumnID))
+		// Skip columns that are virtual.
+		_, _, columnType := scpb.FindColumnType(columnElts)
+		if columnType.IsVirtual {
+			return
+		}
+		// Check if the column is stored in primary index.
+		if _, found := foundColumns[idxColumn.ColumnID]; !found {
+			panic(sqlerrors.NewSecondaryIndexDataLossError(indexName.Name))
+		}
+	})
+}
+
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
 // both in DROP INDEX and as a cascade from another operation.
 func dropSecondaryIndex(
@@ -125,6 +162,9 @@ func dropSecondaryIndex(
 	sie *scpb.SecondaryIndex,
 ) {
 	{
+		// Sanity: We had a pretty severe bug with a data loss risk, prevent
+		// dropping of any indexes that are the sole source for given data.
+		panicIfColumnsAreNotStoredElseWhere(b, sie)
 		next := b.WithNewSourceElementID()
 		// Maybe drop dependent views.
 		// If CASCADE and there are "dependent" views (i.e. views that use this
@@ -155,23 +195,13 @@ func dropSecondaryIndex(
 		// using the expression column.
 		dropAdditionallyForExpressionIndex(next, sie)
 	}
-	// Finally, drop all elements associated with this index.
-	tblElts := b.QueryByID(sie.TableID)
-	if sie.TemporaryIndexID != 0 {
-		// If this secondary index has an associated temporary index, which happens
-		// when it is newly added, but now needs to be dropped (e.g. CREATE INDEX
-		// followed by DROP INDEX), we also need to drop the temporary index.
-		tblElts = tblElts.
-			Filter(orFilter(hasIndexIDAttrFilter(sie.IndexID), hasIndexIDAttrFilter(sie.TemporaryIndexID))).
-			Filter(orFilter(publicTargetFilter, transientTargetFilter))
-	} else {
-		tblElts = tblElts.
-			Filter(hasIndexIDAttrFilter(sie.IndexID)).
-			Filter(publicTargetFilter)
-	}
-	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-		b.Drop(e)
-	})
+	// Finally, drop the index's public elements and trigger a GC job.
+	b.QueryByID(sie.TableID).
+		Filter(hasIndexIDAttrFilter(sie.IndexID)).
+		Filter(publicTargetFilter).
+		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+			b.Drop(e)
+		})
 }
 
 // maybeDropDependentViews attempts to drop all views that depend
@@ -271,14 +301,14 @@ func maybeDropDependentFKConstraints(
 	// FK constraint with ID `fkConstraintID`.
 	dropDependentFKConstraint := func(fkConstraintID catid.ConstraintID) {
 		b.BackReferences(tableID).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
-			ForEach(func(
+			ForEachElementStatus(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 			) {
 				b.Drop(e)
 			})
 	}
 
-	b.BackReferences(tableID).ForEach(func(
+	b.BackReferences(tableID).ForEachElementStatus(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		switch t := e.(type) {
@@ -349,7 +379,7 @@ func maybeDropAdditionallyForShardedIndex(
 		}
 
 		// This check constraint uses the shard column. Resolve it and drop its elements.
-		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEach(func(
+		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEachElementStatus(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if target != scpb.ToAbsent {
@@ -359,7 +389,7 @@ func maybeDropAdditionallyForShardedIndex(
 	})
 
 	// Drop the shard column's resolved elements.
-	shardColElms.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	shardColElms.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if target != scpb.ToAbsent {
 			b.Drop(e)
 		}
@@ -370,7 +400,7 @@ func maybeDropAdditionallyForShardedIndex(
 // expression column if the to-be-dropped index is an expression index
 // and no other index uses this expression column.
 func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.SecondaryIndex) {
-	keyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
+	keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
 	scpb.ForEachColumn(b.QueryByID(toBeDroppedIndex.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, ce *scpb.Column,
 	) {
@@ -387,7 +417,7 @@ func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.Secon
 		// This expression column was created when we created the to-be-dropped as an "expression" index.
 		// We also know no other index uses this column, so we will need to resolve this column and
 		// drop its constituent elements.
-		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEach(func(
+		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEachElementStatus(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if target != scpb.ToAbsent {
@@ -411,7 +441,7 @@ func anyIndexUsesColOtherThan(
 	scpb.ForEachPrimaryIndex(b.QueryByID(relationID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex,
 	) {
-		keyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, e.TableID, e.IndexID)
+		keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, e.TableID, e.IndexID)
 		used = used || (e.IndexID != indexID && hasColID(keyColumnIDs))
 	})
 
@@ -423,7 +453,7 @@ func anyIndexUsesColOtherThan(
 	scpb.ForEachSecondaryIndex(b.QueryByID(relationID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex,
 	) {
-		keyColumnIDs, keySuffixColumnIDs, storingColumnIDs := getSortedColumnIDsInIndexByKind(b, e.TableID, e.IndexID)
+		keyColumnIDs, keySuffixColumnIDs, storingColumnIDs := getSortedColumnIDsInIndex(b, e.TableID, e.IndexID)
 		used = used || (e.IndexID != indexID &&
 			(hasColID(keyColumnIDs) ||
 				hasColID(keySuffixColumnIDs) ||
@@ -454,7 +484,7 @@ func explicitColumnStartIdx(b BuildCtx, ie *scpb.Index) int {
 // of index element `ie`.
 func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.ColumnIDs {
 	// Retrieve all key column IDs in index `ie`.
-	indexKeyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
+	indexKeyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
 
 	// Exclude implicit key columns, if any.
 	explicitColIDs := indexKeyColumnIDs[explicitColumnStartIdx(b, ie):]
@@ -498,7 +528,7 @@ func isIndexUniqueAndCanServeFK(
 		return false
 	}
 
-	keyColIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
+	keyColIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
 	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
 	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
 	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
@@ -516,8 +546,8 @@ func isIndexUniqueAndCanServeFK(
 func hasColsUniquenessConstraintOtherThan(
 	b BuildCtx, tableID descpb.ID, columnIDs []descpb.ColumnID, otherThan descpb.ConstraintID,
 ) (ret bool) {
-	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(publicStatusFilter).
-		ForEach(func(
+	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(statusPublicFilter).
+		ForEachElementStatus(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if ret {

@@ -4,8 +4,8 @@
 # connections.
 user root
 
-query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges
+query TTTTO
+SELECT * FROM system.privileges
 ----
 
 # Attempt to grant on an external connection that does not exist.
@@ -21,19 +21,19 @@ CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo'
 statement ok
 GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
 
-query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges ORDER by username
+query TTTTO
+SELECT * FROM system.privileges ORDER by username
 ----
-root      /externalconn/foo  {ALL}         {}
-testuser  /externalconn/foo  {DROP,USAGE}  {}
+root      /externalconn/foo  {ALL}         {}  1
+testuser  /externalconn/foo  {DROP,USAGE}  {}  100
 
 statement ok
 REVOKE USAGE,DROP ON EXTERNAL CONNECTION foo FROM testuser
 
-query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges ORDER by username
+query TTTTO
+SELECT * FROM system.privileges ORDER by username
 ----
-root  /externalconn/foo  {ALL}  {}
+root  /externalconn/foo  {ALL}  {}  1
 
 statement ok
 GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
@@ -60,12 +60,12 @@ GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO bar
 
 user root
 
-query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY username
+query TTTTO
+SELECT * FROM system.privileges ORDER BY username
 ----
-bar       /externalconn/foo  {DROP,USAGE}  {}
-root      /externalconn/foo  {ALL}         {}
-testuser  /externalconn/foo  {DROP,USAGE}  {DROP,USAGE}
+bar       /externalconn/foo  {DROP,USAGE}  {}            101
+root      /externalconn/foo  {ALL}         {}            1
+testuser  /externalconn/foo  {DROP,USAGE}  {DROP,USAGE}  100
 
 # Invalid grants on external connections.
 
@@ -81,7 +81,7 @@ CREATE ROLE testuser2
 statement ok
 GRANT DROP, USAGE ON EXTERNAL CONNECTION foo TO testuser2 WITH GRANT OPTION
 
-query TTTB colnames,rowsort
+query TTTB colnames
 SHOW GRANTS ON EXTERNAL CONNECTION foo
 ----
 connection_name  grantee    privilege_type  is_grantable
@@ -93,7 +93,7 @@ foo              testuser   USAGE           true
 foo              testuser2  DROP            true
 foo              testuser2  USAGE           true
 
-query TTTB colnames,rowsort
+query TTTB colnames
 SHOW GRANTS ON EXTERNAL CONNECTION foo FOR testuser, testuser2
 ----
 connection_name  grantee    privilege_type  is_grantable

@@ -17,13 +17,14 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=d
 ----
-[-] acquire lock: txn 00000001 @ ‹d›
+[-] acquire lock: txn 00000001 @ d
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "d"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 finish req=req1
 ----
@@ -43,9 +44,10 @@ sequence req=req2 eval-kind=opt
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "d"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 # When checking with a span that does not include the existing lock, there is
 # no conflict.
@@ -72,9 +74,10 @@ sequence req=req3 eval-kind=opt
 
 debug-lock-table
 ----
-num=1
+global: num=1
  lock: "d"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 # Wider span for req3 has a conflict.
 check-opt-no-conflicts req=req3
@@ -89,7 +92,7 @@ sequence req=req3 eval-kind=pess-after-opt
 [4] sequence req3: optimistic failed, so waiting for latches
 [4] sequence req3: scanning lock table for conflicting locks
 [4] sequence req3: waiting in lock wait-queues
-[4] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"d"› (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "d" (queuedWriters: 0, queuedReaders: 1)
 [4] sequence req3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req3: pushing timestamp of txn 00000001 above 12.000000000,1
 [4] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -98,9 +101,9 @@ sequence req=req3 eval-kind=pess-after-opt
 on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
-[4] sequence req3: resolving intent ‹"d"› for txn 00000001 with COMMITTED status
+[4] sequence req3: resolving intent "d" for txn 00000001 with COMMITTED status
 [4] sequence req3: lock wait-queue event: done waiting
-[4] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"d"› for 0.000s
+[4] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on "d" for 0.000s
 [4] sequence req3: acquiring latches
 [4] sequence req3: scanning lock table for conflicting locks
 [4] sequence req3: sequencing complete, returned guard
@@ -127,7 +130,8 @@ sequence req=req4
 
 debug-lock-table
 ----
-num=0
+global: num=0
+local: num=0
 
 new-request name=req5 txn=txn2 ts=12,1
   scan key=a endkey=e
@@ -172,7 +176,7 @@ sequence req=req6 eval-kind=pess-after-opt
 ----
 [8] sequence req6: re-sequencing request after optimistic sequencing failed
 [8] sequence req6: optimistic failed, so waiting for latches
-[8] sequence req6: waiting to acquire read latch ‹{a-e}›@12.000000000,1, held by write latch ‹d›@10.000000000,1
+[8] sequence req6: waiting to acquire read latch {a-e}@12.000000000,1, held by write latch d@10.000000000,1
 [8] sequence req6: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # req4 finishing releases the latch and allows req6 to proceed.

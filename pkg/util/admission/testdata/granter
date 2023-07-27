@@ -379,7 +379,7 @@ GrantCoordinator:
 sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 #####################################################################
-# Test store grant coordinator with a 250ms tick rate for the tokens.
+# Test store grant coordinator.
 init-store-grant-coordinator
 ----
 GrantCoordinator:
@@ -387,7 +387,7 @@ GrantCoordinator:
 
 # Set tokens to a large value that permits all request sizes in this file.
 # Set elastic tokens to a large value that permits all request sizes.
-set-tokens io-tokens=100000 elastic-disk-bw-tokens=100000 tick-interval=250
+set-tokens io-tokens=100000 elastic-disk-bw-tokens=100000
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 100000, elastic-disk-bw-tokens-avail: 100000
@@ -400,7 +400,7 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 90000, elastic-disk-bw-tokens-avail: 100000
 
 # Set the io tokens to a smaller value.
-set-tokens io-tokens=500 elastic-disk-bw-tokens=100000 tick-interval=250
+set-tokens io-tokens=500 elastic-disk-bw-tokens=100000
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 500, elastic-disk-bw-tokens-avail: 100000
@@ -453,7 +453,7 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -100, elastic-disk-bw-tokens-avail: 99900
 
 # Increment by 50 tokens.
-set-tokens io-tokens=50 elastic-disk-bw-tokens=99900 tick-interval=250
+set-tokens io-tokens=50 elastic-disk-bw-tokens=99900
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -50, elastic-disk-bw-tokens-avail: 99900
@@ -504,20 +504,20 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 100300
 
 # kv-elastic is granted.
-set-tokens io-tokens=100 elastic-disk-bw-tokens=100300 tick-interval=250
+set-tokens io-tokens=100 elastic-disk-bw-tokens=100300
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: 100100
 
 # Nothing is granted.
-set-tokens io-tokens=0 elastic-disk-bw-tokens=50 tick-interval=250
+set-tokens io-tokens=0 elastic-disk-bw-tokens=50
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: 50
 
 # Both kinds of tokens are decremented and become negative.
-set-tokens io-tokens=200 elastic-disk-bw-tokens=50 tick-interval=250
+set-tokens io-tokens=200 elastic-disk-bw-tokens=50
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
@@ -525,7 +525,7 @@ GrantCoordinator:
 
 # IO tokens become positive. But no grant to elastic work since
 # elastic-disk-bw tokens are negative.
-set-tokens io-tokens=300 elastic-disk-bw-tokens=0 tick-interval=250
+set-tokens io-tokens=300 elastic-disk-bw-tokens=0
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 101, elastic-disk-bw-tokens-avail: -150
@@ -545,20 +545,20 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -150
 
 # Still negative. Add elastic-disk-bw-tokens, but don't change io tokens.
-set-tokens io-tokens=91 elastic-disk-bw-tokens=50 tick-interval=250
+set-tokens io-tokens=91 elastic-disk-bw-tokens=50
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -100
 
 # Add some io-tokens.
-set-tokens io-tokens=400 elastic-disk-bw-tokens=0 tick-interval=250
+set-tokens io-tokens=400 elastic-disk-bw-tokens=0
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 400, elastic-disk-bw-tokens-avail: -100
 
 # Finally both tokens are positive and we grant until the elastic-disk-bw
 # tokens become negative.
-set-tokens io-tokens=400 elastic-disk-bw-tokens=120 tick-interval=250
+set-tokens io-tokens=400 elastic-disk-bw-tokens=120
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
@@ -584,118 +584,3 @@ store-write-done work=kv-elastic orig-tokens=400 write-bytes=40
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 650, elastic-disk-bw-tokens-avail: -10
-
-#####################################################################
-# Test store grant coordinator with 1ms tick rates for set-tokens, and transitions
-# between the 1ms and 250ms tick rates. Note the the previous test tests how
-# the kvStoreTokenGranter behaves given the amount of available tokens it has.
-# This test is trying to see if the value of the available tokens is correct on
-# calls to set-tokens.
-
-# The system starts off with a large number of tokens available.
-init-store-grant-coordinator
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930, elastic-disk-bw-tokens-avail: 153722867280912930
-
-# Tokens set to 250 * 10 = 2500.
-set-tokens io-tokens=10 elastic-disk-bw-tokens=10 tick-interval=1
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500, elastic-disk-bw-tokens-avail: 2500
-
-try-get work=kv-elastic v=2490
-----
-kv-elastic: tryGet(2490) returned true
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 10, elastic-disk-bw-tokens-avail: 10
-
-# Initial tokens are effectively unlimited.
-try-get work=kv v=1
-----
-kv-regular: tryGet(1) returned true
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 9, elastic-disk-bw-tokens-avail: 10
-
-# Set the io tokens to a smaller value. Note that since the IO tokens can
-# increase up to 6*250 and 10*250, we expect the tokens to increase to 15, and
-# 20 respectively.
-set-tokens io-tokens=6 elastic-disk-bw-tokens=10 tick-interval=1
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 15, elastic-disk-bw-tokens-avail: 20
-
-# Subtract 10 tokens for elastic work. Note that elastic-disk-bw-tokens-avail also decreases by 10.
-took-without-permission work=kv-elastic v=10
-----
-kv-elastic: tookWithoutPermission(10)
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 5, elastic-disk-bw-tokens-avail: 10
-
-# Add 10 tokens.
-return-grant work=kv-elastic v=10
-----
-kv-elastic: returnGrant(10)
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 15, elastic-disk-bw-tokens-avail: 20
-
-# If io-tokens is 10, we expect the tokens to accumulate upto 2500. So, we call
-# set-tokens 250 times, and ensure that the tokens are capped at 2500.
-set-tokens-loop io-tokens=10 elastic-disk-bw-tokens=10 loop=250
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500, elastic-disk-bw-tokens-avail: 2500
-
-# Setup waiting requests that want 1300 tokens each.
-set-has-waiting-requests work=kv-elastic v=true
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500, elastic-disk-bw-tokens-avail: 2500
-
-set-return-value-from-granted work=kv-elastic v=1300
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500, elastic-disk-bw-tokens-avail: 2500
-
-# Returning tokens triggers granting and 2 requests will be granted until the
-# tokens become <= 0.
-return-grant work=kv v=1
-----
-kv-regular: returnGrant(1)
-kv-elastic: granted in chain 0, and returning 1300
-kv-elastic: granted in chain 0, and returning 1300
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: -100
-
-# No tokens to give.
-try-get work=kv
-----
-kv-regular: tryGet(1) returned false
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: -100
-
-set-has-waiting-requests work=kv-elastic v=false
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: -100
-
-# Negative tokens available should be respected on a subsequent call to set-tokens.
-set-tokens io-tokens=100 elastic-disk-bw-tokens=0 tick-interval=1
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 1, elastic-disk-bw-tokens-avail: -100
-
-# No elastic tokens to give.
-try-get work=kv-elastic
-----
-kv-elastic: tryGet(1) returned false
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 1, elastic-disk-bw-tokens-avail: -100
-
-# Switch to an unloaded system which ticks at a 250ms rate. With this interval,
-# we expect the available tokens to be at most 50, 110 respectively. We see the
-# io-tokens clamp at 50, and the elastic-disk-bw-tokens increase to 10.
-set-tokens io-tokens=50 elastic-disk-bw-tokens=110 tick-interval=250
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50, elastic-disk-bw-tokens-avail: 10

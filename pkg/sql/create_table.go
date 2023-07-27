@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -707,7 +706,7 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
-	if d.Invisibility != 0.0 {
+	if d.NotVisible {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -1627,19 +1626,6 @@ func NewTableDesc(
 				incTelemetryForNewColumn(d, col)
 			}
 
-			// Version gates for enabling primary keys / unique indexes for JSONB columns
-			if col.Type.Family() == types.JsonFamily && (d.PrimaryKey.IsPrimaryKey || d.Unique.IsUnique) && !version.IsActive(clusterversion.V23_2) {
-				return nil, errors.WithHint(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						"index element %s of type %s is not indexable in a non-inverted index",
-						col.Name,
-						col.Type.Name(),
-					),
-					"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
-				)
-			}
-
 			desc.AddColumn(col)
 
 			if idx != nil {
@@ -1824,19 +1810,14 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted); err != nil {
 				return nil, err
-			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
-				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.NotVisible,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1943,17 +1924,12 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
-				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
-			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.NotVisible,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2652,11 +2628,11 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					continue
 				}
 				indexDef := tree.IndexTableDef{
-					Name:         tree.Name(idx.GetName()),
-					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
-					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
-					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
-					Invisibility: idx.GetInvisibility(),
+					Name:       tree.Name(idx.GetName()),
+					Inverted:   idx.GetType() == descpb.IndexDescriptor_INVERTED,
+					Storing:    make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
+					Columns:    make(tree.IndexElemList, 0, idx.NumKeyColumns()),
+					NotVisible: idx.IsNotVisible(),
 				}
 				numColumns := idx.NumKeyColumns()
 				if idx.IsSharded() {

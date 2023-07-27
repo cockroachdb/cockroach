@@ -1,0 +1,7 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, tk(2), tk(4), true /* @s1 */) // @<ts> <nil>
+  return nil
+}) // @<ts> <nil>
+// ^-- txnpb:<txn>

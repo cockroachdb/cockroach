@@ -92,7 +92,7 @@ vectorized: false
 ·
 • create statistics
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lVtvmzAUx9_3Kazz1EpGYCA3PzVqOwmptwUeJk1R5YbTFJVgZht1XZXvPjlZ1sIKSpDCAwIDv_Pz3xfeQP_MgcPl97uraXRDTi6iOIm_XZ2S89nlNLkkcTJNojiJzmOiGbm9IYJ8nd1ek1QYARQKmeKNWKEG_gMYUPCBQgAUQqAwgDmFUskFai2VfeVt80GU_gLuUciKsjK2eU5hIRUCfwOTmRyBQyIecpyhSFG5HlBI0Ygs35Sxpc_s6b58xlegcC7zalVoTqxRXAp76biMiCIljEjzhArmawqyMu8FtRFLBM4-GEYXwL013V8yFqsyR-UO6oLb5jj7jZwwz_Osf2yE4eSMtYr4DZFBq8h7_aqQKkWFaa3-fN2qOl0uFS6Fkcpl3v7S5MT3PPJQLZ7R6NPWLgSNLrB6mGz_EWc9Rtxljuv3GnN2iOZuzIdHGPNhTcTfPy-_T16-4wa98vIP0dzlNTpCXqOaSLB_XkGfvALHDXvlFRyiuctrfIS8xjWRcP-8wj55hY476JVXeIjmLq_JEfKaHPIzmKEuZaGxsRd_XslrVHKY3bQxXeJ2h9eyUgu8U3KxeXd7e7sBbRpS1Gb7lG1vomL3SBuFYvXvX_aRxDpJfo3EPpIGTZLf7XSIVNCJCttJrEkK-3Zv2CQNOknDdie_SRr2dRo1SaNO0rjdKWiSxn2dxk3SpHsaeO1S4X9zs3uad1hN7NJ5zOXLfZYCB-_v4Xxy2h1gPxBLbddv_CRfNtjktbSr71HkGilci2e8QINqlRWZNtkCuFEVrtdf_gQAAP__uYub4w==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNGK2kAUhu_7FMO52oWRzCRx183VirUQ2OrW5KJQpMw6BysbM-nMBNqK716SIFtlnYRob8RM_P1-vjOcHZifGUQw_fr8NI5n5OZjnKTJl6dbMllMx-mUJOk4jZM0niTEcDKfEUE-LeafiRRWAIVcSZyJLRqIvgEHCj5QCIBCCBSGsKRQaLVCY5SufrKrA7H8BRGjsMmL0lbHSworpRGiHdiNzRAiSMVLhgsUErXHgIJEKzZZjanQj9XH9-IVfwOFicrKbW4iUjVKClF9HXiciFwSTpT9gRqWewqqtG9AY8UaIeJ72r1UIrZFhtobHhdqjpPNH4wIZ4xVfRMrbEQe-Vmwfxb8xitzpSVqlEe85f5stfF6rXEtrNIeZ91LkhufMfJSrl7RmtuzlYOjyrz7AHmPAXp84Pk9RthS6zDCu6uP0O_uw-_jwx94QQ8fLbUOPu6v7iPo7iPo4yMYeGEPHy21Dj5GV_cRdvcR9vERDrxhDx8ttQ4-Hv7rynsHvEBTqNzgyep7_59ZtRJRrrHZn0aVeoXPWq1qTPM4r3P1gURjm7e8eYjz5lVV8N8wd4b9ozA_Dftucgs6cKZDdzi8pPfQGb5zk-8uId87wyM3eXQJ-cE9K9ZyTdyX7JS93H_4GwAA__-fBhCl
 
 statement ok
 INSERT INTO data SELECT a, b, c::FLOAT, 1
@@ -105,14 +105,14 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
+rows read from KV: 1,000 (7.8 KiB, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
 ·
 • create statistics
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsls9u2zgQxu_7FMScWkCOREr-p1OzbhcwijSFZfSyMApGmqqCZVFLUnCygR9rX2CfbCEpWluK5FpGDOQQHwyTHM98H-dHgo-g_orBhdni0_XyE_GW18u5t5zPPKIouf1COPljcXtDAq45GJCIAL_wDSpw_wQKBjAwwAYDHDBgCCsDUil8VErIPOSx-MM8uAfXMiBK0kzn0ysDfCER3EfQkY4RXFjyuxgXyAOUpgUGBKh5FBdl8tIf8q_v6RofwICZiLNNolySK_JSnv8cmJTwJCCUCP0TJRjw-RvR0QZdYv37jyrHvkg0JjoSybMlKbaKBOiLAAOXUMsqp-8eNCoikQcumVgW-b2cDhdfZ8TncawOYlMeySqWFZM332YzojSmxBdZosk7vNdmlOj3LrHMfQDiuiugkCUynWa6rLTaGVCOnzZSaR4iuPRg5-cfwbV2xumb7_FNGqM0h_WNL6e96G8saheWPM21Sz7QTiGsIWTYKWRfP0uEDFBiUKu_2nVKvQ5DiSHXQprUOl00eccsi9xl_hq1et9pwW5YoPXNpKeTTM8g2aQDk70gy6yNZXo1Ip-jFppZG83OJWhmPWimfRpQ0Ty6AM2jmhB2OgnsHBLYwLTfSKg1gPVpQEXC-AIkjGtC7NNJsM8hwR6YzhsJtQbYfRpQkTC5AAmTmhDndBKcc0hwBubwBUmw20hgV3Y7CXYbCaNLkGD3IMHp04CKhOkFSJj2eXQtUKUiUdh487RXshqVBjR_HGEQYvmSUiKTPn6Vwi9iy-FtkaiYCFDpcpWWg3lSLSktkW_-fzMeZqJHM7FaJnqYadjMxI5r6iPKPprK6c5Em5mcvvZ40RVIUG-FXJcnSWFSXFz5U69aKM9SubK_VavVDSrFw31ATvqhzlFT5_CozlG3Y9bMNHqdjsdNneOjOifdju1mpsnrdDxp6pwePyBWt2Xn2ak9fgH08mx3emZXzi88Dxuep_mV9SMW2-9RAC5YT59By1f1gfwPPFT5ven9FNtC9PIhzW-9HzxWaMANX-NH1Cg3URIpHfngapnhbvfbfwEAAP__s9NdEw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkVttq4zoUfT9fIfZTC05tyU6a-qk9oQdC6YUk9OUQBtXeeEwcySPJtJ2Sz5ofmC8bbI3JpJPYbkih0JdS7YvX2nstO3oB_S2DEEaTy4vZJZnOLmbj6Ww8mhJNye0N4eS_ye01ibnh4ICQMd7wJWoI_wcKDjBwwAcHAnCgD3MHciUj1FqqsuSlahjHTxB6DqQiL0wZnjsQSYUQvoBJTYYQwow_ZDhBHqNyPXAgRsPTrIIpoc_LP1_yBT6DAyOZFUuhQ1Iymua8_LfnUsJFTCiR5isqcODqnph0iSHxfv7Q9hxJYVCYVIq_Uko-aqKQxyGhnmdjD88G6-DQ88i_NpxM7kYk4lmm69rr-9GIaIM5iWQhDDnCJ-OmwhyHxHPXBYiLXQUVvCxMXhj70PnKAXv-vTBteIIQ0pXTfalTvswzVG5_c6E2PE2_Y4VVjTA13ITknO4EZjuB13iFkCpGhfEG3ny1k9pFkihMuJHKpV53kuSIeR55KKIFGn28k7K_QZl2NyDdw4Au7bnsUBZk2yxITwbkKt1iQvYeJmSdTdiy2NqEg4ObkHVXlO2jKOu5_qdUtGWxtaKnB1fU766ov4-ifs8NPqWiLYutFR0eXNGgu6LBPooGPbd_KEX9bYqyE3-7ov57KOp3VrRlsbWiZ-_6078FeII6l0LjqyvA9id75dUA4wTtPULLQkV4p2RUwdjjbdVXBWLUxmapPYyFTZUE_2ymjc1so5m-bmbNyC3QfmN30NwcvIV3tcVqoSDQPEq1sGbWKKpvQ3mLqRPW0Taz_kbV2SVqzZN1gTXhJrV-I7VB81yDjzvXaSO1YfNcw48711mzi72WF6j59XvTZP7OydhJ0DJZv5xsvvrnVwAAAP__buCuCA==
 
 query T retry
 EXPLAIN (DISTSQL, TYPES) SELECT * FROM data
@@ -126,67 +126,4 @@ vectorized: true
   table: data@data_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyklEFvmz4UwO__T2G903-TERjIDpw2NZmElKZZ4LBpiioXv6aogJlt1FUR330ydGtBSYWID5bs5_zeLw8_H0H_KiCC1fft-ku8If8v4yRNvq0pSX9sV8kHkqzWq6uUfCRfdzfXRHDDgUIlBW54iRqin8CAgg8UAqAQAoUF7CnUSmaotVT2yLH7QSx-Q-RRyKu6MXZ7TyGTCiE6gslNgRBByu8K3CEXqFwPKAg0PC-6NDb1Zzvd1o_4DBSuZNGUlY4Ip-SOkowSARSSmts9x2WEV4IwIs0DKti3FGRjXjNrww8IEXujGi8h8lp6xvZVsqmkEqhQDAXzygB9me8LyU0XzvKSF7BvT_zZjXRk7S4GlHOe_shzMfBk06vKLqmqyxzXn1VXNvD1p_v6F_n6jhvM8vUHvsF03-Ai38Bxw1m-wcA3nO4bXuQbOu5ilm94ts9O-O5Q17LSOKlTvFEmh9neQ3HAvou1bFSGWyWz7my_vOlA3YZAbfoo6xdx1YWYzaCQl_-eibck9i7p04DkvUvy5zqxMSmYS_LHpHAuKRiTFnNJof2K94V8us0FROC9DOfE9Hd07zA_aHuVkgf51GHT59peBKMapHDNH3GJBlWZV7k2edYH2va_PwEAAP__DBRFDg==
-
-subtest regression_98373
-
-statement ok
-CREATE TABLE IF NOT EXISTS t98373 AS
-        SELECT
-                g::INT2 AS _int2,
-                g::INT4 AS _int4,
-                g::INT8 AS _int8,
-                g::FLOAT8 AS _float8,
-                '2001-01-01'::DATE + g AS _date,
-                '2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp
-        FROM
-                generate_series(1, 5) AS g;
-
-statement OK
-SET vectorize = off
-
-statement OK
-SET distsql = always
-
-# These query plans should be disallowed from executing in a distributed
-# fashion, even with distsql = always. Check different flavors of EXPLAIN.
-
-query T
-EXPLAIN SELECT
-        regproc(_int2::INT8)::REGPROC AS col865
-FROM
-        t98373@[0]
-----
-distribution: local
-vectorized: false
-·
-• render
-│
-└── • scan
-      missing stats
-      table: t98373@t98373_pkey
-      spans: FULL SCAN
-
-query T
-EXPLAIN(DISTSQL) SELECT
-        regproc(_int2::INT8)::REGPROC AS col865
-FROM
-        t98373@[0]
-----
-distribution: local
-vectorized: false
-·
-• render
-│
-└── • scan
-      missing stats
-      table: t98373@t98373_pkey
-      spans: FULL SCAN
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkF9r2zAUxd_3KcR5akFh9sq2TE8tSTYMaZLZfhgUEzTr1hOVJU-S6Urwdx-20_1jg90HiftH5_6OTghfDQQ2nw7bm2zHLtZZURYft5es2Gw3q5J5ajrv6oujtvGVENmuXF4KkW8-HPL9it0UrHZm-eY1e5_vb1l8t7x6e3V9l1TgsE7RTrYUIO6QouIYhSgE58fSaRrI1DeIhEPbro9jueKonSeIE6KOhiBQys-GcpKK_MsEHIqi1GaSPS-cr2P3QE_gWDnTtzYINjGDo-jkmC7AkZNV5MUPW9fp2ROqgcP18SdGiLIhiPQX7mwNkQz8_9FzCp2zgX6j_tem5I9Ni3SoOEg1NP9XcL2v6eBdPc3O6X4SmgqKQpy76Zxk9rkVoifZzvgVx71xj0etIJCcY_GX4zkwPpBNGI0VX9zjJFs-dSPWvTSBOG7lA60pkm-11SHqGiL6nobhxfcAAAD__wgUvrk=
-
-statement OK
-RESET vectorize
-
-statement OK
-RESET distsql
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk0GL00AUx-9-iuF_UnkhnST1kJOyVijUbm16UCTIbOa5BtNMnJmAUvrdJamwVraS7VwG5r388v_lkXeA-9Egx-LjZvVmuRbP3y6LXfFhRWL3abMoXohisVrc7MRL8W57-15o5RUIrdG8Vnt2yD9DgpCAkIKQgTBHSeisqdg5Y4dHDiOw1D-Rzwh12_V-KJeEylhGfoCvfcPIsVN3DW9ZabbxDATNXtXNGDNEvx6OL913_gXCjWn6fetyoUjckahIaBCKTg21KJZCtVpIYfw3tiiPBNP7h2Tn1T0jl0e6YPcg1bfGarasz4Xq1oP-nF8bo_zYruq9alAeH_m4tYlMF8_P3nLJKznzktOnJkOmFssoTq6YWzLdLwnyS6I4vcIvne6XBvmlUZxd4ZdN98uC_LIongfuxSN-W3adaR1P-rNnw2qwvufTkjnT24o31lRjzOl6O3JjQbPzp648XZbt2BoF_4blf-FXZ_DsXzgJSU5D4CwEnj8JLo_PfgcAAP__LXzooA==

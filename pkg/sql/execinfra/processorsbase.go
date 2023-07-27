@@ -965,21 +965,6 @@ func NewLimitedMonitor(
 	return limitedMon
 }
 
-// NewLimitedMonitorWithLowerBound is similar to NewLimitedMonitor but
-// guarantees that the monitor's limit is at least minMemoryLimit bytes.
-// flowCtx.Mon is used as the parent for the new monitor.
-func NewLimitedMonitorWithLowerBound(
-	ctx context.Context, flowCtx *FlowCtx, name redact.RedactableString, minMemoryLimit int64,
-) *mon.BytesMonitor {
-	memoryLimit := GetWorkMemLimit(flowCtx)
-	if memoryLimit < minMemoryLimit {
-		memoryLimit = minMemoryLimit
-	}
-	limitedMon := mon.NewMonitorInheritWithLimit(name, memoryLimit, flowCtx.Mon)
-	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
-	return limitedMon
-}
-
 // NewLimitedMonitorNoFlowCtx is the same as NewLimitedMonitor and should be
 // used when the caller doesn't have an access to *FlowCtx.
 func NewLimitedMonitorNoFlowCtx(

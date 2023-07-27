@@ -19,21 +19,19 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLargeEnums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
 
 	// The idea here is that we're going to create a very large number of
 	// enum elements corresponding to non-negative integers and then we're
@@ -44,7 +42,7 @@ func TestLargeEnums(t *testing.T) {
 	const N = 100
 
 	order := rand.Perm(N)
-	tdb := sqlutils.MakeSQLRunner(conn)
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	tdb.Exec(t, "CREATE TYPE e AS ENUM ()")
 	// Construct a single transaction to insert all the values; otherwise we'd
@@ -116,13 +114,12 @@ func (i intItem) Less(o btree.Item) bool {
 // with bind where we would not properly deal with leases involving types.
 func TestEnumPlaceholderWithAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(conn)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db.Exec(t, "CREATE TYPE typ AS ENUM ('a', 'b')")
 	db.Exec(t, "CREATE TABLE tab (k INT PRIMARY KEY, v typ)")
 	db.Exec(t, "INSERT INTO tab VALUES ($1, $2)", 1, "a")
@@ -150,13 +147,12 @@ func TestEnumPlaceholderWithAsOfSystemTime(t *testing.T) {
 // to drop said value.
 func TestEnumDropValueCheckConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(conn)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db.Exec(t, "CREATE TYPE typ AS ENUM ('a', 'b', 'c')")
 
 	// Check that an enum value cannot be dropped if it is referenced in a table's

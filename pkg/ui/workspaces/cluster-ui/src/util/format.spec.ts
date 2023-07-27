@@ -10,6 +10,8 @@
 
 import { assert } from "chai";
 import {
+  DurationFitScale,
+  durationUnits,
   BytesFitScale,
   byteUnits,
   HexStringToInt64String,
@@ -19,6 +21,19 @@ import {
 } from "./format";
 
 describe("Format utils", () => {
+  describe("DurationFitScale", () => {
+    it("converts nanoseconds to provided units", () => {
+      // test zero values
+      assert.equal(DurationFitScale(durationUnits[0])(undefined), "0.00 ns");
+      assert.equal(DurationFitScale(durationUnits[0])(0), "0.00 ns");
+      // "ns", "µs", "ms", "s"
+      assert.equal(DurationFitScale(durationUnits[0])(32), "32.00 ns");
+      assert.equal(DurationFitScale(durationUnits[1])(32120), "32.12 µs");
+      assert.equal(DurationFitScale(durationUnits[2])(32122300), "32.12 ms");
+      assert.equal(DurationFitScale(durationUnits[3])(32122343000), "32.12 s");
+    });
+  });
+
   describe("BytesFitScale", () => {
     it("converts bytes to provided units", () => {
       // test zero values

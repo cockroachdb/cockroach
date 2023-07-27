@@ -867,15 +867,6 @@ func formatReleaseNotes(
 		)
 		rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
 	}
-	if len(rnBodySlice) > 1 {
-		relatedProductChanges := "Related product changes: " +
-			"https://cockroachlabs.atlassian.net/issues/?jql=project%20%3D%20%22DOC%22%20and%20%22Doc%20Type%5BDropdown%5D" +
-			"%22%20%3D%20%22Product%20Change%22%20AND%20description%20~%20%22commit%2F" +
-			crdbSha + "%22%20ORDER%20BY%20created%20DESC\n\n---"
-		for i, rn := range rnBodySlice {
-			rnBodySlice[i] = strings.Replace(rn, "\n---", relatedProductChanges, -1)
-		}
-	}
 	return rnBodySlice
 }
 

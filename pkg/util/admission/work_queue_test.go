@@ -67,7 +67,7 @@ type testGranter struct {
 	additionalTokens      int64
 }
 
-var _ granterWithStoreReplicatedWorkAdmitted = &testGranter{}
+var _ granterWithStoreWriteDone = &testGranter{}
 
 func (tg *testGranter) grantKind() grantKind {
 	return tg.gk
@@ -107,14 +107,6 @@ func (tg *testGranter) storeWriteDone(
 ) (additionalTokens int64) {
 	tg.buf.printf("storeWriteDone%s: originalTokens %d, doneBytes(write %d,ingested %d) returning %d",
 		tg.name, originalTokens, doneInfo.WriteBytes, doneInfo.IngestedBytes, tg.additionalTokens)
-	return tg.additionalTokens
-}
-
-func (tg *testGranter) storeReplicatedWorkAdmittedLocked(
-	originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo,
-) (additionalTokens int64) {
-	tg.buf.printf("storeReplicatedWorkAdmittedLocked%s: originalTokens %d, admittedBytes(write %d,ingested %d) returning %d",
-		tg.name, originalTokens, admittedInfo.WriteBytes, admittedInfo.IngestedBytes, tg.additionalTokens)
 	return tg.additionalTokens
 }
 
@@ -530,13 +522,9 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
 				st = cluster.MakeTestingClusterSettings()
-				var mockCoordMu syncutil.Mutex
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()), roachpb.StoreID(1),
-					[admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
-						tg[admissionpb.RegularWorkClass],
-						tg[admissionpb.ElasticWorkClass],
-					},
-					st, metrics, opts, nil /* testing knobs */, &noopOnLogEntryAdmitted{}, &mockCoordMu).(*StoreWorkQueue)
+					[admissionpb.NumWorkClasses]granterWithStoreWriteDone{tg[admissionpb.RegularWorkClass], tg[admissionpb.ElasticWorkClass]},
+					st, metrics, opts, nil /* testing knobs */).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = q.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = q.getRequesters()[admissionpb.ElasticWorkClass]
 				wrkMap.resetMap()

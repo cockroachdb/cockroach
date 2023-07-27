@@ -12,9 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
-        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/roachpb",
-        "//pkg/settings",
         "//pkg/util/admission/admissionpb",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",

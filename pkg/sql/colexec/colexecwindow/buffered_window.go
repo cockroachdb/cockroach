@@ -162,7 +162,6 @@ type windowInitFields struct {
 type bufferedWindowOp struct {
 	colexecop.CloserHelper
 	windowInitFields
-	cancelChecker colexecutils.CancelChecker
 
 	// windower houses the fields and logic specific to the window function being
 	// calculated.
@@ -199,7 +198,6 @@ func (b *bufferedWindowOp) Init(ctx context.Context) {
 	if !b.InitHelper.Init(ctx) {
 		return
 	}
-	b.cancelChecker.Init(b.Ctx)
 	b.Input.Init(b.Ctx)
 	b.windower.Init(b.Ctx)
 	b.state = windowLoading
@@ -222,7 +220,6 @@ var _ colexecop.ClosableOperator = &bufferedWindowOp{}
 func (b *bufferedWindowOp) Next() coldata.Batch {
 	var err error
 	for {
-		b.cancelChecker.CheckEveryCall()
 		switch b.state {
 		case windowLoading:
 			batch := b.Input.Next()

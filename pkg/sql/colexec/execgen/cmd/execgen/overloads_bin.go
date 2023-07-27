@@ -312,10 +312,6 @@ func checkRightIsZero(binOp treebin.BinaryOperatorSymbol) bool {
 	return binOp == treebin.Div || binOp == treebin.FloorDiv || binOp == treebin.Mod
 }
 
-func checkRightIsInf(binOp treebin.BinaryOperatorSymbol) bool {
-	return binOp == treebin.Div || binOp == treebin.FloorDiv
-}
-
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
@@ -323,7 +319,6 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
-			"CheckRightIsInf":  checkRightIsInf(binOp),
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
@@ -332,7 +327,7 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}}.IsZero() && {{.Left}}.Form != apd.NaN {
+				if {{.Right}}.IsZero() {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
@@ -340,11 +335,6 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{if .CheckRightIsInf}}
-				if {{.Right}}.Form == apd.Infinite && {{.Left}}.Form == apd.Finite {
-					{{.Target}} = apd.Decimal{}
-				}
-				{{end}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -369,7 +359,6 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		args := map[string]interface{}{
 			"CheckRightIsZero": checkRightIsZero(binOp),
 			"Target":           targetElem,
-			"Left":             leftElem,
 			"Right":            rightElem,
 			"ComputeBinOp":     computeBinOp,
 		}
@@ -377,7 +366,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
+				if {{.Right}} == 0.0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
@@ -552,7 +541,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0 && {{.Left}}.Form != apd.NaN {
+				if {{.Right}} == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
@@ -577,7 +566,6 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
-			"CheckRightIsInf":  checkRightIsInf(binOp),
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
@@ -596,11 +584,6 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{if .CheckRightIsInf}}
-				if {{.Right}}.Form == apd.Infinite {
-					{{.Target}} = apd.Decimal{}
-				}
-				{{end}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -701,7 +684,7 @@ if _j == nil {
 			if _text == nil {
 				_outNulls.SetNull(%[2]s)
 			} else {
-				%[1]s.Set(%[2]s, encoding.UnsafeConvertStringToBytes(*_text))
+				%[1]s.Set(%[2]s, []byte(*_text))
 			}`, vecVariable, idxVariable))
 		case treebin.Minus:
 			return fmt.Sprintf(`
@@ -753,7 +736,7 @@ if _j == nil {
 			if _text == nil {
 				_outNulls.SetNull(%[2]s)
 			} else {
-				%[1]s.Set(%[2]s, encoding.UnsafeConvertStringToBytes(*_text))
+				%[1]s.Set(%[2]s, []byte(*_text))
 			}`, vecVariable, idxVariable))
 		case treebin.Minus:
 			return fmt.Sprintf(`
@@ -804,7 +787,7 @@ if _path == nil {
     if _text == nil {
         _outNulls.SetNull(%[2]s)
     } else {
-        %[1]s.Set(%[2]s, encoding.UnsafeConvertStringToBytes(*_text))
+        %[1]s.Set(%[2]s, []byte(*_text))
     }
 `, vecVariable, idxVariable))
 		default:

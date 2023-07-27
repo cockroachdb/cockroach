@@ -200,7 +200,7 @@ statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split
 
 # Use retry because source data is eventually consistent.
-query ITT colnames,retry,rowsort
+query ITT colnames,retry
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache WHERE capability_name = 'can_admin_split'
 ----
 tenant_id  capability_name    capability_value

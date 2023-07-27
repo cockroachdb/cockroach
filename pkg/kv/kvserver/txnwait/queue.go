@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -74,20 +73,18 @@ func ShouldPushImmediately(req *kvpb.PushTxnRequest) bool {
 	if req.Force {
 		return true
 	}
-	return CanPushWithPriority(
-		req.PushType,
-		req.PusherTxn.IsoLevel, req.PusheeTxn.IsoLevel,
-		req.PusherTxn.Priority, req.PusheeTxn.Priority,
-	)
+	if !(req.PushType == kvpb.PUSH_ABORT || req.PushType == kvpb.PUSH_TIMESTAMP) {
+		return true
+	}
+	if CanPushWithPriority(req.PusherTxn.Priority, req.PusheeTxn.Priority) {
+		return true
+	}
+	return false
 }
 
-// CanPushWithPriority returns true if the pusher can perform the specified push
-// type on the pushee, based on the two txns' isolation levels and priorities.
-func CanPushWithPriority(
-	pushType kvpb.PushTxnType,
-	pusherIso, pusheeIso isolation.Level,
-	pusherPri, pusheePri enginepb.TxnPriority,
-) bool {
+// CanPushWithPriority returns true if the given pusher can push the pushee
+// based on its priority.
+func CanPushWithPriority(pusher, pushee enginepb.TxnPriority) bool {
 	// Normalize the transaction priorities so that normal user priorities are
 	// considered equal for the purposes of pushing.
 	normalize := func(p enginepb.TxnPriority) enginepb.TxnPriority {
@@ -98,26 +95,8 @@ func CanPushWithPriority(
 			return enginepb.MinTxnPriority + 1
 		}
 	}
-	pusherPri, pusheePri = normalize(pusherPri), normalize(pusheePri)
-	switch pushType {
-	case kvpb.PUSH_ABORT:
-		return pusherPri > pusheePri
-	case kvpb.PUSH_TIMESTAMP:
-		// If the pushee transaction tolerates write skew, the PUSH_TIMESTAMP is
-		// harmless, so let it through.
-		return pusheeIso.ToleratesWriteSkew() ||
-			// Else, if the pushee transaction does not tolerate write skew but the
-			// pusher transaction does (and expects other to), let the PUSH_TIMESTAMP
-			// proceed as long as the pusher has at least the same priority.
-			(pusherIso.ToleratesWriteSkew() && pusherPri >= pusheePri) ||
-			// Otherwise, if neither transaction tolerates write skew, let the
-			// PUSH_TIMESTAMP proceed only if the pusher has a higher priority.
-			(pusherPri > pusheePri)
-	case kvpb.PUSH_TOUCH:
-		return true
-	default:
-		panic("unreachable")
-	}
+	pusher, pushee = normalize(pusher), normalize(pushee)
+	return pusher > pushee
 }
 
 // isPushed returns whether the PushTxn request has already been

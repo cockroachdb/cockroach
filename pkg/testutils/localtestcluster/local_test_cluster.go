@@ -200,25 +200,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		RenewalDuration:         renewal,
 		Settings:                cfg.Settings,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
-		Engines:                 []storage.Engine{ltc.Eng},
-		NodeDialer:              cfg.NodeDialer,
 	})
-	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
-	nodeCountFn := func() int {
-		var count int
-		for _, nv := range cfg.NodeLiveness.ScanNodeVitalityFromCache() {
-			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
-				count++
-			}
-		}
-		return count
-	}
+	storepool.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, storepool.TestTimeUntilStoreDead)
 	cfg.StorePool = storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
-		nodeCountFn,
+		cfg.NodeLiveness.GetNodeCount,
 		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)
@@ -292,16 +281,16 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		t.Fatalf("unable to set node descriptor: %s", err)
 	}
 
+	if !ltc.DisableLivenessHeartbeat {
+		cfg.NodeLiveness.Start(ctx,
+			liveness.NodeLivenessStartOptions{Engines: []storage.Engine{ltc.Eng}})
+	}
+
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 
 	ltc.Stores.AddStore(ltc.Store)
-
-	if !ltc.DisableLivenessHeartbeat {
-		cfg.NodeLiveness.Start(ctx)
-	}
-
 	ltc.Cfg = cfg
 }
 

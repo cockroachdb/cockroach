@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -102,7 +100,6 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
-			disabledConfig:       kvserverbase.ConsistencyQueueEnabled,
 		},
 	)
 	return q
@@ -119,7 +116,7 @@ func (q *consistencyQueue) shouldQueue(
 			},
 			isNodeAvailable: func(nodeID roachpb.NodeID) bool {
 				if repl.store.cfg.NodeLiveness != nil {
-					return repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.ConsistencyQueue)
+					return repl.store.cfg.NodeLiveness.IsAvailableNotDraining(nodeID)
 				}
 				// Some tests run without a NodeLiveness configured.
 				return true

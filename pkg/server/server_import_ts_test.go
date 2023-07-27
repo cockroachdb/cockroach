@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -80,11 +79,7 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 }
 
 func dumpTSNonempty(t *testing.T, cc *grpc.ClientConn, dest string) (bytes int64) {
-	names, err := serverpb.GetInternalTimeseriesNamesFromServer(context.Background(), cc)
-	require.NoError(t, err)
-	c, err := tspb.NewTimeSeriesClient(cc).DumpRaw(context.Background(), &tspb.DumpRequest{
-		Names: names,
-	})
+	c, err := tspb.NewTimeSeriesClient(cc).DumpRaw(context.Background(), &tspb.DumpRequest{})
 	require.NoError(t, err)
 
 	f, err := os.Create(dest)

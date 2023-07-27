@@ -175,21 +175,6 @@ func (p *planner) HasPrivilege(
 
 	// Check if the 'public' pseudo-role has privileges.
 	if privs.CheckPrivilege(username.PublicRoleName(), privilegeKind) {
-		// Before returning true, make sure the user actually exists.
-		// We only need to check for existence here, since a dropped user will not
-		// appear in the role hierarchy, so it cannot pass the privilege check made
-		// later in this function. The RoleExists call performs a system table
-		// lookup, so it's better not to do it in the general case.
-		if user.IsNodeUser() || user.IsRootUser() {
-			// Short-circuit for the node and root users to avoid doing an extra
-			// lookup in common cases (e.g., internal executor usages).
-			return true, nil
-		}
-		if exists, err := p.RoleExists(ctx, user); err != nil {
-			return false, err
-		} else if !exists {
-			return false, pgerror.Newf(pgcode.UndefinedObject, "role %s was concurrently dropped", user)
-		}
 		return true, nil
 	}
 

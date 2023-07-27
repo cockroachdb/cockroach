@@ -16,12 +16,12 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	proxyproto "github.com/pires/go-proxyproto"
@@ -181,14 +181,14 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 
 	srv := http.Server{Handler: s.mux}
 
-	err := s.Stopper.RunAsyncTask(ctx, "sqlproxy-http-cleanup", func(ctx context.Context) {
+	go func() {
 		<-ctx.Done()
 
 		// Wait up to 15 seconds for the HTTP server to shut itself
 		// down. The HTTP service is an auxiliary service for health
 		// checking and metrics, which does not need a completely
 		// graceful shutdown.
-		_ = timeutil.RunWithTimeout(
+		_ = contextutil.RunWithTimeout(
 			context.Background(),
 			"http server shutdown",
 			15*time.Second,
@@ -196,13 +196,11 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 				// Ignore any errors as this routine will only be called
 				// when the server is shutting down.
 				_ = srv.Shutdown(shutdownCtx)
+
 				return nil
 			},
 		)
-	})
-	if err != nil {
-		return err
-	}
+	}()
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

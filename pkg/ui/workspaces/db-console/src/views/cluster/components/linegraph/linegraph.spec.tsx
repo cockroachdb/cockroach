@@ -78,17 +78,6 @@ describe("<LineGraph>", function () {
     expect(root.length).toBe(1);
   });
 
-  it("should display an empty state if viewing the secondary tenant and there is no data", () => {
-    mockProps.tenantSource = "demoapp";
-    const wrapper = linegraph({ ...mockProps }).dive() as ShallowWrapper<
-      any,
-      Readonly<{}>,
-      React.Component<{}, {}, any>
-    >;
-    const root = wrapper.find(".linegraph-empty");
-    expect(root.length).toBe(1);
-  });
-
   it("should set a new chart on update", () => {
     const wrapper = linegraph({ ...mockProps }).dive() as ShallowWrapper<
       any,

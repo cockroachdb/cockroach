@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -184,7 +183,6 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			failures:             store.metrics.RaftLogQueueFailures,
 			pending:              store.metrics.RaftLogQueuePending,
 			processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
-			disabledConfig:       kvserverbase.RaftLogQueueEnabled,
 		},
 	)
 	return rlq
@@ -298,15 +296,16 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		return truncateDecision{}, nil
 	}
 
-	// For all our followers, overwrite the RecentActive field with our own
-	// activity check.
+	// For all our followers, overwrite the RecentActive field (which is always
+	// true since we don't use CheckQuorum) with our own activity check.
 	r.mu.RLock()
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
 		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
 		func(replicaID roachpb.ReplicaID) bool {
-			return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, now, r.store.cfg.RangeLeaseDuration)
+			return r.mu.lastUpdateTimes.isFollowerActiveSince(
+				ctx, replicaID, now, r.store.cfg.RangeLeaseDuration)
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
@@ -375,8 +374,8 @@ type truncateDecisionInput struct {
 	RaftStatus            raft.Status
 	LogSize, MaxLogSize   int64
 	LogSizeTrusted        bool // false when LogSize might be off
-	FirstIndex, LastIndex kvpb.RaftIndex
-	PendingSnapshotIndex  kvpb.RaftIndex
+	FirstIndex, LastIndex uint64
+	PendingSnapshotIndex  uint64
 }
 
 func (input truncateDecisionInput) LogTooLarge() bool {
@@ -389,13 +388,13 @@ func (input truncateDecisionInput) LogTooLarge() bool {
 // cluster data.
 type truncateDecision struct {
 	Input       truncateDecisionInput
-	CommitIndex kvpb.RaftIndex
+	CommitIndex uint64
 
-	NewFirstIndex kvpb.RaftIndex // first index of the resulting log after truncation
+	NewFirstIndex uint64 // first index of the resulting log after truncation
 	ChosenVia     string
 }
 
-func (td *truncateDecision) raftSnapshotsForIndex(index kvpb.RaftIndex) int {
+func (td *truncateDecision) raftSnapshotsForIndex(index uint64) int {
 	var n int
 	for _, p := range td.Input.RaftStatus.Progress {
 		if p.State != tracker.StateReplicate {
@@ -413,7 +412,7 @@ func (td *truncateDecision) raftSnapshotsForIndex(index kvpb.RaftIndex) int {
 		// need a truncation to catch up. A follower in that state will have a
 		// Match equaling committed-1, but a Next of committed+1 (indicating that
 		// an append at 'committed' is already ongoing).
-		if kvpb.RaftIndex(p.Match) < index && kvpb.RaftIndex(p.Next) <= index {
+		if p.Match < index && p.Next <= index {
 			n++
 		}
 	}
@@ -477,7 +476,7 @@ func (td *truncateDecision) ShouldTruncate() bool {
 // if it would be truncating at a point past it. If a change is made, the
 // ChosenVia is updated with the one given. This protection is not guaranteed if
 // the protected index is outside of the existing [FirstIndex,LastIndex] bounds.
-func (td *truncateDecision) ProtectIndex(index kvpb.RaftIndex, chosenVia string) {
+func (td *truncateDecision) ProtectIndex(index uint64, chosenVia string) {
 	if td.NewFirstIndex > index {
 		td.NewFirstIndex = index
 		td.ChosenVia = chosenVia
@@ -503,7 +502,7 @@ func (td *truncateDecision) ProtectIndex(index kvpb.RaftIndex, chosenVia string)
 // snapshots. See #8629.
 func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
-	decision.CommitIndex = kvpb.RaftIndex(input.RaftStatus.Commit)
+	decision.CommitIndex = input.RaftStatus.Commit
 
 	// The last index is most aggressive possible truncation that we could do.
 	// Everything else in this method makes the truncation less aggressive.
@@ -542,13 +541,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// be split many times over, resulting in a flurry of snapshots with
 		// overlapping bounds that put significant stress on the Raft snapshot
 		// queue.
-		//
-		// NB: RecentActive is populated by updateRaftProgressFromActivity().
 		if progress.RecentActive {
 			if progress.State == tracker.StateProbe {
 				decision.ProtectIndex(input.FirstIndex, truncatableIndexChosenViaProbingFollower)
 			} else {
-				decision.ProtectIndex(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
+				decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
 			}
 			continue
 		}
@@ -556,7 +553,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// Second, if the follower has not been recently active, we don't
 		// truncate it off as long as the raft log is not too large.
 		if !input.LogTooLarge() {
-			decision.ProtectIndex(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
+			decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
 		}
 
 		// Otherwise, we let it truncate to the committed index.
@@ -616,7 +613,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// https://github.com/nvanbenschoten/optional could help us emulate an
 	// `option<uint64>` type if we care enough.
 	logEmpty := input.FirstIndex > input.LastIndex
-	noCommittedEntries := input.FirstIndex > kvpb.RaftIndex(input.RaftStatus.Commit)
+	noCommittedEntries := input.FirstIndex > input.RaftStatus.Commit
 
 	logIndexValid := logEmpty ||
 		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex)

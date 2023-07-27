@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -1269,7 +1270,7 @@ func (c *clusterImpl) validate(
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
-	cloudClusters, err := roachprod.List(l, false /* listMine */, pattern, vm.ListOptions{})
+	cloudClusters, err := roachprod.List(l, false /* listMine */, pattern)
 	if err != nil {
 		return err
 	}
@@ -1334,7 +1335,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
-	return timeutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
 		path := filepath.Join(c.t.ArtifactsDir(), "logs", "unredacted")
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
@@ -1369,7 +1370,7 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 	}
 
 	// Don't hang forever.
-	return timeutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
 		return c.RunE(ctx, c.All(),
 			"du -c /mnt/data1 --exclude lost+found >> logs/diskusage.txt")
 	})
@@ -1402,7 +1403,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
 func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger) error {
 	l.Printf("fetching timeseries data\n")
-	return timeutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
 			db, err := c.ConnE(ctx, l, node)
@@ -1484,7 +1485,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 	c.status("fetching debug zip")
 
 	// Don't hang forever if we can't fetch the debug zip.
-	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		const zipName = "debug.zip"
 		path := filepath.Join(c.t.ArtifactsDir(), dest)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -1500,7 +1501,6 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
 			cmd := roachtestutil.NewCommand("%s debug zip", defaultCockroachPath).
-				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
 				Flag("url", fmt.Sprintf("{pgurl:%d}", i)).
 				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
@@ -1595,7 +1595,7 @@ func (c *clusterImpl) HealthStatus(
 
 	results := make([]*HealthStatusResult, c.spec.NodeCount)
 
-	_ = timeutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
+	_ = contextutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
 		var wg sync.WaitGroup
 		wg.Add(c.spec.NodeCount)
 		for i := 1; i <= c.spec.NodeCount; i++ {
@@ -1615,7 +1615,7 @@ func (c *clusterImpl) HealthStatus(
 // the crdb_internal.invalid_objects virtual table.
 func (c *clusterImpl) assertValidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) error {
 	t.L().Printf("checking for invalid descriptors")
-	return timeutil.RunWithTimeout(
+	return contextutil.RunWithTimeout(
 		ctx, "invalid descriptors check", 1*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckInvalidDescriptors(ctx, db)
@@ -1630,7 +1630,7 @@ func (c *clusterImpl) assertConsistentReplicas(
 	ctx context.Context, db *gosql.DB, t *testImpl,
 ) error {
 	t.L().Printf("checking for replica divergence")
-	return timeutil.RunWithTimeout(
+	return contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
@@ -1651,7 +1651,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
-	return timeutil.RunWithTimeout(ctx, "dmesg", 20*time.Second, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "dmesg", 20*time.Second, func(ctx context.Context) error {
 		const name = "dmesg.txt"
 		path := filepath.Join(c.t.ArtifactsDir(), name)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -1702,7 +1702,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, l *logger.Logger) err
 	c.status("fetching journalctl")
 
 	// Don't hang forever.
-	return timeutil.RunWithTimeout(ctx, "journalctl", 20*time.Second, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "journalctl", 20*time.Second, func(ctx context.Context) error {
 		const name = "journalctl.txt"
 		path := filepath.Join(c.t.ArtifactsDir(), name)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -1762,7 +1762,7 @@ func (c *clusterImpl) FetchCores(ctx context.Context, l *logger.Logger) error {
 
 	// Don't hang forever. The core files can be large, so we give a generous
 	// timeout.
-	return timeutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
 		path := filepath.Join(c.t.ArtifactsDir(), "cores")
 		return errors.Wrap(c.Get(ctx, c.l, "/mnt/data1/cores" /* src */, path /* dest */), "cluster.FetchCores")
 	})
@@ -1871,39 +1871,6 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	close(ch)
 	c.destroyState.mu.Unlock()
 	return ch
-}
-
-func (c *clusterImpl) ListSnapshots(
-	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
-) ([]vm.VolumeSnapshot, error) {
-	return roachprod.ListSnapshots(ctx, c.l, c.spec.Cloud, vslo)
-}
-
-func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
-	return roachprod.DeleteSnapshots(ctx, c.l, c.spec.Cloud, snapshots...)
-}
-
-func (c *clusterImpl) CreateSnapshot(
-	ctx context.Context, snapshotPrefix string,
-) ([]vm.VolumeSnapshot, error) {
-	return roachprod.CreateSnapshot(ctx, c.l, c.name, vm.VolumeSnapshotCreateOpts{
-		Name:        snapshotPrefix,
-		Description: fmt.Sprintf("snapshot for test: %s", c.t.Name()),
-		Labels: map[string]string{
-			vm.TagUsage: "roachtest",
-		},
-	})
-}
-
-func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error {
-	opts := vm.VolumeCreateOpts{
-		Size: c.spec.VolumeSize,
-		Type: c.spec.GCEVolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
-		Labels: map[string]string{
-			vm.TagUsage: "roachtest",
-		},
-	}
-	return roachprod.ApplySnapshots(ctx, c.l, c.name, snapshots, opts)
 }
 
 // Put a local file to all of the machines in a cluster.
@@ -2370,7 +2337,7 @@ func (c *clusterImpl) RunWithDetails(
 		testLogger.Printf("> %s\n", strings.Join(args, " "))
 	}
 
-	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
+	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, false /* secure */, args)
 	if err != nil && len(physicalFileName) > 0 {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
@@ -2677,22 +2644,6 @@ func (c *clusterImpl) ConnE(
 	if err != nil {
 		return nil, err
 	}
-
-	// When running roachtest locally, we set a max connection lifetime
-	// to avoid errors like the following:
-	//
-	// `read tcp 127.0.0.1:63742 -> 127.0.0.1:26257: read: connection reset by peer`
-	//
-	// The pq issue below seems related. This was only observed in local
-	// runs so the lifetime is only applied in that context intentionally;
-	// for cloud runs, we use the connection pool's default behaviour.
-	//
-	// https://github.com/lib/pq/issues/835
-	if c.spec.Cloud == spec.Local {
-		localConnLifetime := 10 * time.Second
-		db.SetConnMaxLifetime(localConnLifetime)
-	}
-
 	return db, nil
 }
 

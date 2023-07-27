@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -126,8 +125,6 @@ func RandDatumWithNullChance(
 	case types.Box2DFamily:
 		b := geo.NewCartesianBoundingBox().AddPoint(rng.NormFloat64(), rng.NormFloat64()).AddPoint(rng.NormFloat64(), rng.NormFloat64())
 		return tree.NewDBox2D(*b)
-	case types.PGLSNFamily:
-		return tree.NewDPGLSN(lsn.LSN(rng.Uint64()))
 	case types.GeographyFamily:
 		gm, err := typ.GeoMetadata()
 		if err != nil {
@@ -475,10 +472,6 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 		datum = tree.NewDUuid(tree.DUuid{
 			UUID: uuid.FromUint128(uint128.FromInts(0, uint64(rng.Intn(simpleRange)))),
 		})
-	case types.TSQueryFamily:
-		datum = tree.NewDTSQuery(tsearch.RandomTSQuery(rng))
-	case types.TSVectorFamily:
-		datum = tree.NewDTSVector(tsearch.RandomTSVector(rng))
 	}
 	return datum
 }
@@ -713,12 +706,6 @@ var (
 			tree.DMinIPAddr,
 			tree.DMaxIPAddr,
 		},
-		types.PGLSNFamily: {
-			tree.NewDPGLSN(0),
-			tree.NewDPGLSN(math.MaxInt64),
-			tree.NewDPGLSN(math.MaxInt64 + 1),
-			tree.NewDPGLSN(math.MaxUint64),
-		},
 		types.JsonFamily: func() []tree.Datum {
 			var res []tree.Datum
 			for _, s := range []string{
@@ -885,9 +872,6 @@ var (
 			}
 			return res
 		}(),
-		types.PGLSNFamily: {
-			tree.NewDPGLSN(0x1000),
-		},
 		types.IntervalFamily: func() []tree.Datum {
 			var res []tree.Datum
 			for _, nanos := range []int64{

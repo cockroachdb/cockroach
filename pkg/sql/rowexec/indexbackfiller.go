@@ -84,7 +84,7 @@ func newIndexBackfiller(
 	}
 
 	if err := ib.IndexBackfiller.InitForDistributedUse(ctx, flowCtx, ib.desc,
-		ib.spec.IndexesToBackfill, indexBackfillerMon); err != nil {
+		indexBackfillerMon); err != nil {
 		return nil, err
 	}
 

@@ -1,9 +1,5 @@
 # LogicTest: cockroach-go-testserver-upgrade-to-master
 
-# This test should only be executed to test upgrades from 22.2 -> 23.2
-# (experimental version skipping).
-skip 103956
-
 upgrade 0
 
 upgrade 1

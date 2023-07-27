@@ -44,9 +44,18 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
 	defer span.Finish()
 
-	hasCreateRolePriv, err := p.HasRoleOption(ctx, roleoption.CREATEROLE)
-	if err != nil {
-		return nil, err
+	var allowedToRevokeWithoutAdminOption bool
+	var err error
+	if createRoleAllowsGrantRoleMembership.Get(&p.ExecCfg().Settings.SV) {
+		allowedToRevokeWithoutAdminOption, err = p.HasRoleOption(ctx, roleoption.CREATEROLE)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		allowedToRevokeWithoutAdminOption, err = p.HasAdminRole(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// check permissions on each role.
 	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
@@ -75,7 +84,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		if err != nil {
 			return nil, err
 		}
-		if hasCreateRolePriv && !revokedRoleIsAdmin {
+		if allowedToRevokeWithoutAdminOption && !revokedRoleIsAdmin {
 			continue
 		}
 		if hasAdminOption := allRoles[r]; !hasAdminOption && !revokingRoleHasAdminOptionOnAdmin {
@@ -83,8 +92,13 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"%s must have admin option on role %q", p.User(), r)
 			}
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"%s must have CREATEROLE or have admin option on role %q", p.User(), r)
+			if createRoleAllowsGrantRoleMembership.Get(&p.ExecCfg().Settings.SV) {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"%s must have CREATEROLE or have admin option on role %q", p.User(), r)
+			} else {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"%s must belong to admin role or have admin option on role %q", p.User(), r)
+			}
 		}
 	}
 

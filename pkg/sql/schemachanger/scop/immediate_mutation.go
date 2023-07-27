@@ -154,20 +154,6 @@ type DrainDescriptorName struct {
 	Namespace scpb.Namespace
 }
 
-// AddDescriptorName marks a descriptor's name as to-be-added to the
-// system.Namespace table.
-type AddDescriptorName struct {
-	immediateMutationOp
-	Namespace scpb.Namespace
-}
-
-// SetNameInDescriptor sets the name field of the descriptor.
-type SetNameInDescriptor struct {
-	immediateMutationOp
-	DescriptorID descpb.ID
-	Name         string
-}
-
 // MakeDeleteOnlyColumnWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to WRITE_ONLY.
 type MakeDeleteOnlyColumnWriteOnly struct {
@@ -257,24 +243,6 @@ type MakeDeleteOnlyColumnAbsent struct {
 	immediateMutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
-}
-
-// AddOwnerBackReferenceInSequence adds a sequence ownership
-// back-reference from a sequence.
-type AddOwnerBackReferenceInSequence struct {
-	immediateMutationOp
-	SequenceID descpb.ID
-	TableID    descpb.ID
-	ColumnID   descpb.ColumnID
-}
-
-// AddSequenceOwner adds a sequence ownership reference from the owning
-// table column.
-type AddSequenceOwner struct {
-	immediateMutationOp
-	TableID         descpb.ID
-	ColumnID        descpb.ColumnID
-	OwnedSequenceID descpb.ID
 }
 
 // RemoveOwnerBackReferenceInSequence removes a sequence ownership
@@ -443,13 +411,6 @@ type RemoveUniqueWithoutIndexConstraint struct {
 
 // RemoveSchemaParent removes the schema - parent database relationship.
 type RemoveSchemaParent struct {
-	immediateMutationOp
-	Parent scpb.SchemaParent
-}
-
-// AddSchemaParent adds the schema - parent database relationship.
-// Namely, it updates schema's parentID and parentDatabase's schemas.
-type AddSchemaParent struct {
 	immediateMutationOp
 	Parent scpb.SchemaParent
 }
@@ -817,28 +778,4 @@ type UpdateUserPrivileges struct {
 type UpdateOwner struct {
 	immediateMutationOp
 	Owner scpb.Owner
-}
-
-type CreateSchemaDescriptor struct {
-	immediateMutationOp
-	SchemaID descpb.ID
-}
-
-type CreateSequenceDescriptor struct {
-	immediateMutationOp
-	SequenceID descpb.ID
-}
-
-type SetSequenceOptions struct {
-	immediateMutationOp
-	SequenceID descpb.ID
-	Key        string
-	Value      string
-}
-
-type InitSequence struct {
-	immediateMutationOp
-	SequenceID     descpb.ID
-	RestartWith    int64
-	UseRestartWith bool
 }

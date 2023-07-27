@@ -16,18 +16,13 @@ import (
 	"fmt"
 	"sort"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -130,13 +125,48 @@ func TestRangeIDQueue(t *testing.T) {
 	}
 }
 
+func TestRangeIDQueuePrioritization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q rangeIDQueue
+	for _, withPriority := range []bool{false, true} {
+		if withPriority {
+			q.SetPriorityID(3)
+		}
+
+		// Push 5 ranges in order, then pop them off.
+		for i := 1; i <= 5; i++ {
+			q.Push(roachpb.RangeID(i))
+			require.Equal(t, i, q.Len())
+		}
+		var popped []int
+		for i := 5; ; i-- {
+			require.Equal(t, i, q.Len())
+			id, ok := q.PopFront()
+			if !ok {
+				require.Equal(t, i, 0)
+				break
+			}
+			popped = append(popped, int(id))
+		}
+
+		// Assert pop order.
+		if withPriority {
+			require.Equal(t, []int{3, 1, 2, 4, 5}, popped)
+		} else {
+			require.Equal(t, []int{1, 2, 3, 4, 5}, popped)
+		}
+	}
+}
+
 type testProcessor struct {
 	mu struct {
 		syncutil.Mutex
 		raftReady   map[roachpb.RangeID]int
 		raftRequest map[roachpb.RangeID]int
 		raftTick    map[roachpb.RangeID]int
-		ready       func(roachpb.RangeID)
+		ready       func()
 	}
 }
 
@@ -148,7 +178,7 @@ func newTestProcessor() *testProcessor {
 	return p
 }
 
-func (p *testProcessor) onReady(f func(roachpb.RangeID)) {
+func (p *testProcessor) onReady(f func()) {
 	p.mu.Lock()
 	p.mu.ready = f
 	p.mu.Unlock()
@@ -157,12 +187,11 @@ func (p *testProcessor) onReady(f func(roachpb.RangeID)) {
 func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 	p.mu.Lock()
 	p.mu.raftReady[rangeID]++
-	onReady := p.mu.ready
-	p.mu.ready = nil
-	p.mu.Unlock()
-	if onReady != nil {
-		onReady(rangeID)
+	if p.mu.ready != nil {
+		p.mu.ready()
+		p.mu.ready = nil
 	}
+	p.mu.Unlock()
 }
 
 func (p *testProcessor) processRequestQueue(_ context.Context, rangeID roachpb.RangeID) bool {
@@ -177,12 +206,6 @@ func (p *testProcessor) processTick(_ context.Context, rangeID roachpb.RangeID) 
 	p.mu.raftTick[rangeID]++
 	p.mu.Unlock()
 	return false
-}
-
-func (p *testProcessor) readyCount(rangeID roachpb.RangeID) int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.mu.raftReady[rangeID]
 }
 
 func (p *testProcessor) countsLocked(m map[roachpb.RangeID]int) string {
@@ -225,7 +248,7 @@ func TestSchedulerLoop(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1, 1)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1)
 	s.Start(stopper)
 
 	batch := s.NewEnqueueBatch()
@@ -261,7 +284,7 @@ func TestSchedulerBuffering(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1, 5)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 5)
 	s.Start(stopper)
 
 	testCases := []struct {
@@ -288,7 +311,7 @@ func TestSchedulerBuffering(t *testing.T) {
 		var started, done chan struct{}
 		if c.slow {
 			started, done = make(chan struct{}), make(chan struct{})
-			p.onReady(func(roachpb.RangeID) {
+			p.onReady(func() {
 				close(started)
 				<-done
 			})
@@ -330,62 +353,51 @@ func TestNewSchedulerShards(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pri := 2 // priority workers
-
 	testcases := []struct {
-		priorityWorkers int
-		workers         int
-		shardSize       int
-		expectShards    []int
+		workers      int
+		shardSize    int
+		expectShards []int
 	}{
-		// We always assign at least 1 priority worker to the priority shard.
-		{-1, 1, 1, []int{1, 1}},
-		{0, 1, 1, []int{1, 1}},
-		{2, 1, 1, []int{2, 1}},
-
-		// We balance workers across shards instead of filling up shards. We assume
-		// ranges are evenly distributed across shards, and want ranges to have
-		// about the same number of workers available on average.
-		//
-		// Shard 0 is reserved for priority ranges, with a constant worker count.
-		{pri, -1, -1, []int{pri, 1}},
-		{pri, 0, 0, []int{pri, 1}},
-		{pri, 1, -1, []int{pri, 1}},
-		{pri, 1, 0, []int{pri, 1}},
-		{pri, 1, 1, []int{pri, 1}},
-		{pri, 1, 2, []int{pri, 1}},
-		{pri, 2, 2, []int{pri, 2}},
-		{pri, 3, 2, []int{pri, 2, 1}},
-		{pri, 1, 3, []int{pri, 1}},
-		{pri, 2, 3, []int{pri, 2}},
-		{pri, 3, 3, []int{pri, 3}},
-		{pri, 4, 3, []int{pri, 2, 2}},
-		{pri, 5, 3, []int{pri, 3, 2}},
-		{pri, 6, 3, []int{pri, 3, 3}},
-		{pri, 7, 3, []int{pri, 3, 2, 2}},
-		{pri, 8, 3, []int{pri, 3, 3, 2}},
-		{pri, 9, 3, []int{pri, 3, 3, 3}},
-		{pri, 10, 3, []int{pri, 3, 3, 2, 2}},
-		{pri, 11, 3, []int{pri, 3, 3, 3, 2}},
-		{pri, 12, 3, []int{pri, 3, 3, 3, 3}},
+		// NB: We balance workers across shards instead of filling up shards. We
+		// assume ranges are evenly distributed across shards, and want ranges to
+		// have about the same number of workers available on average.
+		{-1, -1, []int{1}},
+		{0, 0, []int{1}},
+		{1, -1, []int{1}},
+		{1, 0, []int{1}},
+		{1, 1, []int{1}},
+		{1, 2, []int{1}},
+		{2, 2, []int{2}},
+		{3, 2, []int{2, 1}},
+		{1, 3, []int{1}},
+		{2, 3, []int{2}},
+		{3, 3, []int{3}},
+		{4, 3, []int{2, 2}},
+		{5, 3, []int{3, 2}},
+		{6, 3, []int{3, 3}},
+		{7, 3, []int{3, 2, 2}},
+		{8, 3, []int{3, 3, 2}},
+		{9, 3, []int{3, 3, 3}},
+		{10, 3, []int{3, 3, 2, 2}},
+		{11, 3, []int{3, 3, 3, 2}},
+		{12, 3, []int{3, 3, 3, 3}},
 
 		// Typical examples, using 8 workers per CPU core. Note that we cap workers
-		// at 128 by default.
-		{pri, 1 * 8, 16, []int{pri, 8}},
-		{pri, 2 * 8, 16, []int{pri, 16}},
-		{pri, 3 * 8, 16, []int{pri, 12, 12}},
-		{pri, 4 * 8, 16, []int{pri, 16, 16}},
-		{pri, 6 * 8, 16, []int{pri, 16, 16, 16}},
-		{pri, 8 * 8, 16, []int{pri, 16, 16, 16, 16}},
-		{pri, 12 * 8, 16, []int{pri, 16, 16, 16, 16, 16, 16}},
-		{pri, 16 * 8, 16, []int{pri, 16, 16, 16, 16, 16, 16, 16, 16}}, // 128 workers
+		// at 96 by default.
+		{1 * 8, 16, []int{8}},
+		{2 * 8, 16, []int{16}},
+		{3 * 8, 16, []int{12, 12}},
+		{4 * 8, 16, []int{16, 16}},
+		{6 * 8, 16, []int{16, 16, 16}},
+		{8 * 8, 16, []int{16, 16, 16, 16}},
+		{12 * 8, 16, []int{16, 16, 16, 16, 16, 16}}, // 96 workers
+		{16 * 8, 16, []int{16, 16, 16, 16, 16, 16, 16, 16}},
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
 			m := newStoreMetrics(metric.TestSampleInterval)
 			p := newTestProcessor()
-			s := newRaftScheduler(log.MakeTestingAmbientContext(nil), m, p,
-				tc.workers, tc.shardSize, tc.priorityWorkers, 5)
+			s := newRaftScheduler(log.MakeTestingAmbientContext(nil), m, p, tc.workers, tc.shardSize, 5)
 
 			var shardWorkers []int
 			for _, shard := range s.shards {
@@ -394,116 +406,6 @@ func TestNewSchedulerShards(t *testing.T) {
 			require.Equal(t, tc.expectShards, shardWorkers)
 		})
 	}
-}
-
-// TestSchedulerPriority tests that range prioritization is correctly
-// updated and applied.
-func TestSchedulerPriority(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Set up a test scheduler with 1 regular non-priority worker.
-	stopper := stop.NewStopper()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	defer stopper.Stop(ctx)
-
-	m := newStoreMetrics(metric.TestSampleInterval)
-	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(nil), m, p, 1, 1, 1, 5)
-	s.Start(stopper)
-	require.Empty(t, s.PriorityIDs())
-
-	// We use 3 ranges: r1 has priority, r2 blocks, r3 starves due to r2.
-	const (
-		priorityID = 1
-		blockedID  = 2
-		starvedID  = 3
-	)
-	s.AddPriorityID(priorityID)
-	require.Equal(t, []roachpb.RangeID{priorityID}, s.PriorityIDs())
-
-	// Enqueue r2 and wait for it to block.
-	blockedC := make(chan chan struct{}, 1)
-	p.onReady(func(rangeID roachpb.RangeID) {
-		if rangeID == blockedID {
-			unblockC := make(chan struct{})
-			blockedC <- unblockC
-			select {
-			case <-unblockC:
-			case <-ctx.Done():
-			}
-		}
-	})
-	s.EnqueueRaftReady(blockedID)
-
-	var unblockC chan struct{}
-	select {
-	case unblockC = <-blockedC:
-	case <-ctx.Done():
-		return
-	}
-
-	// r3 should get starved.
-	s.EnqueueRaftReady(starvedID)
-	time.Sleep(time.Second)
-	require.Zero(t, p.readyCount(starvedID))
-
-	// r1 should get scheduled.
-	s.EnqueueRaftReady(priorityID)
-	require.Eventually(t, func() bool {
-		return p.readyCount(priorityID) == 1
-	}, 10*time.Second, 100*time.Millisecond)
-
-	// Remove r1's priority. It should now starve as well.
-	s.RemovePriorityID(priorityID)
-	require.Empty(t, s.PriorityIDs())
-
-	s.EnqueueRaftReady(priorityID)
-	time.Sleep(time.Second)
-	require.Equal(t, 1, p.readyCount(priorityID))
-
-	// Unblock r2. r3 and r1 should now both get scheduled.
-	close(unblockC)
-	require.Eventually(t, func() bool {
-		return p.readyCount(starvedID) == 1
-	}, 10*time.Second, 100*time.Millisecond)
-	require.Eventually(t, func() bool {
-		return p.readyCount(priorityID) == 2
-	}, 10*time.Second, 100*time.Millisecond)
-}
-
-// TestSchedulerPrioritizesLivenessAndMeta tests that the meta and liveness
-// ranges are prioritized in the Raft scheduler.
-func TestSchedulerPrioritizesLivenessAndMeta(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	store, err := s.GetStores().(*Stores).GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
-
-	iter, err := s.RangeDescIteratorFactory().(rangedesc.IteratorFactory).
-		NewIterator(ctx, keys.EverythingSpan)
-	require.NoError(t, err)
-
-	expectPrioritySpans := []roachpb.Span{keys.NodeLivenessSpan, keys.MetaSpan}
-	expectPriorityIDs := []roachpb.RangeID{}
-	for ; iter.Valid(); iter.Next() {
-		desc := iter.CurRangeDescriptor()
-		for _, span := range expectPrioritySpans {
-			rspan, err := keys.SpanAddr(span)
-			require.NoError(t, err)
-			if _, err := desc.RSpan().Intersect(rspan); err == nil {
-				expectPriorityIDs = append(expectPriorityIDs, desc.RangeID)
-			}
-		}
-	}
-	require.NotEmpty(t, expectPriorityIDs)
-	require.ElementsMatch(t, expectPriorityIDs, store.RaftSchedulerPriorityIDs())
 }
 
 // BenchmarkSchedulerEnqueueRaftTicks benchmarks the performance of enqueueing
@@ -517,22 +419,20 @@ func BenchmarkSchedulerEnqueueRaftTicks(b *testing.B) {
 	ctx := context.Background()
 
 	for _, collect := range []bool{false, true} {
-		for _, priority := range []bool{false, true} {
-			for _, numRanges := range []int{1, 10, 100, 1000, 10000, 100000} {
-				for _, numWorkers := range []int{8, 16, 32, 64, 128} {
-					b.Run(fmt.Sprintf("collect=%t/priority=%t/ranges=%d/workers=%d", collect, priority, numRanges, numWorkers),
-						func(b *testing.B) {
-							runSchedulerEnqueueRaftTicks(ctx, b, collect, priority, numRanges, numWorkers)
-						},
-					)
-				}
+		for _, numRanges := range []int{1, 10, 100, 1000, 10000, 100000} {
+			for _, numWorkers := range []int{8, 16, 32, 64, 128} {
+				b.Run(fmt.Sprintf("collect=%t/ranges=%d/workers=%d", collect, numRanges, numWorkers),
+					func(b *testing.B) {
+						runSchedulerEnqueueRaftTicks(ctx, b, collect, numRanges, numWorkers)
+					},
+				)
 			}
 		}
 	}
 }
 
 func runSchedulerEnqueueRaftTicks(
-	ctx context.Context, b *testing.B, collect bool, priority bool, numRanges, numWorkers int,
+	ctx context.Context, b *testing.B, collect bool, numRanges, numWorkers int,
 ) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -540,14 +440,7 @@ func runSchedulerEnqueueRaftTicks(
 	a := log.MakeTestingAmbientContext(stopper.Tracer())
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(
-		a, m, p, numWorkers, defaultRaftSchedulerShardSize, defaultRaftSchedulerPriorityShardSize, 5)
-
-	// If requested, add a prioritized range corresponding to e.g. the liveness
-	// range.
-	if priority {
-		s.AddPriorityID(1)
-	}
+	s := newRaftScheduler(a, m, p, numWorkers, defaultRaftSchedulerShardSize, 5)
 
 	// raftTickLoop keeps unquiesced ranges in a map, so we do the same.
 	ranges := make(map[roachpb.RangeID]struct{})
@@ -557,8 +450,10 @@ func runSchedulerEnqueueRaftTicks(
 
 	// Collect range IDs in the same way as raftTickLoop does, such that the
 	// performance is comparable.
-	getRangeIDs := func() *raftSchedulerBatch {
-		batch := s.NewEnqueueBatch()
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
+	getRangeIDs := func() raftSchedulerBatch {
+		batch.Reset()
 		for id := range ranges {
 			batch.Add(id)
 		}
@@ -570,7 +465,6 @@ func runSchedulerEnqueueRaftTicks(
 
 	for i := 0; i < b.N; i++ {
 		if collect {
-			ids.Close()
 			ids = getRangeIDs()
 		}
 		s.EnqueueRaftTicks(ids)
@@ -581,5 +475,4 @@ func runSchedulerEnqueueRaftTicks(
 			shard.queue = rangeIDQueue{}
 		}
 	}
-	ids.Close()
 }

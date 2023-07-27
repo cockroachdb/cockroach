@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "tc",
-    testonly = 1,
     srcs = ["tc.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/acceptance/localcluster/tc",
     visibility = ["//visibility:public"],

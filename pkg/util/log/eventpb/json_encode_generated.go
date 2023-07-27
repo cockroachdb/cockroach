@@ -437,15 +437,6 @@ func (m *AlterIndexVisible) AppendJSONFields(printComma bool, b redact.Redactabl
 		b = append(b, "\"NotVisible\":true"...)
 	}
 
-	if m.Invisibility != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"Invisibility\":"...)
-		b = strconv.AppendFloat(b, float64(m.Invisibility), 'f', -1, 64)
-	}
-
 	return printComma, b
 }
 
@@ -1960,15 +1951,6 @@ func (m *CommonSQLExecDetails) AppendJSONFields(printComma bool, b redact.Redact
 		printComma = true
 		b = append(b, "\"BulkJobId\":"...)
 		b = strconv.AppendUint(b, uint64(m.BulkJobId), 10)
-	}
-
-	if m.StmtPosInTxn != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"StmtPosInTxn\":"...)
-		b = strconv.AppendUint(b, uint64(m.StmtPosInTxn), 10)
 	}
 
 	return printComma, b
@@ -4525,15 +4507,6 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.KVBytesRead), 10)
 	}
 
-	if m.KVPairsRead != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"KVPairsRead\":"...)
-		b = strconv.AppendInt(b, int64(m.KVPairsRead), 10)
-	}
-
 	if m.KVRowsRead != 0 {
 		if printComma {
 			b = append(b, ',')
@@ -4837,21 +4810,6 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, "\"SchemaChangerMode\":\""...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SchemaChangerMode)))
 		b = append(b, '"')
-	}
-
-	if len(m.SQLInstanceIDs) > 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"SQLInstanceIDs\":["...)
-		for i, v := range m.SQLInstanceIDs {
-			if i > 0 {
-				b = append(b, ',')
-			}
-			b = strconv.AppendInt(b, int64(v), 10)
-		}
-		b = append(b, ']')
 	}
 
 	return printComma, b
@@ -5358,15 +5316,6 @@ func (m *StoreStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 		printComma = true
 		b = append(b, "\"FlushIngestTableBytes\":"...)
 		b = strconv.AppendUint(b, uint64(m.FlushIngestTableBytes), 10)
-	}
-
-	if m.IngestCount != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"IngestCount\":"...)
-		b = strconv.AppendUint(b, uint64(m.IngestCount), 10)
 	}
 
 	if m.MemtableSize != 0 {

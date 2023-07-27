@@ -13,12 +13,10 @@ package logstore
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -77,7 +75,7 @@ func NewDiskSideloadStorage(
 }
 
 func (ss *DiskSideloadStorage) createDir() error {
-	err := ss.eng.MkdirAll(ss.dir, os.ModePerm)
+	err := ss.eng.MkdirAll(ss.dir)
 	ss.dirCreated = ss.dirCreated || err == nil
 	return err
 }
@@ -88,9 +86,7 @@ func (ss *DiskSideloadStorage) Dir() string {
 }
 
 // Put implements SideloadStorage.
-func (ss *DiskSideloadStorage) Put(
-	ctx context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm, contents []byte,
-) error {
+func (ss *DiskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
 	filename := ss.filename(ctx, index, term)
 	// There's a chance the whole path is missing (for example after Clear()),
 	// in which case handle that transparently.
@@ -112,9 +108,7 @@ func (ss *DiskSideloadStorage) Put(
 }
 
 // Get implements SideloadStorage.
-func (ss *DiskSideloadStorage) Get(
-	ctx context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm,
-) ([]byte, error) {
+func (ss *DiskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
 	b, err := fs.ReadFile(ss.eng, filename)
 	if oserror.IsNotExist(err) {
@@ -124,22 +118,16 @@ func (ss *DiskSideloadStorage) Get(
 }
 
 // Filename implements SideloadStorage.
-func (ss *DiskSideloadStorage) Filename(
-	ctx context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm,
-) (string, error) {
+func (ss *DiskSideloadStorage) Filename(ctx context.Context, index, term uint64) (string, error) {
 	return ss.filename(ctx, index, term), nil
 }
 
-func (ss *DiskSideloadStorage) filename(
-	ctx context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm,
-) string {
+func (ss *DiskSideloadStorage) filename(ctx context.Context, index, term uint64) string {
 	return filepath.Join(ss.dir, fmt.Sprintf("i%d.t%d", index, term))
 }
 
 // Purge implements SideloadStorage.
-func (ss *DiskSideloadStorage) Purge(
-	ctx context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm,
-) (int64, error) {
+func (ss *DiskSideloadStorage) Purge(ctx context.Context, index, term uint64) (int64, error) {
 	return ss.purgeFile(ctx, ss.filename(ctx, index, term))
 }
 
@@ -177,17 +165,17 @@ func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
 
 // TruncateTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) TruncateTo(
-	ctx context.Context, firstIndex kvpb.RaftIndex,
+	ctx context.Context, firstIndex uint64,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	return ss.possiblyTruncateTo(ctx, 0, firstIndex, true /* doTruncate */)
 }
 
 // Helper for truncation or byte calculation for [from, to).
 func (ss *DiskSideloadStorage) possiblyTruncateTo(
-	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex, doTruncate bool,
+	ctx context.Context, from uint64, to uint64, doTruncate bool,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	deletedAll := true
-	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) error {
+	if err := ss.forEach(ctx, func(index uint64, filename string) error {
 		if index >= to {
 			size, err := ss.fileSize(filename)
 			if err != nil {
@@ -231,13 +219,13 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 
 // BytesIfTruncatedFromTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
-	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex,
+	ctx context.Context, from uint64, to uint64,
 ) (freed, retained int64, _ error) {
 	return ss.possiblyTruncateTo(ctx, from, to, false /* doTruncate */)
 }
 
 func (ss *DiskSideloadStorage) forEach(
-	ctx context.Context, visit func(index kvpb.RaftIndex, filename string) error,
+	ctx context.Context, visit func(index uint64, filename string) error,
 ) error {
 	matches, err := ss.eng.List(ss.dir)
 	if oserror.IsNotExist(err) {
@@ -264,7 +252,7 @@ func (ss *DiskSideloadStorage) forEach(
 			log.Infof(ctx, "unexpected file %s in sideloaded directory %s", match, ss.dir)
 			continue
 		}
-		if err := visit(kvpb.RaftIndex(logIdx), match); err != nil {
+		if err := visit(logIdx, match); err != nil {
 			return errors.Wrapf(err, "matching pattern %q on dir %s", match, ss.dir)
 		}
 	}
@@ -275,7 +263,7 @@ func (ss *DiskSideloadStorage) forEach(
 func (ss *DiskSideloadStorage) String() string {
 	var buf strings.Builder
 	var count int
-	if err := ss.forEach(context.Background(), func(_ kvpb.RaftIndex, filename string) error {
+	if err := ss.forEach(context.Background(), func(_ uint64, filename string) error {
 		count++
 		_, _ = fmt.Fprintln(&buf, filename)
 		return nil

@@ -110,7 +110,7 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, fdb.maybeModified.ParentID, fdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, fdb.maybeModified.DeclarativeSchemaChangerState) {
 		fdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil

@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	// Enable CCL statements.
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -492,7 +494,7 @@ var ignoredErrorPatterns = []string{
 	"unsupported binary operator",
 	"unsupported comparison operator",
 	"memory budget exceeded",
-	"set-returning functions are not allowed in",
+	"generator functions are not allowed in",
 	"txn already encountered an error; cannot be used anymore",
 	"no data source matches prefix",
 	"index .* already contains column",
@@ -615,6 +617,7 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()()
 
 	var smither *sqlsmith.Smither
 
@@ -768,6 +771,7 @@ func testRandomSyntax(
 		skip.IgnoreLint(t, "enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
+	defer ccl.TestingEnableEnterprise()()
 
 	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = databaseName

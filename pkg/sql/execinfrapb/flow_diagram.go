@@ -16,10 +16,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 )
@@ -349,7 +346,7 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 func (m *BackupDataSpec) summary() (string, []string) {
 	var spanStr strings.Builder
 	if len(m.Spans) > 0 {
-		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.Spans)+len(m.IntroducedSpans)))
+		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.Spans)))
 		const limit = 3
 		for i := 0; i < len(m.Spans) && i < limit; i++ {
 			if i > 0 {
@@ -619,7 +616,7 @@ func (s *HashGroupJoinerSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (g *GenerativeSplitAndScatterSpec) summary() (string, []string) {
-	detail := fmt.Sprintf("%d import spans, %d checkpointed spans", g.NumEntries, len(g.CheckpointedSpans))
+	detail := fmt.Sprintf("%d import spans", g.NumEntries)
 	return "GenerativeSplitAndScatterSpec", []string{detail}
 }
 
@@ -643,12 +640,13 @@ type diagramCell struct {
 }
 
 type diagramProcessor struct {
-	NodeIdx     int           `json:"nodeIdx"`
-	Inputs      []diagramCell `json:"inputs"`
-	Core        diagramCell   `json:"core"`
-	Outputs     []diagramCell `json:"outputs"`
-	StageID     int32         `json:"stage"`
-	ProcessorID int32         `json:"processorID"`
+	NodeIdx int           `json:"nodeIdx"`
+	Inputs  []diagramCell `json:"inputs"`
+	Core    diagramCell   `json:"core"`
+	Outputs []diagramCell `json:"outputs"`
+	StageID int32         `json:"stage"`
+
+	processorID int32
 }
 
 type diagramEdge struct {
@@ -657,7 +655,8 @@ type diagramEdge struct {
 	DestProc     int      `json:"destProc"`
 	DestInput    int      `json:"destInput"`
 	Stats        []string `json:"stats,omitempty"`
-	StreamID     StreamID `json:"streamID"`
+
+	streamID StreamID
 }
 
 // FlowDiagram is a plan diagram that can be made into a URL.
@@ -668,10 +667,6 @@ type FlowDiagram interface {
 
 	// AddSpans adds stats extracted from the input spans to the diagram.
 	AddSpans([]tracingpb.RecordedSpan)
-
-	// UpdateComponentFractionProgressed updates the per-component progress on the
-	// diagram.
-	UpdateComponentFractionProgressed(perComponentProgress map[ComponentID]float32)
 }
 
 type diagramData struct {
@@ -679,41 +674,16 @@ type diagramData struct {
 	NodeNames  []string           `json:"nodeNames"`
 	Processors []diagramProcessor `json:"processors"`
 	Edges      []diagramEdge      `json:"edges"`
-	FlowID     FlowID             `json:"flow_id"`
-	Flags      DiagramFlags       `json:"flags"`
 
+	flags          DiagramFlags
+	flowID         FlowID
 	sqlInstanceIDs []base.SQLInstanceID
 }
 
 var _ FlowDiagram = &diagramData{}
 
-// FromURL converts a FlowDiagram URL to a FlowDiagram.
-func FromURL(url string) (FlowDiagram, error) {
-	r, err := decodeURLToJSON(url)
-	if err != nil {
-		return &diagramData{}, errors.Wrap(err, "failed to decode URL to JSON")
-	}
-
-	d := diagramData{}
-	err = json.NewDecoder(&r).Decode(&d)
-	for _, name := range d.NodeNames {
-		sqlInstanceID, err := strconv.Atoi(name)
-		if err != nil {
-			return nil, err
-		}
-		d.sqlInstanceIDs = append(d.sqlInstanceIDs, base.SQLInstanceID(sqlInstanceID))
-	}
-	return &d, err
-}
-
 // ToURL implements the FlowDiagram interface.
 func (d diagramData) ToURL() (string, url.URL, error) {
-	if d.Flags.MakeDeterministic {
-		d.FlowID = FlowID{uuid.Nil}
-		for _, p := range d.Processors {
-			p.ProcessorID = 0
-		}
-	}
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(d); err != nil {
 		return "", url.URL{}, err
@@ -721,50 +691,20 @@ func (d diagramData) ToURL() (string, url.URL, error) {
 	return encodeJSONToURL(buf)
 }
 
-// UpdateComponentFractionProgressed implements the FlowDiagram interface.
-func (d *diagramData) UpdateComponentFractionProgressed(
-	perComponentProgress map[ComponentID]float32,
-) {
-	for i := range d.Processors {
-		p := &d.Processors[i]
-		sqlInstanceID := d.sqlInstanceIDs[p.NodeIdx]
-		component := ProcessorComponentID(sqlInstanceID, d.FlowID, p.ProcessorID)
-		if fraction, ok := perComponentProgress[component]; ok {
-			var updated bool
-			for i, detail := range p.Core.Details {
-				if strings.HasPrefix(detail, "progress") {
-					p.Core.Details[i] = fmt.Sprintf("progress: %.2f", fraction)
-					updated = true
-					break
-				}
-			}
-
-			// If this is the first time we are recording the component progress then
-			// we simply append the new details.
-			//
-			// TODO(adityamaru): Consider making p.Core.Details a map instead of a
-			// slice since all the values stored in the slice are key-values.
-			if !updated {
-				p.Core.Details = append(p.Core.Details, fmt.Sprintf("progress: %.2f", fraction))
-			}
-		}
-	}
-}
-
 // AddSpans implements the FlowDiagram interface.
 func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
-	statsMap := ExtractStatsFromSpans(spans, d.Flags.MakeDeterministic)
+	statsMap := ExtractStatsFromSpans(spans, d.flags.MakeDeterministic)
 	for i := range d.Processors {
 		p := &d.Processors[i]
 		sqlInstanceID := d.sqlInstanceIDs[p.NodeIdx]
-		component := ProcessorComponentID(sqlInstanceID, d.FlowID, p.ProcessorID)
+		component := ProcessorComponentID(sqlInstanceID, d.flowID, p.processorID)
 		if compStats := statsMap[component]; compStats != nil {
 			p.Core.Details = append(p.Core.Details, compStats.StatsForQueryPlan()...)
 		}
 	}
 	for i := range d.Edges {
 		originSQLInstanceID := d.sqlInstanceIDs[d.Processors[d.Edges[i].SourceProc].NodeIdx]
-		component := StreamComponentID(originSQLInstanceID, d.FlowID, d.Edges[i].StreamID)
+		component := StreamComponentID(originSQLInstanceID, d.flowID, d.Edges[i].streamID)
 		if compStats := statsMap[component]; compStats != nil {
 			d.Edges[i].Stats = compStats.StatsForQueryPlan()
 		}
@@ -779,7 +719,7 @@ func generateDiagramData(
 	d := &diagramData{
 		SQL:            sql,
 		sqlInstanceIDs: sqlInstanceIDs,
-		Flags:          flags,
+		flags:          flags,
 	}
 	d.NodeNames = make([]string, len(sqlInstanceIDs))
 	for i := range d.NodeNames {
@@ -787,9 +727,9 @@ func generateDiagramData(
 	}
 
 	if len(flows) > 0 {
-		d.FlowID = flows[0].FlowID
+		d.flowID = flows[0].FlowID
 		for i := 1; i < len(flows); i++ {
-			if flows[i].FlowID != d.FlowID {
+			if flows[i].FlowID != d.flowID {
 				return nil, errors.AssertionFailedf("flow ID mismatch within a diagram")
 			}
 		}
@@ -806,7 +746,7 @@ func generateDiagramData(
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
 			proc.Core.Title += fmt.Sprintf("/%d", p.ProcessorID)
-			proc.ProcessorID = p.ProcessorID
+			proc.processorID = p.ProcessorID
 			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
 
 			// We need explicit synchronizers if we have multiple inputs, or if the
@@ -869,7 +809,7 @@ func generateDiagramData(
 			// When generating stats, spans are mapped from processor ID in the span
 			// tags to processor ID in the diagram data. To avoid clashing with
 			// the processor with ID 0, assign an impossible processorID.
-			ProcessorID: -1,
+			processorID: -1,
 		})
 	}
 
@@ -886,7 +826,7 @@ func generateDiagramData(
 					edge := diagramEdge{
 						SourceProc:   pIdx,
 						SourceOutput: srcOutput,
-						StreamID:     o.StreamID,
+						streamID:     o.StreamID,
 					}
 					if o.Type == StreamEndpointSpec_SYNC_RESPONSE {
 						edge.DestProc = len(d.Processors) - 1
@@ -943,31 +883,6 @@ func GeneratePlanDiagramURL(
 		return "", url.URL{}, err
 	}
 	return d.ToURL()
-}
-
-func decodeURLToJSON(urlStr string) (bytes.Buffer, error) {
-	var json bytes.Buffer
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return json, errors.Wrap(err, "failed to Parse URL")
-	}
-
-	compressed := u.Fragment
-	decoder := base64.NewDecoder(base64.URLEncoding, bytes.NewReader([]byte(compressed)))
-	decompressor, err := zlib.NewReader(decoder)
-	if err != nil {
-		return json, errors.Wrap(err, "failed in NewReader")
-	}
-	b, err := io.ReadAll(decompressor)
-	if err != nil {
-		return json, errors.Wrap(err, "failed in ReadAll")
-	}
-	if err := decompressor.Close(); err != nil {
-		return json, err
-	}
-
-	_, err = json.Write(b)
-	return json, err
 }
 
 func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {

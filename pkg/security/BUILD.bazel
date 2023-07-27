@@ -33,6 +33,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/cache",
+        "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/log",

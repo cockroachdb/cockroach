@@ -274,8 +274,7 @@ func logSchemaChangeEvents(
 ) error {
 	var ids catalog.DescriptorIDSet
 	for _, t := range state.TargetState.Targets {
-		if t.Metadata.SourceElementID > 1 ||
-			!t.IsLinkedToSchemaChange() { // Ignore empty metadata
+		if t.Metadata.SourceElementID > 1 {
 			// Ignore targets which are the product of CASCADEs.
 			continue
 		}
@@ -336,7 +335,7 @@ func makeState(
 		// but TXN_DROPPED is special and should be cleaned up in memory before
 		// executing on a newer node.
 		cs = protoutil.Clone(cs).(*scpb.DescriptorState)
-		scpb.MigrateDescriptorState(version, desc.GetParentID(), cs)
+		scpb.MigrateDescriptorState(version, cs)
 		if cs == nil {
 			return errors.New("missing schema changer state")
 		}

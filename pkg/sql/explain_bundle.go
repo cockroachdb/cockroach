@@ -478,11 +478,6 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].String(), err), &buf)
 		}
 	}
-	// Get all user-defined types. If redaction is a
-	blankLine()
-	if err := c.PrintCreateEnum(&buf, b.flags.RedactValues); err != nil {
-		b.printError(fmt.Sprintf("-- error getting schema for enums: %v", err), &buf)
-	}
 	if len(mem.Metadata().AllUserDefinedFunctions()) != 0 {
 		// Get all relevant user-defined functions.
 		blankLine()
@@ -827,22 +822,6 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 		return err
 	}
 	fmt.Fprintf(w, "%s;\n", createStatement)
-	return nil
-}
-
-func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer, redactValues bool) error {
-	qry := "SELECT create_statement FROM [SHOW CREATE ALL TYPES]"
-	if redactValues {
-		qry = "SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [SHOW CREATE ALL TYPES]"
-
-	}
-	createStatement, err := c.queryRows(qry)
-	if err != nil {
-		return err
-	}
-	for _, cs := range createStatement {
-		fmt.Fprintf(w, "%s\n", cs)
-	}
 	return nil
 }
 

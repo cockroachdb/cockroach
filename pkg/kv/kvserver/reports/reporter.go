@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -209,8 +208,9 @@ func (stats *Reporter) update(
 		return allStores[id]
 	}
 
+	isLiveMap := stats.liveness.GetIsLiveMap()
 	isNodeLive := func(nodeID roachpb.NodeID) bool {
-		return stats.liveness.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.Metrics)
+		return isLiveMap[nodeID].IsLive
 	}
 
 	nodeLocalities := make(map[roachpb.NodeID]roachpb.Locality, len(allStores))
@@ -447,12 +447,9 @@ func visitAncestors(
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
-	// This is a bug: see https://github.com/cockroachdb/cockroach/issues/48123.
-	var FIXMEIDONTKNOWWHICHCODECTOUSE = keys.MakeSQLCodec(roachpb.SystemTenantID)
-
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	descVal := cfg.GetValue(catalogkeys.MakeDescMetadataKey(FIXMEIDONTKNOWWHICHCODECTOUSE, descpb.ID(id)))
+	descVal := cfg.GetValue(catalogkeys.MakeDescMetadataKey(keys.TODOSQLCodec, descpb.ID(id)))
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.

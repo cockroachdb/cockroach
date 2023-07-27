@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,14 +48,14 @@ func (m *MockTransactionalSender) Send(
 
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
-	context.Context,
+	context.Context, TxnStatusOpt,
 ) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
 // GetLeafTxnFinalState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnFinalState(
-	context.Context,
+	context.Context, TxnStatusOpt,
 ) (*roachpb.LeafTxnFinalState, error) {
 	panic("unimplemented")
 }
@@ -71,22 +70,6 @@ func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
 // TxnStatus is part of the TxnSender interface.
 func (m *MockTransactionalSender) TxnStatus() roachpb.TransactionStatus {
 	return m.txn.Status
-}
-
-// ClientFinalized is part of the TxnSender interface.
-func (m *MockTransactionalSender) ClientFinalized() bool {
-	return m.txn.Status.IsFinalized()
-}
-
-// SetIsoLevel is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetIsoLevel(isoLevel isolation.Level) error {
-	m.txn.IsoLevel = isoLevel
-	return nil
-}
-
-// IsoLevel is part of the TxnSender interface.
-func (m *MockTransactionalSender) IsoLevel() isolation.Level {
-	return m.txn.IsoLevel
 }
 
 // SetUserPriority is part of the TxnSender interface.
@@ -145,10 +128,9 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
-) error {
+	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
+) {
 	m.txn.Restart(pri, 0 /* upgradePriority */, ts)
-	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.
@@ -156,17 +138,17 @@ func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool
 	return false
 }
 
-// CreateSavepoint is part of the kv.TxnSender interface.
+// CreateSavepoint is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) CreateSavepoint(context.Context) (SavepointToken, error) {
 	panic("unimplemented")
 }
 
-// RollbackToSavepoint is part of the kv.TxnSender interface.
+// RollbackToSavepoint is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) RollbackToSavepoint(context.Context, SavepointToken) error {
 	panic("unimplemented")
 }
 
-// ReleaseSavepoint is part of the kv.TxnSender interface.
+// ReleaseSavepoint is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointToken) error {
 	panic("unimplemented")
 }
@@ -194,8 +176,15 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 	panic("unimplemented")
 }
 
-// DisablePipelining is part of the kv.TxnSender interface.
+// DisablePipelining is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
+
+// PrepareRetryableError is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) PrepareRetryableError(
+	ctx context.Context, msg redact.RedactableString,
+) error {
+	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
+}
 
 // Step is part of the TxnSender interface.
 func (m *MockTransactionalSender) Step(_ context.Context) error {
@@ -204,9 +193,6 @@ func (m *MockTransactionalSender) Step(_ context.Context) error {
 	// and that requires a non-panicky Step().
 	return nil
 }
-
-// GetReadSeqNum is part of the TxnSender interface.
-func (m *MockTransactionalSender) GetReadSeqNum() enginepb.TxnSeq { return 0 }
 
 // SetReadSeqNum is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetReadSeqNum(_ enginepb.TxnSeq) error { return nil }
@@ -220,6 +206,11 @@ func (m *MockTransactionalSender) ConfigureStepping(context.Context, SteppingMod
 // GetSteppingMode is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode {
 	return SteppingDisabled
+}
+
+// ManualRefresh is part of the TxnSender interface.
+func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
+	panic("unimplemented")
 }
 
 // DeferCommitWait is part of the TxnSender interface.

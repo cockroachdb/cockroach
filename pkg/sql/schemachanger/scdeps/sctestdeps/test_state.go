@@ -89,7 +89,6 @@ type TestState struct {
 type catalogChanges struct {
 	descs               []catalog.Descriptor
 	namesToDelete       map[descpb.NameInfo]descpb.ID
-	namesToAdd          map[descpb.NameInfo]descpb.ID
 	descriptorsToDelete catalog.DescriptorIDSet
 	zoneConfigsToDelete catalog.DescriptorIDSet
 	commentsToUpdate    map[catalogkeys.CommentKey]string
@@ -212,11 +211,6 @@ func (s *TestState) CanPerformDropOwnedBy(
 	ctx context.Context, role username.SQLUsername,
 ) (bool, error) {
 	return true, nil
-}
-
-// CanCreateCrossDBSequenceOwnerRef implements scbuild.SchemaFeatureCheck.
-func (s *TestState) CanCreateCrossDBSequenceOwnerRef() error {
-	return nil
 }
 
 // FeatureChecker implements scbuild.Dependencies

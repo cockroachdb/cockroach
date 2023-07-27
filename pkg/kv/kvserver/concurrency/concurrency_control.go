@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -419,15 +418,22 @@ type Request struct {
 	// not also passed an exiting Guard.
 	LatchSpans *spanset.SpanSet
 
-	// The maximal set of spans within which the request expects to have isolation
-	// from conflicting transactions. The level of isolation for a span is
-	// dictated by its corresponding lock Strength. Conflicting locks within these
-	// spans will be queued on and conditionally pushed.
+	// The maximal set of spans within which the request expects to have
+	// isolation from conflicting transactions. Conflicting locks within
+	// these spans will be queued on and conditionally pushed.
 	//
-	// Note: ownership of the LockSpanSet is assumed by the Request once it is
+	// Note that unlike LatchSpans, the timestamps that these spans are
+	// declared at are NOT consulted. All read spans are considered to take
+	// place at the transaction's read timestamp (Txn.ReadTimestamp) and all
+	// write spans are considered to take place the transaction's write
+	// timestamp (Txn.WriteTimestamp). If the request is non-transactional
+	// (Txn == nil), all reads and writes are considered to take place at
+	// Timestamp.
+	//
+	// Note: ownership of the SpanSet is assumed by the Request once it is
 	// passed to SequenceReq. Only supplied to SequenceReq if the method is
 	// not also passed an exiting Guard.
-	LockSpans *lockspanset.LockSpanSet
+	LockSpans *spanset.SpanSet
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
@@ -451,6 +457,7 @@ type Error = kvpb.Error
 
 // QueryLockTableOptions bundles the options for the QueryLockTableState function.
 type QueryLockTableOptions struct {
+	KeyScope           spanset.SpanScope
 	MaxLocks           int64
 	TargetBytes        int64
 	IncludeUncontended bool
@@ -643,30 +650,19 @@ type lockTable interface {
 	// AcquireLock informs the lockTable that a new lock was acquired or an
 	// existing lock was updated.
 	//
-	// The TxnMeta associated with the lock acquisition must be the same one used
-	// when the request scanned the lockTable initially. It must only be called in
-	// the evaluation phase, before calling Dequeue, which means all latches
-	// needed by the request are held. The key must be in the request's lock span
-	// set with the appropriate strength. Currently, the only strength with which a
-	// lock can be acquired is Intent[1]. This contract ensures that the lock is
-	// not held in a conflicting manner by a different transaction.
-	// Acquiring a lock that is already held by a transaction upgrades the lock's
-	// timestamp and strength. Any prior sequence numbers at which the lock was
-	// previously held and has since been rolled back are no longer tracked as
-	// well.
-	//
-	// [1] We are in an intermediate state where KV ignores lock strength supplied
-	// by SQL and acquires all locks with Intent locking strength. Notably, this
-	// includes in-memory Exclusive locks acquired for `SELECT FOR UPDATE` queries
-	// as well. While the Intent strength verbiage might be a bit surprising,
-	// there is no meaningful difference when it comes to conflict resolution
-	// between a lock and a request. This is a temporary state, which is bound to
-	// change as we go about supporting additional locking strengths in the lock
-	// table.
+	// The provided TxnMeta must be the same one used when the request scanned
+	// the lockTable initially. It must only be called in the evaluation phase
+	// before calling Dequeue, which means all the latches needed by the request
+	// are held. The key must be in the request's SpanSet with the appropriate
+	// SpanAccess: currently the strength is always Exclusive, so the span
+	// containing this key must be SpanReadWrite. This contract ensures that the
+	// lock is not held in a conflicting manner by a different transaction.
+	// Acquiring a lock that is already held by this transaction upgrades the
+	// lock's timestamp and strength, if necessary.
 	//
 	// For replicated locks, this must be called after the corresponding write
 	// intent has been applied to the replicated state machine.
-	AcquireLock(*roachpb.LockAcquisition) error
+	AcquireLock(*enginepb.TxnMeta, roachpb.Key, lock.Strength, lock.Durability) error
 
 	// UpdateLocks informs the lockTable that an existing lock or range of locks
 	// was either updated or released.
@@ -764,31 +760,24 @@ type lockTableGuard interface {
 	//   the discovered locks have been added.
 	ResolveBeforeScanning() []roachpb.LockUpdate
 
-	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
+	// CheckOptimisticNoConflicts uses the SpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic
 	// evaluation. It returns true if there were no conflicts. See
 	// lockTable.ScanOptimistic for context. Note that the evaluation has
 	// already seen any intents (replicated single-key locks) that conflicted,
 	// so this checking is practically only going to find unreplicated locks
 	// that conflict.
-	CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool)
+	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
 
-	// IsKeyLockedByConflictingTxn returns whether the specified key is claimed
-	// (see claimantTxn()) by a conflicting transaction in the lockTableGuard's
-	// snapshot of the lock table, given the caller's own desired locking
-	// strength. If so, true is returned. If the key is locked, the lock holder is
-	// also returned. Otherwise, if the key was claimed by a concurrent request
-	// still sequencing through the lock table, but the lock isn't held (yet), nil
-	// is also returned.
-	//
-	// If the lock has been claimed (held or otherwise) by the transaction itself,
-	// there's no conflict to speak of, so false is returned. In cases where the
-	// lock isn't held, but the lock has been claimed by the transaction itself,
-	// we do not make a distinction about which request claimed the key -- it
-	// could either be the request itself, or a different concurrent request from
-	// the same transaction; The specifics do not affect the caller.
-	// This method is used by requests in conjunction with the SkipLocked wait
-	// policy to determine which keys they should skip over during evaluation.
+	// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
+	// reserved (see lockTable "reservations") by a conflicting transaction in the
+	// lockTableGuard's snapshot of the lock table, given the caller's own desired
+	// locking strength. If so, true is returned. If the key is locked, the lock
+	// holder is also returned. Otherwise, if the key is reserved, nil is also
+	// returned. A transaction's own lock or reservation does not appear to be
+	// locked to itself (false is returned). The method is used by requests in
+	// conjunction with the SkipLocked wait policy to determine which keys they
+	// should skip over during evaluation.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 

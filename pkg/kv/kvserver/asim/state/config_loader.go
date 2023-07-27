@@ -200,22 +200,15 @@ var MultiRangeConfig = []RangeInfo{
 
 // RangeInfoWithReplicas returns a new RangeInfo using the supplied arguments.
 func RangeInfoWithReplicas(
-	startKey Key, voters, nonVoters []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
+	startKey Key, replicas []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
 ) RangeInfo {
 	desc := roachpb.RangeDescriptor{
 		StartKey:         startKey.ToRKey(),
-		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(voters)+len(nonVoters)),
+		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicas)),
 	}
-	for i, storeID := range voters {
+	for i, storeID := range replicas {
 		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
 			StoreID: roachpb.StoreID(storeID),
-			Type:    roachpb.VOTER_FULL,
-		}
-	}
-	for i, storeID := range nonVoters {
-		desc.InternalReplicas[i+len(voters)] = roachpb.ReplicaDescriptor{
-			StoreID: roachpb.StoreID(storeID),
-			Type:    roachpb.NON_VOTER,
 		}
 	}
 	return RangeInfo{Descriptor: desc, Leaseholder: leaseholder, Config: config}
@@ -245,7 +238,6 @@ type ClusterInfo struct {
 type RangeInfo struct {
 	Descriptor  roachpb.RangeDescriptor
 	Config      *roachpb.SpanConfig
-	Size        int64
 	Leaseholder StoreID
 }
 
@@ -265,34 +257,22 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 	s := newState(settings)
 	// A new state has a single range - add the replica load for that range.
 	s.clusterinfo = c
+	// TODO(lidor): load locality info to be used by the allocator. Do we need a
+	// NodeDescriptor and higher level localities? or can we simulate those?
 	for _, r := range c.Regions {
-		regionTier := roachpb.Tier{
-			Key:   "region",
-			Value: r.Name,
-		}
 		for _, z := range r.Zones {
-			zoneTier := roachpb.Tier{
-				Key:   "zone",
-				Value: z.Name,
-			}
-			locality := roachpb.Locality{
-				Tiers: []roachpb.Tier{regionTier, zoneTier},
-			}
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
-				s.SetNodeLocality(node.NodeID(), locality)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					storesRequired = 1
 				}
 				for store := 0; store < storesRequired; store++ {
-					if newStore, ok := s.AddStore(node.NodeID()); !ok {
+					if _, ok := s.AddStore(node.NodeID()); !ok {
 						panic(fmt.Sprintf(
 							"Unable to load config: cannot add store %d",
 							node.NodeID(),
 						))
-					} else {
-						s.SetStoreCapacity(newStore.StoreID(), int64(c.DiskCapacityGB)*1<<30)
 					}
 				}
 			}
@@ -332,7 +312,7 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 			))
 		}
 
-		if !s.SetSpanConfigForRange(rng.RangeID(), *r.Config) {
+		if !s.SetSpanConfig(rng.RangeID(), *r.Config) {
 			panic(fmt.Sprintf(
 				"Unable to load config: cannot set span config for range %s",
 				rng,
@@ -347,9 +327,8 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 	for _, r := range rangeInfos {
 		startKey := ToKey(r.Descriptor.StartKey.AsRawKey())
 		rng := s.RangeFor(startKey)
-		s.SetRangeBytes(rng.RangeID(), r.Size)
 		for _, desc := range r.Descriptor.InternalReplicas {
-			if _, ok := s.AddReplica(rng.RangeID(), StoreID(desc.StoreID), desc.Type); !ok {
+			if _, ok := s.AddReplica(rng.RangeID(), StoreID(desc.StoreID)); !ok {
 				panic(fmt.Sprintf(
 					"Unable to load config: add replica to store %d failed at "+
 						"for range %s replicas %s",

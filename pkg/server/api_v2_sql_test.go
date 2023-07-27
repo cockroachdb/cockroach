@@ -62,7 +62,7 @@ func TestExecSQL(t *testing.T) {
 			}
 
 			resp, err := client.Post(
-				server.AdminURL().WithPath("/api/v2/sql/").String(), "application/json",
+				server.AdminURL()+"/api/v2/sql/", "application/json",
 				bytes.NewReader([]byte(d.Input)),
 			)
 			require.NoError(t, err)

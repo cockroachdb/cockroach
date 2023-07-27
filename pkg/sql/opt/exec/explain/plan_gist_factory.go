@@ -648,8 +648,8 @@ func (u *unknownIndex) IsInverted() bool {
 	return false
 }
 
-func (u *unknownIndex) GetInvisibility() float64 {
-	return 0.0
+func (u *unknownIndex) IsNotVisible() bool {
+	return false
 }
 
 func (u *unknownIndex) ColumnCount() int {

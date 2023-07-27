@@ -770,7 +770,6 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(ij.fetcher.GetBytesRead())),
-			KVPairsRead:         optional.MakeUint(uint64(ij.fetcher.GetKVPairsRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(ij.contentionEventsListener.CumulativeContentionTime),

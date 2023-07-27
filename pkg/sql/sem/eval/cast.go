@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -432,7 +431,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 		case *tree.DBool, *tree.DDecimal:
 			s = d.String()
-		case *tree.DTimestamp, *tree.DDate, *tree.DTime, *tree.DTimeTZ, *tree.DGeography, *tree.DGeometry, *tree.DBox2D, *tree.DPGLSN:
+		case *tree.DTimestamp, *tree.DDate, *tree.DTime, *tree.DTimeTZ, *tree.DGeography, *tree.DGeometry, *tree.DBox2D:
 			s = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 		case *tree.DTimestampTZ:
 			// Convert to context timezone for correct display.
@@ -582,21 +581,6 @@ func performCastWithoutPrecisionTruncation(
 			return tree.NewDBox2D(*bbox), nil
 		}
 
-	case types.PGLSNFamily:
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use pg_lsn",
-				clusterversion.ByKey(clusterversion.V23_2))
-		}
-		switch d := d.(type) {
-		case *tree.DString:
-			return tree.ParseDPGLSN(string(*d))
-		case *tree.DCollatedString:
-			return tree.ParseDPGLSN(d.Contents)
-		case *tree.DPGLSN:
-			return d, nil
-		}
-
 	case types.GeographyFamily:
 		switch d := d.(type) {
 		case *tree.DString:
@@ -633,7 +617,7 @@ func performCastWithoutPrecisionTruncation(
 			if t == nil {
 				return tree.DNull, nil
 			}
-			g, err := geo.ParseGeographyFromGeoJSON(encoding.UnsafeConvertStringToBytes(*t))
+			g, err := geo.ParseGeographyFromGeoJSON([]byte(*t))
 			if err != nil {
 				return nil, err
 			}
@@ -681,7 +665,7 @@ func performCastWithoutPrecisionTruncation(
 			if t == nil {
 				return tree.DNull, nil
 			}
-			g, err := geo.ParseGeometryFromGeoJSON(encoding.UnsafeConvertStringToBytes(*t))
+			g, err := geo.ParseGeometryFromGeoJSON([]byte(*t))
 			if err != nil {
 				return nil, err
 			}

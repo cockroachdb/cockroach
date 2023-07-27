@@ -97,13 +97,9 @@ end_test
 
 start_test "Check that \\set display_format properly errors out"
 send "\\set display_format blabla\r"
-eexpect "ERROR"
 eexpect "invalid table display format"
-eexpect "HINT"
-eexpect tsv
-eexpect ndjson
-eexpect html
-eexpect raw
+# check we don't see a stray "cannot change option during multi-line editing" tacked at the end
+eexpect "html, raw)\r\n"
 eexpect root@
 end_test
 

@@ -33,7 +33,6 @@ export default function (props: GraphDashboardProps) {
     tooltipSelection,
     storeIDsByNodeID,
     nodeDisplayNameByID,
-    tenantSource,
   } = props;
 
   const getNodeNameById = (id: string) =>
@@ -43,7 +42,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Capacity"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
@@ -57,7 +55,6 @@ export default function (props: GraphDashboardProps) {
       title="Live Bytes"
       isKvGraph={false}
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={<LiveBytesGraphTooltip tooltipSelection={tooltipSelection} />}
     >
       <Axis units={AxisUnits.Bytes} label="live bytes">
@@ -69,7 +66,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Log Commit Latency: 99th Percentile"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The 99th %ile latency for commits to the Raft Log.
         This measures essentially an fdatasync to the storage engine's write-ahead log.`}
     >
@@ -88,7 +84,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Log Commit Latency: 50th Percentile"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The 50th %ile latency for commits to the Raft Log.
         This measures essentially an fdatasync to the storage engine's write-ahead log.`}
     >
@@ -107,7 +102,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Command Commit Latency: 99th Percentile"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The 99th %ile latency for commits of Raft commands.
         This measures applying a batch to the storage engine
         (including writes to the write-ahead log), but no fsync.`}
@@ -127,7 +121,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Command Commit Latency: 50th Percentile"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The 50th %ile latency for commits of Raft commands.
         This measures applying a batch to the storage engine
         (including writes to the write-ahead log), but no fsync.`}
@@ -147,7 +140,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Read Amplification"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The average number of real read operations executed per logical read operation ${tooltipSelection}.`}
     >
       <Axis label="factor">
@@ -165,7 +157,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="SSTables"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The number of SSTables in use ${tooltipSelection}.`}
     >
       <Axis label="sstables">
@@ -183,7 +174,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="File Descriptors"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={`The number of open file descriptors ${tooltipSelection}, compared with the
           file descriptor limit.`}
     >
@@ -196,7 +186,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Flushes"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`Bytes written by memtable flushes ${tooltipSelection}.`}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
@@ -213,28 +202,8 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="WAL Bytes Written"
-      sources={storeSources}
-      tenantSource={tenantSource}
-      tooltip={`Bytes written to WAL files ${tooltipSelection}.`}
-    >
-      <Axis units={AxisUnits.Bytes} label="written bytes">
-        {_.map(nodeIDs, nid => (
-          <Metric
-            key={nid}
-            name="cr.store.storage.wal.bytes_written"
-            title={getNodeNameById(nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            nonNegativeRate
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
       title="Compactions"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`Bytes written by compactions ${tooltipSelection}.`}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
@@ -253,7 +222,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Ingestions"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
@@ -272,7 +240,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Write Stalls"
       sources={storeSources}
-      tenantSource={tenantSource}
       tooltip={`The number of intentional write stalls per second ${tooltipSelection}. Write stalls
         are used to backpressure incoming writes during periods of heavy write traffic.`}
     >
@@ -288,7 +255,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Time Series Writes"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={`The number of successfully written time series samples, and number of errors attempting
         to write time series, per second ${tooltipSelection}.`}
     >
@@ -309,7 +275,6 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Time Series Bytes Written"
       sources={nodeSources}
-      tenantSource={tenantSource}
       tooltip={
         <div>
           The number of bytes written by the time series system per second{" "}

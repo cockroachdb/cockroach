@@ -37,7 +37,6 @@ const (
 	stressFlag       = "stress"
 	stressArgsFlag   = "stress-args"
 	raceFlag         = "race"
-	deadlockFlag     = "deadlock"
 	ignoreCacheFlag  = "ignore-cache"
 	rewriteFlag      = "rewrite"
 	streamOutputFlag = "stream-output"
@@ -66,17 +65,17 @@ pkg/kv/kvserver:kvserver_test) instead.`,
     dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
         Test multiple packages recursively
 
-    dev test --stress --timeout=1m --test-args='-test.timeout 5s'
-        Stress for 1m until a test runs longer than 5s
-
-    dev test --race --count 250 ...
-        Run a test under race, 250 times in parallel
+    dev test --race --stress ...
+        Run a test under race and stress
 
     dev test pkg/spanconfig/... --test-args '-test.trace=trace.out'
         Pass arguments to go test (see 'go help testflag'; prefix args with '-test.{arg}')
 
-    dev test pkg/spanconfig --stress --stress-args '-maxruns 1000 -p 4' --timeout=10m
-        Pass arguments to github.com/cockroachdb/stress, run for 10 min
+    dev test pkg/spanconfig --stress --stress-args '-maxruns 1000 -p 4'
+        Pass arguments to github.com/cockroachdb/stress
+
+    dev test --stress --timeout=1m --test-args='-test.timeout 5s'
+        Stress for 1m until a test runs longer than 5s
 
     dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
 `,
@@ -102,7 +101,6 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
-	testCmd.Flags().Bool(deadlockFlag, false, "run tests using the deadlock detector")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
@@ -125,8 +123,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	defer func() {
 		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
 			// Retry.
-			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil && d.debug {
-				log.Printf("Internal Error: Sending BEP file to beaver hub failed - %v", err)
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Interal Error: Sending BEP file to beaver hub failed - %v", err)
 			}
 		}
 		if !buildutil.CrdbTestBuild {
@@ -139,7 +137,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		filter        = mustGetFlagString(cmd, filterFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
 		race          = mustGetFlagBool(cmd, raceFlag)
-		deadlock      = mustGetFlagBool(cmd, deadlockFlag)
 		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
 		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
@@ -203,7 +200,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	var args []string
-	var goTags []string
 	args = append(args, "test")
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
@@ -212,9 +208,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--config=race")
 	} else if stress {
 		disableTestSharding = true
-	}
-	if deadlock {
-		goTags = append(goTags, "deadlock")
 	}
 
 	var testTargets []string
@@ -338,7 +331,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-show-logs")
 	}
 	if count != 1 {
-		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
+		args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
 	}
 	if vModule != "" {
 		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
@@ -354,9 +347,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
-	if len(goTags) > 0 {
-		args = append(args, "--define", "gotags=bazel,gss,"+strings.Join(goTags, ","))
-	}
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)

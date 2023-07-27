@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -711,15 +710,7 @@ func (v *validator) processOp(op Operation) {
 		for _, op := range ops {
 			v.processOp(op)
 		}
-		prevFailures := v.failures
-		atomicTxnType := fmt.Sprintf(`%s txn`, t.IsoLevel.StringLower())
-		v.checkAtomic(atomicTxnType, t.Result)
-		if t.IsoLevel != isolation.Serializable {
-			// TODO(nvanbenschoten): for now, we run snapshot and read committed
-			// transactions in the mix but don't validate their results. Doing so
-			// is non-trivial. See #100169 and #100170
-			v.failures = prevFailures
-		}
+		v.checkAtomic(`txn`, t.Result)
 	case *SplitOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // splits should never return *any* error
@@ -1230,19 +1221,6 @@ func (v *validator) checkNonAmbError(
 func (v *validator) failIfError(
 	op Operation, r Result, exceptions ...func(err error) bool,
 ) (ambiguous, hasError bool) {
-	exceptions = append(exceptions[:len(exceptions):len(exceptions)], func(err error) bool {
-		return errors.Is(err, errInjected)
-	}, func(err error) bool {
-		// Work-around for [1].
-		//
-		// TODO(arul): find out why we (as of [2]) sometimes leaking
-		// *TransactionPushError (wrapped in `UnhandledRetryableError`) from
-		// `db.Get`, `db.Scan`, etc.
-		//
-		// [1]: https://github.com/cockroachdb/cockroach/issues/105330
-		// [2]: https://github.com/cockroachdb/cockroach/pull/97779
-		return errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil))
-	})
 	switch r.Type {
 	case ResultType_Unknown:
 		err := errors.AssertionFailedf(`unknown result %s`, op)

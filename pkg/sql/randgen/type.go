@@ -26,8 +26,8 @@ var (
 	// SeedTypes includes the following types that form the basis of randomly
 	// generated types:
 	//   - All scalar types, except UNKNOWN and ANY
-	//   - ARRAY of ANY and TUPLE of ANY, where the ANY will be replaced with
-	//     one of the legal array element types in RandType
+	//   - ARRAY of ANY, where the ANY will be replaced with one of the legal
+	//     array element types in RandType
 	//   - OIDVECTOR and INT2VECTOR types
 	SeedTypes []*types.T
 
@@ -126,24 +126,24 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 			return types.MakeArray(inner)
 		}
 		if typ.ArrayContents().Family() == types.TupleFamily {
-			return types.MakeArray(RandTupleFromSlice(rng, typs))
+			// Generate tuples between 0 and 4 datums in length
+			len := rng.Intn(5)
+			contents := make([]*types.T, len)
+			for i := range contents {
+				contents[i] = RandTypeFromSlice(rng, typs)
+			}
+			return types.MakeArray(types.MakeTuple(contents))
 		}
 	case types.TupleFamily:
-		return RandTupleFromSlice(rng, typs)
+		// Generate tuples between 0 and 4 datums in length
+		len := rng.Intn(5)
+		contents := make([]*types.T, len)
+		for i := range contents {
+			contents[i] = RandTypeFromSlice(rng, typs)
+		}
+		return types.MakeTuple(contents)
 	}
 	return typ
-}
-
-// RandTupleFromSlice returns a random tuple which has field chosen randomly
-// from the input slice of types.
-func RandTupleFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
-	// Generate tuples between 0 and 4 datums in length
-	len := rng.Intn(5)
-	contents := make([]*types.T, len)
-	for i := range contents {
-		contents[i] = RandTypeFromSlice(rng, typs)
-	}
-	return types.MakeTuple(contents)
 }
 
 // RandColumnType returns a random type that is a legal column type (e.g. no

@@ -20,7 +20,7 @@ user root nodeidx=2
 statement ok
 GRANT SYSTEM CANCELQUERY TO testuser1
 
-query TTTT rowsort
+query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges
 ----
 public     /vtable/crdb_internal/tables  {}                                  {}

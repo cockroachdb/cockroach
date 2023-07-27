@@ -28,11 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -62,7 +61,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -97,6 +95,30 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 	return cov.Slice()
 }
 
+// clusterNodeCount returns the approximate number of nodes in the cluster.
+func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
+	g, err := gw.OptionalErr(47970)
+	if err != nil {
+		return 0, err
+	}
+	var nodes int
+	err = g.IterateInfos(
+		gossip.KeyNodeDescPrefix, func(_ string, _ gossip.Info) error {
+			nodes++
+			return nil
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	// If we somehow got 0 and return it, a caller may panic if they divide by
+	// such a nonsensical nodecount.
+	if nodes == 0 {
+		return 1, errors.New("failed to count nodes")
+	}
+	return nodes, nil
+}
+
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -104,9 +126,6 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 //   - <dir> is given by the user and may be cloud storage
 //   - Each file contains data for a key range that doesn't overlap with any other
 //     file.
-//
-// - numBackupInstances indicates the number of SQL instances that were used to
-// execute the backup.
 func backup(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -121,7 +140,7 @@ func backup(
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
 	execLocality roachpb.Locality,
-) (_ roachpb.RowCount, numBackupInstances int, _ error) {
+) (roachpb.RowCount, error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
 
@@ -138,12 +157,12 @@ func backup(
 	iterFactory := backupinfo.NewIterFactory(backupManifest, defaultStore, encryption, &kmsEnv)
 	it, err := iterFactory.NewFileIter(ctx)
 	if err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, err
 	}
 	defer it.Close()
 	for ; ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
-			return roachpb.RowCount{}, 0, err
+			return roachpb.RowCount{}, err
 		} else if !ok {
 			break
 		}
@@ -176,7 +195,7 @@ func backup(
 		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
 	backupSpecs, err := distBackupPlanSpecs(
@@ -197,10 +216,9 @@ func backup(
 		backupManifest.EndTime,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, err
 	}
 
-	numBackupInstances = len(backupSpecs)
 	numTotalSpans := 0
 	for _, spec := range backupSpecs {
 		numTotalSpans += len(spec.IntroducedSpans) + len(spec.Spans)
@@ -219,32 +237,11 @@ func backup(
 		}
 	}
 
-	// Create a channel that is large enough that it does not block.
-	perNodeProgressCh := make(chan map[execinfrapb.ComponentID]float32, numTotalSpans)
-	storePerNodeProgressLoop := func(ctx context.Context) error {
-		if !execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1) {
-			return nil
-		}
-		for {
-			select {
-			case prog, ok := <-perNodeProgressCh:
-				if !ok {
-					return nil
-				}
-				jobsprofiler.StorePerNodeProcessorProgressFraction(
-					ctx, execCtx.ExecCfg().InternalDB, job.ID(), prog)
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-	}
-
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	checkpointLoop := func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		defer close(requestFinishedCh)
-		defer close(perNodeProgressCh)
 		var numBackedUpFiles int64
 		for progress := range progCh {
 			var progDetails backuppb.BackupManifest_Progress
@@ -265,26 +262,6 @@ func backup(
 				requestFinishedCh <- struct{}{}
 			}
 
-			// Update the per-component progress maintained by the job profiler.
-			perComponentProgress := make(map[execinfrapb.ComponentID]float32)
-			component := execinfrapb.ComponentID{
-				SQLInstanceID: progress.NodeID,
-				FlowID:        progress.FlowID,
-				Type:          execinfrapb.ComponentID_PROCESSOR,
-			}
-			for processorID, fraction := range progress.CompletedFraction {
-				component.ID = processorID
-				perComponentProgress[component] = fraction
-			}
-			select {
-			// This send to a buffered channel should never block but incase it does
-			// we will fallthrough to the default case.
-			case perNodeProgressCh <- perComponentProgress:
-			default:
-				log.Warningf(ctx, "skipping persisting per component progress as buffered channel was full")
-			}
-
-			// Check if we should persist a checkpoint backup manifest.
 			interval := BackupCheckpointInterval.Get(&execCtx.ExecCfg().Settings.SV)
 			if timeutil.Since(lastCheckpoint) > interval {
 				resumerSpan.RecordStructured(&backuppb.BackupProgressTraceEvent{
@@ -320,8 +297,8 @@ func backup(
 		)
 	}
 
-	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, storePerNodeProgressLoop, runBackup); err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
+	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
+		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	backupID := uuid.MakeV4()
@@ -359,7 +336,7 @@ func backup(
 				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename,
 					encryption, &kmsEnv, &desc)
 			}(); err != nil {
-				return roachpb.RowCount{}, 0, err
+				return roachpb.RowCount{}, err
 			}
 		}
 	}
@@ -372,7 +349,7 @@ func backup(
 	// `BACKUP_METADATA` instead.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, err
 	}
 
 	// Write a `BACKUP_METADATA` file along with SSTs for all the alloc heavy
@@ -384,13 +361,13 @@ func backup(
 	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&settings.SV) {
 		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
 			&kmsEnv, backupManifest); err != nil {
-			return roachpb.RowCount{}, 0, err
+			return roachpb.RowCount{}, err
 		}
 	}
 
 	statsTable := getTableStatsForBackup(ctx, statsCache, backupManifest.Descriptors)
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, err
 	}
 
 	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
@@ -398,13 +375,13 @@ func backup(
 			statsTable.Statistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
 			if !build.IsRelease() {
-				return roachpb.RowCount{}, 0, err
+				return roachpb.RowCount{}, err
 			}
 			log.Warningf(ctx, "%+v", err)
 		}
 	}
 
-	return backupManifest.EntryCounts, numBackupInstances, nil
+	return backupManifest.EntryCounts, nil
 }
 
 func releaseProtectedTimestamp(
@@ -481,18 +458,13 @@ func (b *backupResumer) ForceRealSpan() bool {
 	return true
 }
 
-// DumpTraceAfterRun implements the TraceableJob interface.
-func (b *backupResumer) DumpTraceAfterRun() bool {
-	return true
-}
-
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	if err := maybeRelocateJobExecution(ctx, b.job.ID(), p, details.ExecutionLocality, "BACKUP"); err != nil {
+	if err := b.maybeRelocateJobExecution(ctx, p, details.ExecutionLocality); err != nil {
 		return err
 	}
 
@@ -569,7 +541,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		initialDetails := details
 		if err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			backupDetails, m, err := getBackupDetailAndManifest(
-				ctx, p.ExecCfg(), txn, initialDetails, p.User(), backupDest,
+				ctx, p.ExecCfg(), txn, details, p.User(), backupDest,
 			)
 			if err != nil {
 				return err
@@ -731,9 +703,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res roachpb.RowCount
-	var numBackupInstances int
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		res, numBackupInstances, err = backup(
+		res, err = backup(
 			ctx,
 			p,
 			details.URI,
@@ -842,6 +813,15 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// Collect telemetry.
 	{
+		numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+		if err != nil {
+			if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
+				return err
+			}
+			log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+			numClusterNodes = 1
+		}
+
 		telemetry.Count("backup.total.succeeded")
 		const mb = 1 << 20
 		sizeMb := res.DataSize / mb
@@ -850,20 +830,16 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if sec > 0 {
 			mbps = mb / sec
 		}
-		if numBackupInstances == 0 {
-			// This can happen when we didn't have anything to back up.
-			numBackupInstances = 1
-		}
 		if details.StartTime.IsEmpty() {
 			telemetry.CountBucketed("backup.duration-sec.full-succeeded", sec)
 			telemetry.CountBucketed("backup.size-mb.full", sizeMb)
 			telemetry.CountBucketed("backup.speed-mbps.full.total", mbps)
-			telemetry.CountBucketed("backup.speed-mbps.full.per-node", mbps/int64(numBackupInstances))
+			telemetry.CountBucketed("backup.speed-mbps.full.per-node", mbps/int64(numClusterNodes))
 		} else {
 			telemetry.CountBucketed("backup.duration-sec.inc-succeeded", sec)
 			telemetry.CountBucketed("backup.size-mb.inc", sizeMb)
 			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
-			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numBackupInstances))
+			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numClusterNodes))
 		}
 		logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil, res.Rows)
 	}
@@ -890,12 +866,8 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	}
 }
 
-func maybeRelocateJobExecution(
-	ctx context.Context,
-	jobID jobspb.JobID,
-	p sql.JobExecContext,
-	locality roachpb.Locality,
-	jobDesc redact.SafeString,
+func (b *backupResumer) maybeRelocateJobExecution(
+	ctx context.Context, p sql.JobExecContext, locality roachpb.Locality,
 ) error {
 	if locality.NonEmpty() {
 		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
@@ -904,8 +876,8 @@ func maybeRelocateJobExecution(
 		}
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
 			log.Infof(ctx,
-				"%s job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
-				jobDesc, jobID, current.NodeID, missedTier.String(),
+				"BACKUP job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
+				b.job.ID(), current.NodeID, missedTier.String(),
 			)
 
 			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)
@@ -918,7 +890,7 @@ func maybeRelocateJobExecution(
 			var res error
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				var err error
-				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, jobID, dest.InstanceID, dest.SessionID)
+				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, b.job.ID(), dest.InstanceID, dest.SessionID)
 				return err
 			}); err != nil {
 				return errors.Wrapf(err, "failed to relocate job coordinator to %d", dest.InstanceID)

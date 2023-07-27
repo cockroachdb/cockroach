@@ -16,11 +16,7 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
-import {
-  nodeIDAttr,
-  dashboardNameAttr,
-  tenantNameAttr,
-} from "src/util/constants";
+import { nodeIDAttr, dashboardNameAttr } from "src/util/constants";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import {
   PageConfig,
@@ -33,7 +29,6 @@ import {
   refreshNodes,
   refreshLiveness,
   refreshSettings,
-  refreshTenantsList,
 } from "src/redux/apiReducers";
 import {
   hoverStateSelector,
@@ -70,7 +65,6 @@ import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
 import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
-import networkingDashboard from "./dashboards/networking";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -81,8 +75,11 @@ import {
   selectTimeScale,
 } from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
-import TimeScaleDropdown from "../timeScaleDropdownWithSearchParams";
-import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
+import {
+  Anchor,
+  TimeScaleDropdown,
+  TimeScale,
+} from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import moment from "moment-timezone";
 import {
@@ -91,8 +88,6 @@ import {
   selectCrossClusterReplicationEnabled,
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
-import { getCookieValue } from "src/redux/cookies";
-import { isSystemTenant, tenantDropdownOptions } from "src/redux/tenants";
 
 interface GraphDashboard {
   label: string;
@@ -114,11 +109,6 @@ const dashboards: { [key: string]: GraphDashboard } = {
   runtime: {
     label: "Runtime",
     component: runtimeDashboard,
-    isKvDashboard: true,
-  },
-  networking: {
-    label: "Networking",
-    component: networkingDashboard,
     isKvDashboard: true,
   },
   sql: { label: "SQL", component: sqlDashboard, isKvDashboard: false },
@@ -155,7 +145,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   },
   ttl: { label: "TTL", component: ttlDashboard, isKvDashboard: false },
   crossClusterReplication: {
-    label: "Physical Cluster Replication",
+    label: "Cross-Cluster Replication",
     component: crossClusterReplicationDashboard,
     isKvDashboard: true,
   },
@@ -185,15 +175,12 @@ type MapStateToProps = {
     typeof nodeDisplayNameByIDSelector.resultFunc
   >;
   crossClusterReplicationEnabled: boolean;
-  tenantOptions: ReturnType<() => DropdownOption[]>;
-  currentTenant: string | null;
 };
 
 type MapDispatchToProps = {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
   refreshNodeSettings: typeof refreshSettings;
-  refreshTenantsList: typeof refreshTenantsList;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
   setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
@@ -230,29 +217,27 @@ export class NodeGraphs extends React.Component<
     this.props.refreshNodeSettings();
   };
 
-  setClusterPath = (key: string, selected: DropdownOption) => {
-    const { match, history } = this.props;
-    const { value } = selected;
-    const nodeID = getMatchParamByName(match, nodeIDAttr) || "";
-    const dashName = getMatchParamByName(match, dashboardNameAttr) || "";
-    const tenantName = getMatchParamByName(match, tenantNameAttr) || "";
-    const nodeMatchParam = (val: string): string =>
-      val === "" ? "/cluster" : `/node/${val}`;
-    const tenantMatchParam = (val: string): string =>
-      val === "" ? "" : `/tenant/${val}`;
-    let path = "/metrics/";
-    switch (key) {
-      case "dashboard":
-        path += value + nodeMatchParam(nodeID) + tenantMatchParam(tenantName);
-        break;
-      case "node":
-        path += dashName + nodeMatchParam(value) + tenantMatchParam(tenantName);
-        break;
-      default:
-        path += dashName + nodeMatchParam(nodeID) + tenantMatchParam(value);
-        break;
+  setClusterPath(nodeID: string, dashboardName: string) {
+    const push = this.props.history.push;
+    if (!_.isString(nodeID) || nodeID === "") {
+      push(`/metrics/${dashboardName}/cluster`);
+    } else {
+      push(`/metrics/${dashboardName}/node/${nodeID}`);
     }
-    history.push(path);
+  }
+
+  nodeChange = (selected: DropdownOption) => {
+    this.setClusterPath(
+      selected.value,
+      getMatchParamByName(this.props.match, dashboardNameAttr),
+    );
+  };
+
+  dashChange = (selected: DropdownOption) => {
+    this.setClusterPath(
+      getMatchParamByName(this.props.match, nodeIDAttr),
+      selected.value,
+    );
   };
 
   componentDidMount() {
@@ -260,9 +245,6 @@ export class NodeGraphs extends React.Component<
     // settings won't change frequently so it's safe to request one
     // when page is loaded.
     this.props.refreshNodeSettings();
-    if (isSystemTenant(this.props.currentTenant)) {
-      this.props.refreshTenantsList();
-    }
   }
 
   componentDidUpdate() {
@@ -310,8 +292,6 @@ export class NodeGraphs extends React.Component<
       storeIDsByNodeID,
       nodeDisplayNameByID,
       nodeIds,
-      tenantOptions,
-      currentTenant,
     } = this.props;
     const canViewKvGraphs =
       getDataFromServer().FeatureFlags.can_view_kv_metric_dashboards;
@@ -326,9 +306,7 @@ export class NodeGraphs extends React.Component<
 
     const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
-    const selectedTenant = isSystemTenant(currentTenant)
-      ? getMatchParamByName(match, tenantNameAttr) || ""
-      : currentTenant;
+
     // When "all" is the selected source, some graphs display a line for every
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
@@ -357,7 +335,6 @@ export class NodeGraphs extends React.Component<
       tooltipSelection,
       nodeDisplayNameByID,
       storeIDsByNodeID,
-      tenantSource: selectedTenant,
     };
 
     const forwardParams = {
@@ -402,7 +379,7 @@ export class NodeGraphs extends React.Component<
       .filter(
         option =>
           this.props.crossClusterReplicationEnabled ||
-          option.label !== "Physical Cluster Replication",
+          option.label !== "Cross-Cluster Replication",
       );
 
     return (
@@ -410,22 +387,12 @@ export class NodeGraphs extends React.Component<
         <Helmet title={"Metrics"} />
         <h3 className="base-heading">Metrics</h3>
         <PageConfig>
-          {isSystemTenant(currentTenant) && tenantOptions.length > 1 && (
-            <PageConfigItem>
-              <Dropdown
-                title="Tenant"
-                options={tenantOptions}
-                selected={selectedTenant}
-                onChange={selection => this.setClusterPath("tenant", selection)}
-              />
-            </PageConfigItem>
-          )}
           <PageConfigItem>
             <Dropdown
               title="Graph"
               options={nodeDropdownOptions}
               selected={selectedNode}
-              onChange={selection => this.setClusterPath("node", selection)}
+              onChange={this.nodeChange}
             />
           </PageConfigItem>
           <PageConfigItem>
@@ -433,9 +400,7 @@ export class NodeGraphs extends React.Component<
               title="Dashboard"
               options={filteredDropdownOptions}
               selected={dashboard}
-              onChange={selection =>
-                this.setClusterPath("dashboard", selection)
-              }
+              onChange={this.dashChange}
               className="full-size"
             />
           </PageConfigItem>
@@ -496,10 +461,7 @@ export class NodeGraphs extends React.Component<
             <div className="chart-group l-columns__left">{graphComponents}</div>
             <div className="l-columns__right">
               <Alerts />
-              <ClusterSummaryBar
-                nodeSources={nodeSources}
-                tenantSource={selectedTenant}
-              />
+              <ClusterSummaryBar nodeSources={nodeSources} />
             </div>
           </div>
         </section>
@@ -544,15 +506,12 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   nodeDropdownOptions: nodeDropdownOptionsSelector(state),
   nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
   crossClusterReplicationEnabled: selectCrossClusterReplicationEnabled(state),
-  tenantOptions: tenantDropdownOptions(state),
-  currentTenant: getCookieValue("tenant"),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
   refreshNodes,
   refreshLiveness,
   refreshNodeSettings: refreshSettings,
-  refreshTenantsList,
   hoverOn,
   hoverOff,
   setMetricsFixedWindow: setMetricsFixedWindow,

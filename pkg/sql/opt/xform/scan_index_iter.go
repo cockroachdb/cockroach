@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
@@ -50,7 +51,7 @@ const (
 // of a Scan operator table.
 type scanIndexIter struct {
 	evalCtx *eval.Context
-	e       *explorer
+	f       *norm.Factory
 	im      *partialidx.Implicator
 	tabMeta *opt.TableMeta
 
@@ -85,7 +86,7 @@ type scanIndexIter struct {
 // Init initializes a new scanIndexIter.
 func (it *scanIndexIter) Init(
 	evalCtx *eval.Context,
-	e *explorer,
+	f *norm.Factory,
 	mem *memo.Memo,
 	im *partialidx.Implicator,
 	scanPrivate *memo.ScanPrivate,
@@ -96,7 +97,7 @@ func (it *scanIndexIter) Init(
 	// reused. Field reuse must be explicit.
 	*it = scanIndexIter{
 		evalCtx:     evalCtx,
-		e:           e,
+		f:           f,
 		im:          im,
 		tabMeta:     mem.Metadata().TableMeta(scanPrivate.Table),
 		scanPrivate: scanPrivate,
@@ -226,7 +227,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		} else {
 			// If we are not forcing any specific index and not visible index feature is
 			// enabled here, ignore not visible indexes.
-			if it.tabMeta.IsIndexNotVisible(ord, it.e.o.rng) && !it.scanPrivate.Flags.DisableNotVisibleIndex &&
+			if index.IsNotVisible() && !it.scanPrivate.Flags.DisableNotVisibleIndex &&
 				!it.evalCtx.SessionData().OptimizerUseNotVisibleIndexes {
 				continue
 			}
@@ -373,9 +374,9 @@ func (it *scanIndexIter) buildConstProjectionsFromPredicate(
 			panic(errors.AssertionFailedf("could not extract constant value for column %d", col))
 		}
 
-		scalar := it.e.f.ConstructConstVal(val, typ)
+		scalar := it.f.ConstructConstVal(val, typ)
 
-		proj = append(proj, it.e.f.ConstructProjectionsItem(
+		proj = append(proj, it.f.ConstructProjectionsItem(
 			scalar,
 			col,
 		))

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -101,7 +102,7 @@ type TestingKnobs struct {
 	BinaryVersionOverride roachpb.Version
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
-	OnDecommissionedCallback func(id roachpb.NodeID)
+	OnDecommissionedCallback func(livenesspb.Liveness)
 	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
 	//
@@ -141,12 +142,6 @@ type TestingKnobs struct {
 	// DrainReportCh, if set, is a channel that will be notified when
 	// the SQL service shuts down.
 	DrainReportCh chan struct{}
-
-	// ShutdownTenantConnectorEarlyIfNoRecordPresent, if set, will cause the
-	// tenant connector to be shut down early if no record is present in the
-	// system.tenants table. This is useful for tests that want to verify that
-	// the tenant connector can't start when the record doesn't exist.
-	ShutdownTenantConnectorEarlyIfNoRecordPresent bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

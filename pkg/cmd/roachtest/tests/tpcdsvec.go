@@ -186,10 +186,9 @@ WITH unsafe_restore_incompatible_version;
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      "tpcdsvec",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(3),
+		Name:    "tpcdsvec",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")

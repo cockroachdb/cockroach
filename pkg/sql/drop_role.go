@@ -451,17 +451,6 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 		numRoleSettingsRowsDeleted += rowsDeleted
 
-		_, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.NodeUserSessionDataOverride,
-			`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL;`,
-			normalizedUsername,
-		)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Bump role-related table versions to force a refresh of membership/auth

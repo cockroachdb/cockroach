@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"math"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -20,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -178,67 +175,4 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		})
 		b.IncrementSubWorkID()
 	}
-	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
-	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
 }
-
-// maybeRewriteTempIDsInPrimaryIndexes is part of the post-processing
-// invoked at the end of building each ALTER TABLE statement to replace temporary
-// IDs with real, actual IDs.
-func maybeRewriteTempIDsInPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
-	chain := getPrimaryIndexChain(b, tableID)
-	for i, spec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
-		if i == 0 {
-			continue
-		}
-		maybeRewriteIndexAndConstraintID(b, tableID, spec.primary.IndexID, spec.primary.ConstraintID)
-		tempIndexSpec := chain.mustGetIndexSpecByID(spec.primary.TemporaryIndexID)
-		maybeRewriteIndexAndConstraintID(b, tableID, tempIndexSpec.temporary.IndexID, tempIndexSpec.temporary.ConstraintID)
-	}
-	chain.validate()
-}
-
-// maybeRewriteIndexAndConstraintID attempts to replace index which currently has
-// a temporary index ID `indexID` with an actual index ID. It also updates
-// all elements that references this index with the actual index ID.
-func maybeRewriteIndexAndConstraintID(
-	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, constraintID catid.ConstraintID,
-) {
-	if indexID < catid.IndexID(TableTentativeIdsStart) || constraintID < catid.ConstraintID(TableTentativeIdsStart) {
-		// Nothing to do if it's already an actual index ID.
-		return
-	}
-
-	actualIndexID := b.NextTableIndexID(tableID)
-	actualConstraintID := b.NextTableConstraintID(tableID)
-	b.QueryByID(tableID).ForEach(func(
-		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
-	) {
-		_ = screl.WalkIndexIDs(e, func(id *catid.IndexID) error {
-			if id != nil && *id == indexID {
-				*id = actualIndexID
-			}
-			return nil
-		})
-		_ = screl.WalkConstraintIDs(e, func(id *catid.ConstraintID) error {
-			if id != nil && *id == constraintID {
-				*id = actualConstraintID
-			}
-			return nil
-		})
-	})
-}
-
-// maybeDropRedundantPrimaryIndexes is part of the post-processing invoked at
-// the end of building each ALTER TABLE statement to remove possibly redundant
-// primary indexes.
-func maybeDropRedundantPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
-	chain := getPrimaryIndexChain(b, tableID)
-	chain.deflate(b)
-}
-
-// TableTentativeIdsStart is the beginning of a sequence of increasing
-// IDs for builder internal use for each table.
-// Table IDs are uint32 and for those internal use, temporary IDs we
-// start from MaxInt32, halfway of MaxUint32.
-const TableTentativeIdsStart = math.MaxInt32

@@ -16,10 +16,11 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
@@ -71,11 +72,25 @@ func (ctx *postCtx) Printf(format string, args ...interface{}) {
 	fmt.Fprintf(&ctx.Builder, format, args...)
 }
 
-func (p *poster) getProbableMilestone(ctx *postCtx) *int {
-	bv := p.getBinaryVersion()
-	v, err := version.Parse(bv)
+func getLatestTag() (string, error) {
+	cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		ctx.Printf("unable to parse version from binary version to determine milestone: %s", err)
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (p *poster) getProbableMilestone(ctx *postCtx) *int {
+	tag, err := p.getLatestTag()
+	if err != nil {
+		ctx.Printf("unable to get latest tag to determine milestone: %s", err)
+		return nil
+	}
+
+	v, err := version.Parse(tag)
+	if err != nil {
+		ctx.Printf("unable to parse version from tag to determine milestone: %s", err)
 		return nil
 	}
 	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
@@ -99,7 +114,7 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 type poster struct {
 	*Options
 
-	l Logger
+	l *logger.Logger
 
 	createIssue func(ctx context.Context, owner string, repo string,
 		issue *github.IssueRequest) (*github.Issue, *github.Response, error)
@@ -115,7 +130,7 @@ type poster struct {
 		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
-func newPoster(l Logger, client *github.Client, opts *Options) *poster {
+func newPoster(l *logger.Logger, client *github.Client, opts *Options) *poster {
 	return &poster{
 		Options:           opts,
 		l:                 l,
@@ -149,17 +164,17 @@ func (p *poster) parameters(extraParams map[string]string) map[string]string {
 
 // Options configures the issue poster.
 type Options struct {
-	Token            string // GitHub API token
-	Org              string
-	Repo             string
-	SHA              string
-	BuildTypeID      string
-	BuildID          string
-	ServerURL        string
-	Branch           string
-	Tags             string
-	Goflags          string
-	getBinaryVersion func() string
+	Token        string // GitHub API token
+	Org          string
+	Repo         string
+	SHA          string
+	BuildTypeID  string
+	BuildID      string
+	ServerURL    string
+	Branch       string
+	Tags         string
+	Goflags      string
+	getLatestTag func() (string, error)
 }
 
 // DefaultOptionsFromEnv initializes the Options from the environment variables,
@@ -189,14 +204,14 @@ func DefaultOptionsFromEnv() *Options {
 		// This was chosen simply because it exists and while surprising,
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
-		SHA:              maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
-		BuildTypeID:      maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
-		BuildID:          maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
-		ServerURL:        maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
-		Branch:           maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
-		Tags:             maybeEnv(tagsEnv, ""),
-		Goflags:          maybeEnv(goFlagsEnv, ""),
-		getBinaryVersion: build.BinaryVersion,
+		SHA:          maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
+		BuildTypeID:  maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
+		BuildID:      maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
+		ServerURL:    maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
+		Branch:       maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
+		Tags:         maybeEnv(tagsEnv, ""),
+		Goflags:      maybeEnv(goFlagsEnv, ""),
+		getLatestTag: getLatestTag,
 	}
 }
 
@@ -437,20 +452,11 @@ type PostRequest struct {
 	ProjectColumnID int
 }
 
-// Logger is an interface that allows callers to plug their own log
-// implementation when they post GitHub issues. It avoids us having to
-// link against heavy dependencies in certain cases (such as in
-// `bazci`) while still allowing other callers (such as `roachtest`)
-// to use other logger implementations.
-type Logger interface {
-	Printf(format string, args ...interface{})
-}
-
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, l Logger, formatter IssueFormatter, req PostRequest) error {
+func Post(ctx context.Context, l *logger.Logger, formatter IssueFormatter, req PostRequest) error {
 	opts := DefaultOptionsFromEnv()
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
@@ -496,7 +502,7 @@ func HelpCommandAsLink(title, href string) func(r *Renderer) {
 func filterByPrefixTitleMatch(
 	result *github.IssuesSearchResult, expectedTitle string,
 ) []github.Issue {
-	expectedTitleRegex := regexp.MustCompile(`^` + expectedTitle + `(\s+|$)`)
+	expectedTitleRegex := regexp.MustCompile(`^` + regexp.QuoteMeta(expectedTitle) + `(\s+|$)`)
 	var issues []github.Issue
 	for _, issue := range result.Issues {
 		if title := issue.Title; title != nil && expectedTitleRegex.MatchString(*title) {

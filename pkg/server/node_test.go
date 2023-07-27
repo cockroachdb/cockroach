@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -757,78 +756,6 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Get].Count(), getCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Put].Count(), putCurr)
-}
-
-// TestNodeCrossLocalityMetrics verifies that
-// updateCrossLocalityMetricsOnBatch{Request|Response} correctly updates
-// cross-region, cross-zone byte count metrics for batch requests sent and batch
-// responses received.
-func TestNodeCrossLocalityMetrics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	const expectedInc = 10
-
-	metricsNames := []string{
-		"batch_requests.bytes",
-		"batch_requests.cross_region.bytes",
-		"batch_requests.cross_zone.bytes",
-		"batch_responses.bytes",
-		"batch_responses.cross_region.bytes",
-		"batch_responses.cross_zone.bytes"}
-	for _, tc := range []struct {
-		crossLocalityType    roachpb.LocalityComparisonType
-		expectedMetricChange [6]int64
-		forRequest           bool
-	}{
-		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
-			expectedMetricChange: [6]int64{expectedInc, expectedInc, 0, 0, 0, 0},
-			forRequest:           true,
-		},
-		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
-			expectedMetricChange: [6]int64{expectedInc, 0, expectedInc, 0, 0, 0},
-			forRequest:           true,
-		},
-		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
-			expectedMetricChange: [6]int64{expectedInc, 0, 0, 0, 0, 0},
-			forRequest:           true,
-		},
-		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
-			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, expectedInc, 0},
-			forRequest:           false,
-		},
-		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
-			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, expectedInc},
-			forRequest:           false,
-		},
-		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
-			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, 0},
-			forRequest:           false,
-		},
-	} {
-		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
-			metrics := makeNodeMetrics(metric.NewRegistry(), 1)
-			beforeMetrics, err := metrics.getNodeCounterMetrics(metricsNames)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tc.forRequest {
-				metrics.updateCrossLocalityMetricsOnBatchRequest(tc.crossLocalityType, expectedInc)
-			} else {
-				metrics.updateCrossLocalityMetricsOnBatchResponse(tc.crossLocalityType, expectedInc)
-			}
-
-			afterMetrics, err := metrics.getNodeCounterMetrics(metricsNames)
-			if err != nil {
-				t.Fatal(err)
-			}
-			metricsDiff := getMapsDiff(beforeMetrics, afterMetrics)
-			expectedDiff := make(map[string]int64, 6)
-			for i, inc := range tc.expectedMetricChange {
-				expectedDiff[metricsNames[i]] = inc
-			}
-			require.Equal(t, metricsDiff, expectedDiff)
-		})
-	}
 }
 
 func TestGetTenantWeights(t *testing.T) {

@@ -6,8 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-// Package schemafeed provides SchemaFeed, which can be used to track schema
-// updates.
 package schemafeed
 
 import (
@@ -32,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -658,14 +657,7 @@ func (tf *schemaFeed) validateDescriptor(
 		}
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
-		if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
-			err = errors.Wrapf(err, "could not acquire type descriptor %d lease", desc.GetID())
-			if errors.Is(err, catalog.ErrDescriptorDropped) { // That's pretty fatal.
-				err = changefeedbase.WithTerminalError(err)
-			}
-			return err
-		}
-		return nil
+		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
 		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances); err != nil {
 			return err
@@ -767,7 +759,7 @@ func sendExportRequestWithPriorityOverride(
 	}
 
 	var resp kvpb.Response
-	err := timeutil.RunWithTimeout(
+	err := contextutil.RunWithTimeout(
 		ctx, "schema-feed", priorityAfter,
 		func(ctx context.Context) error {
 			var err error
@@ -778,7 +770,7 @@ func sendExportRequestWithPriorityOverride(
 	if err == nil {
 		return resp, nil
 	}
-	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
+	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
 		header.UserPriority = roachpb.MaxUserPriority
 		return sendRequest(ctx)
 	}

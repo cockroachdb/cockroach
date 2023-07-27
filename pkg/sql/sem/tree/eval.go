@@ -765,20 +765,6 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &PlusIntINetOp{},
 			Volatility: volatility.Immutable,
 		},
-		{
-			LeftType:   types.Decimal,
-			RightType:  types.PGLSN,
-			ReturnType: types.PGLSN,
-			EvalOp:     &PlusDecimalPGLSNOp{},
-			Volatility: volatility.Immutable,
-		},
-		{
-			LeftType:   types.PGLSN,
-			RightType:  types.Decimal,
-			ReturnType: types.PGLSN,
-			EvalOp:     &PlusPGLSNDecimalOp{},
-			Volatility: volatility.Immutable,
-		},
 	}},
 
 	treebin.Minus: {overloads: []*BinOp{
@@ -949,20 +935,6 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			RightType:  types.Int,
 			ReturnType: types.INet,
 			EvalOp:     &MinusINetIntOp{},
-			Volatility: volatility.Immutable,
-		},
-		{
-			LeftType:   types.PGLSN,
-			RightType:  types.Decimal,
-			ReturnType: types.PGLSN,
-			EvalOp:     &MinusPGLSNDecimalOp{},
-			Volatility: volatility.Immutable,
-		},
-		{
-			LeftType:   types.PGLSN,
-			RightType:  types.PGLSN,
-			ReturnType: types.Decimal,
-			EvalOp:     &MinusPGLSNOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},
@@ -1541,7 +1513,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeEqFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 		makeEqFn(types.Oid, types.Oid, volatility.Leakproof),
-		makeEqFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeEqFn(types.String, types.String, volatility.Leakproof),
 		makeEqFn(types.Time, types.Time, volatility.Leakproof),
 		makeEqFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
@@ -1600,7 +1571,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.Int, types.Int, volatility.Leakproof),
 		makeLtFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeLtFn(types.Oid, types.Oid, volatility.Leakproof),
-		makeLtFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLtFn(types.String, types.String, volatility.Leakproof),
 		makeLtFn(types.Time, types.Time, volatility.Leakproof),
 		makeLtFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
@@ -1608,7 +1578,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
 		makeLtFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLtFn(types.VarBit, types.VarBit, volatility.Leakproof),
-		makeLtFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1658,7 +1627,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.Int, types.Int, volatility.Leakproof),
 		makeLeFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeLeFn(types.Oid, types.Oid, volatility.Leakproof),
-		makeLeFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLeFn(types.String, types.String, volatility.Leakproof),
 		makeLeFn(types.Time, types.Time, volatility.Leakproof),
 		makeLeFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
@@ -1666,7 +1634,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.TimestampTZ, types.TimestampTZ, volatility.Leakproof),
 		makeLeFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLeFn(types.VarBit, types.VarBit, volatility.Leakproof),
-		makeLeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1737,7 +1704,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeIsFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 		makeIsFn(types.Oid, types.Oid, volatility.Leakproof),
-		makeIsFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeIsFn(types.String, types.String, volatility.Leakproof),
 		makeIsFn(types.Time, types.Time, volatility.Leakproof),
 		makeIsFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
@@ -1804,7 +1770,6 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.Interval, volatility.Leakproof),
 		makeEvalTupleIn(types.Jsonb, volatility.Leakproof),
 		makeEvalTupleIn(types.Oid, volatility.Leakproof),
-		makeEvalTupleIn(types.PGLSN, volatility.Leakproof),
 		makeEvalTupleIn(types.String, volatility.Leakproof),
 		makeEvalTupleIn(types.Time, volatility.Leakproof),
 		makeEvalTupleIn(types.TimeTZ, volatility.Leakproof),
@@ -2052,7 +2017,7 @@ func (e *MultipleResultsError) Error() string {
 func (expr *FuncExpr) MaybeWrapError(err error) error {
 	// If we are facing an explicit error, propagate it unchanged.
 	fName := expr.Func.String()
-	if fName == `crdb_internal.force_error` || fName == `crdb_internal.plpgsql_raise` {
+	if fName == `crdb_internal.force_error` {
 		return err
 	}
 	// Otherwise, wrap it with context.

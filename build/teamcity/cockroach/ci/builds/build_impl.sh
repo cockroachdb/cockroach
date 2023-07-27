@@ -16,24 +16,21 @@ EXTRA_TARGETS=
 if [ "$CONFIG" == "crosslinux" ]
 then
     DOC_TARGETS=$(grep '^//' docs/generated/bazel_targets.txt)
-    BINARY_TARGETS="@com_github_cockroachdb_go_test_teamcity//:go-test-teamcity"
+    BINARY_TARGETS="@com_github_cockroachdb_go_test_teamcity//:go-test-teamcity //pkg/cmd/dev //pkg/cmd/workload"
     EXTRA_TARGETS="$DOC_TARGETS $BINARY_TARGETS"
 fi
 
 # Extra targets to build on Unix only.
 if [ "$CONFIG" != "crosswindows" ]
 then
-    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev"
+    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod"
 fi
 
 EXTRA_ARGS=
-# GEOS does not compile on windows.
-GEOS_TARGET=//c-deps:libgeos
 
 if [ "$CONFIG" == "crosswindows" ]
 then
    EXTRA_ARGS=--enable_runfiles
-   GEOS_TARGET=
 fi
 
 bazel build //pkg/cmd/bazci --config=ci
@@ -42,7 +39,7 @@ BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 		       --config "$CONFIG" --config ci $EXTRA_ARGS \
 		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
-		       //pkg/cmd/cockroach-oss $GEOS_TARGET $EXTRA_TARGETS
+		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
 
 if [[ $CONFIG == "crosslinuxfips" ]]; then
     for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do

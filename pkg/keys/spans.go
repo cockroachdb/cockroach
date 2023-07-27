@@ -19,9 +19,6 @@ var (
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
-	// MetaSpan holds all first- and second-level addressing records.
-	MetaSpan = roachpb.Span{Key: MetaMin, EndKey: MetaMax}
-
 	// Meta2MaxSpan begins at key Meta2KeyMax with the last entry in the second
 	// level addressing keyspace. The rest of the span is always empty. We cannot
 	// split at this starting key or between it and MetaMax.
@@ -39,10 +36,6 @@ var (
 
 	// TimeseriesSpan holds all the timeseries data in the cluster.
 	TimeseriesSpan = roachpb.Span{Key: TimeseriesPrefix, EndKey: TimeseriesKeyMax}
-
-	// ScratchSpan is used in tests to write arbitrary data without
-	// 	overlapping with meta, system or tenant ranges.
-	ScratchSpan = roachpb.Span{Key: ScratchRangeMin, EndKey: ScratchRangeMax}
 
 	// SystemSpanConfigSpan is part of the system keyspace that is used to carve
 	// out spans for system span configurations. No data is stored in these spans,

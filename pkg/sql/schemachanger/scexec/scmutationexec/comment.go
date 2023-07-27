@@ -39,12 +39,7 @@ func (i *immediateVisitor) UpsertTableComment(_ context.Context, op scop.UpsertT
 func (i *immediateVisitor) UpsertColumnComment(
 	_ context.Context, op scop.UpsertColumnComment,
 ) error {
-	subID := int(op.ColumnID)
-	if op.PGAttributeNum != 0 {
-		// PGAttributeNum is only set if it differs from the ColumnID.
-		subID = int(op.PGAttributeNum)
-	}
-	i.AddComment(op.TableID, subID, catalogkeys.ColumnCommentType, op.Comment)
+	i.AddComment(op.TableID, int(op.PGAttributeNum), catalogkeys.ColumnCommentType, op.Comment)
 	return nil
 }
 

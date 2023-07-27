@@ -737,7 +737,7 @@ func randEncDatumPrimaryFamily(
 
 // readSortedRangeFeedValues reads n values, and sorts them based on key order.
 func readSortedRangeFeedValues(
-	t *testing.T, n int, row func(t testing.TB) *kvpb.RangeFeedValue,
+	t *testing.T, n int, row func(t *testing.T) *kvpb.RangeFeedValue,
 ) (res []kvpb.RangeFeedValue) {
 	t.Helper()
 	for i := 0; i < n; i++ {
@@ -784,12 +784,8 @@ func newEvaluatorWithNormCheck(
 		defaultDBSessionData, hlc.Timestamp{}, withDiff), nil
 }
 
-var defaultDBSessionData = &sessiondata.SessionData{
-	SessionData: sessiondatapb.SessionData{
-		Database:                   "defaultdb",
-		TrigramSimilarityThreshold: 0.3,
-		UserProto:                  username.RootUserName().EncodeProto(),
-	},
-	SequenceState: sessiondata.NewSequenceState(),
-	SearchPath:    sessiondata.DefaultSearchPathForUser(username.RootUserName()),
+var defaultDBSessionData = sessiondatapb.SessionData{
+	Database:                   "defaultdb",
+	SearchPath:                 sessiondata.DefaultSearchPath.GetPathArray(),
+	TrigramSimilarityThreshold: 0.3,
 }

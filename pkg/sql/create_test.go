@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -84,8 +83,7 @@ func createTestTable(
 // of values.
 func verifyTables(
 	t *testing.T,
-	kvDB *kv.DB,
-	codec keys.SQLCodec,
+	tc *testcluster.TestCluster,
 	completed chan int,
 	expectedNumOfTables int,
 	descIDStart descpb.ID,
@@ -97,7 +95,8 @@ func verifyTables(
 	for id := range completed {
 		count++
 		tableName := fmt.Sprintf("table_%d", id)
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", tableName)
+		kvDB := tc.Servers[count%tc.NumServers()].DB()
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		if tableDesc.GetID() < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",
@@ -124,11 +123,12 @@ func verifyTables(
 
 	// Check that no extra descriptors have been written in the range
 	// descIDStart..maxID.
+	kvDB := tc.Servers[0].DB()
 	for id := descIDStart; id < maxID; id++ {
 		if _, ok := tableIDs[id]; ok {
 			continue
 		}
-		descKey := catalogkeys.MakeDescMetadataKey(codec, id)
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 		desc := &descpb.Descriptor{}
 		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)
@@ -157,8 +157,8 @@ func TestParallelCreateTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get the id descriptor generator count.
-	s := tc.Servers[0].TenantOrServer()
-	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
+	s := tc.Servers[0]
+	idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -185,8 +185,7 @@ func TestParallelCreateTables(t *testing.T) {
 
 	verifyTables(
 		t,
-		s.DB(),
-		s.Codec(),
+		tc,
 		completed,
 		numberOfTables,
 		descIDStart,
@@ -212,8 +211,8 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	}
 
 	// Get the id descriptor generator count.
-	s := tc.Servers[0].TenantOrServer()
-	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
+	s := tc.Servers[0]
+	idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -240,8 +239,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 
 	verifyTables(
 		t,
-		s.DB(),
-		s.Codec(),
+		tc,
 		completed,
 		1, /* expectedNumOfTables */
 		descIDStart,

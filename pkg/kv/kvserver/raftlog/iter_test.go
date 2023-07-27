@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,7 +31,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 	sl := make([]raftpb.Entry, 0, len(inds))
 	for _, ind := range inds {
 		cmd := kvserverpb.RaftCommand{
-			MaxLeaseIndex: kvpb.LeaseAppliedIndex(ind), // just to have something nontrivial in here
+			MaxLeaseIndex: ind, // just to have something nontrivial in here
 		}
 		b, err := protoutil.Marshal(&cmd)
 		if err != nil {
@@ -49,7 +48,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 			if ind%2 == 0 {
 				enc = EntryEncodingSideloadedWithAC
 			}
-			data = EncodeCommandBytes(enc, cmdID, b)
+			data = EncodeRaftCommand(enc, cmdID, b)
 		case raftpb.EntryConfChangeV2:
 			c := kvserverpb.ConfChangeContext{
 				CommandID: string(cmdID),
@@ -100,7 +99,7 @@ func ents(inds ...uint64) []raftpb.Entry {
 type modelIter struct {
 	idx  int
 	ents []raftpb.Entry
-	hi   kvpb.RaftIndex
+	hi   uint64
 }
 
 func (it *modelIter) load() (raftpb.Entry, error) {
@@ -114,12 +113,12 @@ func (it *modelIter) check() error {
 	return err
 }
 
-func (it *modelIter) SeekGE(lo kvpb.RaftIndex) (bool, error) {
+func (it *modelIter) SeekGE(lo uint64) (bool, error) {
 	for {
-		if it.idx >= len(it.ents) || (it.hi > 0 && kvpb.RaftIndex(it.ents[it.idx].Index) >= it.hi) {
+		if it.idx >= len(it.ents) || (it.hi > 0 && it.ents[it.idx].Index >= it.hi) {
 			return false, nil
 		}
-		if ind := kvpb.RaftIndex(it.ents[it.idx].Index); ind >= lo && (it.hi == 0 || ind < it.hi) {
+		if ind := it.ents[it.idx].Index; ind >= lo && (it.hi == 0 || ind < it.hi) {
 			if err := it.check(); err != nil {
 				return false, err
 			}
@@ -134,7 +133,7 @@ func (it *modelIter) Next() (bool, error) {
 	if it.idx >= len(it.ents) {
 		return false, nil
 	}
-	if it.hi > 0 && kvpb.RaftIndex(it.ents[it.idx].Index) >= it.hi {
+	if it.hi > 0 && it.ents[it.idx].Index >= it.hi {
 		return false, nil
 	}
 	err := it.check()
@@ -153,7 +152,7 @@ func TestIteratorEmptyLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	eng := storage.NewDefaultInMemForTesting()
-	for _, hi := range []kvpb.RaftIndex{0, 1} {
+	for _, hi := range []uint64{0, 1} {
 		it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 		ok, err := it.SeekGE(0)
 		it.Close()
@@ -187,7 +186,7 @@ func TestIterator(t *testing.T) {
 			ents: ents(math.MaxUint64-1, math.MaxUint64),
 		},
 	} {
-		indToName := func(ind kvpb.RaftIndex) string {
+		indToName := func(ind uint64) string {
 			if ind > math.MaxUint64/2 {
 				if ind == math.MaxUint64 {
 					return "max"
@@ -198,7 +197,7 @@ func TestIterator(t *testing.T) {
 		}
 		var inds []string
 		for _, ent := range tc.ents {
-			inds = append(inds, indToName(kvpb.RaftIndex(ent.Index)))
+			inds = append(inds, indToName(ent.Index))
 		}
 		if len(inds) == 0 {
 			inds = []string{"empty"}
@@ -215,17 +214,17 @@ func TestIterator(t *testing.T) {
 				require.NoError(t, err)
 				metaB, err := e.ToRawBytes()
 				require.NoError(t, err)
-				require.NoError(t, eng.PutUnversioned(keys.RaftLogKey(rangeID, kvpb.RaftIndex(ent.Index)), metaB))
+				require.NoError(t, eng.PutUnversioned(keys.RaftLogKey(rangeID, ent.Index), metaB))
 			}
 
 			// Rather than handcrafting some invocations, just run all possible ones
 			// and verify against our expectations. There's no need to hard-code them
 			// since they're so simple to express.
-			var fi kvpb.RaftIndex // firstIndex
-			var li kvpb.RaftIndex // lastIndex
+			var fi uint64 // firstIndex
+			var li uint64 // lastIndex
 			if n := len(tc.ents); n > 0 {
-				fi = kvpb.RaftIndex(tc.ents[0].Index)
-				li = kvpb.RaftIndex(tc.ents[n-1].Index)
+				fi = tc.ents[0].Index
+				li = tc.ents[n-1].Index
 			} else {
 				// Make sure we do some bogus scans on the empty log as well.
 				fi = 1
@@ -275,12 +274,12 @@ func TestIterator(t *testing.T) {
 }
 
 type iter interface {
-	SeekGE(idx kvpb.RaftIndex) (bool, error)
+	SeekGE(idx uint64) (bool, error)
 	Next() (bool, error)
 	Entry() raftpb.Entry
 }
 
-func consumeIter(it iter, lo kvpb.RaftIndex) ([]uint64, error) {
+func consumeIter(it iter, lo uint64) ([]uint64, error) {
 	var sl []uint64
 
 	ok, err := it.SeekGE(lo)

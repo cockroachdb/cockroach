@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
@@ -41,8 +40,8 @@ func TestProgressTracker(t *testing.T) {
 
 	requiredSpans := []roachpb.Span{c.sp("a", "e"), c.sp("f", "i")}
 
-	mockUpdate := func(sp roachpb.Span, completeUpTo hlc.Timestamp) *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress {
-		restoreProgress := backuppb.RestoreProgress{DataSpan: sp, CompleteUpTo: completeUpTo}
+	mockUpdate := func(sp roachpb.Span) *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress {
+		restoreProgress := backuppb.RestoreProgress{DataSpan: sp}
 		details, err := gogotypes.MarshalAny(&restoreProgress)
 		require.NoError(t, err)
 		return &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{ProgressDetails: *details}
@@ -61,12 +60,11 @@ func TestProgressTracker(t *testing.T) {
 	type testStep struct {
 		update            roachpb.Span
 		expectedPersisted []jobspb.RestoreProgress_FrontierEntry
-		completeUpTo      hlc.Timestamp
 	}
 
 	// Each test step builds on the persistedSpan.
 	persistedSpans := make([]jobspb.RestoreProgress_FrontierEntry, 0)
-	for i, step := range []testStep{
+	for _, step := range []testStep{
 		{
 			update:            c.sp("a", "c"),
 			expectedPersisted: pSp(c.sp("a", "c")),
@@ -79,11 +77,6 @@ func TestProgressTracker(t *testing.T) {
 		},
 		{
 			update:            c.sp("h", "i"),
-			expectedPersisted: pSp(c.sp("a", "f")),
-			completeUpTo:      hlc.Timestamp{Logical: 1},
-		},
-		{
-			update:            c.sp("h", "i"),
 			expectedPersisted: pSp(c.sp("a", "f"), c.sp("h", "i")),
 		},
 		{
@@ -92,16 +85,12 @@ func TestProgressTracker(t *testing.T) {
 			expectedPersisted: pSp(c.sp("a", "i")),
 		},
 	} {
-		restoreTime := hlc.Timestamp{}
-		pt, err := makeProgressTracker(requiredSpans, persistedSpans, true, 0, restoreTime)
-		require.NoError(t, err, "step %d", i)
-
-		done, err := pt.ingestUpdate(ctx, mockUpdate(step.update, step.completeUpTo))
+		pt, err := makeProgressTracker(requiredSpans, persistedSpans, true, 0)
 		require.NoError(t, err)
-		lastInSpan := step.completeUpTo == restoreTime
-		require.Equal(t, lastInSpan, done, "step %d", i)
+
+		require.NoError(t, pt.ingestUpdate(ctx, mockUpdate(step.update)))
 
 		persistedSpans = persistFrontier(pt.mu.checkpointFrontier, 0)
-		require.Equal(t, step.expectedPersisted, persistedSpans, "step %d", i)
+		require.Equal(t, step.expectedPersisted, persistedSpans)
 	}
 }

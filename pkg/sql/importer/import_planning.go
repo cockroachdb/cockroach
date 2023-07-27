@@ -1096,7 +1096,7 @@ func parseAvroOptions(
 			}
 			defer store.Close()
 
-			raw, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+			raw, err := store.ReadFile(ctx, "")
 			if err != nil {
 				return err
 			}

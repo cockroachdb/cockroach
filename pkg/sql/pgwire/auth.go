@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -101,7 +100,7 @@ func (c *conn) handleAuthentication(
 	tlsState, hbaEntry, authMethod, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return nil, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	ac.SetAuthMethod(hbaEntry.Method.String())
@@ -114,7 +113,7 @@ func (c *conn) handleAuthentication(
 	connClose = behaviors.ConnClose
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
-		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	// Choose the system identity that we'll use below for mapping
@@ -139,7 +138,7 @@ func (c *conn) handleAuthentication(
 	if err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
 		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
-		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
 	// Once chooseDbRole() returns, we know that the actual DB username
@@ -148,7 +147,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -158,7 +157,7 @@ func (c *conn) handleAuthentication(
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
-		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 	c.sessionArgs.IsSuperuser = isSuperuser
 
@@ -167,12 +166,12 @@ func (c *conn) handleAuthentication(
 		// If the user does not exist, we show the same error used for invalid
 		// passwords, to make it harder for an attacker to determine if a user
 		// exists.
-		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(security.NewErrPasswordUserAuthFailed(dbUser), pgcode.InvalidPassword))
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(security.NewErrPasswordUserAuthFailed(dbUser), pgcode.InvalidPassword))
 	}
 
 	if !canLoginSQL {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, nil)
-		return connClose, c.sendError(ctx, pgerror.Newf(pgcode.InvalidAuthorizationSpecification, "%s does not have login privilege", dbUser))
+		return connClose, c.sendError(ctx, execCfg, pgerror.Newf(pgcode.InvalidAuthorizationSpecification, "%s does not have login privilege", dbUser))
 	}
 
 	// At this point, we know that the requested user exists and is
@@ -185,7 +184,7 @@ func (c *conn) handleAuthentication(
 		} else {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
 		}
-		return connClose, c.sendError(ctx, err)
+		return connClose, c.sendError(ctx, execCfg, err)
 	}
 
 	// Add all the defaults to this session's defaults. If there is an
@@ -208,21 +207,6 @@ func (c *conn) handleAuthentication(
 			if _, ok := c.sessionArgs.SessionDefaults[keyVal[0]]; !ok {
 				c.sessionArgs.SessionDefaults[keyVal[0]] = keyVal[1]
 			}
-		}
-	}
-
-	// Check replication privilege.
-	if c.sessionArgs.SessionDefaults["replication"] != "" {
-		m, err := sql.ReplicationModeFromString(c.sessionArgs.SessionDefaults["replication"])
-		if err == nil && m != sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED && !canUseReplicationMode {
-			ac.LogAuthFailed(ctx, eventpb.AuthFailReason_NO_REPLICATION_ROLEOPTION, nil)
-			return connClose, c.sendError(
-				ctx,
-				pgerror.Newf(
-					pgcode.InsufficientPrivilege,
-					"must be superuser or have REPLICATION role to start streaming replication",
-				),
-			)
 		}
 	}
 

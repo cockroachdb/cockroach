@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
 	"sync"
 	"time"
 	"unsafe"
@@ -57,7 +56,7 @@ type singleRangeInfo struct {
 }
 
 var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemOnly,
 	"kv.rangefeed.use_dedicated_connection_class.enabled",
 	"uses dedicated connection when running rangefeeds",
 	util.ConstantWithMetamorphicTestBool(
@@ -238,20 +237,6 @@ func (ds *DistSender) RangeFeedSpans(
 func divideAllSpansOnRangeBoundaries(
 	spans []SpanTimePair, onRange onRangeFn, ds *DistSender, g *ctxgroup.Group,
 ) {
-	// Sort input spans based on their start time -- older spans first.
-	// Starting rangefeed over large number of spans is an expensive proposition,
-	// since this involves initiating catch-up scan operation for each span. These
-	// operations are throttled (both on the client and on the server). Thus, it
-	// is possible that only some portion of the spans  will make it past catch-up
-	// phase.  If the caller maintains checkpoint, and then restarts rangefeed
-	// (for any reason), then we will restart against the same list of spans --
-	// but this time, we'll begin with the spans that might be substantially ahead
-	// of the rest of the spans. We simply sort input spans so that the oldest
-	// spans get a chance to complete their catch-up scan.
-	sort.Slice(spans, func(i, j int) bool {
-		return spans[i].StartAfter.Less(spans[j].StartAfter)
-	})
-
 	for _, s := range spans {
 		func(stp SpanTimePair) {
 			g.GoCtx(func(ctx context.Context) error {
@@ -560,8 +545,7 @@ func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, e
 		case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 			kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 			kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
-			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
-			kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
+			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER:
 			// Try again with same descriptor. These are transient
 			// errors that should not show up again.
 			return rangefeedErrorInfo{}, nil
@@ -736,7 +720,7 @@ func (ds *DistSender) singleRangeFeed(
 	for {
 		stuckWatcher.stop() // if timer is running from previous iteration, stop it now
 		if transport.IsExhausted() {
-			return args.Timestamp, newSendError(errors.New("sending to all replicas failed"))
+			return args.Timestamp, newSendError("sending to all replicas failed")
 		}
 		maybeCleanupStream()
 

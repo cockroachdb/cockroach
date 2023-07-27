@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "multiregionccltestutils",
-    testonly = 1,
     srcs = ["testutils.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils",
     visibility = ["//visibility:public"],

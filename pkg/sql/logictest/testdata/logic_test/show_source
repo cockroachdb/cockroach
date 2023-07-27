@@ -24,7 +24,6 @@ query TT colnames
 SELECT *
 FROM [SHOW ALL]
 WHERE variable NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
-ORDER BY variable
 ----
 variable                                                   value
 allow_ordinal_column_references                            off
@@ -107,7 +106,6 @@ locality                                                   region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on
 lock_timeout                                               0
 log_timezone                                               UTC
-max_connections                                            -1
 max_identifier_length                                      128
 max_index_keys                                             32
 node_id                                                    1
@@ -115,12 +113,11 @@ null_ordered_last                                          off
 on_update_rehome_row_enabled                               on
 opt_split_scan_limit                                       2048
 optimizer_always_use_histograms                            on
-optimizer_hoist_uncorrelated_equality_subqueries           on
+optimizer_hoist_uncorrelated_equality_subqueries           off
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
-optimizer_use_improved_computed_column_filters_derivation  on
+optimizer_use_improved_computed_column_filters_derivation  off
 optimizer_use_improved_disjunction_stats                   on
-optimizer_use_improved_join_elimination                    on
 optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_limit_ordering_for_streaming_group_by        on
 optimizer_use_multicol_stats                               on
@@ -154,7 +151,6 @@ synchronous_commit                                         on
 system_identity                                            root
 testing_optimizer_cost_perturbation                        0
 testing_optimizer_disable_rule_probability                 0
-testing_optimizer_inject_panics                            off
 testing_optimizer_random_seed                              0
 testing_vectorize_inject_panics                            off
 timezone                                                   UTC
@@ -222,7 +218,7 @@ SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
 target  raw_config_sql
 
-query TTTTTT colnames,rowsort
+query TTTTTT colnames
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
@@ -238,12 +234,12 @@ database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 system         public       descriptor  admin    SELECT          true
 system         public       descriptor  root     SELECT          true
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-descriptor  primary     false       1             id           id          ASC        false    false     true     1
-descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+descriptor  primary     false       1             id           id          ASC        false    false     true
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
@@ -251,12 +247,12 @@ SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 table_name  constraint_name  constraint_type  details               validated
 descriptor  primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-descriptor  primary     false       1             id           id          ASC        false    false     true     1
-descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+descriptor  primary     false       1             id           id          ASC        false    false     true
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
@@ -268,7 +264,7 @@ information_schema  NULL
 pg_catalog          NULL
 pg_extension        NULL
 
-query TT colnames,rowsort
+query TT colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_schema  sequence_name
@@ -276,7 +272,7 @@ public           descriptor_id_seq
 public           role_id_seq
 public           tenant_id_seq
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system]
 ORDER BY schema_name, table_name
 ----
@@ -333,7 +329,7 @@ public       users                            table     node   NULL
 public       web_sessions                     table     node   NULL
 public       zones                            table     node   NULL
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SELECT schema_name, table_name, type, owner, locality, comment FROM [SHOW TABLES FROM system WITH COMMENT]
 ORDER BY schema_name, table_name
 ----
@@ -529,7 +525,6 @@ job_id  job_type  description  statement  user_name  status  running_status  cre
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
-ORDER BY message
 ----
 field  message
 sql    SELECT 1
@@ -539,15 +534,14 @@ sql    SELECT 2
 # here because that is highly likely to change as code is edited.
 query TT colnames
 SELECT field, replace(message, e'\n', ' ') AS message FROM [SHOW SYNTAX 'foo']
-WHERE field != 'line'
-ORDER BY field
+ WHERE field != 'line'
 ----
 field     message
-code      42601
-detail    source SQL: foo ^
 error     at or near "foo": syntax error
+code      42601
 file      lexer.go
 function  Error
+detail    source SQL: foo ^
 
 # Test the SHOW TRANSFER STATE statement.
 statement error pgcode 0A000 cannot use SHOW TRANSFER STATE as a statement source
@@ -566,11 +560,11 @@ CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 
-query TTTBITTTBBBF rowsort
+query TTTBITTTBBB
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
-table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true  1
-table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true  1
+table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true
+table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true
 
 statement ok
 CREATE DATABASE "$peci@l";
@@ -581,11 +575,11 @@ CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 
-query TTTBITTTBBBF rowsort
+query TTTBITTTBBB
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
-table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true  1
-table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true  1
+table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true
+table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true
 
 # Test SHOW LOCALITY telemetry.
 query T
@@ -657,30 +651,30 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3'
 
-query TTBITTTBBBFT rowsort
+query TTBITTTBBBT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  i1      true   1  x      x      ASC  false  false  true  1  NULL
-t  i1      true   2  rowid  rowid  ASC  false  true   true  1  NULL
-t  i2      true   1  y      y      ASC  false  false  true  1  comm'ent3
-t  i2      true   2  rowid  rowid  ASC  false  true   true  1  comm'ent3
-t  i3      true   1  z      z      ASC  false  false  true  1  NULL
-t  i3      true   2  rowid  rowid  ASC  false  true   true  1  NULL
-t  t_pkey  false  1  rowid  rowid  ASC  false  false  true  1  NULL
-t  t_pkey  false  2  x      x      N/A  true   false  true  1  NULL
-t  t_pkey  false  3  y      y      N/A  true   false  true  1  NULL
-t  t_pkey  false  4  z      z      N/A  true   false  true  1  NULL
+t  i1      true   1  x      x      ASC  false  false  true  NULL
+t  i1      true   2  rowid  rowid  ASC  false  true   true  NULL
+t  i2      true   1  y      y      ASC  false  false  true  comm'ent3
+t  i2      true   2  rowid  rowid  ASC  false  true   true  comm'ent3
+t  i3      true   1  z      z      ASC  false  false  true  NULL
+t  i3      true   2  rowid  rowid  ASC  false  true   true  NULL
+t  t_pkey  false  1  rowid  rowid  ASC  false  false  true  NULL
+t  t_pkey  false  2  x      x      N/A  true   false  true  NULL
+t  t_pkey  false  3  y      y      N/A  true   false  true  NULL
+t  t_pkey  false  4  z      z      N/A  true   false  true  NULL
 
-query TTBITTTBBBFT rowsort
+query TTBITTTBBBT
 SHOW INDEXES FROM t2 WITH COMMENT
 ----
-t2  i1       true   1  x      x      ASC  false  false  true  1  NULL
-t2  i1       true   2  rowid  rowid  ASC  false  true   true  1  NULL
-t2  i2       true   1  y      y      ASC  false  false  true  1  NULL
-t2  i2       true   2  rowid  rowid  ASC  false  true   true  1  NULL
-t2  i3       true   1  z      z      ASC  false  false  true  1  NULL
-t2  i3       true   2  rowid  rowid  ASC  false  true   true  1  NULL
-t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  1  NULL
-t2  t2_pkey  false  2  x      x      N/A  true   false  true  1  NULL
-t2  t2_pkey  false  3  y      y      N/A  true   false  true  1  NULL
-t2  t2_pkey  false  4  z      z      N/A  true   false  true  1  NULL
+t2  i1       true   1  x      x      ASC  false  false  true  NULL
+t2  i1       true   2  rowid  rowid  ASC  false  true   true  NULL
+t2  i2       true   1  y      y      ASC  false  false  true  NULL
+t2  i2       true   2  rowid  rowid  ASC  false  true   true  NULL
+t2  i3       true   1  z      z      ASC  false  false  true  NULL
+t2  i3       true   2  rowid  rowid  ASC  false  true   true  NULL
+t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  NULL
+t2  t2_pkey  false  2  x      x      N/A  true   false  true  NULL
+t2  t2_pkey  false  3  y      y      N/A  true   false  true  NULL
+t2  t2_pkey  false  4  z      z      N/A  true   false  true  NULL

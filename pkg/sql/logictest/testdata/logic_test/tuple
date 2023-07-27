@@ -1136,7 +1136,7 @@ ORDER BY
 {}
 {"(1,cat)"}
 
-query T nosort
+query T
 SELECT
   t2.c4
 FROM
@@ -1224,7 +1224,7 @@ subtest end
 # to handle tuples of arrays of tuples in the VALUES clause.
 subtest 79484
 
-query T nosort
+query T
 SELECT * FROM (
   VALUES
     ((ARRAY[15181:::INT8], ARRAY[]:::RECORD[])),

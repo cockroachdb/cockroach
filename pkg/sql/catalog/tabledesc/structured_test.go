@@ -51,19 +51,19 @@ func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescript
 		Name:                name,
 		KeyColumnNames:      columnNames,
 		KeyColumnDirections: dirs,
-		Version:             descpb.LatestIndexDescriptorVersion,
+		Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 	}
 	return idx
 }
 
 func TestAllocateIDs(t *testing.T) {
+	// TODO(postamar): bump idx versions to LatestIndexDescriptorVersion in 22.2
+	// This is not possible until then because of a limitation in 21.2 which
+	// affects mixed-21.2-22.1-version clusters (issue #78426).
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
-		DeclarativeSchemaChangerState: &scpb.DescriptorState{
-			JobID: catpb.JobID(1),
-		},
 		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
 		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Name:     "foo",
@@ -96,9 +96,6 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := NewBuilder(&descpb.TableDescriptor{
-		DeclarativeSchemaChangerState: &scpb.DescriptorState{
-			JobID: catpb.JobID(1),
-		},
 		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
 		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Version:  1,
@@ -134,7 +131,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnNames:      []string{"b", "a"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				Version:             descpb.LatestIndexDescriptorVersion,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			{
 				ID:                  3,
@@ -143,7 +140,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"b"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.LatestIndexDescriptorVersion,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			{
 				ID:                  4,
@@ -152,7 +149,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"c"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				EncodingType:        catenumpb.PrimaryIndexEncoding,
-				Version:             descpb.LatestIndexDescriptorVersion,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		},
 		Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),

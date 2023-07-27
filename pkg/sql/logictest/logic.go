@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"net/url"
@@ -294,9 +295,7 @@ import (
 //        place of actual results.
 //
 //    Options are comma separated strings from the following:
-//      - nosort: sorts neither the returned or expected rows. Skips the
-//            flakiness check that forces either rowsort, valuesort,
-//            partialsort, or an ORDER BY clause to be present.
+//      - nosort (default)
 //      - rowsort: sorts both the returned and the expected rows assuming one
 //            white-space separated word per column.
 //      - valuesort: sorts all values on all rows as one big set of
@@ -507,13 +506,10 @@ import (
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
 
 var (
-	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE    = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
-	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
-	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
-	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
-	showTraceRE = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE  = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
+	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -881,8 +877,6 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
-	// noSort is true if the nosort option was explicitly provided in the test.
-	noSort bool
 	// expectedErr and expectedErrCode are as in logicStatement.
 
 	// if set, the results are cross-checked against previous queries with the
@@ -1247,9 +1241,6 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 		if notice.Hint != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
 		}
-		if notice.Code != "" && notice.Code != "00000" {
-			t.noticeBuffer = append(t.noticeBuffer, "SQLSTATE: "+string(notice.Code))
-		}
 	})
 
 	return gosql.OpenDB(connector)
@@ -1263,19 +1254,7 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // bootstrapBinaryPath is given by the config's CockroachGoBootstrapVersion.
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
-func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath string) {
-	logsDir, err := os.MkdirTemp("", "cockroach-logs*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cleanupLogsDir := func() {
-		if t.rootT.Failed() {
-			fmt.Fprintf(os.Stderr, "cockroach logs captured in: %s\n", logsDir)
-		} else {
-			_ = os.RemoveAll(logsDir)
-		}
-	}
-
+func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
 	// During config initialization, NumNodes is required to be 3.
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
@@ -1283,14 +1262,12 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
-		testserver.CockroachLogsDirOpt(logsDir),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		// If we're using a cockroach-short binary, that means it was
-		// locally built, so we need to opt-out of version offsetting to
-		// better simulate a real upgrade path.
+		// If we're using a cockroach-short binary, that means it was locally
+		// built, so we need to opt-in to development upgrades.
 		opts = append(opts, testserver.EnvVarOpt([]string{
-			"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
+			"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
 		}))
 	}
 
@@ -1306,7 +1283,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	}
 
 	t.testserverCluster = ts
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
 }
@@ -1376,7 +1353,11 @@ func (t *logicTest) newCluster(
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
-
+	if serverArgs.MaxSQLMemoryLimit == 0 {
+		// Specify a fixed memory limit (some test cases verify OOM conditions;
+		// we don't want those to take long on large machines).
+		serverArgs.MaxSQLMemoryLimit = 256 * 1024 * 1024
+	}
 	// We have some queries that bump into 100MB default temp storage limit
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
@@ -1385,23 +1366,10 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
-	var defaultTestTenant base.DefaultTestTenantOptions
-	switch t.cfg.UseSecondaryTenant {
-	case logictestbase.Always, logictestbase.Never:
-		// If the test tenant is explicitly enabled or disabled then
-		// `logic test` will handle the creation of a configured test
-		// tenant, thus for this case we disable the implicit creation of
-		// the default test tenant.
-		defaultTestTenant = base.TestControlsTenantsExplicitly
-	case logictestbase.Random:
-		// Delegate to the test framework what to do.
-		defaultTestTenant = base.TestTenantProbabilisticOnly
-	}
-
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
-			DefaultTestTenant: defaultTestTenant,
+			SQLMemoryPoolSize:        serverArgs.MaxSQLMemoryLimit,
+			DisableDefaultTestTenant: t.cfg.UseTenant || t.cfg.DisableDefaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -1426,14 +1394,9 @@ func (t *logicTest) newCluster(
 	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
-	if cfg.UseSecondaryTenant == logictestbase.Always {
+	if cfg.UseTenant {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
-		//
-		// TODO(#76378): This condition is faulty. In the case where the
-		// profile is configured with "Random", we want to set the
-		// replication mode as well when a test tenant is effectively
-		// created. This currently is not happening.
 		params.ReplicationMode = base.ReplicationAuto
 	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
@@ -1501,12 +1464,7 @@ func (t *logicTest) newCluster(
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.UseSecondaryTenant == logictestbase.Always {
-		// The config profile requires the test to run with a secondary
-		// tenant. Set the tenant servers up now.
-		//
-		// TODO(cli): maybe share this code with the code in
-		// cli/democluster which does a very similar thing.
+	if cfg.UseTenant {
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			settings := makeClusterSettings(false /* forSystemTenant */)
@@ -1569,7 +1527,7 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
+	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
 
 		conn := t.cluster.StorageClusterConn()
 		clusterSettings := toa.clusterSettings
@@ -2315,9 +2273,8 @@ func (t *logicTest) maybeBackupRestore(
 		}
 	}
 
-	bucket := testutils.BackupTestingBucket()
-	backupLocation := fmt.Sprintf("gs://%s/logic-test-backup-restore-nightly/%s?AUTH=implicit",
-		bucket, strconv.FormatInt(timeutil.Now().UnixNano(), 10))
+	backupLocation := fmt.Sprintf("gs://cockroachdb-backup-testing/logic-test-backup-restore-nightly/%s?AUTH=implicit",
+		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
 	// Perform the backup and restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
@@ -2710,7 +2667,6 @@ func (t *logicTest) processSubtest(
 						switch opt {
 						case "nosort":
 							query.sorter = nil
-							query.noSort = true
 
 						case "rowsort":
 							query.sorter = rowSort
@@ -2993,12 +2949,7 @@ func (t *logicTest) processSubtest(
 			t.setUser(fields[1], nodeIdx)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
-			//
-			// TODO(#76378): It seems the conditional should include `||
-			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
-			// where the config specified "Random" and a test tenant was
-			// effectively created.
-			if t.cfg.UseSecondaryTenant == logictestbase.Always && strings.HasPrefix(fields[1], "host-cluster-") {
+			if t.cfg.UseTenant && strings.HasPrefix(fields[1], "host-cluster-") {
 				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}
@@ -3421,7 +3372,6 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 	defer rows.Close()
 
 	var actualResultsRaw []string
-	rowCount := 0
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
 		// returns results.
@@ -3452,7 +3402,6 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				if err := rows.Scan(vals...); err != nil {
 					return err
 				}
-				rowCount++
 				for i, v := range vals {
 					colT := query.colTypes[i]
 					// Ignore column - useful for non-deterministic output.
@@ -3560,32 +3509,6 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		}
 	}
 
-	allDuplicateRows := true
-	numCols := len(query.colTypes)
-	resultsWithoutColNames := actualResults
-	if query.colNames {
-		resultsWithoutColNames = resultsWithoutColNames[numCols:]
-	}
-	for i := numCols; i < len(resultsWithoutColNames); i++ {
-		// There are numCols*numRows elements in actualResults, each a string
-		// representation of a single column in a row. The element at i%numCols
-		// is the value in the first row in the same column as i.
-		if resultsWithoutColNames[i%numCols] != resultsWithoutColNames[i] {
-			allDuplicateRows = false
-			break
-		}
-	}
-
-	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
-		!query.kvtrace && !orderRE.MatchString(query.sql) && !explainRE.MatchString(query.sql) &&
-		!showTraceRE.MatchString(query.sql) {
-		return fmt.Errorf("to prevent flakes in queries that return multiple rows, " +
-			"add the rowsort option, the valuesort option, the partialsort option, " +
-			"or an ORDER BY clause. If you are certain that your test will not flake " +
-			"due to a non-deterministic ordering of rows, you can add the nosort option " +
-			"to ignore this error")
-	}
-
 	if query.sorter != nil {
 		query.sorter(len(query.colTypes), actualResults)
 		query.sorter(len(query.colTypes), query.expectedResults)
@@ -3675,9 +3598,9 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				// ('R') coltypes are approximately equal to take into account
 				// platform differences in floating point calculations.
 				if runtime.GOARCH == "s390x" && (colT == 'F' || colT == 'R') {
-					resultMatches, err = floatcmp.FloatsMatchApprox(expected, actual)
+					resultMatches, err = floatsMatchApprox(expected, actual)
 				} else if colT == 'F' {
-					resultMatches, err = floatcmp.FloatsMatch(expected, actual)
+					resultMatches, err = floatsMatch(expected, actual)
 				}
 				if err != nil {
 					return errors.CombineErrors(makeError(), err)
@@ -3743,6 +3666,93 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 
 	t.finishOne("OK")
 	return nil
+}
+
+// parseExpectedAndActualFloats converts the strings expectedString and
+// actualString to float64 values.
+func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
+	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing expected")
+	}
+	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing actual")
+	}
+	return expected, actual, nil
+}
+
+// floatsMatchApprox returns whether two floating point represented as
+// strings are equal within a tolerance.
+func floatsMatchApprox(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	return floatcmp.EqualApprox(expected, actual, floatcmp.CloseFraction, floatcmp.CloseMargin), nil
+}
+
+// floatsMatch returns whether two floating point numbers represented as
+// strings have matching 15 significant decimal digits (this is the precision
+// that Postgres supports for 'double precision' type).
+func floatsMatch(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	// Check special values - NaN, +Inf, -Inf, 0.
+	if math.IsNaN(expected) || math.IsNaN(actual) {
+		return math.IsNaN(expected) == math.IsNaN(actual), nil
+	}
+	if math.IsInf(expected, 0 /* sign */) || math.IsInf(actual, 0 /* sign */) {
+		bothNegativeInf := math.IsInf(expected, -1 /* sign */) == math.IsInf(actual, -1 /* sign */)
+		bothPositiveInf := math.IsInf(expected, 1 /* sign */) == math.IsInf(actual, 1 /* sign */)
+		return bothNegativeInf || bothPositiveInf, nil
+	}
+	if expected == 0 || actual == 0 {
+		return expected == actual, nil
+	}
+	// Check that the numbers have the same sign.
+	if expected*actual < 0 {
+		return false, nil
+	}
+	expected = math.Abs(expected)
+	actual = math.Abs(actual)
+	// Check that 15 significant digits match. We do so by normalizing the
+	// numbers and then checking one digit at a time.
+	//
+	// normalize converts f to base * 10**power representation where base is in
+	// [1.0, 10.0) range.
+	normalize := func(f float64) (base float64, power int) {
+		for f >= 10 {
+			f = f / 10
+			power++
+		}
+		for f < 1 {
+			f *= 10
+			power--
+		}
+		return f, power
+	}
+	var expPower, actPower int
+	expected, expPower = normalize(expected)
+	actual, actPower = normalize(actual)
+	if expPower != actPower {
+		return false, nil
+	}
+	// TODO(yuzefovich): investigate why we can't always guarantee deterministic
+	// 15 significant digits and switch back from 14 to 15 digits comparison
+	// here. See #56446 for more details.
+	for i := 0; i < 14; i++ {
+		expDigit := int(expected)
+		actDigit := int(actual)
+		if expDigit != actDigit {
+			return false, nil
+		}
+		expected -= (expected - float64(expDigit)) * 10
+		actual -= (actual - float64(actDigit)) * 10
+	}
+	return true, nil
 }
 
 func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
@@ -3996,7 +4006,7 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
 	// MaxSQLMemoryLimit determines the value of --max-sql-memory startup
-	// argument for the server. If unset, then the default limit of 256MiB will
+	// argument for the server. If unset, then the default limit of 192MiB will
 	// be used.
 	MaxSQLMemoryLimit int64
 	// If set, mutations.MaxBatchSize, row.getKVBatchSize, and other values

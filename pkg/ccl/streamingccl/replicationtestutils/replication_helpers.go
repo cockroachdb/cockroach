@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -135,7 +135,7 @@ func (rf *ReplicationFeed) Close(ctx context.Context) {
 func (rf *ReplicationFeed) consumeUntil(
 	ctx context.Context, pred FeedEventPredicate, errPred FeedErrorPredicate,
 ) {
-	require.NoError(rf.t, timeutil.RunWithTimeout(ctx, "consume", 2*time.Minute,
+	require.NoError(rf.t, contextutil.RunWithTimeout(ctx, "consume", 2*time.Minute,
 		func(ctx context.Context) error {
 			rowCount := 0
 			for {

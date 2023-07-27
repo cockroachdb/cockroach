@@ -32,7 +32,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":netutil"],
     deps = [
-        "//pkg/util/timeutil",
+        "//pkg/util/contextutil",
         "@com_github_cockroachdb_cmux//:cmux",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",

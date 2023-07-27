@@ -14,68 +14,74 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10,1 epoch=0 seq=1
 ----
 
-new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req1 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u strength=exclusive
+acquire r=req1 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1]
+local: num=0
 
 dequeue r=req1
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1]
+local: num=0
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
 ----
 
-new-request r=req2 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req2 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req2
 ----
 start-waiting: false
 
-acquire r=req2 k=a durability=u strength=exclusive
+acquire r=req2 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2]
+local: num=0
 
 dequeue r=req2
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2]
+local: num=0
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=4
 ----
 
-new-request r=req3 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req3 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req3
 ----
 start-waiting: false
 
-acquire r=req3 k=a durability=u strength=exclusive
+acquire r=req3 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
+local: num=0
 
 dequeue r=req3
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
+local: num=0
 
 # -------------------------------------------------------------
 # Re-Acquire lock with sequence number 4
@@ -84,24 +90,26 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=4
 ----
 
-new-request r=req3 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req3 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req3
 ----
 start-waiting: false
 
-acquire r=req3 k=a durability=u strength=exclusive
+acquire r=req3 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
+local: num=0
 
 dequeue r=req3
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
+local: num=0
 
 # -------------------------------------------------------------
 # Re-Acquire lock with sequence number 2
@@ -110,24 +118,26 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
 ----
 
-new-request r=req4 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req4 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req4
 ----
 start-waiting: false
 
-acquire r=req4 k=a durability=u strength=exclusive
+acquire r=req4 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
+local: num=0
 
 dequeue r=req4
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
+local: num=0
 
 # -------------------------------------------------------------
 # Try to acquire lock with sequence number 3. Should update the
@@ -138,24 +148,26 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=3
 ----
 
-new-request r=req5 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req5 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req5
 ----
 start-waiting: false
 
-acquire r=req5 k=a durability=u strength=exclusive
+acquire r=req5 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 3, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4]
+local: num=0
 
 dequeue r=req5
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 3, 4]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4]
+local: num=0
 
 # -------------------------------------------------------------
 # Acquire lock with sequence numbers 5
@@ -164,21 +176,23 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=5
 ----
 
-new-request r=req6 txn=txn1 ts=10,1 spans=exclusive@a
+new-request r=req6 txn=txn1 ts=10,1 spans=w@a
 ----
 
 scan r=req6
 ----
 start-waiting: false
 
-acquire r=req6 k=a durability=u strength=exclusive
+acquire r=req6 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 3, 4, 5]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4, 5]
+local: num=0
 
 dequeue r=req6
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [1, 2, 3, 4, 5]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4, 5]
+local: num=0

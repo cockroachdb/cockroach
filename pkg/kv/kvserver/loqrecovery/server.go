@@ -22,19 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
@@ -167,7 +166,7 @@ func (s Server) ServeClusterReplicas(
 		return err
 	}
 
-	err = timeutil.RunWithTimeout(ctx, "scan range descriptors", s.metadataQueryTimeout,
+	err = contextutil.RunWithTimeout(ctx, "scan range descriptors", s.metadataQueryTimeout,
 		func(txnCtx context.Context) error {
 			txn := kvDB.NewTxn(txnCtx, "scan-range-descriptors")
 			if err := txn.SetFixedTimestamp(txnCtx, kvDB.Clock().Now()); err != nil {
@@ -469,7 +468,10 @@ func (s Server) NodeStatus(
 }
 
 func (s Server) Verify(
-	ctx context.Context, req *serverpb.RecoveryVerifyRequest, nl *liveness.NodeLiveness, db *kv.DB,
+	ctx context.Context,
+	req *serverpb.RecoveryVerifyRequest,
+	liveNodes livenesspb.IsLiveMap,
+	db *kv.DB,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	// Block requests that require fan-out to other nodes until upgrade is finalized.
 	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
@@ -480,7 +482,7 @@ func (s Server) Verify(
 	err := s.visitAdminNodes(ctx, fanOutConnectionRetryOptions,
 		notListed(req.DecommissionedNodeIDs),
 		func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
-			return timeutil.RunWithTimeout(ctx, fmt.Sprintf("retrieve status of n%d", nodeID),
+			return contextutil.RunWithTimeout(ctx, fmt.Sprintf("retrieve status of n%d", nodeID),
 				retrieveNodeStatusTimeout,
 				func(ctx context.Context) error {
 					res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
@@ -495,20 +497,24 @@ func (s Server) Verify(
 	if err != nil {
 		return nil, err
 	}
-	decomNodes := make(map[roachpb.NodeID]bool)
-	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus, len(req.DecommissionedNodeIDs))
+
+	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus)
+	decomNodes := make(map[roachpb.NodeID]interface{})
 	for _, plannedID := range req.DecommissionedNodeIDs {
-		decomNodes[plannedID] = true
-		decomStatus[plannedID] = nl.GetNodeVitalityFromCache(plannedID).MembershipStatus()
+		decomNodes[plannedID] = struct{}{}
+		if ns, ok := liveNodes[plannedID]; ok {
+			decomStatus[plannedID] = ns.Membership
+		}
 	}
 
 	isNodeLive := func(rd roachpb.ReplicaDescriptor) bool {
 		// Preemptively remove dead nodes as they would return Forbidden error if
 		// liveness is not stale enough.
-		if decomNodes[rd.NodeID] {
+		if _, removed := decomNodes[rd.NodeID]; removed {
 			return false
 		}
-		return nl.GetNodeVitalityFromCache(rd.NodeID).IsLive(livenesspb.LossOfQuorum)
+		l, ok := liveNodes[rd.NodeID]
+		return ok && l.IsLive
 	}
 
 	getRangeInfo := func(
@@ -541,7 +547,7 @@ func (s Server) Verify(
 		if req.MaxReportedRanges == 0 {
 			return nil, nil
 		}
-		err := timeutil.RunWithTimeout(ctx, "retrieve ranges health", retrieveKeyspaceHealthTimeout,
+		err := contextutil.RunWithTimeout(ctx, "retrieve ranges health", retrieveKeyspaceHealthTimeout,
 			func(ctx context.Context) error {
 				start := keys.Meta2Prefix
 				for {

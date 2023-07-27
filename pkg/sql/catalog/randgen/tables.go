@@ -179,6 +179,7 @@ func (g *testSchemaGenerator) genOneTable(
 	tmpl.desc.UnexposedParentSchemaID = sc.GetID()
 	tmpl.desc.Privileges = privs
 	tmpl.desc.Temporary = sc.SchemaKind() == catalog.SchemaTemporary
+	tmpl.desc.PrimaryIndex.Name = "primary"
 	if g.cfg.RandomizeColumns {
 		nameGenCfg := g.cfg.NameGen
 		nameGenCfg.Number = false

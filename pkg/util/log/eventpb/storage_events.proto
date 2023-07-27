@@ -75,11 +75,6 @@ message StoreStats {
   uint64 flush_ingest_table_count = 36 [(gogoproto.jsontag) = ",omitempty"];
   uint64 flush_ingest_table_bytes = 37 [(gogoproto.jsontag) = ",omitempty"];
 
-  // Ingest stats.
-
-  // ingest_count is the number of successful ingest operations (counter).
-  uint64 ingest_count = 38 [(gogoproto.jsontag) = ",omitempty"];
-
   // Memtable stats.
 
   // memtable_size is the total size allocated to all memtables and (large)

@@ -1438,61 +1438,59 @@ SELECT (SELECT i_name FROM item LIMIT 1)
 project
  ├── columns: i_name:57
  ├── inner-join (hash)
- │    ├── columns: h_data:9!null ol_dist_info:21!null ol_i_id:39 exists:49!null
- │    ├── fd: (9)==(21), (21)==(9)
+ │    ├── columns: h_data:9!null ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21!null true_agg:48
+ │    ├── fd: (12-15)-->(21,48), (9)==(21), (21)==(9)
  │    ├── scan history
  │    │    └── columns: h_data:9
  │    ├── select
- │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:49!null
- │    │    ├── left-join (cross)
- │    │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:49!null
- │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    │    ├── project
- │    │    │    │    ├── columns: exists:49!null ol_dist_info:21
- │    │    │    │    ├── group-by (hash)
- │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
- │    │    │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
- │    │    │    │    │    ├── key: (12-15)
- │    │    │    │    │    ├── fd: (12-15)-->(21,48)
- │    │    │    │    │    ├── left-join (cross)
- │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true:47
- │    │    │    │    │    │    ├── fd: (12-15)-->(21)
- │    │    │    │    │    │    ├── scan order_line
- │    │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21
- │    │    │    │    │    │    │    ├── key: (12-15)
- │    │    │    │    │    │    │    └── fd: (12-15)-->(21)
- │    │    │    │    │    │    ├── project
- │    │    │    │    │    │    │    ├── columns: true:47!null
- │    │    │    │    │    │    │    ├── fd: ()-->(47)
- │    │    │    │    │    │    │    ├── select
- │    │    │    │    │    │    │    │    ├── columns: h_data:32!null
- │    │    │    │    │    │    │    │    ├── scan history
- │    │    │    │    │    │    │    │    │    └── columns: h_data:32
- │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │         └── h_data:32 IS NOT NULL [outer=(32), constraints=(/32: (/NULL - ]; tight)]
- │    │    │    │    │    │    │    └── projections
- │    │    │    │    │    │    │         └── true [as=true:47]
- │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── ol_dist_info:21 IS NOT NULL [outer=(21), constraints=(/21: (/NULL - ]; tight)]
- │    │    │    │    │    └── aggregations
- │    │    │    │    │         ├── const-not-null-agg [as=true_agg:48, outer=(47)]
- │    │    │    │    │         │    └── true:47
- │    │    │    │    │         └── const-agg [as=ol_dist_info:21, outer=(21)]
- │    │    │    │    │              └── ol_dist_info:21
- │    │    │    │    └── projections
- │    │    │    │         └── true_agg:48 IS NOT NULL [as=exists:49, outer=(48)]
- │    │    │    ├── limit
- │    │    │    │    ├── columns: ol_i_id:39!null
- │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(39)
+ │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
+ │    │    ├── key: (12-15)
+ │    │    ├── fd: (12-15)-->(21,48)
+ │    │    ├── group-by (hash)
+ │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
+ │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
+ │    │    │    ├── key: (12-15)
+ │    │    │    ├── fd: (12-15)-->(21,48)
+ │    │    │    ├── left-join (cross)
+ │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true:47
+ │    │    │    │    ├── fd: (12-15)-->(21)
  │    │    │    │    ├── scan order_line
- │    │    │    │    │    ├── columns: ol_i_id:39!null
- │    │    │    │    │    └── limit hint: 1.00
- │    │    │    │    └── 1
- │    │    │    └── filters (true)
+ │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21
+ │    │    │    │    │    ├── key: (12-15)
+ │    │    │    │    │    └── fd: (12-15)-->(21)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:47!null
+ │    │    │    │    │    ├── fd: ()-->(47)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: h_data:32!null
+ │    │    │    │    │    │    ├── scan history
+ │    │    │    │    │    │    │    └── columns: h_data:32
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── h_data:32 IS NOT NULL [outer=(32), constraints=(/32: (/NULL - ]; tight)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── true [as=true:47]
+ │    │    │    │    └── filters
+ │    │    │    │         └── ol_dist_info:21 IS NOT NULL [outer=(21), constraints=(/21: (/NULL - ]; tight)]
+ │    │    │    └── aggregations
+ │    │    │         ├── const-not-null-agg [as=true_agg:48, outer=(47)]
+ │    │    │         │    └── true:47
+ │    │    │         └── const-agg [as=ol_dist_info:21, outer=(21)]
+ │    │    │              └── ol_dist_info:21
  │    │    └── filters
- │    │         └── exists:49 OR (ol_i_id:39 IS NOT NULL) [outer=(39,49)]
+ │    │         └── or [outer=(48), subquery]
+ │    │              ├── true_agg:48 IS NOT NULL
+ │    │              └── is-not
+ │    │                   ├── subquery
+ │    │                   │    └── limit
+ │    │                   │         ├── columns: ol_i_id:39!null
+ │    │                   │         ├── cardinality: [0 - 1]
+ │    │                   │         ├── key: ()
+ │    │                   │         ├── fd: ()-->(39)
+ │    │                   │         ├── scan order_line
+ │    │                   │         │    ├── columns: ol_i_id:39!null
+ │    │                   │         │    └── limit hint: 1.00
+ │    │                   │         └── 1
+ │    │                   └── NULL
  │    └── filters
  │         └── h_data:9 = ol_dist_info:21 [outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ]), fd=(9)==(21), (21)==(9)]
  └── projections
@@ -1844,20 +1842,21 @@ semi-join-apply
 norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k
 ----
-project
+inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (8)
- ├── fd: (8)-->(9-12), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
+ ├── fd: (8)-->(9-12), (1)-->(2-5), (1)==(8), (8)==(1)
  ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- └── projections
-      ├── a2.k:8 [as=a.k:1, outer=(8)]
-      ├── a2.i:9 [as=a.i:2, outer=(9)]
-      ├── a2.f:10 [as=a.f:3, outer=(10)]
-      ├── a2.s:11 [as=a.s:4, outer=(11)]
-      └── a2.j:12 [as=a.j:5, outer=(12)]
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a.k:1 = a2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Right side has partial rows, so only right-join can be simplified.
 norm expect=SimplifyRightJoin
@@ -1889,20 +1888,22 @@ left-join (hash)
 norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.k=a2.k AND a2.f=a.f
 ----
-project
+inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (8)
- ├── fd: (8)-->(9-12), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
+ ├── fd: (8)-->(9-12), (1)-->(2-5), (3)==(10), (10)==(3), (1)==(8), (8)==(1)
  ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- └── projections
-      ├── a2.k:8 [as=a.k:1, outer=(8)]
-      ├── a2.i:9 [as=a.i:2, outer=(9)]
-      ├── a2.f:10 [as=a.f:3, outer=(10)]
-      ├── a2.s:11 [as=a.s:4, outer=(11)]
-      └── a2.j:12 [as=a.j:5, outer=(12)]
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── a2.f:10 = a.f:3 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+      └── a2.k:8 = a.k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Input contains Project operator.
 norm expect=SimplifyLeftJoin
@@ -1934,22 +1935,23 @@ SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2
 inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12 k:15!null i:16 f:17!null s:18 j:19
  ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
- ├── key: (1,8)
- ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(3,17), (17)==(3,10), (11)==(18), (18)==(11), (12)==(19), (19)==(12), (1)-->(2-5), (3)==(10,17)
- ├── project
- │    ├── columns: a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19 a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
- │    ├── key: (8)
- │    ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(17), (17)==(10), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
+ ├── key: (1,15)
+ ├── fd: (8)-->(9-12), (15)-->(16-19), (8)==(15), (15)==(8), (1)-->(2-5), (3)==(10), (10)==(3)
+ ├── inner-join (hash)
+ │    ├── columns: a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12 a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── key: (15)
+ │    ├── fd: (8)-->(9-12), (15)-->(16-19), (8)==(15), (15)==(8)
  │    ├── scan a
  │    │    ├── columns: a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9-12)
- │    └── projections
- │         ├── a.k:8 [as=a2.k:15, outer=(8)]
- │         ├── a.i:9 [as=a2.i:16, outer=(9)]
- │         ├── a.f:10 [as=a2.f:17, outer=(10)]
- │         ├── a.s:11 [as=a2.s:18, outer=(11)]
- │         └── a.j:12 [as=a2.j:19, outer=(12)]
+ │    ├── scan a [as=a2]
+ │    │    ├── columns: a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19
+ │    │    ├── key: (15)
+ │    │    └── fd: (15)-->(16-19)
+ │    └── filters
+ │         └── a.k:8 = a2.k:15 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
@@ -3841,39 +3843,41 @@ inner-join (cross)
 norm expect=RemoveJoinNotNullCondition
 SELECT * FROM a LEFT JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
-project
+inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
- ├── key: (1)
- ├── fd: (1)-->(2-5), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: (8)
+ ├── fd: (1)-->(2-5), (8)-->(9-12), (1)==(8), (8)==(1)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── projections
-      ├── a.k:1 [as=a2.k:8, outer=(1)]
-      ├── a.i:2 [as=a2.i:9, outer=(2)]
-      ├── a.f:3 [as=a2.f:10, outer=(3)]
-      ├── a.s:4 [as=a2.s:11, outer=(4)]
-      └── a.j:5 [as=a2.j:12, outer=(5)]
+ ├── scan a [as=a2]
+ │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9-12)
+ └── filters
+      └── a.k:1 = a2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Full join case.
 norm expect=RemoveJoinNotNullCondition
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
-project
+inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: (8)
- ├── fd: (8)-->(9-12), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3), (4)==(11), (11)==(4), (5)==(12), (12)==(5)
+ ├── fd: (8)-->(9-12), (1)-->(2-5), (1)==(8), (8)==(1)
  ├── scan a [as=a2]
  │    ├── columns: a2.k:8!null a2.i:9 a2.f:10!null a2.s:11 a2.j:12
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- └── projections
-      ├── a2.k:8 [as=a.k:1, outer=(8)]
-      ├── a2.i:9 [as=a.i:2, outer=(9)]
-      ├── a2.f:10 [as=a.f:3, outer=(10)]
-      ├── a2.s:11 [as=a.s:4, outer=(11)]
-      └── a2.j:12 [as=a.j:5, outer=(12)]
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a.k:1 = a2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # No-op case because i is nullable.
 norm expect-not=RemoveJoinNotNullCondition

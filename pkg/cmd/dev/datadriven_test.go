@@ -27,9 +27,8 @@ import (
 )
 
 const (
-	crdbCheckoutPlaceholder    = "crdb-checkout"
-	sandboxPlaceholder         = "sandbox"
-	testFixturesDirPlaceholder = "crdb-mock-test-fixtures"
+	crdbCheckoutPlaceholder = "crdb-checkout"
+	sandboxPlaceholder      = "sandbox"
 )
 
 // TestDataDriven makes use of datadriven to capture all operations executed by
@@ -63,7 +62,6 @@ func TestDataDriven(t *testing.T) {
 		osOpts := []os.Option{
 			os.WithLogger(log.New(logger, "", 0)),
 			os.WithDryrun(),
-			os.WithIntercept("echo $HOME", testFixturesDirPlaceholder),
 		}
 
 		if !verbose { // suppress all internal output unless told otherwise

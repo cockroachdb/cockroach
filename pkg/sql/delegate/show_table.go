@@ -154,8 +154,7 @@ SELECT
     direction,
     storing::BOOL,
     implicit::BOOL,
-    is_visible::BOOL AS visible,
-    visibility`
+    is_visible::BOOL AS visible`
 
 	if n.WithComment {
 		getIndexesQuery += `,

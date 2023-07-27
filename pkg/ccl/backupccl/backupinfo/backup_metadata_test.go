@@ -293,7 +293,7 @@ func checkStats(
 func testingReadBackupManifest(
 	ctx context.Context, store cloud.ExternalStorage, file string,
 ) (*backuppb.BackupManifest, error) {
-	r, _, err := store.ReadFile(ctx, file, cloud.ReadOptions{NoFileSize: true})
+	r, err := store.ReadFile(ctx, file)
 	if err != nil {
 		return nil, err
 	}

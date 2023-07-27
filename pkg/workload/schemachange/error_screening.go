@@ -564,9 +564,9 @@ SELECT count(*) > 0
 
 func getValidGenerationErrors() errorCodeSet {
 	return errorCodeSet{
-		pgcode.NumericValueOutOfRange:    struct{}{},
-		pgcode.FloatingPointException:    struct{}{},
-		pgcode.InvalidTextRepresentation: struct{}{},
+		pgcode.NumericValueOutOfRange:    true,
+		pgcode.FloatingPointException:    true,
+		pgcode.InvalidTextRepresentation: true,
 	}
 }
 

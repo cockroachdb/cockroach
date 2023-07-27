@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -39,9 +38,9 @@ import (
 // txnState contains state associated with an ongoing SQL txn; it constitutes
 // the ExtendedState of a connExecutor's state machine (defined in conn_fsm.go).
 // It contains fields that are mutated as side-effects of state transitions;
-// notably the kv.Txn. All mutations to txnState are performed through calling
-// fsm.Machine.Apply(event); see conn_fsm.go for the definition of the state
-// machine.
+// notably the KV client.Txn.  All mutations to txnState are performed through
+// calling fsm.Machine.Apply(event); see conn_fsm.go for the definition of the
+// state machine.
 type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
@@ -98,9 +97,6 @@ type txnState struct {
 	// The transaction's priority.
 	priority roachpb.UserPriority
 
-	// The transaction's isolation level.
-	isolationLevel isolation.Level
-
 	// The transaction's read only state.
 	readOnly bool
 
@@ -148,7 +144,7 @@ const (
 )
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
-// It creates a new kv.Txn and initializes it using the session defaults
+// It creates a new client.Txn and initializes it using the session defaults
 // and returns the ID of the new transaction.
 //
 // connCtx: The context in which the new transaction is started (usually a
@@ -186,7 +182,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	txn *kv.Txn,
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
-	isoLevel isolation.Level,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -228,9 +223,6 @@ func (ts *txnState) resetForNewSQLTxn(
 			ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
 			ts.mu.txn.SetDebugName(opName)
 			if err := ts.setPriorityLocked(priority); err != nil {
-				panic(err)
-			}
-			if err := ts.setIsolationLevelLocked(isoLevel); err != nil {
 				panic(err)
 			}
 		} else {
@@ -352,20 +344,6 @@ func (ts *txnState) setPriorityLocked(userPriority roachpb.UserPriority) error {
 		return err
 	}
 	ts.priority = userPriority
-	return nil
-}
-
-func (ts *txnState) setIsolationLevel(level isolation.Level) error {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return ts.setIsolationLevelLocked(level)
-}
-
-func (ts *txnState) setIsolationLevelLocked(level isolation.Level) error {
-	if err := ts.mu.txn.SetIsoLevel(level); err != nil {
-		return err
-	}
-	ts.isolationLevel = level
 	return nil
 }
 

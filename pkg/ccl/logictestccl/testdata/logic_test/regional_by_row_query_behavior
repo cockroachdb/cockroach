@@ -349,43 +349,49 @@ SELECT * FROM [
 │
 └── • render
     │
-    └── • lookup join (anti)
-        │ table: regional_by_row_table@uniq_idx (partial index)
-        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column4 = a)
-        │ pred: column5 > 0
+    └── • distinct
+        │ distinct on: arbiter_uniq_idx_distinct
+        │ nulls are distinct
         │
-        └── • lookup join (anti)
-            │ table: regional_by_row_table@uniq_idx (partial index)
-            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column4 = a)
-            │ pred: column5 > 0
+        └── • render
             │
             └── • lookup join (anti)
-                │ table: regional_by_row_table@regional_by_row_table_b_key
-                │ equality cols are key
-                │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = b)
+                │ table: regional_by_row_table@uniq_idx (partial index)
+                │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column4 = a)
+                │ pred: column5 > 0
                 │
                 └── • lookup join (anti)
-                    │ table: regional_by_row_table@regional_by_row_table_b_key
-                    │ equality cols are key
-                    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column5 = b)
+                    │ table: regional_by_row_table@uniq_idx (partial index)
+                    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column4 = a)
+                    │ pred: column5 > 0
                     │
-                    └── • cross join (anti)
+                    └── • lookup join (anti)
+                        │ table: regional_by_row_table@regional_by_row_table_b_key
+                        │ equality cols are key
+                        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = b)
                         │
-                        ├── • values
-                        │     size: 6 columns, 1 row
-                        │
-                        └── • union all
-                            │ limit: 1
+                        └── • lookup join (anti)
+                            │ table: regional_by_row_table@regional_by_row_table_b_key
+                            │ equality cols are key
+                            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column5 = b)
                             │
-                            ├── • scan
-                            │     missing stats
-                            │     table: regional_by_row_table@regional_by_row_table_pkey
-                            │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
-                            │
-                            └── • scan
-                                  missing stats
-                                  table: regional_by_row_table@regional_by_row_table_pkey
-                                  spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
+                            └── • cross join (anti)
+                                │
+                                ├── • values
+                                │     size: 6 columns, 1 row
+                                │
+                                └── • union all
+                                    │ limit: 1
+                                    │
+                                    ├── • scan
+                                    │     missing stats
+                                    │     table: regional_by_row_table@regional_by_row_table_pkey
+                                    │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
+                                    │
+                                    └── • scan
+                                          missing stats
+                                          table: regional_by_row_table@regional_by_row_table_pkey
+                                          spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
 
 # Tests for locality optimized search.
 
@@ -417,7 +423,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
   table: regional_by_row_table@regional_by_row_table_pkey
   spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8klGrmzAUx9_3KcJ52kaKxu5hBAZ33Fom9LZ3VdjgViTVczunNVkS6S3F7z602-6tuLH2oXkQcnL8nf8vegDzowQOoT_zbyPylkyXizvy4H-9n30M5uT1JAij8PPsDTlt0LjJZSXKZL1PtNwlVqxLJF8--UufqIJ8ICwmi-k09CPiAYVKZjgXWzTAH4BBTEFpmaIxUrelQ9cQZE_AXQp5pWrblmMKqdQI_AA2tyUCh6ids0SRoXZcoJChFXnZYQcj3QxWE1XgHijcyrLeVoYTVVCiCo8SQcmaku9AIVSiPXFWcLMChzkuxA0FWdvncMaKDQJnL2yCCXC3oZcJsSsJrVZP790zpdilUt71pNJzpby_Sj271JXUGWrMTjziZkB7LkdSOeNe43AUrxdlfM79LtEoWRn8r0lub9KItdkx2-BR1Mhap3ivZdr1HreLDtQVMjT2eDo-boKqO2LtBI1i--eff0lil5JYn-RdSvL6pPE_Se9OSO6pXUzhsZS7JM-Ag_trjQYevxe0L4iNaT9b-E3uOmy0V-2lP4rSIIU7UeAELeptXuXG5ilwq2tsmlc_AwAA__9wGtJB
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kF-r00AQxd_9FMM8qazkT32QgHDlmmKgttckoHATwjY7lJjc7Lq7wZaS7y5JHmoliLbcPs6ZOTPnN0c0PxoMMAlX4X0Kr2EZbz7DY_jtYfUhWsPLj1GSJl9Wr-B8QNOuki1viu2h0PJnYfm2Ifj6KYxDUDW8By-HzXKZhCn4yLCVgtb8iQwGj-hhzlBpWZIxUg_ScRyIxB4Dl2HVqs4Ocs6wlJowOKKtbEMYYDrciYkL0o6LDAVZXjXj2tlId7NqoWo6IMN72XRPrQlA1QxU7TPgDLYMviPDRPGh42R4l6HjOS7mPUPZ2VM4Y_mOMPB6dhmAdyOALNu_c58Lwr8dRHk5xCl710otSJM4y533M5hr-UYqZ_HH4Pxp_3_-F5NRsjX0T5vdIRqJHU0cRna6pActy_HMVG5G3ygIMnbqLqYiasfW-Jvfzd41Zv8a8-Kv5rdnZrfP-xe_AgAA__9014gb
 
 statement ok
 SET vectorize=on
@@ -477,7 +483,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
       table: regional_by_row_table@regional_by_row_table_pkey
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k1Fr2zAUhd_3K8R92oZCLCeDIRh0NA4LpEkXBzZoTFDs20yLY2mSTBqC__uws621cbomD9WDQVfX3z3nyD6A_ZUChzAYB9dz8p4MZ9Mbchd8vx1_Hk3I28EonIdfx-9IvcHgWqpMpMvVfmnUbunEKkXy7UswC4jekE-ERWQ6HIbBnPhAIVMJTsQWLfA7YBBR0EbFaK0yZelQNYySB-AeBZnp3JXliEKsDAI_gJMuReAwL-fMUCRouh5QSNAJmVbYVklXrdWl3uAeKFyrNN9mlhO9oURvfEoEJStKfgKFUIvypLuAxeLho7eALut6EBUUVO4eBVon1gicPXE0GgD3CnqZKfZ6puJzTbGTph695JkyCRpMaj6iosX2RHWU7vqNxnYpfkOKf2m-vVfK9-o_2fYahnovyNaikSIlZ0fcr3sey610hJ2U5jWk9c_JeoZWq8zii261OanDShOYrPFo3KrcxHhrVFz1HrfTClQVErTueOofN6OsOmLlBINi--9XfEpil5JYk-Q_S-qfJvWapN6lJL9J6j9L-lAjefWcIgr3qdotZQIcvD-r0_L4u6B8Qaxt-QGEP9Suws73ury-e5FapHAjNjhAh2YrM2mdjIE7k2NRvPkdAAD__67tHiA=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kl-L00AUxd_9FJf7pDKSP60gAWFlTbFQ27UJKGxCmGYuJSbNjDMT3KXku0uShzUSu7td6OP988s952SOaH5VGGAUrsLrGN7CYrv5Crfhj5vVp-UaXn9eRnH0bfUGxgua9oWseZXt7jMtf2eW7yqC71_CbQiqhI_gpbBZLKIwBh8Z1lLQmh_IYHCLHqYMlZY5GSN11zr2C0txh4HLsKhVY7t2yjCXmjA4oi1sRRhg3N3ZEhekHRcZCrK8qPrPTkq6muxmqqR7ZHgtq-ZQmwBUyUCVPgPOYMfgJzKMFO8mToJJcvfBTdDxHBfTlqFs7INAY_meMPBadp4J73Im8vNNPGhvaqkFaRIj3Wk7YXMt30nl-P8sTp_2z81vdqH8rh7JbvaE7Azpglfw7AjnY4-r4lBY8P4rxX1OllsyStaGnvSX3E4jiT0NvoxsdE43Wub9maHc9FzfEGTsMPWHYln3o_6d_Q17L4H9k_D8NDx7CTw_Cb8fwW6btq_-BAAA___NQ8qq
 
 query T
 EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
@@ -498,7 +504,7 @@ SET vectorize=off
 query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
 ----
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kFFr2zAQx9_3KY6D0nYoxPJehmDQ0njMLE27OLBBY4ISXVMttqVJMmkI-e7DTrc2IRlbH6YHg-7OP_1_t0b_o0CBWdJPrkbwFj4Ob67hLvl2279MB3DWS7NR9qV_DrsDjubaVLKYTFcTZ5aTIKcFwddPyTABu4APwHO4zCBQaeFMnj91JPTTzwmcnvS0nDtZnpwiw8ooGsiSPIo75JgztM7MyHvjmtK6HUjVI4qIoa5sHZpyznBmHKFYY9ChIBQ4ajIMSSpy3QgZKgpSFy32YNyLg9WJXdAKGV6Zoi4rL8AuGNhFzEAymDL4jgwzK5tOd4zj8eP7aIxd3o1AVgo4mPBADvMNQ1OH57A-yDmh4C_s0h6KaMNeJ8j_k-DFVu6oULwnxI8KPXt4cloWUFfGKXKkdlTyzQHzgekY2413nfu61AH40WjRXrT4X3Y9JG9N5Wkv29-91OGNBKk5bcW9qd2Mbp2ZtbPb600LaguKfNh24-0lrdoWb15wJMvfm31J4q8lRfuk-I-kdzukaJeUM7wvzHKiFQqMnk7nwOfXweYHOffNsrMHs2yxo5VtVnUvC08Mr-WCehTIlbrSPugZiuBq2mze_AwAAP__m_KD0g==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8keFr1EAQxb_7VwwDpa2sJBu_SEBoaSMG47VeDhR64di7Hc71kt11d4MtR_53uUQ4IxdBBT_Oe_Mm75fdo_9aY4plVmQ3C3gOb-Z37-Eh-3RfXOczuLjNy0X5obiE8YKjrTJa1Kv108qZb6sg1jXBx7fZPAO7g9fAK7guIVBj4UJc_nAEFPm7DM7PbpXYOtGcnSNDbSTNREMe0wfkWDG0zmzIe-MO0r5fyOUjpjFDpW0bDnLFcGMcYbrHoEJNmOLi0GFOQpKLYmQoKQhV92dP1r06qa7sjp6Q4Y2p20b7FOyOgd0lDASDNYMvyLC04uBES1wuH1_FS4x4FIPQEjiY8JkcVh1D04ZjWR_EljDlHfs7IP6fgK4GmEmAZBLg2NuTU6KGVhsnyZEcVa-6E6Qz88LYKBkzFqpRAfhklfhP_uWcvDXa0y9dpi5XDEluaeDypnUbundm039mGO_6XC9I8mFwk2HIdW_1j_1zmP9LOPlt-OUoHHdV9-x7AAAA__-eCkLr
 
 statement ok
 RESET vectorize
@@ -809,7 +815,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * 
               table: child@child_pkey
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslNFr6kgUxt_3rzicF3VJcRJdKAOFlBrZFBu7GthCFUmTUzu3MZM7k1BL8X-_TGJvTajltjQP0Zwcf_N9Zz7nBfXPFDnOvYl3EcLfMJ5Nr-DWu7menPsBdEf-PJz_N-lBsyF-EGkC___rzTzoBtMQvBvTCN1mWx4pyop9X74SCZxBvDJfej04D0bQjeuizXpLmI7Hcy8EBy3MZEJBtCGN_BZtXFqYKxmT1lKZ0kvV4Cdb5MxCkeVlYcpLC2OpCPkLFqJICTmG0V1KM4oSUn2GFiZURCKtsJUHt7qv8kd6RgsvZFpuMs3ByLL2UtHCeR6Zan-Bi8X2lC2wb7M-gyhLwAZZPJDC5c5CWRZvSnQRrQm5fSDdHyFnO-tr6u1vUO_ulR9V67TU2kfVvonUpESUQplJlZCipKFzuXvHViBPZN53moYmYiMKsI9KYy1pzmcGeSlFtp_joLls-JwTh4k3DuE8CH24nPoBWlgn160_Xgc8kfKxzOGHFBnIjEPXHcIZbDtD1uGcuzZjNjvdB9t14AzcQe9wX_J6X1Ryt1K0FjI7anbQMjv4otnh95o1J8K2c3po14JtJ274_5YBDFsDGH5mADPSucw0tZL4Z7k6sU1kKVlTHXMtSxXTtZJx1Vs_TitQVUhIF_Vbp37ws-qVbVZQFG1-_48OSfZXSaxNcj4kDRokdkhy2qTBh6ThcdKgTRp-SPrnOImZ2d-n8smcXBzZ_jp55_Z6oflBtNYmAPMH-VRhTdA18vso1WThVfRIIypIbUQmdCFi5IUqabf761cAAAD__yS4NdA=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9Fro0AQxt_vrxjmJcmxR1bjQVkoWFrDWTzTS4QrNBKsO7Re7a63KqSU_O-HmqMxXALt5UXd2fnc3zd8-4rl7xwFLrzAu4zgM0zns-9w593eBBd-CMMrfxEtfgQj6Dekj1ku4ec3b-7BMJxF4N02jTDstxWJIVVt-4pVJuEc0lXzMRrBRXgFw7QrWnwUw2w6XXgR2MhQaUlh8kwliju0MGZYGJ1SWWrTlF7bBl-uUXCGmSrqqinHDFNtCMUrVlmVEwqMkvuc5pRIMmOODCVVSZa3v209uO1zVTzRCzK81Hn9rEoBDRbboiLDRZE01fESl8v1GV_i2OJjDomSYIGuHslgvGGo6-qNpKySB0JhbdjHaK0T0Lpb0oN09kG6N6iSTJbkUCttJBmSPa548w8bof6ii7HdNxBkz1kF1kEU_p5BXetMbec06R8TvRQkIPCmEVyEkQ_XMz9Ehl0S3e71d4CB1k91Ab90pkArAUPXgXNYDxw-EEK4FucWP9sG1bXhHNzJaHfuRTd3I-9Xhh4yrQ6am3zQnHNac82NXg_Odu0xWA_Snt-TGHbeY3hOZaFVSXvJOpSTmCHJB-pSWurapHRjdNoe0y1nra4tSCqrbtfuFr5qt9p7uSu2_kdsHxVPemK-L54cFTvHxc5R8dc9cbz59CcAAP__ibHiWg==
 
 statement ok
 SET vectorize=on
@@ -886,7 +892,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk0Fv4jwQhu_frxjNBfjkCif0UFmqRFWClopClyBtpYJQmkyptyHO2o5KVfHfV05oS9hSbavNweDx-PXjd8bPaH6lKDAMhsH5FP6H_mR8CTfB9dXwbDCCZm8QTsPvwxbUE-J7mSbw41swCSC4djnQrGfkkabMblPyhUzgFOKF-9OCs1EPmnEV83hrDuN-Pwym4CPDTCU0ilZkUNygh3OGuVYxGaO0Cz2XCYNkjYIzlFleWBeeM4yVJhTPaKVNCQVOo9uUJhQlpNscGSZkI5mWsiV9txwX-QM9IcNzlRarzAhwWGxLigzDPHLR9gxns_UJn2Hb420OUZaAB8rek8b5hqEq7BuJsdGSUHg76IMeCr5hX6P3_gF9d0t-kNbfo_UO0r5BGtIySqHIlE5IU1LjnG_eudZIHam87dcvNJQracE7iMb30PzPGHmhZLb1sVM_dvqUk4Bh0J9CGFwO4GI8GCHDqnG71c-LwUOlHoocfiqZgcoENLvHcArrxjFvCCG6HuceP9k2dteHU-h2WshwQitlCdJ3drvHtW6c7O5nsG7ENcE_FV8rnVeV1sntQtNSquygfZ09-zqfsW9CJleZob3S_l2hjjzXA5Qsqeobowod05VWcZlbTcelUBlIyNhq1a8mg6xc8twJmqLVa2PuKnlfVeL7Sv6HSp2aEt9V8veVOh8qHR9W4s6xu1Q9ugcskG-_o3eGlw_dhmhpXNnCe_VYyrrmNijuotQQw8vogXpkSa9kJo2VMQqrC9ps_vsdAAD__6Zd4k0=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9Fro04Qx99_f8UwL0l-7JHV5CEsBCyt4Sw26UXhCo0E6w6pV7PrrQopIf_7oeauNdcUencv6s7Od_az3xn3WHzPUGDg-u5lCP_DbLm4gXv37ta_8ObQv_KCMPjiD6CbkDymmYSvn92lC-5dnQP9bkYeG1LlMSVfpxKmkKzrjwFczK-gn7Qxiw8iWMxmgRuCjQyVljSPt1SguEcLI4a50QkVhTZ1aN8keHKHgjNMVV6VdThimGhDKPZYpmVGKDCMHzJaUizJDDkylFTGadaUbeid5rnOn-gZGV7qrNqqQkCNxY6kyDDI4zo6XOFqtZvwFQ4tPuQQKwkW6PKRDEYHhroqX0iKMt4QCuvA_ozW-ge0zpH0LJ19lu4FqiCTxhlUShtJhmSHKzq8cY25_qTzod29gJ9u0xKssyj8I0Zd61QdfRp1jwmfcxLgu7MQAvfGg-uFN0eG7SA67eungb7WT1UO33SqQCsBfWcMU9j1xrwnhHAszi0-OQ6qY8MUnNEAGS5pq0uC7A11_bPsepPXega7XtIp-HvFX53M204a-bA2tEm1OmvX6CN2LanItSropHXnGhExJLmhdgwKXZmEbo1OmmPa5aLRNQFJRdnu2u3CU81WM_ivxdbfiO13xaOOmJ-KR--Kxyfi6PDfjwAAAP__S-6YJw==
 
 statement ok
 SET vectorize=on
@@ -964,7 +970,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9FO4zoQhu_PU4zmpnBkVDvhAllCCqJBJ6iknLbSrkSrKiRD8ZLGWdsRRajvvkpSoO1StKD1hROP7d-f_xk_o_2Zo8RR2A_Px_AvXAwHV3ATfr_un0UxHPSi0Xj0f_8Qthek9yrPIIrjcAiXgyiGMjFUOBjEUM5UBqeQzpqfb_-FwxDSNib4FAYXF6NwDB4yLHRGcbIgi_IGBU4ZlkanZK02dei5WRBlS5ScoSrKytXhKcNUG0L5jE65nFDiOLnNaUhJRqbLkWFGLlF5I9uABk0_Kx_oCRme67xaFFY2VGwNigxHZVJHuxOcTJYnfIJdwbsckiIDAdrdk8HpiqGu3BuJdcmcUIoN9KiHkq_Y1-jFX6AP1uR7ab0dWrGX9g3SklFJDlWhTUaGsi3O6eqda8X6SJddb_tCfbVQDsReNL6D5n3GyEutirWP_vaxbXUG7efFyb7WD1UJP7QqQBcSDoJjOIVl55h3pJSB4Fzwk0M4i3twEHhwCoF_iAyHtNCOIH9nd_1glp2Tzf0Mlp10S_B3xdeUlm1KTXY7MzRXukCGg8pJCAQLPBb4e33zd3zzP-PbkGypC0s7Of2zDB2JOvmUzaktGKsrk9K10Wmzth0OGqEmkJF17azXDqKimRL1CYaSxWtFbiqJryrxXSXvQyV_S4lvKnm7Sv6HSsf7lXjt2F2uH-uXK5Gv29E73UvDekMyt3XaRvf6sZEdP5W16XdJbonhVfJAPXJkFqpQ1qkUpTMVrVb__AoAAP__93baww==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAQgN_3K457STs0Itt9CIKAS-swl8zunMAGjQmudaReHcmTZcgI-e8jdrbWWVPothfbOuk7fbqTt1h_L1HgLJgGV3N4D5Mk_gR3wdfb6WUYwdl1OJvPPk_Pob8gfyhKCWEUBQncxGEEVWZIWYgjqJaFhDHky_bjy8cgCSDvYg5PIZ5MZsEcXGSotKQoW1ON4g4dTBlWRudU19rsQ9t2QSg3KDjDQlWN3YdThrk2hGKLtrAlocB5dl9SQpkkM-TIUJLNirJN24r67XNZPdIPZHily2atatFasYMoMpxV2T46XOBisRnxBQ4dPuSQKQkOaPtABtMdQ93YJ5PaZitC4ezY39k6_8HWP5ietHNP2j1J1WSKrIRGaSPJkOx5pbsXjhHpD7oauv0DTIt1YcE5qcLfUqgbXahDnbz-Nt1t87vXr0pNtX5sKvimCwVaCTjzL2AMm8EFHwghfIdzh4_O4TK6hjPfhTH43jkyTGitLUH5Ar3_ATaD0XOewWaQ9xL-mfF3y6quZUbeLw2tCq2QYdxYAb7DfJf53sk6eW-pU0J1pVVNRz071YGUIckVdf2vdWNyujU6b7fphnHLtQFJte1m3W4QqnaqvfHPYedfYPdV2OvB_Bj2XoUvjuB09-5nAAAA__-kyJCd
 
 statement ok
 SET vectorize=on
@@ -1042,7 +1048,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1FP2zwUhu-_X3F0bgqfjGqnXCBLSEE01YpKw9pMm0SrKiSH4pHGme2IItT_PiUp0HYUDTRfOPGx_frxOa-f0P7KUOI4GATnEfwPvVF4CdfBj6vBWX8IB93-OBp_HRzC9oLkTmUpDIJeBBdhfwhFbCh3EA6hmKkUTiGZ1T_fvwSjAJImJvgUwl5vHETgIcNcpzSMF2RRXqPAKcPC6ISs1aYKPdUL-ukSJWeo8qJ0VXjKMNGGUD6hUy4jlBjFNxmNKE7JtDkyTMnFKqtla06_7mfFPT0iw3OdlYvcypqKrUGR4biIq2h7gpPJ8oRPsC14m0OcpyBAuzsyOF0x1KV7JbEunhNKsYHe76LkK_Y5evEP6P01-V5ab4dW7KV9hbRkVJxBmWuTkqF0i3O6euNaQ32ki7a3faGBWigHYi8a30HzPpLIC63ydR4728dGjwXJxq3htygY1Z5Fho1r_ebznOGB1vdlAT-1ykHnEg78YziFZeuYt6SUvuBc8JNDOBt24cD34BT8ziEyHNFCO4Lsjd3VO1q2Tjb3M1i2ki3BPxVfSl00pTbpzczQXOkcGYalk-AL5nvM7-zNZ2cnn52P5HNEttC5pZ1a_13ljkRlCkrn1BjJ6tIkdGV0Uq9thmEtVAdSsq6Z9ZpBP6-nRHWCoXjx4tRNJfFZJb6r5L2r1NlS4ptK3q5S512l4_1KvMrYbaYfqhctka_b0Rvdc8NqQzy3VdnGd_qhlq3cblHexpklhpfxPXXJkVmoXFmnEpTOlLRa_fc7AAD__0CL4Qg=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAQx9_3KY57STs0Ijt9KIKCS-uwFM_uHI8NGhNc62i9OpIny5BS8t1H5G6ts6bQbS-2dNL_9NP_Tg_Y_qhR4DyMwrMM3sM0TT7BVfjtMjqdxXBwPptn88_RIQw3lLdVLSEKpxlcJLMYmsKQspDE0CwrCSdQLt3g68cwDaHsYx7PIZlO52EGPjJUWlJcrKhFcYUe5gwbo0tqW222oQe3YSbXKDjDSjWd3YZzhqU2hOIBbWVrQoFZcV1TSoUkM-bIUJItqtqldZyB-y6bO7pHhme67laqFY6KPYIiw3lTbKPjBS4W62O-wLHHxxwKJcEDbW_JYL5hqDv7RNLa4oZQeBv2d7Tef6ANHkn30vl76Z6gWjJVUUOntJFkSA648s0L14j1B92M_eEFompVWfD2ovC3GHWhK_Xo02R4THbfkOi7L_mShanrQWTYd2HQ_345GGl91zXwXVcKtBJwEBzBCaxHR3wkhAg8zj1-fAin8TkcBD6cQDA5RIYprbQlqF9Qb9_FenT8XM9gPSoHCf_M-LuUTV9KI6-Xhm4qrZBh0lkBgccCnwWTvf5N3uJfSm2jVUs7tdxXmZwhyRvq-6LVnSnp0ujSHdNPE6dzAUmt7Vf9fjJTbsm9hOdi71_E_qviyUDMd8WTV8VHO-J88-5nAAAA___MpJbi
 
 statement ok
 SET vectorize=on
@@ -1787,7 +1793,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
             └── • scan buffer
                   label: buffer 1
 
-query TIIIIIIIIT colnames,rowsort
+query TIIIIIIIIT colnames
 SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)
 LEFT JOIN regional_by_row_table t ON v.pk = t.pk;
 ----
@@ -1875,7 +1881,7 @@ CREATE TABLE regional_by_row_table_as (
   FAMILY (pk, a, b)
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col
 
-query TI rowsort
+query TI
 INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
 RETURNING crdb_region_col, pk
 ----
@@ -2610,35 +2616,40 @@ OFFSET
 ----
  │    ├── scan regional_by_row_table_as4@a_idx
  │    │    ├── constraint: /11/10/9
- │    │    │    ├── [/'ap-southeast-2'/6 - /'ap-southeast-2'/6]
- │    │    │    ├── [/'ap-southeast-2'/12 - /'ap-southeast-2'/12]
- │    │    │    ├── [/'ap-southeast-2'/15 - /'ap-southeast-2'/15]
- │    │    │    ├── [/'ap-southeast-2'/18 - /'ap-southeast-2'/18]
- │    │    │    ├── [/'ap-southeast-2'/24 - /'ap-southeast-2'/24]
+ │    │    │    ├── [/'ap-southeast-2'/1 - /'ap-southeast-2'/2]
+ │    │    │    ├── [/'ap-southeast-2'/4 - /'ap-southeast-2'/6]
+ │    │    │    ├── [/'ap-southeast-2'/8 - /'ap-southeast-2'/8]
+ │    │    │    ├── [/'ap-southeast-2'/10 - /'ap-southeast-2'/12]
+ │    │    │    ├── [/'ap-southeast-2'/14 - /'ap-southeast-2'/19]
+ │    │    │    ├── [/'ap-southeast-2'/22 - /'ap-southeast-2'/25]
+ │    │    │    ├── [/'ap-southeast-2'/28 - /'ap-southeast-2'/28]
  │    │    │    ├── [/'ap-southeast-2'/30 - /'ap-southeast-2'/30]
- │    │    │    ├── [/'ap-southeast-2'/33 - /'ap-southeast-2'/33]
- │    │    │    └── [/'ap-southeast-2'/39 - /'ap-southeast-2'/39]
+ │    │    │    ├── [/'ap-southeast-2'/33 - /'ap-southeast-2'/34]
+ │    │    │    └── [/'ap-southeast-2'/39 - /'ap-southeast-2'/40]
  │    │    ├── limit: 5
  │    │    └── flags: force-index=a_idx
  │    └── scan regional_by_row_table_as4@a_idx
  │         ├── constraint: /16/15/14
- │         │    ├── [/'ca-central-1'/1 - /'ca-central-1'/1]
- │         │    ├── [/'ca-central-1'/4 - /'ca-central-1'/4]
- │         │    ├── [/'ca-central-1'/10 - /'ca-central-1'/10]
- │         │    ├── [/'ca-central-1'/16 - /'ca-central-1'/16]
- │         │    ├── [/'ca-central-1'/19 - /'ca-central-1'/19]
- │         │    ├── [/'ca-central-1'/22 - /'ca-central-1'/22]
- │         │    ├── [/'ca-central-1'/25 - /'ca-central-1'/25]
+ │         │    ├── [/'ca-central-1'/1 - /'ca-central-1'/2]
+ │         │    ├── [/'ca-central-1'/4 - /'ca-central-1'/6]
+ │         │    ├── [/'ca-central-1'/8 - /'ca-central-1'/8]
+ │         │    ├── [/'ca-central-1'/10 - /'ca-central-1'/12]
+ │         │    ├── [/'ca-central-1'/14 - /'ca-central-1'/19]
+ │         │    ├── [/'ca-central-1'/22 - /'ca-central-1'/25]
  │         │    ├── [/'ca-central-1'/28 - /'ca-central-1'/28]
- │         │    ├── [/'ca-central-1'/34 - /'ca-central-1'/34]
- │         │    ├── [/'ca-central-1'/40 - /'ca-central-1'/40]
- │         │    ├── [/'us-east-1'/2 - /'us-east-1'/2]
- │         │    ├── [/'us-east-1'/5 - /'us-east-1'/5]
+ │         │    ├── [/'ca-central-1'/30 - /'ca-central-1'/30]
+ │         │    ├── [/'ca-central-1'/33 - /'ca-central-1'/34]
+ │         │    ├── [/'ca-central-1'/39 - /'ca-central-1'/40]
+ │         │    ├── [/'us-east-1'/1 - /'us-east-1'/2]
+ │         │    ├── [/'us-east-1'/4 - /'us-east-1'/6]
  │         │    ├── [/'us-east-1'/8 - /'us-east-1'/8]
- │         │    ├── [/'us-east-1'/11 - /'us-east-1'/11]
- │         │    ├── [/'us-east-1'/14 - /'us-east-1'/14]
- │         │    ├── [/'us-east-1'/17 - /'us-east-1'/17]
- │         │    └── [/'us-east-1'/23 - /'us-east-1'/23]
+ │         │    ├── [/'us-east-1'/10 - /'us-east-1'/12]
+ │         │    ├── [/'us-east-1'/14 - /'us-east-1'/19]
+ │         │    ├── [/'us-east-1'/22 - /'us-east-1'/25]
+ │         │    ├── [/'us-east-1'/28 - /'us-east-1'/28]
+ │         │    ├── [/'us-east-1'/30 - /'us-east-1'/30]
+ │         │    ├── [/'us-east-1'/33 - /'us-east-1'/34]
+ │         │    └── [/'us-east-1'/39 - /'us-east-1'/40]
  │         ├── limit: 5
  │         └── flags: force-index=a_idx
  └── aggregations
@@ -3269,8 +3280,7 @@ index-join t88047
 query TTT
 SELECT * FROM t88047
 WHERE json_col->'loc' @> '{"state":"NY"}'
-ORDER BY 2
-LIMIT 2
+  LIMIT 2
 ----
 {"loc": {"state": "NY"}}  Big Apple          us-east-1
 {"loc": {"state": "NY"}}  Statue of Liberty  us-east-1
@@ -3282,8 +3292,7 @@ DROP INDEX t88047_inv_idx
 query TTT
 SELECT * FROM t88047
 WHERE json_col->'loc' @> '{"state":"NY"}'
-ORDER BY 2
-LIMIT 2
+  LIMIT 2
 ----
 {"loc": {"state": "NY"}}  Big Apple          us-east-1
 {"loc": {"state": "NY"}}  Statue of Liberty  us-east-1
@@ -3436,42 +3445,3 @@ distribute
       │    └── filters
       │         └── t1.b = regional_by_row_table_virt_partial.pk
       └── 1
-
-subtest groupByUnique
-
-# GROUP BY unique column v doesn't allow non-aggregate expressions in the
-# SELECT list because v is not marked as NOT NULL.
-statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT pk, a, b FROM regional_by_row_table_virt GROUP BY v;
-
-statement ok
-ALTER TABLE regional_by_row_table_virt ALTER COLUMN v SET NOT NULL
-
-# GROUP BY unique column v allows non-aggregate expressions in the
-# SELECT list because v is marked as NOT NULL.
-query III
-SELECT pk, a, b FROM regional_by_row_table_virt GROUP BY v;
-----
-1  1  1
-
-# GROUP BY unique index column "a" doesn't allow non-aggregate expressions in
-# the SELECT list because "a" is not marked as NOT NULL.
-statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT pk FROM regional_by_row_table_virt GROUP BY a;
-
-statement ok
-ALTER TABLE regional_by_row_table_virt ALTER COLUMN v SET NOT NULL
-
-# GROUP BY unique index column a allows non-aggregate expressions in the
-# SELECT list because v is marked as NOT NULL.
-query I
-SELECT pk FROM regional_by_row_table_virt GROUP BY v;
-----
-1
-
-# GROUP BY unique expression index (a+10) doesn't currently allow non-aggregate
-# expressions in the SELECT list. This could potentially be supported in the
-# future. The index need not be an expression index if the GROUP BY expression
-# can be proven to be monotonically increasing or decreasing.
-statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
-SELECT pk FROM regional_by_row_table_virt GROUP BY (a+10);

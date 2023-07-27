@@ -746,7 +746,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 				l.Printf("%d of %d resolved timestamps validated, latest is %s behind realtime",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()))
 
-				l.Printf("%s was spent validating this resolved timestamp: %s", timeutil.Since(noteResolvedStartTime), resolved)
+				l.Printf("%s was spent validating this resolved timestamp: %s", timeutil.Since(noteResolvedStartTime))
 				l.Printf("%s was spent validating %d rows", timeSpentValidatingRows, numRowsValidated)
 
 				numRowsValidated = 0
@@ -1014,7 +1014,7 @@ func registerCDC(r registry.Registry) {
 		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
-		Tags:            registry.Tags("manual"),
+		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)

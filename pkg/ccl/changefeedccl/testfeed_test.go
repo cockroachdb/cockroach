@@ -16,6 +16,8 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -40,25 +42,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	goparquet "github.com/fraugster/parquet-go"
 	"github.com/jackc/pgx/v4"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -66,28 +69,24 @@ import (
 )
 
 type sinklessFeedFactory struct {
-	s serverutils.TestTenantInterface
-	// postgres url used for creating sinkless changefeeds. This may be the same as
-	// the rootURL.
-	sink url.URL
-	// postgres url for the root user, used for test internals.
-	rootURL     url.URL
+	s           serverutils.TestTenantInterface
+	sink        url.URL
 	sinkForUser sinkForUser
+	currentDB   func(db *string) error
 }
 
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.TestTenantInterface, sink url.URL, rootConn url.URL, sinkForUser sinkForUser,
+	s serverutils.TestTenantInterface, sink url.URL, sinkForUser sinkForUser,
 ) cdctest.TestFeedFactory {
-	return &sinklessFeedFactory{s: s, sink: sink, rootURL: rootConn, sinkForUser: sinkForUser}
+	return &sinklessFeedFactory{s: s, sink: sink, sinkForUser: sinkForUser}
 }
 
-// AsUser executes fn as the specified user.
 func (f *sinklessFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) error {
 	prevSink := f.sink
 	password := `hunter2`
-	if err := f.setPassword(user, password); err != nil {
+	if err := setPassword(user, password, f.sink); err != nil {
 		return err
 	}
 	defer func() { f.sink = prevSink }()
@@ -110,8 +109,8 @@ func (f *sinklessFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) 
 	return nil
 }
 
-func (f *sinklessFeedFactory) setPassword(user, password string) error {
-	rootDB, err := gosql.Open("postgres", f.rootURL.String())
+func setPassword(user, password string, uri url.URL) error {
+	rootDB, err := gosql.Open("postgres", uri.String())
 	if err != nil {
 		return err
 	}
@@ -124,6 +123,13 @@ func (f *sinklessFeedFactory) setPassword(user, password string) error {
 func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
 	sink := f.sink
 	sink.RawQuery = sink.Query().Encode()
+	if f.currentDB == nil {
+		sink.Path = `d`
+	} else {
+		if err := f.currentDB(&sink.Path); err != nil {
+			return nil, err
+		}
+	}
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).
 	pgxConfig, err := pgx.ParseConfig(sink.String())
@@ -158,9 +164,6 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 	// Fixme.
 	seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
 	if _, ok := t[seenKey]; ok {
-		if log.V(1) {
-			log.Infof(context.Background(), "skip dup %s", seenKey)
-		}
 		return false
 	}
 	t[seenKey] = struct{}{}
@@ -351,6 +354,13 @@ func (r *reportErrorResumer) OnFailOrCancel(
 	return r.wrapped.OnFailOrCancel(ctx, execCtx, jobErr)
 }
 
+// OnPauseRequest implements PauseRequester interface.
+func (r *reportErrorResumer) OnPauseRequest(
+	ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress,
+) error {
+	return r.wrapped.(*changefeedResumer).OnPauseRequest(ctx, execCtx, txn, details)
+}
+
 type wrapSinkFn func(sink Sink) Sink
 
 // jobFeed indicates that the feed is an "enterprise feed" -- that is,
@@ -500,7 +510,7 @@ func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
 		if minHWM.Less(current) {
 			return nil
 		}
-		return errors.Newf("waiting to tick: current=%s min=%s", current, minHWM)
+		return errors.New("waiting to tick")
 	}, 10*time.Second)
 }
 
@@ -626,11 +636,10 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
-	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
 }
@@ -675,18 +684,18 @@ func newDepInjector(srvs ...feedInjectable) *depInjector {
 			}
 
 		// Arrange for error reporting resumer to be used.
-		s.JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeChangefeed,
-			func(raw jobs.Resumer) jobs.Resumer {
-				f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
-				return &reportErrorResumer{
-					wrapped: raw,
-					jobFailed: func() {
-						f.jobFailed(f.FetchTerminalJobErr())
-					},
-				}
-			},
-		)
+		s.JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
+			map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
+					f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
+					return &reportErrorResumer{
+						wrapped: raw,
+						jobFailed: func() {
+							f.jobFailed(f.FetchTerminalJobErr())
+						},
+					}
+				},
+			}
 	}
 
 	return di
@@ -739,27 +748,25 @@ func (di *depInjector) getJobFeed(jobID jobspb.JobID) *jobFeed {
 }
 
 type enterpriseFeedFactory struct {
-	s  serverutils.TestTenantInterface
-	di *depInjector
-	// db is used for creating changefeeds. This may be the same as rootDB.
-	db *gosql.DB
-	// rootDB is used for test internals.
+	s      serverutils.TestTenantInterface
+	di     *depInjector
+	db     *gosql.DB
 	rootDB *gosql.DB
 }
 
-func (e *enterpriseFeedFactory) configureUserDB(db *gosql.DB) {
-	e.db = db
-}
-
 func (e *enterpriseFeedFactory) jobsTableConn() *gosql.DB {
+	if e.rootDB == nil {
+		return e.db
+	}
 	return e.rootDB
 }
 
-// AsUser uses the previous connection to ensure
+// AsUser uses the previous (assumed to be root) connection to ensure
 // the user has the ability to authenticate, and saves it to poll
 // job status, then implements TestFeedFactory.AsUser().
 func (e *enterpriseFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) error {
 	prevDB := e.db
+	e.rootDB = e.db
 	defer func() { e.db = prevDB }()
 	password := `password`
 	_, err := e.rootDB.Exec(fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
@@ -821,15 +828,14 @@ func getInjectables(srvOrCluster interface{}) (serverutils.TestTenantInterface, 
 // makeTableFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeTableFeedFactory(
-	srvOrCluster interface{}, rootDB *gosql.DB, sink url.URL,
+	srvOrCluster interface{}, db *gosql.DB, sink url.URL,
 ) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	return &tableFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:      s,
-			di:     newDepInjector(injectables...),
-			db:     rootDB,
-			rootDB: rootDB,
+			s:  s,
+			di: newDepInjector(injectables...),
+			db: db,
 		},
 		uri: sink,
 	}
@@ -926,7 +932,7 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return toSend, nil
 		}
 
-		if err := timeutil.RunWithTimeout(
+		if err := contextutil.RunWithTimeout(
 			context.Background(), timeoutOp("tableFeed.Next", c.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -1021,15 +1027,14 @@ type cloudFeedFactory struct {
 // makeCloudFeedFactory returns a TestFeedFactory implementation using the cloud
 // storage uri.
 func makeCloudFeedFactory(
-	srvOrCluster interface{}, rootDB *gosql.DB, dir string,
+	srvOrCluster interface{}, db *gosql.DB, dir string,
 ) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	return &cloudFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:      s,
-			di:     newDepInjector(injectables...),
-			db:     rootDB,
-			rootDB: rootDB,
+			s:  s,
+			di: newDepInjector(injectables...),
+			db: db,
 		},
 		dir: dir,
 	}
@@ -1053,44 +1058,42 @@ func (f *cloudFeedFactory) Feed(
 			tree.KVOption{Key: changefeedbase.OptKeyInValue},
 		)
 	}
+	// Determine if we can enable parquet output if the changefeed is compatible
+	// with parquet format, if no format is specified. If it is, we will use
+	// parquet format with a probability of 0.4. The rest of the time json is used
+	parquetPossible := true
 
-	formatSpecified := false
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
-		if string(opt.Key) == changefeedbase.OptFormat {
-			formatSpecified = true
-		}
 		if string(opt.Key) == changefeedbase.OptEnvelope {
 			explicitEnvelope = true
 		}
-	}
 
-	if !formatSpecified {
-		// Determine if we can enable the parquet format if the changefeed is not
-		// being created with incompatible options. If it can be enabled, we will use
-		// parquet format with a probability of 0.4.
-		parquetPossible := includeParquestTestMetadata
-		for _, opt := range createStmt.Options {
-			for o := range changefeedbase.ParquetFormatUnsupportedOptions {
-				if o == string(opt.Key) {
-					parquetPossible = false
-					break
-				}
+		if string(opt.Key) == changefeedbase.OptFormat {
+			parquetPossible = false
+			break
+		}
+		for o := range changefeedbase.InitialScanOnlyUnsupportedOptions {
+			if o == string(opt.Key) {
+				parquetPossible = false
+				break
 			}
 		}
-		randNum := rand.Intn(5)
-		if randNum < 0 {
-			parquetPossible = false
-		}
-		if parquetPossible {
-			createStmt.Options = append(
-				createStmt.Options,
-				tree.KVOption{
-					Key:   changefeedbase.OptFormat,
-					Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
-				},
-			)
-		}
+	}
+	randNum := rand.Intn(5)
+	if randNum < 3 {
+		parquetPossible = false
+	}
+	if parquetPossible {
+		TestingSetIncludeParquetMetadata()
+		log.Infof(context.Background(), "Using parquet format")
+		createStmt.Options = append(
+			createStmt.Options,
+			tree.KVOption{
+				Key:   changefeedbase.OptFormat,
+				Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
+			},
+		)
 	}
 
 	feedDir := feedSubDir()
@@ -1139,9 +1142,8 @@ type cloudFeed struct {
 	dir    string
 	isBare bool
 
-	resolved  string
-	seenFiles map[string]struct{}
-	rows      []*cdctest.TestFeedMessage
+	resolved string
+	rows     []*cdctest.TestFeedMessage
 }
 
 var _ cdctest.TestFeed = (*cloudFeed)(nil)
@@ -1184,19 +1186,19 @@ func extractFieldFromJSONValue(
 
 	if isBare {
 		meta := make(map[string]gojson.RawMessage)
-		if metaVal, haveMeta := parsed[metaSentinel]; haveMeta {
+		if metaVal, haveMeta := parsed[jsonMetaSentinel]; haveMeta {
 			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
 				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", metaVal)
 			}
 			field = meta[fieldName]
 			delete(meta, fieldName)
 			if len(meta) == 0 {
-				delete(parsed, metaSentinel)
+				delete(parsed, jsonMetaSentinel)
 			} else {
 				if metaVal, err = reformatJSON(meta); err != nil {
 					return nil, nil, err
 				}
-				parsed[metaSentinel] = metaVal
+				parsed[jsonMetaSentinel] = metaVal
 			}
 		}
 	} else {
@@ -1225,140 +1227,199 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	return key, value, nil
 }
 
-// appendParquetTestFeedMessages function reads the parquet file and converts
-// each row to its JSON equivalent and appends it to the cloudfeed's row object.
+func (c *cloudFeed) decodeParquetValueAsJSON(value interface{}) (interface{}, error) {
+	switch vv := value.(type) {
+	case []byte:
+		// Currently, for encoding from CRDB data type to Parquet data type, for
+		// any complex structure (that is, other than ints and floats), it is
+		// always a byte array which is the string representation of that datum
+		// (except for arrays, see below). Therefore, if the parquet reader
+		// decodes a column value as a Go native byte array, then we can be sure
+		// that it is the equivalent string representation of the CRDB datum.
+		// Hence, we can use this value to construct the final JSON object which
+		// will be used by assertPayload to compare actual and expected JSON
+		// objects.
+
+		// Ideally there should be no need to convert byte array to string but
+		// JSON encoder will encode byte arrays as base 64 encoded strings.
+		// Hence, we need to convert to string to tell Marshal to decode it as a
+		// string. For every other Go native type, we can use the type as is and
+		// json.Marhsal will work correctly.
+		return string(vv), nil
+	case map[string]interface{}:
+		// This is CRDB ARRAY data type (only data type for which we use parquet
+		// LIST logical type. For all other CRDB types, it's either a byte array
+		// or a primitive parquet type). See importer.NewParquetColumn for
+		// details on how CRDB Array is encoded to parquet. (read it before
+		// reading the rest of the comments). Ideally, the parquet reader should
+		// decode the encoded CRDB array datum as a go native list type. But we
+		// use a low level API provided by the vendor which decodes parquet's
+		// LIST logical data type
+		// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+		// into this weird map structure in Go (It actually makes a lot of sense
+		// why this is done if you understand the parquet LIST logical data
+		// type). A higher level API would convert this map data structure into
+		// go native list type which is what the code below does. This would
+		// probably need to be changed if the parquet vendor is changed.
+
+		// TODO(ganeshb): Make sure that the library is indeed decoding parquet lists
+		// into this weird map format and it is not because of the way we encode
+		vtemp := make([]interface{}, 0)
+		if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
+			for _, ele := range castedValue {
+				if elementVal, ok := ele["element"]; ok {
+					if byteTypeElement, ok := elementVal.([]byte); ok {
+						vtemp = append(vtemp, string(byteTypeElement))
+					} else {
+						// Primitive types
+						vtemp = append(vtemp, ele["element"])
+					}
+				} else {
+					return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+				}
+			}
+		} else {
+			return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+		}
+		return vtemp, nil
+	default:
+		// int's, float's and other primitive types
+		if floatVal, ok := vv.(float64); ok {
+			// gojson cannot encode NaN values
+			// https://github.com/golang/go/issues/25721
+			if math.IsNaN(floatVal) {
+				return "NaN", nil
+			}
+		}
+		return vv, nil
+	}
+}
+
+// appendParquetTestFeedMessages function reads the parquet file and converts each row to its JSON
+// equivalent and appends it to the cloudfeed's row object.
 func (c *cloudFeed) appendParquetTestFeedMessages(
 	path string, topic string, envelopeType changefeedbase.EnvelopeType,
-) (err error) {
-	meta, datums, err := parquet.ReadFile(path)
+) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fr, err := goparquet.NewFileReader(f)
 	if err != nil {
 		return err
 	}
 
-	primaryKeyColumnsString, ok := meta.MetaFields["keyCols"]
+	primaryKeyColumnsString, ok := fr.MetaData()["primaryKeyNames"]
 	if !ok {
-		return errors.Errorf("could not find primary key column names in parquet metadata")
+		return errors.Errorf("Did not find primary key column names in metadata of parquet file during testing")
 	}
 
-	columnsNamesString, ok := meta.MetaFields["allCols"]
+	columnsNamesString, ok := fr.MetaData()["columnNames"]
 	if !ok {
-		return errors.Errorf("could not find column names in parquet metadata")
+		return errors.Errorf("Did not find column names in metadata of parquet file during testing")
+	}
+	columns := strings.Split(columnsNamesString, ",")
+	primaryKeys := strings.Split(primaryKeyColumnsString, ",")
+
+	columnNameSet := make(map[string]struct{})
+	primaryKeyColumnSet := make(map[string]struct{})
+
+	for _, key := range primaryKeys[:len(primaryKeys)-1] {
+		primaryKeyColumnSet[key] = struct{}{}
 	}
 
-	primaryKeysNamesOrdered, primaryKeyColumnSet, err := deserializeMap(primaryKeyColumnsString)
-	if err != nil {
-		return err
-	}
-	valueColumnNamesOrdered, columnNameSet, err := deserializeMap(columnsNamesString)
-	if err != nil {
-		return err
+	for _, key := range columns[:len(columns)-1] {
+		columnNameSet[key] = struct{}{}
 	}
 
-	// Extract metadata columns into metaColumnNameSet.
-	extractMetaColumns := func(columnNameSet map[string]int) map[string]int {
-		metaColumnNameSet := make(map[string]int)
-		for colName, colIdx := range columnNameSet {
-			switch colName {
-			case parquetCrdbEventTypeColName:
-				metaColumnNameSet[colName] = colIdx
-			case parquetOptUpdatedTimestampColName:
-				metaColumnNameSet[colName] = colIdx
-			case parquetOptMVCCTimestampColName:
-				metaColumnNameSet[colName] = colIdx
-			case parquetOptDiffColName:
-				metaColumnNameSet[colName] = colIdx
-			default:
-			}
+	for {
+		row, err := fr.NextRow()
+		if err == io.EOF {
+			break
 		}
-		return metaColumnNameSet
-	}
-	metaColumnNameSet := extractMetaColumns(columnNameSet)
 
-	for _, row := range datums {
-		rowJSONBuilder := json.NewObjectBuilder(len(valueColumnNamesOrdered) - len(metaColumnNameSet))
-		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
-
-		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
-			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
-			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
-			if err != nil {
-				return err
-			}
-			keyJSONBuilder.Add(j)
-
+		if err != nil {
+			return err
 		}
-		for _, valueColumnName := range valueColumnNamesOrdered {
-			if _, isMeta := metaColumnNameSet[valueColumnName]; isMeta {
+
+		// Holds column to its value mapping for a row and the entire thing will be
+		// JSON encoded later.
+		value := make(map[string]interface{})
+
+		// Holds the mapping of primary keys and its values.
+		key := make(map[string]interface{}, 0)
+		isDeleted := false
+
+		for k, v := range row {
+			if k == parquetCrdbEventTypeColName {
+				if string(v.([]byte)) == parquetEventDelete {
+					isDeleted = true
+				}
 				continue
 			}
 
-			datum := row[columnNameSet[valueColumnName]]
-			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
-			if err != nil {
-				return err
+			if _, ok := columnNameSet[k]; ok {
+				value[k], err = c.decodeParquetValueAsJSON(v)
+				if err != nil {
+					return err
+				}
 			}
-			rowJSONBuilder.Add(valueColumnName, j)
+
+			if _, ok := primaryKeyColumnSet[k]; ok {
+				decodedKeyVal, err := c.decodeParquetValueAsJSON(v)
+				if err != nil {
+					return err
+				}
+				key[k] = decodedKeyVal
+			}
 		}
 
-		var valueWithAfter *json.ObjectBuilder
+		if !isDeleted {
+			for col := range columnNameSet {
+				if _, ok := value[col]; !ok {
+					value[col] = nil
+				}
+			}
+		} else {
+			for k := range primaryKeyColumnSet {
+				delete(value, k)
+			}
+		}
 
-		isDeleted := *(row[metaColumnNameSet[parquetCrdbEventTypeColName]].(*tree.DString)) == *parquetEventDelete.DString()
+		valueWithAfter := make(map[string]interface{})
 
 		if envelopeType == changefeedbase.OptEnvelopeBare {
-			valueWithAfter = rowJSONBuilder
+			valueWithAfter = value
 		} else {
-			valueWithAfter = json.NewObjectBuilder(1)
-			if err != nil {
-				return err
-			}
 			if isDeleted {
-				nullJSON, err := tree.AsJSON(tree.DNull, sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add("after", nullJSON)
+				valueWithAfter["after"] = nil
 			} else {
-				vbJson := rowJSONBuilder.Build()
-				valueWithAfter.Add("after", vbJson)
-			}
-
-			if updatedColIdx, updated := metaColumnNameSet[parquetOptUpdatedTimestampColName]; updated {
-				j, err := tree.AsJSON(row[updatedColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add(changefeedbase.OptUpdatedTimestamps, j)
-			}
-			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptMVCCTimestampColName]; mvcc {
-				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add(changefeedbase.OptMVCCTimestamps, j)
-			}
-			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptDiffColName]; mvcc {
-				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add("before", j)
+				valueWithAfter["after"] = value
 			}
 		}
 
-		keyJSON := keyJSONBuilder.Build()
+		orderedKey := make([]interface{}, 0)
+		for _, k := range primaryKeys[:len(primaryKeys)-1] {
+			orderedKey = append(orderedKey, key[k])
+		}
 
-		rowJSON := valueWithAfter.Build()
+		// Sorts the keys
+		jsonValue, err := reformatJSON(valueWithAfter)
+		if err != nil {
+			return err
+		}
 
-		var keyBuf bytes.Buffer
-		keyJSON.Format(&keyBuf)
-
-		var rowBuf bytes.Buffer
-		rowJSON.Format(&rowBuf)
+		jsonKey, err := reformatJSON(orderedKey)
+		if err != nil {
+			return err
+		}
 
 		m := &cdctest.TestFeedMessage{
 			Topic: topic,
-			Value: rowBuf.Bytes(),
-			Key:   keyBuf.Bytes(),
+			Value: jsonValue,
+			Key:   jsonKey,
 		}
 
 		if isNew := c.markSeen(m); !isNew {
@@ -1371,29 +1432,6 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 	return nil
 }
 
-// readParquetResolvedPayload reads a resolved timestamp value from the
-// specified parquet file and returns it encoded as JSON.
-func (c *cloudFeed) readParquetResolvedPayload(path string) ([]byte, error) {
-	meta, datums, err := parquet.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	if meta.NumRows != 1 || meta.NumCols != 1 {
-		return nil, errors.AssertionFailedf("expected one row with one col containing the resolved timestamp")
-	}
-
-	resolvedDatum := datums[0][0]
-
-	resolved := resolvedRaw{Resolved: resolvedDatum.String()}
-	resolvedBytes, err := gojson.Marshal(resolved)
-	if err != nil {
-		return nil, err
-	}
-
-	return resolvedBytes, nil
-}
-
 // Next implements the TestFeed interface.
 func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
@@ -1403,7 +1441,7 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return e, nil
 		}
 
-		if err := timeutil.RunWithTimeout(
+		if err := contextutil.RunWithTimeout(
 			context.Background(), timeoutOp("cloudfeed.Next", c.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -1451,37 +1489,27 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
-	// Skip files we processed before.
-	if c.seenFiles == nil {
-		c.seenFiles = make(map[string]struct{})
+	tsFromPath := func(p string) string {
+		return strings.Split(filepath.Base(p), "-")[0]
 	}
-	if _, seen := c.seenFiles[path]; seen {
-		log.Infof(context.Background(), "Skip file %s", path)
+
+	// Skip files with timestamp greater than the previously observed timestamp.
+	// Note: theoretically, we should be able to skip any file with timestamp
+	// greater *or equal* to the previously observed timestamp.  However, alter
+	// changefeed pose a problem, since a table maybe added with initial scan
+	// option, causing new events (possibly including resolved event) to be
+	// emitted as of previously emitted timestamp.
+	// See https://github.com/cockroachdb/cockroach/issues/84102
+	if strings.Compare(tsFromPath(c.resolved), tsFromPath(path)) >= 0 {
+		// Already output this in a previous walkDir.
 		return nil
 	}
-	c.seenFiles[path] = struct{}{}
-
-	details, err := c.Details()
-	if err != nil {
-		return err
-	}
-	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
 
 	if strings.HasSuffix(path, `RESOLVED`) {
-		var resolvedPayload []byte
-		var err error
-		if format == changefeedbase.OptFormatParquet {
-			resolvedPayload, err = c.readParquetResolvedPayload(path)
-			if err != nil {
-				return err
-			}
-		} else {
-			resolvedPayload, err = os.ReadFile(path)
-			if err != nil {
-				return err
-			}
+		resolvedPayload, err := os.ReadFile(path)
+		if err != nil {
+			return err
 		}
-
 		resolvedEntry := &cdctest.TestFeedMessage{Resolved: resolvedPayload}
 		c.rows = append(c.rows, resolvedEntry)
 		c.resolved = path
@@ -1503,6 +1531,12 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return err
 	}
 	defer f.Close()
+	details, err := c.Details()
+	if err != nil {
+		return err
+	}
+
+	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
 
 	if format == changefeedbase.OptFormatParquet {
 		envelopeType := changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope])
@@ -1733,15 +1767,14 @@ func mustBeKafkaFeedFactory(f cdctest.TestFeedFactory) *kafkaFeedFactory {
 }
 
 // makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
-func makeKafkaFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.TestFeedFactory {
+func makeKafkaFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	return &kafkaFeedFactory{
 		knobs: &sinkKnobs{},
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:      s,
-			db:     rootDB,
-			rootDB: rootDB,
-			di:     newDepInjector(injectables...),
+			s:  s,
+			db: db,
+			di: newDepInjector(injectables...),
 		},
 	}
 }
@@ -1853,7 +1886,7 @@ func (k *kafkaFeed) Partitions() []string {
 func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
-		if err := timeutil.RunWithTimeout(
+		if err := contextutil.RunWithTimeout(
 			context.Background(), timeoutOp("kafka.Next", k.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -1934,15 +1967,14 @@ type webhookFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
 
 // makeWebhookFeedFactory returns a TestFeedFactory implementation using the `webhook-webhooks` uri.
-func makeWebhookFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.TestFeedFactory {
+func makeWebhookFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	useSecure := rand.Float32() < 0.5
 	return &webhookFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:      s,
-			db:     rootDB,
-			rootDB: rootDB,
-			di:     newDepInjector(injectables...),
+			s:  s,
+			db: db,
+			di: newDepInjector(injectables...),
 		},
 		useSecureServer: useSecure,
 	}
@@ -2147,7 +2179,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		if err := timeutil.RunWithTimeout(
+		if err := contextutil.RunWithTimeout(
 			context.Background(), timeoutOp("webhook.Next", f.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -2334,7 +2366,7 @@ type pubsubFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
 
 // makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
-func makePubsubFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.TestFeedFactory {
+func makePubsubFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 
 	switch t := srvOrCluster.(type) {
@@ -2349,10 +2381,9 @@ func makePubsubFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.T
 
 	return &pubsubFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:      s,
-			db:     rootDB,
-			rootDB: rootDB,
-			di:     newDepInjector(injectables...),
+			s:  s,
+			db: db,
+			di: newDepInjector(injectables...),
 		},
 	}
 }
@@ -2498,7 +2529,7 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		if err := timeutil.RunWithTimeout(
+		if err := contextutil.RunWithTimeout(
 			context.Background(), timeoutOp("pubsub.Next", p.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {

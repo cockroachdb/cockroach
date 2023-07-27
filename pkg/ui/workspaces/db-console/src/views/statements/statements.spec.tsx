@@ -22,11 +22,16 @@ import {
   statementAttr,
   unset,
 } from "src/util/constants";
-import { selectLastReset } from "./statementsPage";
+import { selectStatements, selectLastReset } from "./statementsPage";
 import { selectStatementDetails } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
+import {
+  TimeScale,
+  toRoundedDateRange,
+  util,
+  selectStmtsAllApps as selectApps,
+} from "@cockroachlabs/cluster-ui";
 
 const { generateStmtDetailsToID, longToInt } = util;
 
@@ -50,6 +55,153 @@ const timeScale: TimeScale = {
   sampleSize: moment.duration(30, "seconds"),
   fixedWindowEnd: moment(1646334815),
 };
+
+describe("selectStatements", () => {
+  it("returns null if the statements data is invalid", () => {
+    const state = makeInvalidState();
+    const props = makeEmptyRouteProps();
+    const result = selectStatements(state, props);
+
+    expect(result).toBeNull();
+  });
+
+  it("returns the statements currently loaded", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(2, "foobar");
+    const stmtC = makeFingerprint(3, "another");
+    const state = makeStateWithStatements([stmtA, stmtB, stmtC], timeScale);
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatements(state, props);
+    expect(result.length).toBe(3);
+
+    const expectedFingerprints = [stmtA, stmtB, stmtC].map(
+      stmt => stmt.key.key_data.query,
+    );
+    expectedFingerprints.sort();
+    const actualFingerprints = result.map((stmt: any) => stmt.label);
+    actualFingerprints.sort();
+    expect(actualFingerprints).toEqual(expectedFingerprints);
+  });
+
+  it("returns the statements currently without grouping on fingerprint_id", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(2, "foobar");
+    const stmtC = makeFingerprint(3, "another");
+    const stmtsWithSameFingerprintAsA = Array.from(new Array(5)).map(() =>
+      makeFingerprint(1, "duplicate_fingerprints"),
+    );
+
+    const stmts = [stmtA, stmtB, stmtC, ...stmtsWithSameFingerprintAsA];
+    const state = makeStateWithStatements(stmts, timeScale);
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatements(state, props);
+    expect(result.length).toBe(8);
+
+    const expectedFingerprints = stmts.map(stmt => stmt.key.key_data.query);
+    expectedFingerprints.sort();
+    const actualFingerprints = result.map((stmt: any) => stmt.label);
+    actualFingerprints.sort();
+    expect(actualFingerprints).toEqual(expectedFingerprints);
+  });
+
+  it("returns the statements without Internal for default ALL filter", () => {
+    const stmtA = makeFingerprint(1);
+    const stmtB = makeFingerprint(2, INTERNAL_STATEMENT_PREFIX);
+    const stmtC = makeFingerprint(3, INTERNAL_STATEMENT_PREFIX);
+    const stmtD = makeFingerprint(3, "another");
+    const state = makeStateWithStatements(
+      [stmtA, stmtB, stmtC, stmtD],
+      timeScale,
+    );
+    const props = makeEmptyRouteProps();
+
+    const result = selectStatements(state, props);
+
+    expect(result.length).toBe(2);
+  });
+
+  it("filters out statements when app param is set", () => {
+    const state = makeStateWithStatements(
+      [
+        makeFingerprint(1, "foo"),
+        makeFingerprint(2, "bar"),
+        makeFingerprint(3, "baz"),
+      ],
+      timeScale,
+    );
+    const props = makeRoutePropsWithApp("foo");
+
+    const result = selectStatements(state, props);
+
+    expect(result.length).toBe(1);
+  });
+
+  it('filters out statements with app set when app param is "(unset)"', () => {
+    const state = makeStateWithStatements(
+      [
+        makeFingerprint(1, ""),
+        makeFingerprint(2, "bar"),
+        makeFingerprint(3, "baz"),
+      ],
+      timeScale,
+    );
+    const props = makeRoutePropsWithApp(unset);
+
+    const result = selectStatements(state, props);
+
+    expect(result.length).toBe(1);
+  });
+
+  it('filters out statements with app set when app param is "$ internal"', () => {
+    const state = makeStateWithStatements(
+      [
+        makeFingerprint(1, "$ internal_stmnt_app"),
+        makeFingerprint(2, "bar"),
+        makeFingerprint(3, "baz"),
+      ],
+      timeScale,
+    );
+    const props = makeRoutePropsWithApp("$ internal");
+    const result = selectStatements(state, props);
+    expect(result.length).toBe(1);
+  });
+});
+
+describe("selectApps", () => {
+  it("returns an empty array if the statements data is invalid", () => {
+    const state = makeInvalidState();
+
+    const result = selectApps(state?.cachedData?.statements?.data);
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns all the apps that appear in the statements", () => {
+    const state = makeStateWithStatements(
+      [
+        makeFingerprint(1),
+        makeFingerprint(1, "hello"),
+        makeFingerprint(1, "world"),
+        makeFingerprint(1, "foobar"),
+        makeFingerprint(2, "foobar"),
+        makeFingerprint(3, "cockroach sql"),
+      ],
+      timeScale,
+    );
+
+    const result = selectApps(state?.cachedData?.statements?.data);
+
+    expect(result).toEqual([
+      unset,
+      "cockroach sql",
+      "foobar",
+      "hello",
+      "world",
+    ]);
+  });
+});
 
 describe("selectLastReset", () => {
   it('returns "unknown" if the statements data is invalid', () => {
@@ -443,6 +595,21 @@ function makeRoutePropsWithParams(params: { [key: string]: string }) {
   };
 }
 
+function makeRoutePropsWithSearchParams(params: { [key: string]: string }) {
+  const history = H.createHashHistory();
+  history.location.search = new URLSearchParams(params).toString();
+  return {
+    location: history.location,
+    history,
+    match: {
+      url: "",
+      path: history.location.pathname,
+      isExact: false,
+      params: {},
+    },
+  };
+}
+
 function makeEmptyRouteProps(): RouteComponentProps<any> {
   const history = H.createHashHistory();
   return {
@@ -455,6 +622,12 @@ function makeEmptyRouteProps(): RouteComponentProps<any> {
       params: {},
     },
   };
+}
+
+function makeRoutePropsWithApp(app: string) {
+  return makeRoutePropsWithSearchParams({
+    [appAttr]: app,
+  });
 }
 
 function makeRoutePropsWithStatement(stmt: string) {

@@ -47,25 +47,17 @@ type fileSSTSink struct {
 	out     io.WriteCloser
 	outName string
 
-	flushedFiles []backuppb.BackupManifest_File
-	flushedSize  int64
-
-	// flushedRevStart is the earliest start time of the export responses
-	// written to this sink since the last flush. Resets on each flush.
+	flushedFiles    []backuppb.BackupManifest_File
+	flushedSize     int64
 	flushedRevStart hlc.Timestamp
+	completedSpans  int32
 
-	// completedSpans contain the number of completed spans since the last
-	// flush. This counter resets on each flush.
-	completedSpans int32
-
-	// stats contain statistics about the actions of the fileSSTSink over its
-	// entire lifespan.
 	stats struct {
-		files       int // number of files created.
-		flushes     int // number of flushes.
-		oooFlushes  int // number of out of order flushes.
-		sizeFlushes int // number of flushes due to file exceeding targetFileSize.
-		spanGrows   int // number of times a span was extended.
+		files       int
+		flushes     int
+		oooFlushes  int
+		sizeFlushes int
+		spanGrows   int
 	}
 }
 
@@ -93,27 +85,6 @@ func (s *fileSSTSink) flush(ctx context.Context) error {
 
 func (s *fileSSTSink) flushFile(ctx context.Context) error {
 	if s.out == nil {
-		// If the writer was not initialized but the sink has reported completed
-		// spans then there were empty ExportRequests that were processed by the
-		// owner of this sink. These still need to reported to the coordinator as
-		// progress updates.
-		if s.completedSpans != 0 {
-			progDetails := backuppb.BackupManifest_Progress{
-				CompletedSpans: s.completedSpans,
-			}
-			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-			details, err := gogotypes.MarshalAny(&progDetails)
-			if err != nil {
-				return err
-			}
-			prog.ProgressDetails = *details
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case s.conf.progCh <- prog:
-			}
-			s.completedSpans = 0
-		}
 		return nil
 	}
 	s.stats.flushes++
@@ -125,13 +96,8 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		log.Warningf(ctx, "failed to close write in fileSSTSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
-	wroteSize := s.sst.Meta.Size
 	s.outName = ""
 	s.out = nil
-
-	for i := range s.flushedFiles {
-		s.flushedFiles[i].BackingFileSize = wroteSize
-	}
 
 	progDetails := backuppb.BackupManifest_Progress{
 		RevStartTime:   s.flushedRevStart,
@@ -167,21 +133,17 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.out = w
 	if s.conf.enc != nil {
-		e, err := storageccl.EncryptingWriter(w, s.conf.enc.Key)
+		var err error
+		w, err = storageccl.EncryptingWriter(w, s.conf.enc.Key)
 		if err != nil {
 			return err
 		}
-		s.out = e
 	}
+	s.out = w
 	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
 
 	return nil
-}
-
-func (s *fileSSTSink) writeWithNoData(resp exportedSpan) {
-	s.completedSpans += resp.completedSpans
 }
 
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {

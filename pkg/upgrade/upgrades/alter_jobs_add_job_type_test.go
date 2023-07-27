@@ -145,13 +145,15 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 
 	// Start a job of each type.
 	registry := s.JobRegistry().(*jobs.Registry)
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{}
 	jobspb.ForEachType(func(typ jobspb.Type) {
 		// The upgrade creates migration and schemachange jobs, so we do not
 		// need to create more. We should not override resumers for these job types,
 		// otherwise the upgrade will hang.
 		if typ != jobspb.TypeMigration && typ != jobspb.TypeSchemaChange {
-			registry.TestingWrapResumerConstructor(
-				typ, func(r jobs.Resumer) jobs.Resumer { return &fakeResumer{} })
+			registry.TestingResumerCreationKnobs[typ] = func(r jobs.Resumer) jobs.Resumer {
+				return &fakeResumer{}
+			}
 
 			record := jobs.Record{
 				Details: jobspb.JobDetailsForEveryJobType[typ],

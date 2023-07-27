@@ -10,12 +10,7 @@
 
 package scpb
 
-import (
-	"math"
-
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-)
+import "github.com/cockroachdb/cockroach/pkg/clusterversion"
 
 // HasDeprecatedElements returns if the target contains any element marked
 // for deprecation.
@@ -104,33 +99,14 @@ func MigrateCurrentState(version clusterversion.ClusterVersion, state *CurrentSt
 	return updated
 }
 
-func checkForTableDataElement(target Target) (createID catid.DescID, existingID catid.DescID) {
-	if target.TargetStatus != Status_PUBLIC {
-		return catid.InvalidDescID, catid.InvalidDescID
-	}
-	switch e := target.Element().(type) {
-	case *PrimaryIndex:
-		return e.TableID, catid.InvalidDescID
-	case *SecondaryIndex:
-		return e.TableID, catid.InvalidDescID
-	case *TableData:
-		return catid.InvalidDescID, e.TableID
-	}
-	return catid.InvalidDescID, catid.InvalidDescID
-}
-
 // MigrateDescriptorState migrates descriptor state and applies any changes
 // relevant for the current cluster version.
-func MigrateDescriptorState(
-	version clusterversion.ClusterVersion, parentID catid.DescID, state *DescriptorState,
-) bool {
+func MigrateDescriptorState(version clusterversion.ClusterVersion, state *DescriptorState) bool {
 	// Nothing to do for empty states.
 	if state == nil {
 		return false
 	}
 	targetsToRemove := make(map[int]struct{})
-	newIndexes := make(map[catid.DescID]bool)
-	newTargets := 0
 	updated := false
 	for idx, target := range state.Targets {
 		if HasDeprecatedElements(version, target) {
@@ -138,33 +114,12 @@ func MigrateDescriptorState(
 			migrateTargetElement(state.Targets, idx)
 			targetsToRemove[idx] = struct{}{}
 		}
-		if newIndexID, descID := checkForTableDataElement(target); descID != catid.InvalidDescID || newIndexID != catid.InvalidDescID {
-			if _, ok := newIndexes[newIndexID]; newIndexID != catid.InvalidDescID && !ok {
-				newIndexes[newIndexID] = false
-			}
-			if descID != catid.InvalidDescID {
-				newIndexes[descID] = true
-			}
-		}
 		current, targetStatus, update := migrateStatuses(state.CurrentStatuses[idx], target.TargetStatus)
 		if update {
 			state.CurrentStatuses[idx] = current
 			target.TargetStatus = targetStatus
 			updated = true
 		}
-	}
-	for id, skip := range newIndexes {
-		if skip {
-			continue
-		}
-		// Generate a TableData element
-		state.Targets = append(state.Targets, MakeTarget(ToPublic, &TableData{
-			TableID:    id,
-			DatabaseID: parentID,
-		}, &TargetMetadata{}))
-		state.CurrentStatuses = append(state.CurrentStatuses, Status_PUBLIC)
-		state.TargetRanks = append(state.TargetRanks, math.MaxUint32-uint32(newTargets))
-		newTargets += 1
 	}
 	if !updated {
 		return updated
@@ -183,6 +138,5 @@ func MigrateDescriptorState(
 		state.TargetRanks = append(state.TargetRanks, existingTargetRanks[idx])
 		state.CurrentStatuses = append(state.CurrentStatuses, existingStatuses[idx])
 	}
-
 	return updated
 }

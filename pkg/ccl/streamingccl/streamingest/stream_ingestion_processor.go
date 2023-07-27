@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -99,84 +100,21 @@ func (s mvccKeyValues) Len() int           { return len(s) }
 func (s mvccKeyValues) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s mvccKeyValues) Less(i, j int) bool { return s[i].Key.Less(s[j].Key) }
 
-// streamIngestionBuffer is a local buffer for KVs and RangeKeys. We
-// buffer them locally so that we can sort them before writing them to
-// an SST Batcher.
-//
-// TODO: We don't yet use a buffering adder since the current
-// implementation is specific to ingesting KV pairs without timestamps
-// rather than MVCCKeys.
-type streamIngestionBuffer struct {
+// Specialized SST batcher that is responsible for ingesting range tombstones.
+type rangeKeyBatcher struct {
+	db       *kv.DB
+	settings *cluster.Settings
+
 	// curRangeKVBatch is the current batch of range KVs which will
 	// be ingested through 'flush' later.
 	curRangeKVBatch     mvccRangeKeyValues
 	curRangeKVBatchSize int
 
-	// curKVBatch temporarily batches MVCC Keys so they can be
-	// sorted before ingestion.
-	curKVBatch     mvccKeyValues
-	curKVBatchSize int
-
 	// Minimum timestamp in the current batch. Used for metrics purpose.
 	minTimestamp hlc.Timestamp
-}
 
-func (b *streamIngestionBuffer) addKV(kv storage.MVCCKeyValue) {
-	b.curKVBatchSize += len(kv.Value) + kv.Key.Len()
-	b.curKVBatch = append(b.curKVBatch, kv)
-	if kv.Key.Timestamp.Less(b.minTimestamp) {
-		b.minTimestamp = kv.Key.Timestamp
-	}
-}
-
-func (b *streamIngestionBuffer) addRangeKey(rangeKV storage.MVCCRangeKeyValue) {
-	b.curRangeKVBatchSize += len(rangeKV.RangeKey.StartKey) + len(rangeKV.RangeKey.EndKey) + len(rangeKV.Value)
-	b.curRangeKVBatch = append(b.curRangeKVBatch, rangeKV)
-	if rangeKV.RangeKey.Timestamp.Less(b.minTimestamp) {
-		b.minTimestamp = rangeKV.RangeKey.Timestamp
-	}
-}
-
-func (b *streamIngestionBuffer) shouldFlushOnSize(ctx context.Context, sv *settings.Values) bool {
-	kvBufMax := int(maxKVBufferSize.Get(sv))
-	rkBufMax := int(maxRangeKeyBufferSize.Get(sv))
-	if kvBufMax > 0 && b.curKVBatchSize >= kvBufMax {
-		log.VInfof(ctx, 2, "flushing because current KV batch based on size %d >= %d", b.curKVBatchSize, kvBufMax)
-		return true
-	} else if rkBufMax > 0 && b.curRangeKVBatchSize >= rkBufMax {
-		log.VInfof(ctx, 2, "flushing beacuse current range key batch based on size %d >= %d", b.curRangeKVBatchSize, rkBufMax)
-		return true
-	}
-	return false
-}
-
-func (b *streamIngestionBuffer) reset() {
-	b.minTimestamp = hlc.MaxTimestamp
-
-	b.curKVBatchSize = 0
-	b.curKVBatch = b.curKVBatch[:0]
-
-	b.curRangeKVBatchSize = 0
-	b.curRangeKVBatch = b.curRangeKVBatch[:0]
-}
-
-var bufferPool = sync.Pool{
-	New: func() interface{} { return &streamIngestionBuffer{} },
-}
-
-func getBuffer() *streamIngestionBuffer {
-	return bufferPool.Get().(*streamIngestionBuffer)
-}
-
-func releaseBuffer(b *streamIngestionBuffer) {
-	b.reset()
-	bufferPool.Put(b)
-}
-
-// Specialized SST batcher that is responsible for ingesting range tombstones.
-type rangeKeyBatcher struct {
-	db       *kv.DB
-	settings *cluster.Settings
+	// batchSummary is the BulkOpSummary for the current batch of rangekeys.
+	batchSummary kvpb.BulkOpSummary
 
 	// onFlush is the callback called after the current batch has been
 	// successfully ingested.
@@ -187,9 +125,11 @@ func newRangeKeyBatcher(
 	ctx context.Context, cs *cluster.Settings, db *kv.DB, onFlush func(summary kvpb.BulkOpSummary),
 ) *rangeKeyBatcher {
 	batcher := &rangeKeyBatcher{
-		db:       db,
-		settings: cs,
-		onFlush:  onFlush,
+		db:           db,
+		settings:     cs,
+		minTimestamp: hlc.MaxTimestamp,
+		batchSummary: kvpb.BulkOpSummary{},
+		onFlush:      onFlush,
 	}
 	return batcher
 }
@@ -203,7 +143,13 @@ type streamIngestionProcessor struct {
 	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
 	rewriteToDiffKey bool
 
-	buffer *streamIngestionBuffer
+	// curKVBatch temporarily batches MVCC Keys so they can be
+	// sorted before ingestion.
+	// TODO: This doesn't yet use a buffering adder since the current
+	// implementation is specific to ingesting KV pairs without timestamps rather
+	// than MVCCKeys.
+	curKVBatch     mvccKeyValues
+	curKVBatchSize int
 
 	// batcher is used to flush KVs into SST to the storage layer.
 	batcher *bulk.SSTBatcher
@@ -227,30 +173,46 @@ type streamIngestionProcessor struct {
 	// lastFlushTime keeps track of the last time that we flushed due to a
 	// checkpoint timestamp event.
 	lastFlushTime time.Time
+	// When the event channel closes, we should flush any events that remains to
+	// be buffered. The processor keeps track of if we're done seeing new events,
+	// and have attempted to flush them with `internalDrained`.
+	internalDrained bool
 
-	// workerGroup is a context group holding all goroutines
-	// related to this processor.
-	workerGroup ctxgroup.Group
+	// pollingWaitGroup registers the polling goroutine and waits for it to return
+	// when the processor is being drained.
+	pollingWaitGroup sync.WaitGroup
 
-	// subscriptionGroup is different from workerGroup since we
-	// want to explicitly cancel the context related to it.
-	subscriptionGroup  ctxgroup.Group
-	subscriptionCancel context.CancelFunc
-
-	// stopCh stops the cutover poller and flush loop.
-	stopCh chan struct{}
-
-	mergedSubscription *mergedSubscription
-
-	flushCh chan flushableBuffer
-
-	errCh chan error
-
-	checkpointCh chan *jobspb.ResolvedSpans
+	// eventCh is the merged event channel of all of the partition event streams.
+	eventCh chan partitionEvent
 
 	// cutoverCh is used to convey that the ingestion job has been signaled to
 	// cutover.
 	cutoverCh chan struct{}
+
+	// cg is used to receive the subscription of events from the source cluster.
+	cg ctxgroup.Group
+
+	// closePoller is used to shutdown the poller that checks the job for a
+	// cutover signal.
+	closePoller chan struct{}
+	// cancelMergeAndWait cancels the merging goroutines and waits for them to
+	// finish. It cannot be called concurrently with Next(), as it consumes from
+	// the merged channel.
+	cancelMergeAndWait func()
+
+	// mu is used to provide thread-safe read-write operations to ingestionErr
+	// and pollingErr.
+	mu struct {
+		syncutil.Mutex
+
+		// ingestionErr stores any error that is returned from the worker goroutine so
+		// that it can be forwarded through the DistSQL flow.
+		ingestionErr error
+
+		// pollingErr stores any error that is returned from the poller checking for a
+		// cutover signal so that it can be forwarded through the DistSQL flow.
+		pollingErr error
+	}
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
@@ -302,18 +264,15 @@ func newStreamIngestionDataProcessor(
 	sip := &streamIngestionProcessor{
 		flowCtx:           flowCtx,
 		spec:              spec,
+		curKVBatch:        make([]storage.MVCCKeyValue, 0),
 		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID: jobspb.JobID(spec.JobID),
 			db:    flowCtx.Cfg.DB,
 		},
-		buffer:           &streamIngestionBuffer{},
 		cutoverCh:        make(chan struct{}),
-		stopCh:           make(chan struct{}),
-		flushCh:          make(chan flushableBuffer),
-		checkpointCh:     make(chan *jobspb.ResolvedSpans),
-		errCh:            make(chan error, 1),
+		closePoller:      make(chan struct{}),
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 		logBufferEvery:   log.Every(30 * time.Second),
@@ -333,26 +292,7 @@ func newStreamIngestionDataProcessor(
 	return sip, nil
 }
 
-// Start launches a set of goroutines that read from the spans
-// assigned to this processor and ingests them until cutover is
-// reached.
-//
-// A group of subscriptions is merged into a single event stream that
-// is read by the consumeEvents loop.
-//
-// The consumeEvents loop builds a buffer of KVs that it then sends to
-// the flushLoop. We currently allow 1 in-flight flush.
-//
-// A polling loop watches the cutover time and signals the
-// consumeEvents loop to stop ingesting.
-//
-//	client.Subscribe -> mergedSubscription -> consumeEvents -> flushLoop -> Next()
-//	cutoverPoller ---------------------------------^
-//
-// All errors are reported to Next() via errCh, with the first
-// error winning.
-//
-// Start implements the RowSource interface.
+// Start is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	log.Infof(ctx, "starting ingest proc")
@@ -363,27 +303,43 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
 	rc := sip.FlowCtx.Cfg.RangeCache
-
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(
-		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
-		sip.flowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
+		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
+		sip.flowCtx.Cfg.BulkSenderLimiter, func(batchSummary kvpb.BulkOpSummary) {
+			// OnFlush update the ingested logical and SST byte metrics.
+			sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
+			sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
+		})
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
 
-	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db.KV(), sip.onFlushUpdateMetricUpdate)
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db.KV(), func(batchSummary kvpb.BulkOpSummary) {
+		// OnFlush update the ingested logical and SST byte metrics.
+		sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
+		sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
+	})
 
-	var subscriptionCtx context.Context
-	subscriptionCtx, sip.subscriptionCancel = context.WithCancel(sip.Ctx())
-	sip.subscriptionGroup = ctxgroup.WithContext(subscriptionCtx)
-	sip.workerGroup = ctxgroup.WithContext(sip.Ctx())
+	// Start a poller that checks if the stream ingestion job has been signaled to
+	// cutover.
+	sip.pollingWaitGroup.Add(1)
+	go func() {
+		defer sip.pollingWaitGroup.Done()
+		err := sip.checkForCutoverSignal(ctx, sip.closePoller)
+		if err != nil {
+			sip.mu.Lock()
+			sip.mu.pollingErr = errors.Wrap(err, "error while polling job for cutover signal")
+			sip.mu.Unlock()
+		}
+	}()
 
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
+	sip.cg = ctxgroup.WithContext(ctx)
 	sip.streamPartitionClients = make([]streamclient.Client, 0)
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
 		id := partitionSpec.PartitionID
@@ -418,36 +374,9 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			return
 		}
 		subscriptions[id] = sub
-		sip.subscriptionGroup.GoCtx(sub.Subscribe)
+		sip.cg.GoCtx(sub.Subscribe)
 	}
-
-	sip.mergedSubscription = mergeSubscriptions(sip.Ctx(), subscriptions)
-	sip.workerGroup.GoCtx(func(ctx context.Context) error {
-		if err := sip.mergedSubscription.Run(); err != nil {
-			sip.sendError(err)
-		}
-		return nil
-	})
-	sip.workerGroup.GoCtx(func(ctx context.Context) error {
-		if err := sip.checkForCutoverSignal(ctx); err != nil {
-			sip.sendError(err)
-		}
-		return nil
-	})
-	sip.workerGroup.GoCtx(func(ctx context.Context) error {
-		defer close(sip.flushCh)
-		if err := sip.consumeEvents(ctx); err != nil {
-			sip.sendError(err)
-		}
-		return nil
-	})
-	sip.workerGroup.GoCtx(func(ctx context.Context) error {
-		defer close(sip.checkpointCh)
-		if err := sip.flushLoop(ctx); err != nil {
-			sip.sendError(err)
-		}
-		return nil
-	})
+	sip.eventCh = sip.merge(ctx, subscriptions)
 }
 
 // Next is part of the RowSource interface.
@@ -456,31 +385,42 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	select {
-	case progressUpdate, ok := <-sip.checkpointCh:
-		if ok {
-			progressBytes, err := protoutil.Marshal(progressUpdate)
-			if err != nil {
-				sip.MoveToDraining(err)
-				return nil, sip.DrainHelper()
-			}
-			row := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
-			}
-			return row, nil
+	sip.mu.Lock()
+	err := sip.mu.pollingErr
+	sip.mu.Unlock()
+	if err != nil {
+		sip.MoveToDraining(err)
+		return nil, sip.DrainHelper()
+	}
+
+	progressUpdate, err := sip.consumeEvents()
+	if err != nil {
+		sip.MoveToDraining(err)
+		return nil, sip.DrainHelper()
+	}
+
+	if progressUpdate != nil {
+		progressBytes, err := protoutil.Marshal(progressUpdate)
+		if err != nil {
+			sip.MoveToDraining(err)
+			return nil, sip.DrainHelper()
 		}
-	case err := <-sip.errCh:
+		row := rowenc.EncDatumRow{
+			rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
+		}
+		return row, nil
+	}
+
+	sip.mu.Lock()
+	err = sip.mu.ingestionErr
+	sip.mu.Unlock()
+	if err != nil {
 		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
 	}
-	select {
-	case err := <-sip.errCh:
-		sip.MoveToDraining(err)
-		return nil, sip.DrainHelper()
-	default:
-		sip.MoveToDraining(nil /* error */)
-		return nil, sip.DrainHelper()
-	}
+
+	sip.MoveToDraining(nil /* error */)
+	return nil, sip.DrainHelper()
 }
 
 // MustBeStreaming implements the Processor interface.
@@ -498,54 +438,40 @@ func (sip *streamIngestionProcessor) close() {
 		return
 	}
 
-	// Stop the partition client, mergedSubscription, and
-	// cutoverPoller. All other goroutines should exit based on
-	// channel close events.
 	for _, client := range sip.streamPartitionClients {
 		_ = client.Close(sip.Ctx())
 	}
-	if sip.mergedSubscription != nil {
-		sip.mergedSubscription.Close()
-	}
-	if sip.stopCh != nil {
-		close(sip.stopCh)
-	}
-
-	// We shouldn't need to explicitly cancel the context for
-	// members of the worker group. The mergedSubscription close
-	// and stopCh close above should result in exit signals being
-	// sent to all relevant goroutines.
-	if err := sip.workerGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
-	}
-
-	if sip.subscriptionCancel != nil {
-		sip.subscriptionCancel()
-	}
-	if err := sip.subscriptionGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
-	}
-
 	if sip.batcher != nil {
 		sip.batcher.Close(sip.Ctx())
 	}
 	if sip.maxFlushRateTimer != nil {
 		sip.maxFlushRateTimer.Stop()
 	}
-
+	close(sip.closePoller)
+	// Wait for the processor goroutine to return so that we do not access
+	// processor state once it has shutdown.
+	sip.pollingWaitGroup.Wait()
+	// Wait for the merge goroutine.
+	if sip.cancelMergeAndWait != nil {
+		sip.cancelMergeAndWait()
+	}
 	sip.InternalClose()
 }
 
 // checkForCutoverSignal periodically loads the job progress to check for the
 // sentinel value that signals the ingestion job to complete.
-func (sip *streamIngestionProcessor) checkForCutoverSignal(ctx context.Context) error {
+func (sip *streamIngestionProcessor) checkForCutoverSignal(
+	ctx context.Context, stopPoller chan struct{},
+) error {
 	sv := &sip.flowCtx.Cfg.Settings.SV
 	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
 	defer tick.Stop()
 	for {
 		select {
-		case <-sip.stopCh:
+		case <-stopPoller:
 			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-tick.C:
 			cutoverReached, err := sip.cutoverProvider.cutoverReached(ctx)
 			if err != nil {
@@ -554,7 +480,7 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(ctx context.Context) 
 			if cutoverReached {
 				select {
 				case sip.cutoverCh <- struct{}{}:
-				case <-sip.stopCh:
+				case <-stopPoller:
 				}
 				return nil
 			}
@@ -562,43 +488,60 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(ctx context.Context) 
 	}
 }
 
-func (sip *streamIngestionProcessor) sendError(err error) {
-	if err == nil {
-		return
-	}
-	select {
-	case sip.errCh <- err:
-	default:
-		log.VInfof(sip.Ctx(), 2, "dropping additional error: %s", err)
-	}
-}
+// merge takes events from all the streams and merges them into a single
+// channel.
+func (sip *streamIngestionProcessor) merge(
+	ctx context.Context, subscriptions map[string]streamclient.Subscription,
+) chan partitionEvent {
+	merged := make(chan partitionEvent)
 
-func (sip *streamIngestionProcessor) flushLoop(_ context.Context) error {
-	for {
-		bufferToFlush, ok := <-sip.flushCh
-		if !ok {
-			// eventConsumer is done.
-			return nil
-		}
-		resolvedSpan, err := sip.flushBuffer(bufferToFlush)
-		if err != nil {
-			return err
-		}
-		// NB: The flushLoop needs to select on stopCh here
-		// because the reader of checkpointCh is the caller of
-		// Next(). But there might never be another Next()
-		// call.
-		select {
-		case sip.checkpointCh <- resolvedSpan:
-		case <-sip.stopCh:
-			return nil
+	ctx, cancel := context.WithCancel(ctx)
+	g := ctxgroup.WithContext(ctx)
+
+	sip.cancelMergeAndWait = func() {
+		cancel()
+		// Wait until the merged channel is closed by the goroutine above.
+		for range merged {
 		}
 	}
-}
 
-func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb.BulkOpSummary) {
-	sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
-	sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
+	for partition, sub := range subscriptions {
+		partition := partition
+		sub := sub
+		g.GoCtx(func(ctx context.Context) error {
+			ctxDone := ctx.Done()
+			for {
+				select {
+				case event, ok := <-sub.Events():
+					if !ok {
+						return sub.Err()
+					}
+
+					pe := partitionEvent{
+						Event:     event,
+						partition: partition,
+					}
+
+					select {
+					case merged <- pe:
+					case <-ctxDone:
+						return ctx.Err()
+					}
+				case <-ctxDone:
+					return ctx.Err()
+				}
+			}
+		})
+	}
+	go func() {
+		err := g.Wait()
+		sip.mu.Lock()
+		defer sip.mu.Unlock()
+		sip.mu.ingestionErr = err
+		close(merged)
+	}()
+
+	return merged
 }
 
 // consumeEvents handles processing events on the merged event queue and returns
@@ -608,19 +551,79 @@ func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb
 // It should only make a claim that about the resolved timestamp of a partition
 // increasing after it has flushed all KV events previously received by that
 // partition.
-func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
-	for {
+func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, error) {
+	// This timer is used to batch up resolved timestamp events that occur within
+	// a given time interval, as to not flush too often and allow the buffer to
+	// accumulate data.
+	// A flush may still occur if the in memory buffer becomes full.
+	sv := &sip.FlowCtx.Cfg.Settings.SV
+
+	if sip.internalDrained {
+		return nil, nil
+	}
+
+	for sip.State == execinfra.StateRunning {
 		select {
-		case event, ok := <-sip.mergedSubscription.Events():
+		case event, ok := <-sip.eventCh:
 			if !ok {
-				// eventCh is closed, flush and exit.
-				if err := sip.flush(); err != nil {
-					return err
-				}
-				return nil
+				sip.internalDrained = true
+				return sip.flush()
 			}
-			if err := sip.handleEvent(event); err != nil {
-				return err
+			if event.Type() == streamingccl.KVEvent {
+				sip.metrics.AdmitLatency.RecordValue(
+					timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
+			}
+
+			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+				if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
+					if err := streamingKnobs.RunAfterReceivingEvent(sip.Ctx()); err != nil {
+						return nil, err
+					}
+				}
+			}
+
+			switch event.Type() {
+			case streamingccl.KVEvent:
+				if err := sip.bufferKV(event.GetKV()); err != nil {
+					return nil, err
+				}
+			case streamingccl.SSTableEvent:
+				if err := sip.bufferSST(event.GetSSTable()); err != nil {
+					return nil, err
+				}
+			case streamingccl.DeleteRangeEvent:
+				if err := sip.bufferDelRange(event.GetDeleteRange()); err != nil {
+					return nil, err
+				}
+			case streamingccl.CheckpointEvent:
+				if err := sip.bufferCheckpoint(event); err != nil {
+					return nil, err
+				}
+
+				minFlushInterval := minimumFlushInterval.Get(sv)
+				if timeutil.Since(sip.lastFlushTime) < minFlushInterval {
+					// Not enough time has passed since the last flush. Let's set a timer
+					// that will trigger a flush eventually.
+					// TODO: This resets the timer every checkpoint event, but we only
+					// need to reset it once.
+					sip.maxFlushRateTimer.Reset(time.Until(sip.lastFlushTime.Add(minFlushInterval)))
+					continue
+				}
+
+				return sip.flush()
+			default:
+				return nil, errors.Newf("unknown streaming event type %v", event.Type())
+			}
+
+			if sip.logBufferEvery.ShouldLog() {
+				log.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.curKVBatchSize, len(sip.curKVBatch))
+			}
+			resolvedSpan, err := sip.maybeSizeFlush()
+			if err != nil {
+				return nil, err
+			}
+			if resolvedSpan != nil {
+				return resolvedSpan, nil
 			}
 		case <-sip.cutoverCh:
 			// TODO(adityamaru): Currently, the cutover time can only be <= resolved
@@ -630,85 +633,21 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 			//
 			// On receiving a cutover signal, the processor must shutdown gracefully.
 			log.Infof(sip.Ctx(), "received cutover signal")
-			return nil
+			sip.internalDrained = true
+			return nil, nil
+
 		case <-sip.maxFlushRateTimer.C:
-			// This timer is used to periodically flush a
-			// buffer that may have been previously
-			// skipped.
 			sip.maxFlushRateTimer.Read = true
-			if err := sip.flush(); err != nil {
-				return err
-			}
+			return sip.flush()
 		}
 	}
 
-}
-
-func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
-	sv := &sip.FlowCtx.Cfg.Settings.SV
-
-	if event.Type() == streamingccl.KVEvent {
-		sip.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
-	}
-
-	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-		if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
-			if err := streamingKnobs.RunAfterReceivingEvent(sip.Ctx()); err != nil {
-				return err
-			}
-		}
-	}
-
-	switch event.Type() {
-	case streamingccl.KVEvent:
-		if err := sip.bufferKV(event.GetKV()); err != nil {
-			return err
-		}
-	case streamingccl.SSTableEvent:
-		if err := sip.bufferSST(event.GetSSTable()); err != nil {
-			return err
-		}
-	case streamingccl.DeleteRangeEvent:
-		if err := sip.bufferDelRange(event.GetDeleteRange()); err != nil {
-			return err
-		}
-	case streamingccl.CheckpointEvent:
-		if err := sip.bufferCheckpoint(event); err != nil {
-			return err
-		}
-
-		minFlushInterval := minimumFlushInterval.Get(sv)
-		if timeutil.Since(sip.lastFlushTime) < minFlushInterval {
-			// Not enough time has passed since the last flush. Let's set a timer
-			// that will trigger a flush eventually.
-			// TODO: This resets the timer every checkpoint event, but we only
-			// need to reset it once.
-			sip.maxFlushRateTimer.Reset(time.Until(sip.lastFlushTime.Add(minFlushInterval)))
-			return nil
-		}
-		if err := sip.flush(); err != nil {
-			return err
-		}
-		return nil
-	default:
-		return errors.Newf("unknown streaming event type %v", event.Type())
-	}
-
-	if sip.logBufferEvery.ShouldLog() {
-		log.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
-	}
-
-	if sip.buffer.shouldFlushOnSize(sip.Ctx(), sv) {
-		if err := sip.flush(); err != nil {
-			return err
-		}
-	}
-	return nil
+	// No longer running, we've closed our batcher.
+	return nil, nil
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, bool, error) {
-	return sip.rekeyer.RewriteKey(key, 0 /*wallTimeForImportElision*/)
+	return sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error {
@@ -775,8 +714,22 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 	if !ok {
 		return nil
 	}
-	sip.buffer.addRangeKey(rangeKeyVal)
+	sip.rangeBatcher.buffer(rangeKeyVal)
 	return nil
+}
+
+func (sip *streamIngestionProcessor) maybeSizeFlush() (*jobspb.ResolvedSpans, error) {
+	sv := &sip.FlowCtx.Cfg.Settings.SV
+	kvBufMax := int(maxKVBufferSize.Get(sv))
+	rkBufMax := int(maxRangeKeyBufferSize.Get(sv))
+	if kvBufMax > 0 && sip.curKVBatchSize >= kvBufMax {
+		log.VInfof(sip.Ctx(), 2, "flushing because current KV batch based on size %d >= %d", sip.curKVBatchSize, kvBufMax)
+		return sip.flush()
+	} else if rkBufMax > 0 && sip.rangeBatcher.bufferSize() >= rkBufMax {
+		log.VInfof(sip.Ctx(), 2, "flushing beacuse current range key batch based on size %d >= %d", sip.rangeBatcher.bufferSize(), rkBufMax)
+		return sip.flush()
+	}
+	return nil, nil
 }
 
 func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
@@ -802,13 +755,15 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 		kv.Value.InitChecksum(kv.Key)
 	}
 
-	sip.buffer.addKV(storage.MVCCKeyValue{
+	mvccKeyValue := storage.MVCCKeyValue{
 		Key: storage.MVCCKey{
 			Key:       kv.Key,
 			Timestamp: kv.Value.Timestamp,
 		},
 		Value: kv.Value.RawBytes,
-	})
+	}
+	sip.curKVBatchSize += len(mvccKeyValue.Value) + mvccKeyValue.Key.Len()
+	sip.curKVBatch = append(sip.curKVBatch, mvccKeyValue)
 	return nil
 }
 
@@ -840,6 +795,17 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 	return nil
 }
 
+// Write a batch of MVCC range keys into the SST batcher.
+func (r *rangeKeyBatcher) buffer(rangeKV storage.MVCCRangeKeyValue) {
+	r.curRangeKVBatchSize += len(rangeKV.RangeKey.StartKey) + len(rangeKV.RangeKey.EndKey) + len(rangeKV.Value)
+	r.curRangeKVBatch = append(r.curRangeKVBatch, rangeKV)
+}
+
+// Reeturns the current size of all buffered range keys.
+func (r *rangeKeyBatcher) bufferSize() int {
+	return r.curRangeKVBatchSize
+}
+
 type rangeKeySST struct {
 	start roachpb.Key
 	end   roachpb.Key
@@ -847,27 +813,26 @@ type rangeKeySST struct {
 }
 
 // Flush all the range keys buffered so far into storage as an SST.
-func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues) error {
+func (r *rangeKeyBatcher) flush(ctx context.Context) error {
 	_, sp := tracing.ChildSpan(ctx, "streamingest.rangeKeyBatcher.flush")
 	defer sp.Finish()
 
-	if len(toFlush) == 0 {
+	if len(r.curRangeKVBatch) == 0 {
 		return nil
 	}
 
-	log.VInfof(ctx, 2, "flushing %d range keys", len(toFlush))
+	log.VInfof(ctx, 2, "flushing %d range keys", len(r.curRangeKVBatch))
 
 	sstFile := &storage.MemObject{}
 	sstWriter := storage.MakeIngestionSSTWriter(ctx, r.settings, sstFile)
 	defer sstWriter.Close()
 	// Sort current batch as the SST writer requires a sorted order.
-	sort.Slice(toFlush, func(i, j int) bool {
-		return toFlush[i].RangeKey.Compare(toFlush[j].RangeKey) < 0
+	sort.Slice(r.curRangeKVBatch, func(i, j int) bool {
+		return r.curRangeKVBatch[i].RangeKey.Compare(r.curRangeKVBatch[j].RangeKey) < 0
 	})
 
-	batchSummary := kvpb.BulkOpSummary{}
 	start, end := keys.MaxKey, keys.MinKey
-	for _, rangeKeyVal := range toFlush {
+	for _, rangeKeyVal := range r.curRangeKVBatch {
 		if err := sstWriter.PutRawMVCCRangeKey(rangeKeyVal.RangeKey, rangeKeyVal.Value); err != nil {
 			return err
 		}
@@ -878,7 +843,10 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 		if rangeKeyVal.RangeKey.EndKey.Compare(end) > 0 {
 			end = rangeKeyVal.RangeKey.EndKey
 		}
-		batchSummary.DataSize += int64(rangeKeyVal.RangeKey.EncodedSize() + len(rangeKeyVal.Value))
+		if rangeKeyVal.RangeKey.Timestamp.Less(r.minTimestamp) {
+			r.minTimestamp = rangeKeyVal.RangeKey.Timestamp
+		}
+		r.batchSummary.DataSize += int64(rangeKeyVal.RangeKey.EncodedSize() + len(rangeKeyVal.Value))
 	}
 
 	// Finish the current batch.
@@ -930,12 +898,12 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 				return err
 			}
 		} else {
-			batchSummary.SSTDataSize += int64(len(data))
+			r.batchSummary.SSTDataSize += int64(len(data))
 		}
 	}
 
 	if r.onFlush != nil {
-		r.onFlush(batchSummary)
+		r.onFlush(r.batchSummary)
 	}
 
 	return nil
@@ -1095,61 +1063,52 @@ func splitRangeKeySSTAtKey(
 	return leftRet, rightRet, nil
 }
 
-func (sip *streamIngestionProcessor) flush() error {
-	bufferToFlush := sip.buffer
-	sip.buffer = getBuffer()
-
-	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
-	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
-
-	select {
-	case sip.flushCh <- flushableBuffer{
-		buffer:     bufferToFlush,
-		checkpoint: checkpoint,
-	}:
-		sip.lastFlushTime = timeutil.Now()
-		return nil
-	case <-sip.stopCh:
-		// We return on stopCh here because our flush process
-		// may have been stopped or exited on error.
-		return nil
+// Reset all the states inside the batcher and needs to called after flush
+// for further uses.
+func (r *rangeKeyBatcher) reset() {
+	if len(r.curRangeKVBatch) == 0 {
+		return
 	}
+	r.minTimestamp = hlc.MaxTimestamp
+	r.batchSummary.Reset()
+	r.curRangeKVBatchSize = 0
+	r.curRangeKVBatch = r.curRangeKVBatch[:0]
 }
 
-type flushableBuffer struct {
-	buffer     *streamIngestionBuffer
-	checkpoint *jobspb.ResolvedSpans
-}
-
-// flushBuffer flushes the given streamIngestionBuffer via the SST
-// batchers and returns the underlying streamIngestionBuffer to the pool.
-func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.ResolvedSpans, error) {
+func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
+
+	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
 
 	// First process the point KVs.
 	//
 	// Ensure that the current batch is sorted.
-	sort.Sort(b.buffer.curKVBatch)
-	for _, keyVal := range b.buffer.curKVBatch {
+	sort.Sort(sip.curKVBatch)
+	minBatchMVCCTimestamp := hlc.MaxTimestamp
+	for _, keyVal := range sip.curKVBatch {
 		if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", keyVal)
+		}
+		if keyVal.Key.Timestamp.Less(minBatchMVCCTimestamp) {
+			minBatchMVCCTimestamp = keyVal.Key.Timestamp
 		}
 	}
 
 	preFlushTime := timeutil.Now()
-	if len(b.buffer.curKVBatch) > 0 {
+	if len(sip.curKVBatch) > 0 {
 		if err := sip.batcher.Flush(ctx); err != nil {
 			return nil, errors.Wrap(err, "flushing sst batcher")
 		}
 	}
 
 	// Now process the range KVs.
-	if len(b.buffer.curRangeKVBatch) > 0 {
-		if err := sip.rangeBatcher.flush(ctx, b.buffer.curRangeKVBatch); err != nil {
+	if len(sip.rangeBatcher.curRangeKVBatch) > 0 {
+		if sip.rangeBatcher.minTimestamp.Less(minBatchMVCCTimestamp) {
+			minBatchMVCCTimestamp = sip.rangeBatcher.minTimestamp
+		}
+
+		if err := sip.rangeBatcher.flush(ctx); err != nil {
 			log.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")
 		}
@@ -1157,18 +1116,25 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 
 	// Update the flush metrics.
 	sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
-	sip.metrics.CommitLatency.RecordValue(timeutil.Since(b.buffer.minTimestamp.GoTime()).Nanoseconds())
+	sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
 	sip.metrics.Flushes.Inc(1)
-	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curKVBatch)))
-	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curRangeKVBatch)))
+	sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
+	sip.metrics.IngestedEvents.Inc(int64(len(sip.rangeBatcher.curRangeKVBatch)))
 
-	if err := sip.batcher.Reset(ctx); err != nil {
-		return b.checkpoint, err
-	}
+	// Go through buffered checkpoint events, and put them on the channel to be
+	// emitted to the downstream frontier processor.
+	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
+	})
 
-	releaseBuffer(b.buffer)
+	// Reset the current batch.
+	sip.lastFlushTime = timeutil.Now()
+	sip.curKVBatch = nil
+	sip.curKVBatchSize = 0
+	sip.rangeBatcher.reset()
 
-	return b.checkpoint, nil
+	return &flushedCheckpoints, sip.batcher.Reset(ctx)
 }
 
 // cutoverProvider allows us to override how we decide when the job has reached

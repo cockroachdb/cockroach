@@ -49,7 +49,7 @@ func (f *interceptingTransport) SendNext(
 // in which DistSender retries an (unbeknownst to it) successful EndTxn(commit=true)
 // RPC. It documents that this triggers an assertion failure in TxnCoordSender.
 //
-// See: https://github.com/cockroachdb/cockroach/issues/67765
+// See: https://github.com/cockroachdb/cockroach/issues/103817
 func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -89,8 +89,6 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 				},
 			}, nil
 		},
-		// Turn the assertion into an error returned via the txn.
-		DisableCommitSanityCheck: true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 1, args)

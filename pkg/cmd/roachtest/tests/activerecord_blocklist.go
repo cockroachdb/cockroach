@@ -30,7 +30,6 @@ var activeRecordBlocklist = blocklist{
 	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_timestamp_with_timestamptz_as_default": "49329",
 	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz_as_default":                 "49329",
 	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz":                            "49329",
-	"PessimisticLockingTest#test_with_lock_sets_isolation":                                                                              "100144",
 }
 
 var activeRecordIgnoreList = blocklist{

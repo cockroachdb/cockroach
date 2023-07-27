@@ -126,7 +126,6 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	}
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
-	evalCtx.GetTableMetrics = execCfg.GetTableMetricsFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
 	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
@@ -139,7 +138,6 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
 	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
 	evalCtx.KVStoresIterator = execCfg.KVStoresIterator
-	evalCtx.InspectzServer = execCfg.InspectzServer
 }
 
 // copy returns a deep copy of ctx.
@@ -330,7 +328,7 @@ func NewInternalPlanner(
 	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
-	sessionData *sessiondata.SessionData,
+	sessionData sessiondatapb.SessionData,
 	opts ...InternalPlannerParamsOption,
 ) (interface{}, func()) {
 	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData, opts...)
@@ -351,7 +349,7 @@ func newInternalPlanner(
 	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
-	sd *sessiondata.SessionData,
+	sessionData sessiondatapb.SessionData,
 	opts ...InternalPlannerParamsOption,
 ) (*planner, func()) {
 	// Default parameters which may be override by the supplied options.
@@ -370,14 +368,19 @@ func newInternalPlanner(
 	// suitable contexts.
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
-	sd = sd.Clone()
+	sd := &sessiondata.SessionData{
+		SessionData:   sessionData,
+		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
+		SequenceState: sessiondata.NewSequenceState(),
+		Location:      time.UTC,
+	}
 	if sd.SessionData.Database == "" {
 		sd.SessionData.Database = "system"
 	}
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
-	sd.SearchPath = sessiondata.DefaultSearchPathForUser(user)
 	sds := sessiondata.NewStack(sd)
+
 	if params.collection == nil {
 		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sds)
 		params.collection = execCfg.CollectionFactory.NewCollection(
@@ -440,7 +443,6 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
 	p.extendedEvalCtx.Gossip = p
-	p.extendedEvalCtx.JobsProfiler = p
 	p.extendedEvalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID

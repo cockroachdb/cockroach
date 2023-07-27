@@ -11,14 +11,11 @@
 package kvflowcontroller
 
 import (
-	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -200,38 +197,16 @@ func newMetrics(c *Controller) *metrics {
 				return int64(len(c.mu.buckets))
 			},
 		)
-
-		var blockedStreamLogger = log.Every(30 * time.Second)
-		var buf strings.Builder
 		m.BlockedStreamCount[wc] = metric.NewFunctionalGauge(
 			annotateMetricTemplateWithWorkClass(wc, blockedStreamCount),
 			func() int64 {
-				shouldLog := blockedStreamLogger.ShouldLog()
-
 				count := int64(0)
 				c.mu.Lock()
 				defer c.mu.Unlock()
-
-				for s, wbc := range c.mu.buckets {
+				for _, wbc := range c.mu.buckets {
 					if wbc.tokens[wc] <= 0 {
 						count += 1
-
-						if shouldLog {
-							if count > 10 {
-								continue // cap output to 10 blocked streams
-							}
-							if count == 1 {
-								buf.Reset()
-							}
-							if count > 1 {
-								buf.WriteString(", ")
-							}
-							buf.WriteString(s.String())
-						}
 					}
-				}
-				if shouldLog && count > 0 {
-					log.Warningf(context.Background(), "%d blocked %s replication stream(s): %s", count, wc, buf.String())
 				}
 				return count
 			},

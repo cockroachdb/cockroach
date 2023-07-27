@@ -10,7 +10,6 @@ package tenantcostclient
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -181,13 +180,7 @@ func newTenantSideCostController(
 		NewRate:   initialRate,
 	})
 
-	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
-		config := tenantcostmodel.ConfigFromSettings(&st.SV)
-		c.costCfg.Swap(&config)
-	})
-	initialConfig := tenantcostmodel.ConfigFromSettings(&st.SV)
-	c.costCfg.CompareAndSwap(nil, &initialConfig)
-
+	c.costCfg = tenantcostmodel.ConfigFromSettings(&st.SV)
 	c.modeMu.externalIORUAccountingMode = externalIORUAccountingModeFromString(ExternalIORUAccountingMode.Get(&st.SV))
 	ExternalIORUAccountingMode.SetOnChange(&st.SV, func(context.Context) {
 		c.modeMu.Lock()
@@ -250,7 +243,7 @@ type tenantSideCostController struct {
 	timeSource           timeutil.TimeSource
 	testInstr            TestInstrumentation
 	settings             *cluster.Settings
-	costCfg              atomic.Pointer[tenantcostmodel.Config]
+	costCfg              tenantcostmodel.Config
 	tenantID             roachpb.TenantID
 	provider             kvtenant.TokenBucketProvider
 	limiter              limiter
@@ -435,13 +428,12 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 		deltaCPU = 0
 	}
 
-	costCfg := c.costCfg.Load()
-	ru := costCfg.PodCPUCost(deltaCPU)
+	ru := c.costCfg.PodCPUCost(deltaCPU)
 
 	var deltaPGWireEgressBytes uint64
 	if newExternalUsage.PGWireEgressBytes > c.run.externalUsage.PGWireEgressBytes {
 		deltaPGWireEgressBytes = newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes
-		ru += costCfg.PGWireEgressCost(int64(deltaPGWireEgressBytes))
+		ru += c.costCfg.PGWireEgressCost(int64(deltaPGWireEgressBytes))
 	}
 
 	// KV RUs are not included here, these metrics correspond only to the SQL pod.
@@ -787,9 +779,8 @@ func (c *tenantSideCostController) OnResponseWait(
 	}
 
 	// Account for the cost of write requests and read responses.
-	costCfg := c.costCfg.Load()
-	writeRU := costCfg.RequestCost(req)
-	readRU := costCfg.ResponseCost(resp)
+	writeRU := c.costCfg.RequestCost(req)
+	readRU := c.costCfg.ResponseCost(resp)
 	totalRU := writeRU + readRU
 
 	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
@@ -868,9 +859,8 @@ func (c *tenantSideCostController) onExternalIO(
 		return nil
 	}
 
-	costCfg := c.costCfg.Load()
-	totalRU := costCfg.ExternalIOIngressCost(usage.IngressBytes) +
-		costCfg.ExternalIOEgressCost(usage.EgressBytes)
+	totalRU := c.costCfg.ExternalIOIngressCost(usage.IngressBytes) +
+		c.costCfg.ExternalIOEgressCost(usage.EgressBytes)
 
 	if wait {
 		if err := c.limiter.Wait(ctx, totalRU); err != nil {
@@ -901,5 +891,5 @@ func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
 
 // GetCostConfig is part of the multitenant.TenantSideCostController interface.
 func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
-	return c.costCfg.Load()
+	return &c.costCfg
 }

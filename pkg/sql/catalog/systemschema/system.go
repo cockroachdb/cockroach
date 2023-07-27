@@ -1098,31 +1098,6 @@ func systemTable(
 	// assigned before the primary index.
 	tbl.PrimaryIndex.ConstraintID = tbl.NextConstraintID
 	tbl.NextConstraintID++
-
-	// Make sure all primary indexes have the correct encoding and version,
-	// which also requires the stored columns to be set.
-	tbl.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
-	tbl.PrimaryIndex.EncodingType = catenumpb.PrimaryIndexEncoding
-	storedColumnIDs := make([]descpb.ColumnID, 0, len(tbl.Columns))
-	storedColumnNames := make([]string, 0, len(tbl.Columns))
-	keyColIDs := catalog.TableColSet{}
-	for _, colID := range tbl.PrimaryIndex.KeyColumnIDs {
-		keyColIDs.Add(colID)
-	}
-	for _, col := range tbl.Columns {
-		if keyColIDs.Contains(col.ID) || col.Virtual {
-			continue
-		}
-		storedColumnIDs = append(storedColumnIDs, col.ID)
-		storedColumnNames = append(storedColumnNames, col.Name)
-	}
-	if len(storedColumnIDs) == 0 {
-		storedColumnIDs = nil
-		storedColumnNames = nil
-	}
-	tbl.PrimaryIndex.StoreColumnIDs = storedColumnIDs
-	tbl.PrimaryIndex.StoreColumnNames = storedColumnNames
-
 	return tbl
 }
 
@@ -1155,6 +1130,12 @@ func makeSystemTable(
 		fn(&tbl)
 	}
 	b := tabledesc.NewBuilder(&tbl)
+	if err := b.RunPostDeserializationChanges(); err != nil {
+		log.Fatalf(
+			ctx, "system table %q cannot be registered, error during RunPostDeserializationChanges: %+v",
+			tbl.Name, err,
+		)
+	}
 	return SystemTable{
 		Schema:          createTableStmt,
 		TableDescriptor: b.BuildImmutableTable(),
@@ -1183,7 +1164,6 @@ func MakeSystemTables() []SystemTable {
 		RangeEventTable,
 		UITable,
 		JobsTable,
-		SystemJobInfoTable,
 		WebSessionsTable,
 		TableStatisticsTable,
 		LocationsTable,
@@ -2289,12 +2269,10 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Name:         "check_singleton",
-				Expr:         "singleton",
-				ColumnIDs:    []descpb.ColumnID{1},
-				ConstraintID: tbl.NextConstraintID,
+				Name:      "check_singleton",
+				Expr:      "singleton",
+				ColumnIDs: []descpb.ColumnID{1},
 			}}
-			tbl.NextConstraintID++
 		},
 	)
 
@@ -2434,12 +2412,10 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Name:         "check_sampling_probability",
-				Expr:         "sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8",
-				ColumnIDs:    []descpb.ColumnID{8},
-				ConstraintID: tbl.NextConstraintID,
+				Name:      "check_sampling_probability",
+				Expr:      "sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8",
+				ColumnIDs: []descpb.ColumnID{8},
 			}}
-			tbl.NextConstraintID++
 		},
 	)
 
@@ -2875,9 +2851,7 @@ var (
 				ColumnIDs:             []descpb.ColumnID{11},
 				IsNonNullConstraint:   false,
 				FromHashShardedColumn: true,
-				ConstraintID:          tbl.NextConstraintID,
 			}}
-			tbl.NextConstraintID++
 		},
 	)
 
@@ -3099,9 +3073,7 @@ var (
 				ColumnIDs:             []descpb.ColumnID{8},
 				IsNonNullConstraint:   false,
 				FromHashShardedColumn: true,
-				ConstraintID:          tbl.NextConstraintID,
 			}}
-			tbl.NextConstraintID++
 		},
 	)
 
@@ -3634,12 +3606,10 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Name:         "check_bounds",
-				Expr:         "start_key < end_key",
-				ColumnIDs:    []descpb.ColumnID{1, 2},
-				ConstraintID: tbl.NextConstraintID,
+				Name:      "check_bounds",
+				Expr:      "start_key < end_key",
+				ColumnIDs: []descpb.ColumnID{1, 2},
 			}}
-			tbl.NextConstraintID++
 		},
 	)
 
@@ -3703,12 +3673,10 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Name:         "single_row",
-				Expr:         "singleton",
-				ColumnIDs:    []descpb.ColumnID{1},
-				ConstraintID: tbl.NextConstraintID,
+				Name:      "single_row",
+				Expr:      "singleton",
+				ColumnIDs: []descpb.ColumnID{1},
 			}}
-			tbl.NextConstraintID++
 		},
 	)
 

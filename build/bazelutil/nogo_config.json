@@ -1,28 +1,25 @@
 {
     "assign": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         }
     },
     "composites": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "copylocks": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "deepequalerrors": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         },
         "exclude_files": {
             "_test\\.go$": "tests"
@@ -30,98 +27,86 @@
     },
     "errcheck": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code",
-            "cockroach/bazel-out/.*/testmain\\.go$": "generated test main file by rules_go"
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/testutils/lint/lint_test.go": "not really sure why this is failing honestly"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "errcmp": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code",
-            "cockroach/bazel-out/.*/testmain\\.go$": "generated test main file by rules_go",
-            "cockroach/pkg/cmd/github-pull-request-make/main.go": "invalid direct cast on error object",
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
             "cockroach/pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvpb/errors\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/sql/pgwire/pgerror/constraint_name\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
-            "cockroach/pkg/util/timeutil/timeout_error\\.go$": "invalid direct cast on error object",
+            "cockroach/pkg/util/contextutil/timeout_error\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/util/sysutil/sysutil_.*": "type can change by system",
             "cockroach/pkg/cloud/gcp/gcs_retry\\.go$": "invalid direct cast on error object"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "errwrap": {
-        "exclude_files": {
-            ".*\\.pb\\.go$": "generated code",
-            ".*\\.pb\\.gw\\.go$": "generated code"
-        },
-        "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
-        }
+      "exclude_files": {
+        ".*\\.pb\\.go$": "generated code",
+        ".*\\.pb\\.gw\\.go$": "generated code"
+      },
+      "only_files": {
+        "cockroach/pkg/.*$": "first-party code"
+      }
     },
     "fmtsafe": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
             "cockroach/pkg/roachprod/logger/log\\.go$": "format argument is not a constant expression",
-            "cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression",
-            "pkg/util/log/log_channels_generated\\.go$": "format argument is not a constant expression"
+            "cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "grpcconnclose": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "hash": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "lostcancel": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "nilness": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
             "/_cgo_gotypes.go$": "cgo generated code",
             "_test\\.go$": "tests"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "printf": {
@@ -129,8 +114,7 @@
             "funcs": "ErrEvent,ErrEventf,Error,Errorf,ErrorfDepth,Event,Eventf,Fatal,Fatalf,FatalfDepth,Info,Infof,InfofDepth,AssertionFailedf,AssertionFailedWithDepthf,NewAssertionErrorWithWrappedErrf,DangerousStatementf,pgerror.New,pgerror.NewWithDepthf,pgerror.Newf,SetDetailf,SetHintf,Unimplemented,Unimplementedf,UnimplementedWithDepthf,UnimplementedWithIssueDetailf,UnimplementedWithIssuef,VEvent,VEventf,Warning,Warningf,WarningfDepth,Wrapf,WrapWithDepthf,redact.Fprint,redact.Fprintf,redact.Sprint,redact.Sprintf"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "returncheck": {
@@ -139,651 +123,596 @@
             "cockroach/pkg/kv/txn_external_test.go": "existing failure"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "returnerrcheck": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1002": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1004": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1006": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1007": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1008": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1009": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1010": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1011": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
             "pkg/sql/sem/builtins/aggregate_builtins_test\\.go": "false positive, apparently"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1012": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1016": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1017": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1018": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1019": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1020": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1021": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1023": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1024": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1025": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1028": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1029": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1030": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1031": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1032": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1033": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1034": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1035": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1036": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1037": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1038": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1039": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "S1040": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1002": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1004": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1006": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1007": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1008": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1010": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1011": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1012": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1013": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1014": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1015": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1016": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1017": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1018": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1019": {
@@ -791,12 +720,10 @@
             "cockroach/pkg/kv/kvpb/api_test.go$": "same package that grpc-go imports",
             "cockroach/pkg/rpc/codec.go$": "rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).",
             "cockroach/pkg/rpc/stats_handler.go$": "Using deprecated WireLength call",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code",
-            "pkg/roachprod/vm/aws/embedded\\.go$": "generated code",
-            "pkg/security/securitytest/embedded\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
             "pkg/sql/conn_executor.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/instrumentation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/planner.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
@@ -816,883 +743,809 @@
             "pkg/build/bazel/bazel\\.go$": "Runfile function deprecated"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1020": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1021": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1023": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1024": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1025": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1026": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1027": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1028": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1029": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA1030": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA2000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA2001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA2002": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA2003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA3000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA3001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4004": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4006": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4008": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4009": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4010": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4011": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4012": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4013": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4014": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4015": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4016": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4017": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4018": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4019": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4020": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4021": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4022": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4023": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4024": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4025": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4026": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4027": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4028": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4029": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4030": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA4031": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5002": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5004": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5007": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5008": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5009": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5010": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5011": {
         "exclude_files": {
             "_test\\.go$": "tests",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA5012": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA6000": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA6001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA6002": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA6003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA6005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9002": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9003": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9004": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9006": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9007": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "SA9008": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1000": {
         "exclude_files": {
             "cockroach/pkg/.*$": "skipped in default staticcheck config",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code",
-            "pkg/sql/roleoption": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1001": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
             "cockroach/pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
         },
         "only_files": {
@@ -1703,246 +1556,221 @@
     "ST1003": {
         "exclude_files": {
             "cockroach/pkg/.*$": "skipped in default staticcheck config",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1005": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1006": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1008": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1011": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1011": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1012": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1013": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1015": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1016": {
         "exclude_files": {
             "cockroach/pkg/.*$": "skipped in default staticcheck config",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1017": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1018": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1019": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1020": {
         "exclude_files": {
             "cockroach/pkg/.*$": "skipped in default staticcheck config",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1021": {
         "exclude_files": {
             "cockroach/pkg/.*$": "skipped in default staticcheck config",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1022": {
         "exclude_files": {
             "cockroach/pkg/.*$": "skipped in default staticcheck config",
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "ST1023": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "shadow": {
-       "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
-            "pkg/.*\\.og\\.go$": "generated code"
-        },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "stdmethods": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "stringintconv": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "structtag": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         }
     },
     "testinggoroutine": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         },
         "exclude_files": {
             "_test\\.go$": "tests"
@@ -1950,26 +1778,23 @@
     },
     "unconvert": {
         "exclude_files": {
-            "pkg/.*\\.eg\\.go$": "generated code",
+            "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "U1000": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "unreachable": {
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     },
     "unsafeptr": {
@@ -1977,8 +1802,7 @@
             "cockroach/pkg/sql/colexec/colexechash/hash\\.go$": "re-implements runtime.noescape for efficient hashing"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code",
-            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code"
         }
     }
 }

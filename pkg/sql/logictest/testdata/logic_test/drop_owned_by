@@ -1,4 +1,4 @@
-# LogicTest: default-configs !local-legacy-schema-changer
+# LogicTest: local-mixed-22.2-23.1 default-configs !local-legacy-schema-changer
 # Skipped on legacy schema changer since it unsupported.
 
 # Test dropping nothing.
@@ -40,7 +40,7 @@ CREATE SEQUENCE seq
 statement ok
 CREATE TYPE enum AS ENUM('a', 'b')
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM public
 ----
 public  seq  sequence  testuser   0  NULL
@@ -109,7 +109,7 @@ DROP OWNED BY testuser
 statement error pq: cannot drop desired object\(s\) because other objects depend on them
 DROP OWNED BY testuser RESTRICT
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM public
 ----
 public  t  table  testuser   0  NULL
@@ -244,7 +244,7 @@ user root
 # database privileges via DROP OWNED BY.
 subtest revoke-privileges-db
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE test
 ----
 test  admin     ALL      true
@@ -257,7 +257,7 @@ user root
 statement ok
 DROP OWNED BY testuser
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE test
 ----
 test  admin   ALL      true
@@ -288,7 +288,7 @@ CREATE TABLE s.t()
 statement ok
 DROP OWNED BY testuser
 
-query TTTTB rowsort
+query TTTTB
 SHOW GRANTS ON SCHEMA s
 ----
 test  s  admin  ALL  true
@@ -317,7 +317,7 @@ GRANT ALL ON t TO testuser WITH GRANT OPTION
 
 user testuser
 
-query TTTTTB rowsort
+query TTTTTB
 SHOW GRANTS ON t
 ----
 test  public  t  admin    ALL  true
@@ -327,7 +327,7 @@ test  public  t  testuser ALL  true
 statement ok
 DROP OWNED BY testuser
 
-query TTTTTB rowsort
+query TTTTTB
 SHOW GRANTS ON t
 ----
 test  public  t  admin    ALL  true
@@ -362,7 +362,7 @@ CREATE TABLE t2()
 statement ok
 SET ROLE root
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM public
 ----
 public  t1  table  r1   0  NULL
@@ -466,7 +466,7 @@ CREATE TABLE d2.t1()
 
 user root
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 d1         root  NULL  NULL  {}  NULL
@@ -481,7 +481,7 @@ test       root  NULL  NULL  {}  NULL
 statement ok
 SET DATABASE = d1
 
-query TT rowsort
+query TT
 SHOW SCHEMAS FROM d1
 ----
 crdb_internal       NULL
@@ -494,7 +494,7 @@ s2                  root
 s3                  testuser
 s4                  testuser
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM d1
 ----
 public  t1  table  root      0  NULL
@@ -504,7 +504,7 @@ public  v2  view   testuser  0  NULL
 s1      t1  table  root      0  NULL
 s1      t2  table  testuser  0  NULL
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE d1
 ----
 d1  admin     ALL      true
@@ -513,7 +513,7 @@ d1  root      ALL      true
 d1  testuser  CREATE   true
 d1  testuser  DROP     true
 
-query TTTTB rowsort
+query TTTTB
 SHOW GRANTS ON SCHEMA d1.s1
 ----
 d1  s1  admin     ALL     true
@@ -523,7 +523,7 @@ d1  s1  testuser  CREATE  true
 statement ok
 DROP OWNED BY testuser
 
-query TT rowsort
+query TT
 SHOW SCHEMAS FROM d1
 ----
 crdb_internal       NULL
@@ -534,20 +534,20 @@ public              admin
 s1                  root
 s2                  root
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM d1
 ----
 public  t1  table  root      0  NULL
 public  v1  view   root      0  NULL
 s1      t1  table  root      0  NULL
 
-query TTTTB rowsort
+query TTTTB
 SHOW GRANTS ON SCHEMA d1.s1
 ----
 d1  s1  admin     ALL     true
 d1  s1  root      ALL     true
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE d1
 ----
 d1  admin     ALL      true
@@ -557,7 +557,7 @@ d1  root      ALL      true
 statement ok
 SET DATABASE = d2
 
-query TT rowsort
+query TT
 SHOW SCHEMAS FROM d2
 ----
 crdb_internal       NULL
@@ -573,7 +573,7 @@ SHOW TABLES FROM d2
 ----
 public  t1  table  testuser  0  NULL
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE d2
 ----
 d2  admin     ALL      true
@@ -584,7 +584,7 @@ d2  testuser  ALL      true
 statement ok
 DROP OWNED BY testuser
 
-query TT rowsort
+query TT
 SHOW SCHEMAS FROM d2
 ----
 crdb_internal       NULL
@@ -598,7 +598,7 @@ query TTTTIT
 SHOW TABLES FROM d2
 ----
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE d2
 ----
 d2  admin     ALL      true
@@ -608,7 +608,7 @@ d2  root      ALL      true
 statement ok
 SET DATABASE = d3
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE d3
 ----
 d3  admin     ALL      true
@@ -619,7 +619,7 @@ d3  testuser  CREATE   true
 statement ok
 DROP OWNED BY testuser
 
-query TTTB rowsort
+query TTTB
 SHOW GRANTS ON DATABASE d3
 ----
 d3  admin   ALL      true

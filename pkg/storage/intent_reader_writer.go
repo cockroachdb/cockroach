@@ -37,7 +37,7 @@ func wrapIntentWriter(w Writer) intentDemuxWriter {
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to, and a possibly different buf returned.
 func (idw intentDemuxWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, buf []byte, opts ClearOptions,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, buf []byte,
 ) (_ []byte, _ error) {
 	var engineKey EngineKey
 	engineKey, buf = LockTableKey{
@@ -48,7 +48,7 @@ func (idw intentDemuxWriter) ClearIntent(
 	if txnDidNotUpdateMeta {
 		return buf, idw.w.SingleClearEngineKey(engineKey)
 	}
-	return buf, idw.w.ClearEngineKey(engineKey, opts)
+	return buf, idw.w.ClearEngineKey(engineKey)
 }
 
 // PutIntent has the same behavior as Writer.PutIntent. buf is used as

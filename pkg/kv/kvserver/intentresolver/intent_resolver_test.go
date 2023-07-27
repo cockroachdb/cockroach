@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -837,8 +836,7 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	txn := roachpb.MakeTransaction(
-		name, baseKey, isolation.Serializable, userPriority, now, offset, 1 /* coordinatorNodeID */)
+	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset, 1 /* coordinatorNodeID */)
 	return &txn
 }
 

@@ -127,7 +127,8 @@ func (s *Server) upgradeStatus(
 	if err != nil {
 		return upgradeBlockedDueToError, err
 	}
-	vitalities, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
+	clock := s.admin.server.clock
+	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
 	if err != nil {
 		return upgradeBlockedDueToError, err
 	}
@@ -136,22 +137,20 @@ func (s *Server) upgradeStatus(
 	var notRunningErr error
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
-		v := vitalities[nodeID]
+		st := statusMap[nodeID]
 
 		// Skip over removed nodes.
-		if v.IsDecommissioned() {
+		if st == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			continue
 		}
 
-		// TODO(baptist): This does not allow upgrades if any nodes are draining.
-		// This may be an overly strict check as the operator may want to leave the
-		// node in a draining state until post upgrade.
-		if !v.IsLive(livenesspb.Upgrade) {
+		if st != livenesspb.NodeLivenessStatus_LIVE &&
+			st != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
 			// We definitely won't be able to upgrade, but defer this error as
 			// we may find out that we are already at the latest version (the
 			// cluster may be up-to-date, but a node is down).
 			if notRunningErr == nil {
-				notRunningErr = errors.Errorf("node %d not running (%d), cannot determine version", nodeID, st)
+				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st)
 			}
 			continue
 		}

@@ -218,21 +218,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		defer cleanup()
 
 		s, conn, _ := serverutils.StartServer(t,
-			base.TestServerArgs{
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107310),
-				Insecure:          insecure,
-				SocketFile:        maybeSocketFile,
-			})
+			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
 		defer s.Stopper().Stop(context.Background())
 
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+		pgServer := testServer.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
-		s.TenantOrServer().PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+		testServer.PGPreServer().TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -606,13 +602,6 @@ func fmtErr(err error) string {
 			}
 			if pqErr.Hint != "" {
 				hint := strings.Replace(pqErr.Hint, stdstrings.IssueReferral, "<STANDARD REFERRAL>", 1)
-				if strings.Contains(hint, "Supported methods:") {
-					// Depending on whether the test is running on linux or not
-					// (or, more specifically, whether gss build tag is set),
-					// "gss" method might not be included, so we remove it here
-					// and not include into the expected output.
-					hint = strings.Replace(hint, "gss, ", "", 1)
-				}
 				errStr += "\nHINT: " + hint
 			}
 			if pqErr.Detail != "" {
@@ -651,9 +640,10 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+	testServer := s.(*server.TestServer)
+	pgServer := testServer.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
-	pgPreServer := s.TenantOrServer().PGPreServer().(*pgwire.PreServeConnHandler)
+	pgPreServer := testServer.PGPreServer()
 
 	testCases := []struct {
 		specialAddr string
@@ -793,9 +783,7 @@ func TestSSLSessionVar(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107310),
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	s.(*server.TestServer).Cfg.AcceptSQLWithoutTLS = true
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)

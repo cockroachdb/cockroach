@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -1966,7 +1965,7 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
 	opts allocator.TransferLeaseOptions,
@@ -2141,7 +2140,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetFirstIndex() uint64
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 ) bool {
@@ -2226,7 +2225,7 @@ func (a *Allocator) TransferLeaseTarget(
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2494,7 +2493,7 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2827,7 +2826,7 @@ func (a Allocator) PreferredLeaseholders(
 			if !ok {
 				continue
 			}
-			if constraint.ConjunctionsCheck(storeDesc, preference.Constraints) {
+			if constraint.CheckStoreConjunction(storeDesc, preference.Constraints) {
 				preferred = append(preferred, repl)
 			}
 		}
@@ -2863,10 +2862,7 @@ func FilterBehindReplicas(
 // Other replicas may be filtered out if this function is called with the
 // `raftStatus` of a non-raft leader replica.
 func excludeReplicasInNeedOfSnapshots(
-	ctx context.Context,
-	st *raft.Status,
-	firstIndex kvpb.RaftIndex,
-	replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, st *raft.Status, firstIndex uint64, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {

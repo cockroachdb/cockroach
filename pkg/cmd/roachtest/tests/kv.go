@@ -58,15 +58,13 @@ func registerKV(r registry.Registry) {
 		encryption               bool
 		sequential               bool
 		globalMVCCRangeTombstone bool
-		expirationLeases         bool
 		concMultiplier           int
 		ssds                     int
 		raid0                    bool
 		duration                 time.Duration
 		tracing                  bool // `trace.debug.enable`
-		tags                     map[string]struct{}
+		tags                     []string
 		owner                    registry.Owner // defaults to KV
-		sharedProcessMT          bool
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -122,18 +120,10 @@ func registerKV(r registry.Registry) {
 				t.Fatalf("failed to disable load based splitting: %v", err)
 			}
 		}
-		if opts.expirationLeases {
-			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.expiration_leases_only.enabled = true"); err != nil {
-				t.Fatalf("failed to enable expiration leases: %v", err)
-			}
-		}
 		if opts.tracing {
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING trace.debug.enable = true"); err != nil {
 				t.Fatalf("failed to enable tracing: %v", err)
 			}
-		}
-		if opts.sharedProcessMT {
-			createInMemoryTenant(ctx, t, c, appTenantName, c.Range(1, nodes), false /* secure */)
 		}
 
 		t.Status("running workload")
@@ -179,13 +169,9 @@ func registerKV(r registry.Registry) {
 				envFlags = " " + e
 			}
 
-			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
-			if opts.sharedProcessMT {
-				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
-			}
-			cmd := "./workload run kv --tolerate-errors --init" +
-				histograms + concurrency + splits + duration + readPercent +
-				batchSize + blockSize + sequential + envFlags + url
+			cmd := fmt.Sprintf("./workload run kv --tolerate-errors --init"+
+				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+envFlags+
+				" {pgurl:1-%d}", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
@@ -195,36 +181,24 @@ func registerKV(r registry.Registry) {
 	for _, opts := range []kvOptions{
 		// Standard configs.
 		{nodes: 1, cpus: 8, readPercent: 0},
-		{nodes: 1, cpus: 8, readPercent: 0, sharedProcessMT: true},
 		// CPU overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192},
 		// IO write overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 1, cpus: 8, readPercent: 95},
-		{nodes: 1, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 0},
-		{nodes: 1, cpus: 32, readPercent: 0, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 95},
-		{nodes: 1, cpus: 32, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 0},
-		{nodes: 3, cpus: 8, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 95},
-		{nodes: 3, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObsInf},
 		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
-		{nodes: 3, cpus: 32, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 32, readPercent: 95},
-		{nodes: 3, cpus: 32, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0, globalMVCCRangeTombstone: true},
 		{nodes: 3, cpus: 32, readPercent: 95, globalMVCCRangeTombstone: true},
-
-		// Configs with expiration-based leases.
-		{nodes: 3, cpus: 8, readPercent: 0, expirationLeases: true},
-		{nodes: 3, cpus: 8, readPercent: 95, expirationLeases: true},
 
 		// Configs with large block sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
@@ -265,8 +239,8 @@ func registerKV(r registry.Registry) {
 		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
 
 		// Weekly larger scale configurations.
-		{nodes: 32, cpus: 8, readPercent: 0, tags: registry.Tags("weekly"), duration: time.Hour},
-		{nodes: 32, cpus: 8, readPercent: 95, tags: registry.Tags("weekly"), duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
 	} {
 		opts := opts
 
@@ -277,11 +251,7 @@ func registerKV(r registry.Registry) {
 		}
 		nameParts = append(nameParts, fmt.Sprintf("kv%d%s", opts.readPercent, limitedSpanStr))
 		if len(opts.tags) > 0 {
-			var keys []string
-			for k := range opts.tags {
-				keys = append(keys, k)
-			}
-			nameParts = append(nameParts, strings.Join(keys, "/"))
+			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
 		}
 		nameParts = append(nameParts, fmt.Sprintf("enc=%t", opts.encryption))
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
@@ -303,9 +273,6 @@ func registerKV(r registry.Registry) {
 		if opts.globalMVCCRangeTombstone {
 			nameParts = append(nameParts, "mvcc-range-keys=global")
 		}
-		if opts.expirationLeases {
-			nameParts = append(nameParts, "lease=expiration")
-		}
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
@@ -321,9 +288,6 @@ func registerKV(r registry.Registry) {
 		if opts.tracing {
 			nameParts = append(nameParts, "tracing")
 		}
-		if opts.sharedProcessMT {
-			nameParts = append(nameParts, "mt-shared-process")
-		}
 		owner := registry.OwnerTestEng
 		if opts.owner != "" {
 			owner = opts.owner
@@ -333,12 +297,6 @@ func registerKV(r registry.Registry) {
 			encryption = registry.EncryptionAlwaysEnabled
 		}
 		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
-
-		// All the kv0|95 tests should run on AWS by default
-		if opts.tags == nil && opts.ssds == 0 && (opts.readPercent == 95 || opts.readPercent == 0) {
-			opts.tags = registry.Tags("aws")
-		}
-
 		var skip string
 		if opts.ssds != 0 && cSpec.Cloud != spec.GCE {
 			skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
@@ -513,6 +471,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   registry.OwnerKV,
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/59094",
 		Cluster: r.MakeClusterSpec(4),
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -989,7 +948,7 @@ func registerKVRestartImpact(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name: "kv/restart/nodes=12",
 		// This test is expensive (104vcpu), we run it weekly.
-		Tags:    registry.Tags(`weekly`),
+		Tags:    []string{`weekly`},
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(13, spec.CPU(8)),
 		Leases:  registry.MetamorphicLeases,
@@ -997,10 +956,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			nodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-				"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			// The duration of the outage.
 			duration, err := time.ParseDuration(ifLocal(c, "20s", "10m"))

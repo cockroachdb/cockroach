@@ -263,7 +263,7 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~18KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~17KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (index-join G4 p,cols=(1-5))
@@ -583,7 +583,7 @@ project
 memo
 SELECT k FROM a WHERE v > 1
 ----
-memo (optimized, ~8KB, required=[presentation: k:1])
+memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -620,7 +620,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
-memo (optimized, ~10KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -718,7 +718,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized, ~11KB, required=[presentation: k:1])
+memo (optimized, ~10KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -970,7 +970,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G5)
@@ -1034,7 +1034,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
-memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G6 G7)
@@ -1102,7 +1102,7 @@ select
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
@@ -2033,7 +2033,7 @@ CREATE TABLE t100206 (
 ----
 
 # This should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206 WHERE (a,b) IN ((3,4), (5,6))
 ----
 scan t100206
@@ -2067,7 +2067,7 @@ select
 
 # The presence of a non-single-key constraint should not prevent derivation
 # of filters on computed columns.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) AND a > 4
 ----
 select
@@ -2087,7 +2087,7 @@ select
       └── a:1 > 4 [outer=(1), constraints=(/1: [/5 - ]; tight)]
 
 # This should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) AND d > 4
 ----
 select
@@ -2107,7 +2107,7 @@ select
       └── d:4 > 4 [outer=(4), constraints=(/4: [/5 - ]; tight)]
 
 # Prepared statements should be able to derive constraints.
-assign-placeholders-opt query-args=(1, 2, 3, 4)
+assign-placeholders-opt query-args=(1, 2, 3, 4) set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206 WHERE (a,b) IN (($1,$2), ($3,$4))
 ----
 scan t100206
@@ -2120,7 +2120,7 @@ scan t100206
  └── fd: (1,2)-->(3)
 
 # This should not generate a constrained scan due to the presence of a null.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206 WHERE (a,b) IN ((null,4), (5,6))
 ----
 select
@@ -2148,7 +2148,7 @@ CREATE TABLE t100206n (
 ----
 
 # This should derive the value of c from a and b, including the null in c.
-opt
+opt set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206n@idx1 WHERE (a,b) IN ((3,4), (5,6))
 ----
 project
@@ -2173,7 +2173,7 @@ CREATE TABLE t100206nc (
 ----
 
 # A nested CASE expression should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((3,4), (5,6))
 ----
 project
@@ -2192,7 +2192,7 @@ project
       └── CASE WHEN a:1 = 5 THEN CASE WHEN b:2 = 6 THEN 1 ELSE d:4 END ELSE b:2 END [as=c:3, outer=(1,2,4)]
 
 # When `c` relies on the value of `d`, we should not derive filters.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((5,7), (5,6))
 ----
 project
@@ -2214,7 +2214,7 @@ project
       └── CASE WHEN a:1 = 5 THEN CASE WHEN b:2 = 6 THEN 1 ELSE d:4 END ELSE b:2 END [as=c:3, outer=(1,2,4)]
 
 # When `d` is specified in a separate conjunct, we can't derive filters.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((5,7), (5,6)) AND d IN (9,10)
 ----
 project
@@ -2238,7 +2238,7 @@ project
 
 # An IN clause which could derive terms will not work if OR'ed with another
 # term.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((3,4), (5,6)) OR d IN (9,10)
 ----
 project
@@ -2258,7 +2258,7 @@ project
       └── CASE WHEN a:1 = 5 THEN CASE WHEN b:2 = 6 THEN 1 ELSE d:4 END ELSE b:2 END [as=c:3, outer=(1,2,4)]
 
 # TODO(msirek): Derive predicates on computed columns using ORed predicates.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a = 3 AND b = 4) OR (a = 5 AND b = 6)
 ----
 select
@@ -2276,7 +2276,7 @@ select
       └── ((a:1 = 3) AND (b:2 = 4)) OR ((a:1 = 5) AND (b:2 = 6)) [outer=(1,2), constraints=(/1: [/3 - /3] [/5 - /5]; /2: [/4 - /4] [/6 - /6])]
 
 # We should build a single constrained scan in the present of ORed terms.
-opt expect=(GenerateConstrainedScans,SplitDisjunction)
+opt expect=(GenerateConstrainedScans,SplitDisjunction) set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) OR c=1
 ----
 scan t100206
@@ -2298,7 +2298,7 @@ CREATE TABLE t100206b (
 ----
 
 # This should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206b WHERE a = 1
 ----
 select
@@ -2328,7 +2328,7 @@ CREATE TABLE t103755 (
 
 # The presence of an ORed inequality predicate should disqualify the derivation of the
 # value of column `c`.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t103755 WHERE a IN (VALUES(4)) OR a < 0
 ----
 select
@@ -2347,7 +2347,7 @@ select
 
 # The presence of an ORed equality predicate should allow derivation of the
 # value of column `c`.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t103755 WHERE a IN (VALUES(4)) OR a = 1
 ----
 scan t103755
@@ -2361,7 +2361,7 @@ scan t103755
 
 # The presence of an ORed inequality predicate should disqualify the derivation of the
 # value of column `c`.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t103755 WHERE a IN (VALUES(4)) OR b < 0
 ----
 select
@@ -3132,40 +3132,8 @@ select
       ├── j:4 <@ '{"a": [3]}' [outer=(4), immutable]
       └── j:4 <@ '[1, 2, 3]' [outer=(4), immutable]
 
-# Testing the equality operator, without the fetch val operator,
-# on an inverted index. In all such cases, the inverted expression
-# generated is not tight resulting in the original filter to be
-# applied again.
-
-# Testing equality for a JSON null on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = 'null'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
-      │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │         │         └── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │         └── key: (1)
-      └── filters
-           └── j:4 = 'null' [outer=(4), immutable, constraints=(/4: [/'null' - /'null']; tight), fd=()-->(4)]
-
-# Testing equality for a JSON string on an inverted index.
-opt expect=GenerateInvertedIndexScans
+# Query not using the fetch val but using the equality operator.
+opt expect-not=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j = '"b"'
 ----
 project
@@ -3177,194 +3145,12 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(4)
-      ├── index-join b
+      ├── scan b
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
-      │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │         └── key: (1)
+      │    └── fd: (1)-->(4)
       └── filters
            └── j:4 = '"b"' [outer=(4), immutable, constraints=(/4: [/'"b"' - /'"b"']; tight), fd=()-->(4)]
-
-# Testing equality for a JSON number on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = '1'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
-      │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         └── key: (1)
-      └── filters
-           └── j:4 = '1' [outer=(4), immutable, constraints=(/4: [/'1' - /'1']; tight), fd=()-->(4)]
-
-# Testing equality for a JSON empty string on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = '""'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
-      │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01\x12\x00\x01", "7\x00\x01\x12\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12\x00\x01", "7\x00\x03\x00\x01\x12\x00\x01"]
-      │         └── key: (1)
-      └── filters
-           └── j:4 = '""' [outer=(4), immutable, constraints=(/4: [/'""' - /'""']; tight), fd=()-->(4)]
-
-# Testing equality for a JSON array on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = '[1, 2, 3]'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── inner-join (lookup b)
-      ├── columns: k:1!null j:4!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
-      │    ├── columns: k:1!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [7] = ['\x37000300012a0200']
-      │    ├── right fixed columns: [7] = ['\x37000300012a0400']
-      │    └── filters (true)
-      └── filters
-           └── j:4 = '[1, 2, 3]' [outer=(4), immutable, constraints=(/4: [/'[1, 2, 3]' - /'[1, 2, 3]']; tight), fd=()-->(4)]
-
-
-# Testing equality for a JSON empty array on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = '[]'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    └── union spans
-      │         │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         │         └── ["7\x00\x03", "7\x00\x03"]
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         └── ["7\x00\x03", "7\x00\x03"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
-      └── filters
-           └── j:4 = '[]' [outer=(4), immutable, constraints=(/4: [/'[]' - /'[]']; tight), fd=()-->(4)]
-
-# Testing equality for a JSON empty object on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = '{}'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    └── union spans
-      │         │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         │         └── ["7\x00\xff", "8")
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7\x00\xff", "8")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
-      └── filters
-           └── j:4 = '{}' [outer=(4), immutable, constraints=(/4: [/'{}' - /'{}']; tight), fd=()-->(4)]
-
-# Testing equality for a JSON object on an inverted index.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j = '{"a": "b", "c": "d"}'
-----
-project
- ├── columns: k:1!null
- ├── immutable
- ├── key: (1)
- └── inner-join (lookup b)
-      ├── columns: k:1!null j:4!null
-      ├── key columns: [1] = [1]
-      ├── lookup columns are key
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(4)
-      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
-      │    ├── columns: k:1!null
-      │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [7] = ['\x3761000112620001']
-      │    ├── right fixed columns: [7] = ['\x3763000112640001']
-      │    └── filters (true)
-      └── filters
-           └── j:4 = '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight), fd=()-->(4)]
 
 # Query using the fetch val and equality operators.
 opt expect=GenerateInvertedIndexScans
@@ -3942,11 +3728,9 @@ project
            └── fd: (1)-->(7)
 
 
-# Testing the IN operator, without the fetch val operator,
-# on an inverted index.
-
-# Multiple JSON numbers contained within the IN operator.
-opt expect=GenerateInvertedIndexScans
+# Query NOT using the fetch val and the IN operator.
+# This should result in a full table scan (at the moment)
+opt expect-not=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j IN ('1', '2', '3')
 ----
 project
@@ -3956,257 +3740,12 @@ project
       ├── columns: k:1!null j:4!null
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── index-join b
+      ├── scan b
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    └── union spans
-      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │         │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │              │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │    └── fd: (1)-->(4)
       └── filters
            └── j:4 IN ('1', '2', '3') [outer=(4), constraints=(/4: [/'1' - /'1'] [/'2' - /'2'] [/'3' - /'3']; tight)]
-
-
-# Multiple JSON strings contained within the IN operator.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j IN ('"a"', '"b"', '"c"')
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    └── union spans
-      │         │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │         │         ├── ["7\x00\x01\x12c\x00\x01", "7\x00\x01\x12c\x00\x01"]
-      │         │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │              │         ├── ["7\x00\x01\x12c\x00\x01", "7\x00\x01\x12c\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │              │         └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
-      └── filters
-           └── j:4 IN ('"a"', '"b"', '"c"') [outer=(4), constraints=(/4: [/'"a"' - /'"a"'] [/'"b"' - /'"b"'] [/'"c"' - /'"c"']; tight)]
-
-
-# Multiple JSON arrays contained within the IN operator.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j IN ('[1, 2, 3]', '[1, 2]', '[1]', '[]')
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    ├── union spans
-      │         │    │    ├── ["7\x00\x018", "7\x00\x018"]
-      │         │    │    └── ["7\x00\x03", "7\x00\x03"]
-      │         │    └── UNION
-      │         │         ├── span expression
-      │         │         │    ├── tight: false, unique: false
-      │         │         │    ├── union spans: empty
-      │         │         │    └── INTERSECTION
-      │         │         │         ├── span expression
-      │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │    └── union spans: ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │         │         └── span expression
-      │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │         │         └── span expression
-      │         │              ├── tight: false, unique: true
-      │         │              ├── union spans: empty
-      │         │              └── INTERSECTION
-      │         │                   ├── span expression
-      │         │                   │    ├── tight: true, unique: true
-      │         │                   │    ├── union spans: empty
-      │         │                   │    └── INTERSECTION
-      │         │                   │         ├── span expression
-      │         │                   │         │    ├── tight: true, unique: true
-      │         │                   │         │    └── union spans: ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │                   │         └── span expression
-      │         │                   │              ├── tight: true, unique: true
-      │         │                   │              └── union spans: ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │         │                   └── span expression
-      │         │                        ├── tight: true, unique: true
-      │         │                        └── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         └── ["7\x00\x03", "7\x00\x03"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
-      └── filters
-           └── j:4 IN ('[]', '[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), constraints=(/4: [/'[]' - /'[]'] [/'[1]' - /'[1]'] [/'[1, 2]' - /'[1, 2]'] [/'[1, 2, 3]' - /'[1, 2, 3]']; tight)]
-
-# Multiple JSON objects contained within the IN operator.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j IN ('{"a": "b", "c": "d"}', '{}', '{"a": [1, 2, 3]}')
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    ├── union spans
-      │         │    │    ├── ["7\x00\x019", "7\x00\x019"]
-      │         │    │    └── ["7\x00\xff", "8")
-      │         │    └── UNION
-      │         │         ├── span expression
-      │         │         │    ├── tight: false, unique: false
-      │         │         │    ├── union spans: empty
-      │         │         │    └── INTERSECTION
-      │         │         │         ├── span expression
-      │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │    ├── union spans: empty
-      │         │         │         │    └── INTERSECTION
-      │         │         │         │         ├── span expression
-      │         │         │         │         │    ├── tight: true, unique: true
-      │         │         │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
-      │         │         │         │         └── span expression
-      │         │         │         │              ├── tight: true, unique: true
-      │         │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
-      │         │         │         └── span expression
-      │         │         │              ├── tight: true, unique: true
-      │         │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
-      │         │         └── span expression
-      │         │              ├── tight: false, unique: true
-      │         │              ├── union spans: empty
-      │         │              └── INTERSECTION
-      │         │                   ├── span expression
-      │         │                   │    ├── tight: true, unique: true
-      │         │                   │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         │                   └── span expression
-      │         │                        ├── tight: true, unique: true
-      │         │                        └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7\x00\xff", "8")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
-      └── filters
-           └── j:4 IN ('{}', '{"a": [1, 2, 3]}', '{"a": "b", "c": "d"}') [outer=(4), constraints=(/4: [/'{}' - /'{}'] [/'{"a": [1, 2, 3]}' - /'{"a": [1, 2, 3]}'] [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight)]
-
-# Combination of JSON values contained within the IN operator.
-opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j IN ('{"a": "b", "c": "d"}', '{}', 'null', '1', '"a"')
-----
-project
- ├── columns: k:1!null
- ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── inverted-filter
-      │         ├── columns: k:1!null
-      │         ├── inverted expression: /7
-      │         │    ├── tight: false, unique: false
-      │         │    ├── union spans
-      │         │    │    ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │         │    │    ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │         │    │    ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │    │    ├── ["7\x00\x019", "7\x00\x019"]
-      │         │    │    ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │         │    │    ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │         │    │    ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         │    │    └── ["7\x00\xff", "8")
-      │         │    └── INTERSECTION
-      │         │         ├── span expression
-      │         │         │    ├── tight: true, unique: true
-      │         │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │         │         └── span expression
-      │         │              ├── tight: true, unique: true
-      │         │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │         ├── key: (1)
-      │         └── scan b@j_inv_idx
-      │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │              │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\xff", "8")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
-      └── filters
-           └── j:4 IN ('null', '"a"', '1', '{}', '{"a": "b", "c": "d"}') [outer=(4), constraints=(/4: [/'null' - /'null'] [/'"a"' - /'"a"'] [/'1' - /'1'] [/'{}' - /'{}'] [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight)]
 
 # Generate an inverted scan when the index of the fetch val operator is
 # a string along with the IN operator consisting of JSON strings in
@@ -6678,7 +6217,7 @@ CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
 memo expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
 ----
-memo (optimized, ~14KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~13KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (index-join G6 pi,cols=(1-3))
@@ -7513,7 +7052,7 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~17KB, required=[presentation: q:2,r:3])
+memo (optimized, ~16KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
@@ -7659,7 +7198,7 @@ inner-join (zigzag pqr@q pqr@s)
 memo expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
-memo (optimized, ~14KB, required=[presentation: q:2,s:4])
+memo (optimized, ~13KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -8191,7 +7730,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~39KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~38KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -8601,6 +8140,7 @@ project
       └── filters (true)
 
 # Query requiring a zigzag join with a remaining filter.
+# TODO(itsbilal): remove filter from index join if zigzag join covers it.
 opt expect=GenerateInvertedIndexZigzagJoins
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
@@ -10383,7 +9923,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~35KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~34KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)

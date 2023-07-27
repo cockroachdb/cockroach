@@ -686,7 +686,6 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		Body:       desc.FunctionBody,
 		IsUDF:      true,
 		Version:    uint64(desc.Version),
-		Language:   desc.getCreateExprLang(),
 	}
 
 	argTypes := make(tree.ParamTypes, 0, len(desc.Params))
@@ -785,8 +784,6 @@ func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
 	switch desc.Lang {
 	case catpb.Function_SQL:
 		return tree.FunctionLangSQL
-	case catpb.Function_PLPGSQL:
-		return tree.FunctionLangPLpgSQL
 	}
 	return tree.FunctionLangUnknown
 }

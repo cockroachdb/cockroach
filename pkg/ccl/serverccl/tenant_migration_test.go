@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,55 +73,54 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 
 	// tenant's minimum supported version <= target version <= node's binary version
 	for i, test := range tests {
-		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			defer log.Scope(t).Close(t)
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			test.binaryVersion,
+			test.binaryMinSupportedVersion,
+			false, /* initializeVersion */
+		)
 
-			st := cluster.MakeTestingClusterSettingsWithVersions(
-				test.binaryVersion,
-				test.binaryMinSupportedVersion,
-				false, /* initializeVersion */
-			)
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			// Disable the default test tenant, since we create one explicitly
+			// below.
+			DisableDefaultTestTenant: true,
+			Settings:                 st,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride: test.binaryVersion,
+					// We're bumping cluster versions manually ourselves. We
+					// want to avoid racing with the auto-upgrade process.
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+		})
 
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				Settings:          st,
-				Knobs: base.TestingKnobs{
+		ctx := context.Background()
+		upgradePod, err := s.StartTenant(ctx,
+			base.TestTenantArgs{
+				Settings: st,
+				TenantID: serverutils.TestTenantID(),
+				TestingKnobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						BinaryVersionOverride: test.binaryVersion,
-						// We're bumping cluster versions manually ourselves. We
-						// want to avoid racing with the auto-upgrade process.
-						DisableAutomaticVersionUpgrade: make(chan struct{}),
 					},
 				},
 			})
-			defer s.Stopper().Stop(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			ctx := context.Background()
-			upgradePod, err := s.StartTenant(ctx,
-				base.TestTenantArgs{
-					Settings: st,
-					TenantID: serverutils.TestTenantID(),
-					TestingKnobs: base.TestingKnobs{
-						Server: &server.TestingKnobs{
-							BinaryVersionOverride: test.binaryVersion,
-						},
-					},
-				})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer upgradePod.Stopper().Stop(context.Background())
+		tmServer := upgradePod.MigrationServer().(*server.TenantMigrationServer)
+		req := &serverpb.ValidateTargetClusterVersionRequest{
+			ClusterVersion: &test.targetClusterVersion,
+		}
 
-			tmServer := upgradePod.MigrationServer().(*server.TenantMigrationServer)
-			req := &serverpb.ValidateTargetClusterVersionRequest{
-				ClusterVersion: &test.targetClusterVersion,
-			}
+		_, err = tmServer.ValidateTargetClusterVersion(context.Background(), req)
+		if !testutils.IsError(err, test.expErrMatch) {
+			t.Fatalf("test %d: got error %s, wanted error matching '%s'", i, err, test.expErrMatch)
+		}
 
-			_, err = tmServer.ValidateTargetClusterVersion(context.Background(), req)
-			if !testutils.IsError(err, test.expErrMatch) {
-				t.Fatalf("test %d: got error %s, wanted error matching '%s'", i, err, test.expErrMatch)
-			}
-		})
+		upgradePod.Stopper().Stop(context.Background())
+		s.Stopper().Stop(context.Background())
 	}
 }
 
@@ -185,8 +183,6 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 	ctx := context.Background()
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("config=%d", i), func(t *testing.T) {
-			defer log.Scope(t).Close(t)
-
 			st := cluster.MakeTestingClusterSettingsWithVersions(
 				test.binaryVersion.Version,
 				test.minSupportedVersion.Version,
@@ -194,8 +190,10 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 			)
 
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				Settings:          st,
+				// Disable the default tenant because we're creating one
+				// explicitly below.
+				DisableDefaultTestTenant: true,
+				Settings:                 st,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						// This test wants to bootstrap at the previously active

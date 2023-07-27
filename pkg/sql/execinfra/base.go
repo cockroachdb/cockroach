@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package execinfra contains the common interfaces for colexec and rowexec.
 package execinfra
 
 import (

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -214,7 +215,7 @@ func getNMeta2KVsImpl(
 
 	for n > 0 {
 		var newkvs []kv.KeyValue
-		if err := timeutil.RunWithTimeout(ctx, "db.Scan", timeout, func(ctx context.Context) error {
+		if err := contextutil.RunWithTimeout(ctx, "db.Scan", timeout, func(ctx context.Context) error {
 			// NB: keys.Meta2KeyMax stores a descriptor, so we want to include it.
 			var err error
 			// Queries from the planner bypass admission control, regardless of

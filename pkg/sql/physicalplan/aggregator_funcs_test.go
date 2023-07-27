@@ -68,10 +68,7 @@ func runTestFlow(
 ) (rowenc.EncDatumRows, error) {
 	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
 
-	leafInputState, err := txn.GetLeafTxnInputState(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	leafInputState := txn.GetLeafTxnInputState(context.Background())
 	req := execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,

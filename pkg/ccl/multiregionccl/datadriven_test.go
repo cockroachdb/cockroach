@@ -116,6 +116,11 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	skip.UnderRace(t, "flaky test")
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+
+		if strings.Contains(path, "secondary_region") {
+			skip.WithIssue(t, 92235, "flaky test")
+		}
+
 		ds := datadrivenTestState{}
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex
@@ -157,7 +162,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						// "wait-for-zone-config-changes" only work correctly
 						// when called from the system tenant. More
 						// investigation is required (tracked with #76378).
-						DefaultTestTenant: base.TODOTestTenantDisabled,
+						DisableDefaultTestTenant: true,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {

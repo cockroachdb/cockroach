@@ -94,10 +94,6 @@ type Builder struct {
 	catalog    cat.Catalog
 	scopeAlloc []scope
 
-	// stmtTree tracks the hierarchy of statements to ensure that multiple
-	// modifications to the same table cannot corrupt indexes (see #70731).
-	stmtTree statementTree
-
 	// ctes stores CTEs which may need to be built at the top-level.
 	ctes cteSources
 
@@ -166,6 +162,12 @@ type Builder struct {
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
+
+	// areAllTableMutationsSimpleInserts maps from each table mutated by the
+	// statement to true if all mutations of that table are simple inserts
+	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
+	// entry in the map.
+	areAllTableMutationsSimpleInserts map[cat.StableID]bool
 
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
@@ -259,24 +261,10 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 // "context". This is used at the top-level of every statement, and inside
 // EXPLAIN, CREATE VIEW, CREATE TABLE AS.
 func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) (outScope *scope) {
-	// A "root" statement cannot refer to anything from an enclosing query, so
-	// we always start with an empty scope.
+	// A "root" statement cannot refer to anything from an enclosing query, so we
+	// always start with an empty scope.
 	inScope := b.allocScope()
-	return b.buildStmtAtRootWithScope(stmt, desiredTypes, inScope)
-}
-
-// buildStmtAtRootWithScope is similar to buildStmtAtRoot, but allows a scope to
-// be provided. This is used at the top-level of a statement, that has a new
-// context but can refer to variables that are declared outside the statement,
-// like a statement within a UDF body that can reference UDF parameters.
-func (b *Builder) buildStmtAtRootWithScope(
-	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
-) (outScope *scope) {
 	inScope.atRoot = true
-
-	// Push a new statement onto the statement tree.
-	b.stmtTree.Push()
-	defer b.stmtTree.Pop()
 
 	// Save any CTEs above the boundary.
 	prevCTEs := b.ctes
@@ -326,7 +314,14 @@ func (b *Builder) buildStmt(
 	// An allowlist of statements supported for user defined function.
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
-		case *tree.Select, tree.SelectStatement, *tree.Insert, *tree.Update, *tree.Delete:
+		case *tree.Select:
+		case tree.SelectStatement:
+		case *tree.Delete:
+			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
+		case *tree.Insert:
+			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
+		case *tree.Update:
+			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}

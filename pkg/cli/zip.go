@@ -30,8 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
@@ -67,7 +66,7 @@ func (zc *debugZipContext) runZipFn(
 func (zc *debugZipContext) runZipFnWithTimeout(
 	ctx context.Context, s *zipReporter, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
-	err := timeutil.RunWithTimeout(ctx, s.prefix, timeout, fn)
+	err := contextutil.RunWithTimeout(ctx, s.prefix, timeout, fn)
 	s.progress("received response")
 	return err
 }
@@ -138,7 +137,7 @@ func (zc *debugZipContext) forAllNodes(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
-func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
+func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err
 	}
@@ -160,7 +159,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	var tenants []*serverpb.Tenant
 	if err := func() error {
-		s := zr.start("discovering virtual clusters")
+		s := zr.start("discovering tenants on cluster")
 		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
@@ -168,7 +167,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		defer finish()
 
 		var resp *serverpb.ListTenantsResponse
-		if err := timeutil.RunWithTimeout(context.Background(), "list virtual clusters", timeout, func(ctx context.Context) error {
+		if err := contextutil.RunWithTimeout(context.Background(), "list tenants", timeout, func(ctx context.Context) error {
 			resp, err = serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
 			return err
 		}); err != nil {
@@ -242,13 +241,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			cliCtx.IsInteractive = false
 			sqlExecCtx.TerminalOutput = false
 			sqlExecCtx.ShowTimes = false
-
-			if !cmd.Flags().Changed(cliflags.TableDisplayFormat.Name) {
-				// Use a streaming format to avoid accumulating all rows in RAM.
-				sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayJSON
-			}
-
-			zr.sqlOutputFilenameExtension = computeSQLOutputFilenameExtension(sqlExecCtx.TableDisplayFormat)
+			// Use a streaming format to avoid accumulating all rows in RAM.
+			sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 			sqlConn, err := makeTenantSQLClient("cockroach zip", useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
@@ -388,30 +382,17 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	const maxRetries = 5
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
-		name := baseName + suffix + "." + zc.clusterPrinter.sqlOutputFilenameExtension
+		name := baseName + suffix + ".txt"
 		s.progress("writing output: %s", name)
-		sqlErr := func() (err error) {
+		sqlErr := func() error {
 			zc.z.Lock()
 			defer zc.z.Unlock()
-
-			// Use a time travel query intentionally to avoid contention.
-			if !buildutil.CrdbTestBuild {
-				if err := conn.Exec(ctx, "BEGIN AS OF SYSTEM TIME '-0.1s';"); err != nil {
-					return err
-				}
-				defer func() {
-					rollbackErr := conn.Exec(ctx, "ROLLBACK;")
-					if rollbackErr != nil {
-						err = errors.WithSecondaryError(err, errors.Wrapf(rollbackErr, "failed rolling back"))
-					}
-				}()
-			}
 
 			// TODO(knz): This can use context cancellation now that query
 			// cancellation is supported in v22.1 and later.
 			// SET must be run separately from the query so that the command tag output
 			// doesn't get added to the debug file.
-			err = conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
+			err := conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
 			if err != nil {
 				return err
 			}
@@ -451,14 +432,4 @@ func (zc *debugZipContext) dumpTableDataForZip(
 
 func sanitizeFilename(f string) string {
 	return strings.TrimPrefix(f, `"".`)
-}
-
-func computeSQLOutputFilenameExtension(tfmt clisqlexec.TableDisplayFormat) string {
-	switch tfmt {
-	case clisqlexec.TableDisplayTSV:
-		// Backward-compatibility with previous versions.
-		return "txt"
-	default:
-		return tfmt.String()
-	}
 }

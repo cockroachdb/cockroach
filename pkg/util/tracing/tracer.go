@@ -108,8 +108,11 @@ const (
 var enableTraceRedactable = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"trace.redactable.enabled",
-	"set to true to enable finer-grainer redactability for unstructured events in traces",
-	true,
+	"set to true to enable redactability for unstructured events "+
+		"in traces and to redact traces sent to tenants. "+
+		"Set to false to coarsely mark unstructured events as redactable "+
+		" and eliminate them from tenant traces.",
+	false,
 )
 
 var enableNetTrace = settings.RegisterBoolSetting(

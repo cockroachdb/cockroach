@@ -186,7 +186,7 @@ func (e *versionEncoder) rowAsGoNative(
 	if !row.HasValues() || (emitDeletedRowAsNull && row.IsDeleted()) {
 		if meta != nil {
 			b := json.NewObjectBuilder(1)
-			b.Add(metaSentinel, meta)
+			b.Add(jsonMetaSentinel, meta)
 			return b.Build(), nil
 		}
 		return json.NullJSONValue, nil
@@ -199,7 +199,7 @@ func (e *versionEncoder) rowAsGoNative(
 			return nil
 		})
 		if meta != nil {
-			keys = append(keys, metaSentinel)
+			keys = append(keys, jsonMetaSentinel)
 		}
 		b, err := json.NewFixedKeysObjectBuilder(keys)
 		if err != nil {
@@ -219,7 +219,7 @@ func (e *versionEncoder) rowAsGoNative(
 	}
 
 	if meta != nil {
-		if err := e.valueBuilder.Set(metaSentinel, meta); err != nil {
+		if err := e.valueBuilder.Set(jsonMetaSentinel, meta); err != nil {
 			return nil, err
 		}
 	}
@@ -404,7 +404,7 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		jsonEntries = meta
 	} else {
 		jsonEntries = map[string]interface{}{
-			metaSentinel: meta,
+			jsonMetaSentinel: meta,
 		}
 	}
 	return gojson.Marshal(jsonEntries)

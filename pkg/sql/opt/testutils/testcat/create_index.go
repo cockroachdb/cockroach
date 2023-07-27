@@ -44,7 +44,7 @@ func (tc *Catalog) CreateIndex(stmt *tree.CreateIndex, version descpb.IndexDescr
 		Inverted:         stmt.Inverted,
 		PartitionByIndex: stmt.PartitionByIndex,
 		Predicate:        stmt.Predicate,
-		Invisibility:     stmt.Invisibility,
+		NotVisible:       stmt.NotVisible,
 	}
 
 	idxType := nonUniqueIndex

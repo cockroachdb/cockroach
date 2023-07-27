@@ -179,7 +179,7 @@ const maxNoProgressReads = 3
 
 // ReaderOpenerAt describes a function that opens a ReadCloser at the passed
 // offset.
-type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, int64, error)
+type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
 
 // ResumingReader is a reader which retries reads in case of a transient errors.
 type ResumingReader struct {
@@ -187,7 +187,6 @@ type ResumingReader struct {
 	Reader       io.ReadCloser    // Currently opened reader
 	Filename     string           // Used for logging
 	Pos          int64            // How much data was received so far
-	Size         int64            // Total size of the file
 	RetryOnErrFn func(error) bool // custom retry-on-error function
 	// ErrFn injects a delay between retries on errors. nil means no delay.
 	ErrFn func(error) time.Duration
@@ -195,16 +194,12 @@ type ResumingReader struct {
 
 var _ ioctx.ReadCloserCtx = &ResumingReader{}
 
-// NewResumingReader returns a ResumingReader instance. Reader does not have to
-// be provided, and will be created with the opener if it's not provided. Size
-// can also be empty, and will be determined by the opener on the next open of
-// the file.
+// NewResumingReader returns a ResumingReader instance.
 func NewResumingReader(
 	ctx context.Context,
 	opener ReaderOpenerAt,
 	reader io.ReadCloser,
 	pos int64,
-	size int64,
 	filename string,
 	retryOnErrFn func(error) bool,
 	errFn func(error) time.Duration,
@@ -213,7 +208,6 @@ func NewResumingReader(
 		Opener:       opener,
 		Reader:       reader,
 		Pos:          pos,
-		Size:         size,
 		Filename:     filename,
 		RetryOnErrFn: retryOnErrFn,
 		ErrFn:        errFn,
@@ -227,17 +221,10 @@ func NewResumingReader(
 
 // Open opens the reader at its current offset.
 func (r *ResumingReader) Open(ctx context.Context) error {
-	if r.Size > 0 && r.Pos >= r.Size {
-		// Don't try to open a file if the size has been set and the position is
-		// at size. This generally results in an invalid range error for the
-		// request. Note that we still allow reads at Pos 0 even if Size is 0
-		// since this seems to be allowed in the cloud SDKs.
-		return io.EOF
-	}
-
 	return DelayedRetry(ctx, "Open", r.ErrFn, func() error {
 		var readErr error
-		r.Reader, r.Size, readErr = r.Opener(ctx, r.Pos)
+
+		r.Reader, readErr = r.Opener(ctx, r.Pos)
 		if readErr != nil {
 			return errors.Wrapf(readErr, "open %s", r.Filename)
 		}

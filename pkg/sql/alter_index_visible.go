@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -82,19 +80,13 @@ func (p *planner) AlterIndexVisible(
 func (n *alterIndexVisibleNode) ReadingOwnWrites() {}
 
 func (n *alterIndexVisibleNode) startExec(params runParams) error {
-	if n.n.Invisibility != 0.0 && n.index.Primary() {
+	if n.n.NotVisible && n.index.Primary() {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "primary index cannot be invisible")
-	}
-
-	activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-	if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-		n.n.Invisibility > 0.0 && n.n.Invisibility < 1.0 {
-		return unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 	}
 
 	// Warn if this invisible index may still be used to enforce constraint check
 	// behind the scene.
-	if n.n.Invisibility != 0.0 {
+	if n.n.NotVisible {
 		if notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndex(n.index, n.tableDesc); notVisibleIndexNotice != nil {
 			params.p.BufferClientNotice(
 				params.ctx,
@@ -103,13 +95,12 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 		}
 	}
 
-	if n.index.GetInvisibility() == n.n.Invisibility {
+	if n.index.IsNotVisible() == n.n.NotVisible {
 		// Nothing needed if the index is already what they want.
 		return nil
 	}
 
-	n.index.IndexDesc().NotVisible = n.n.Invisibility != 0.0
-	n.index.IndexDesc().Invisibility = n.n.Invisibility
+	n.index.IndexDesc().NotVisible = n.n.NotVisible
 
 	if err := validateDescriptor(params.ctx, params.p, n.tableDesc); err != nil {
 		return err
@@ -124,10 +115,9 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterIndexVisible{
-			TableName:    n.n.Index.Table.FQString(),
-			IndexName:    n.index.GetName(),
-			NotVisible:   n.n.Invisibility != 0.0,
-			Invisibility: n.n.Invisibility,
+			TableName:  n.n.Index.Table.FQString(),
+			IndexName:  n.index.GetName(),
+			NotVisible: n.n.NotVisible,
 		})
 }
 func (n *alterIndexVisibleNode) Next(runParams) (bool, error) { return false, nil }

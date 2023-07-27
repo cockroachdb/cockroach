@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
@@ -362,11 +362,6 @@ type EngineIterator interface {
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() ([]byte, error)
-	// ValueLen returns the length of the current value. ValueLen should be
-	// preferred when the actual value is not needed. In some circumstances, the
-	// storage engine may be able to avoid loading the value.
-	// REQUIRES: latest positioning function returned valid=true.
-	ValueLen() int
 	// CloneContext is a low-level method only for use in the storage package,
 	// that provides sufficient context that the iterator may be cloned.
 	CloneContext() CloneContext
@@ -622,9 +617,9 @@ type Reader interface {
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
 	// calling Repr() on a batch. Using this method is equivalent to constructing
-	// and committing a batch whose Repr() equals repr. If sync is true, the batch
-	// is synchronously flushed to the OS and written to disk. It is an error to
-	// specify sync=true if the Writer is a Batch.
+	// and committing a batch whose Repr() equals repr. If sync is true, the
+	// batch is synchronously written to disk. It is an error to specify
+	// sync=true if the Writer is a Batch.
 	//
 	// It is safe to modify the contents of the arguments after ApplyBatchRepr
 	// returns.
@@ -636,22 +631,14 @@ type Writer interface {
 	// actually removes entries from the storage engine, rather than inserting
 	// MVCC tombstones.
 	//
-	// If the caller knows the size of the value that is being cleared, they
-	// should set ClearOptions.{ValueSizeKnown, ValueSize} accordingly to
-	// improve the storage engine's ability to prioritize compactions.
-	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCC(key MVCCKey, opts ClearOptions) error
+	ClearMVCC(key MVCCKey) error
 	// ClearUnversioned removes an unversioned item from the db. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys). It does not affect range keys.
 	//
-	// If the caller knows the size of the value that is being cleared, they
-	// should set ClearOptions.{ValueSizeKnown, ValueSize} accordingly to
-	// improve the storage engine's ability to prioritize compactions.
-	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearUnversioned(key roachpb.Key, opts ClearOptions) error
+	ClearUnversioned(key roachpb.Key) error
 	// ClearIntent removes an intent from the db. Unlike ClearMVCC and
 	// ClearUnversioned, this is a higher-level method that may make changes in
 	// parts of the key space that are not only a function of the input, and may
@@ -666,18 +653,14 @@ type Writer interface {
 	// that does a <single-clear, put> pair. If there isn't a performance
 	// decrease, we can stop tracking txnDidNotUpdateMeta and still optimize
 	// ClearIntent by always doing single-clear.
-	ClearIntent(key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions) error
+	ClearIntent(key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
 	// ClearEngineKey removes the given point key from the engine. It does not
 	// affect range keys.  Note that clear actually removes entries from the
 	// storage engine. This is a general-purpose and low-level method that should
 	// be used sparingly, only when the other Clear* methods are not applicable.
 	//
-	// If the caller knows the size of the value that is being cleared, they
-	// should set ClearOptions.{ValueSizeKnown, ValueSize} accordingly to
-	// improve the storage engine's ability to prioritize compactions.
-	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearEngineKey(key EngineKey, opts ClearOptions) error
+	ClearEngineKey(key EngineKey) error
 
 	// ClearRawRange removes point and/or range keys from start (inclusive) to end
 	// (exclusive) using Pebble range tombstones. It can be applied to a range
@@ -854,31 +837,6 @@ type Writer interface {
 	BufferedSize() int
 }
 
-// ClearOptions holds optional parameters to methods that clear keys from the
-// storage engine.
-type ClearOptions struct {
-	// ValueSizeKnown indicates whether the ValueSize carries a meaningful
-	// value. If false, ValueSize is ignored.
-	ValueSizeKnown bool
-	// ValueSize may be provided to indicate the size of the existing KV
-	// record's value that is being removed. ValueSize should be the encoded
-	// value size that the storage engine observes. If the value is a
-	// MVCCMetadata, ValueSize should be the length of the encoded MVCCMetadata.
-	// If the value is a MVCCValue, ValueSize should be the length of the
-	// encoded MVCCValue.
-	//
-	// Setting ValueSize and ValueSizeKnown improves the storage engine's
-	// ability to estimate space amplification and prioritize compactions.
-	// Without it, compaction heuristics rely on average value sizes which are
-	// susceptible to over and under estimation.
-	//
-	// If the true value size is unknown, leave ValueSizeKnown false.
-	// Correctness is not compromised if ValueSize is incorrect; the underlying
-	// key will always be cleared regardless of whether its value size matches
-	// the provided value.
-	ValueSize uint32
-}
-
 // ReadWriter is the read/write interface to an engine's data.
 type ReadWriter interface {
 	Reader
@@ -960,20 +918,11 @@ type Engine interface {
 	// underlying Engine. The batch accumulates all mutations and applies them
 	// atomically on a call to Commit().
 	NewWriteBatch() WriteBatch
-	// NewSnapshot returns a new instance of a read-only snapshot engine. A
-	// snapshot provides a consistent view of the database across multiple
-	// iterators. If a caller only needs a single consistent iterator, they
-	// should create an iterator directly off the engine instead.
-	//
-	// Acquiring a snapshot is instantaneous and is inexpensive if quickly
-	// released. Snapshots are released by invoking Close(). Open snapshots
-	// prevent compactions from reclaiming space or removing tombstones for any
-	// keys written after the snapshot is acquired. This can be problematic
-	// during rebalancing or large ingestions, so they should be used sparingly
-	// and briefly.
-	//
-	// Note that snapshots must not be used after the original engine has been
-	// stopped.
+	// NewSnapshot returns a new instance of a read-only snapshot
+	// engine. Snapshots are instantaneous and, as long as they're
+	// released relatively quickly, inexpensive. Snapshots are released
+	// by invoking Close(). Note that snapshots must not be used after the
+	// original engine has been stopped.
 	NewSnapshot() Reader
 	// Type returns engine type.
 	Type() enginepb.EngineType
@@ -988,16 +937,11 @@ type Engine interface {
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
 	PreIngestDelay(ctx context.Context)
-	// ApproximateDiskBytes returns an approximation of the on-disk size and file
-	// counts for the given key span, along with how many of those bytes are on
-	// remote, as well as specifically external remote, storage.
-	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-
+	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
+	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
-	// GetTableMetrics returns information about sstables that overlap start and end.
-	GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error)
 	// RegisterFlushCompletedCallback registers a callback that will be run for
 	// every successful flush. Only one callback can be registered at a time, so
 	// registering again replaces the previous callback. The callback must
@@ -1006,7 +950,7 @@ type Engine interface {
 	// be invoked while holding mutexes).
 	RegisterFlushCompletedCallback(cb func())
 	// Filesystem functionality.
-	vfs.FS
+	fs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used. If spans is not empty, the checkpoint excludes
@@ -1031,9 +975,6 @@ type Engine interface {
 	// Used to show the store ID in logs and to initialize the shared object
 	// creator ID (if shared object storage is configured).
 	SetStoreID(ctx context.Context, storeID int32) error
-
-	// GetStoreID is used to retrieve the configured store ID.
-	GetStoreID() (int32, error)
 }
 
 // Batch is the interface for batch specific operations.
@@ -1051,12 +992,9 @@ type WriteBatch interface {
 	Writer
 	// Close closes the batch, freeing up any outstanding resources.
 	Close()
-	// Commit atomically applies any batched updates to the underlying engine. If
-	// sync is true, the batch is synchronously flushed to the OS and committed to
-	// disk. Otherwise, this call returns before the data is even flushed to the
-	// OS, and it may be lost if the process terminates.
-	//
-	// This is a noop unless the batch was created via NewBatch().
+	// Commit atomically applies any batched updates to the underlying
+	// engine. This is a noop unless the batch was created via NewBatch(). If
+	// sync is true, the batch is synchronously committed to disk.
 	Commit(sync bool) error
 	// CommitNoSyncWait atomically applies any batched updates to the underlying
 	// engine and initiates a disk write, but does not wait for that write to
@@ -1242,7 +1180,6 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		FlushIngestCount:           m.Flush.AsIngestCount,
 		FlushIngestTableCount:      m.Flush.AsIngestTableCount,
 		FlushIngestTableBytes:      m.Flush.AsIngestBytes,
-		IngestCount:                m.Ingest.Count,
 		MemtableSize:               m.MemTable.Size,
 		MemtableCount:              m.MemTable.Count,
 		MemtableZombieCount:        m.MemTable.ZombieCount,
@@ -1521,10 +1458,7 @@ func ClearRangeWithHeuristic(
 			if err != nil {
 				return err
 			}
-			if err = w.ClearEngineKey(key, ClearOptions{
-				ValueSizeKnown: true,
-				ValueSize:      uint32(iter.ValueLen()),
-			}); err != nil {
+			if err = w.ClearEngineKey(key); err != nil {
 				return err
 			}
 		}
@@ -1604,13 +1538,6 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 	time.Second*5,
 )
 
-var preIngestDelayEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"pebble.pre_ingest_delay.enabled",
-	"controls whether the pre-ingest delay mechanism is active",
-	false,
-)
-
 // PreIngestDelay may choose to block for some duration if L0 has an excessive
 // number of files in it or if PendingCompactionBytesEstimate is elevated. This
 // it is intended to be called before ingesting a new SST, since we'd rather
@@ -1622,9 +1549,6 @@ var preIngestDelayEnabled = settings.RegisterBoolSetting(
 // compaction limit is exceeded, it waits for the maximum delay.
 func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings) {
 	if settings == nil {
-		return
-	}
-	if !preIngestDelayEnabled.Get(&settings.SV) {
 		return
 	}
 	metrics := eng.GetMetrics()

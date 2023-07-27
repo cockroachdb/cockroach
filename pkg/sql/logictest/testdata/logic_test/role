@@ -24,7 +24,7 @@ DROP ROLE admin, root
 statement ok
 CREATE ROLE myrole
 
-query TTT colnames,rowsort
+query TTT colnames
 SHOW ROLES
 ----
 username  options  member_of
@@ -54,7 +54,7 @@ CREATE USER IF NOT EXISTS myrole
 statement error pq: cannot drop roles/users admin, myrole: grants still exist on .*
 DROP ROLE admin, myrole
 
-query TTT colnames,rowsort
+query TTT colnames
 SHOW ROLES
 ----
 username  options  member_of
@@ -66,7 +66,7 @@ testuser  ·        {}
 statement ok
 DROP ROLE myrole
 
-query TTT colnames,rowsort
+query TTT colnames
 SHOW ROLES
 ----
 username  options  member_of
@@ -101,7 +101,7 @@ DROP ROLE IF EXISTS rolec, roled, rolee
 statement ok
 DROP ROLE rolea, roleb
 
-query TTT colnames,rowsort
+query TTT colnames
 SHOW ROLES
 ----
 username  options  member_of
@@ -149,7 +149,7 @@ GRANT unknownrole TO testuser
 # Test role "grant" and WITH ADMIN option.
 user testuser
 
-statement error testuser must have CREATEROLE or have admin option on role "testrole"
+statement error testuser must belong to admin role or have admin option on role "testrole"
 GRANT testrole TO testuser2
 
 user root
@@ -157,14 +157,14 @@ user root
 statement ok
 GRANT testrole TO testuser
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role      member    isAdmin  role_id  member_id
 admin     root      true     2        1
 testrole  testuser  false    108      100
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE
 ----
 role_name  member    is_admin
@@ -173,7 +173,7 @@ testrole   testuser  false
 
 user testuser
 
-statement error testuser must have CREATEROLE or have admin option on role "testrole"
+statement error testuser must belong to admin role or have admin option on role "testrole"
 GRANT testrole TO testuser2
 
 user root
@@ -186,7 +186,7 @@ CREATE ROLE child_role;
 GRANT testrole to child_role;
 GRANT testuser TO child_role;
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role      member      isAdmin  role_id  member_id
@@ -195,7 +195,7 @@ testrole  child_role  false    108      109
 testrole  testuser    true     108      100
 testuser  child_role  false    100      109
 
-query TTBB colnames,rowsort
+query TTBB colnames
 SELECT * FROM "".crdb_internal.kv_inherited_role_members
 ----
 role      inheriting_member  member_is_explicit  member_is_admin
@@ -204,7 +204,7 @@ testuser  child_role         true                false
 admin     root               true                true
 testrole  testuser           true                true
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE FOR child_role
 ----
 role_name  member      is_admin
@@ -264,7 +264,7 @@ SELECT crdb_internal.is_admin()
 true
 
 # Dropping users/roles deletes all their memberships.
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role      member     isAdmin  role_id  member_id
@@ -273,7 +273,7 @@ admin     testuser   false    2        100
 testrole  testuser   true     108      100
 testrole  testuser2  true     108      107
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE
 ----
 role_name  member     is_admin
@@ -282,14 +282,14 @@ admin      testuser   false
 testrole   testuser   true
 testrole   testuser2  true
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE admin
 ----
 role_name  member    is_admin
 admin      root      true
 admin      testuser  false
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE FOR testuser
 ----
 role_name  member    is_admin
@@ -302,7 +302,7 @@ SHOW GRANTS ON ROLE testrole FOR testuser2
 role_name  member     is_admin
 testrole   testuser2  true
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE foo,testrole
 ----
 role_name  member     is_admin
@@ -330,7 +330,7 @@ DROP USER testuser
 statement ok
 CREATE USER testuser
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role      member     isAdmin  role_id  member_id
@@ -428,13 +428,13 @@ rolec
 roled
 testuser
 
-statement error testuser must have CREATEROLE or have admin option on role "roled"
+statement error testuser must belong to admin role or have admin option on role "roled"
 GRANT roled TO rolee
 
-statement error testuser must have CREATEROLE or have admin option on role "rolec"
+statement error testuser must belong to admin role or have admin option on role "rolec"
 GRANT rolec TO rolee
 
-statement error testuser must have CREATEROLE or have admin option on role "roleb"
+statement error testuser must belong to admin role or have admin option on role "roleb"
 GRANT roleb TO rolee
 
 statement ok
@@ -468,7 +468,7 @@ testuser
 
 user root
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role   member    isAdmin  role_id  member_id
@@ -486,14 +486,14 @@ DROP ROLE rolea
 statement ok
 DROP ROLE rolec
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role   member    isAdmin  role_id  member_id
 admin  root      true     2        1
 roled  testuser  false    114      110
 
-query TTT rowsort
+query TTT
 SHOW ROLES
 ----
 admin      ·        {}
@@ -540,7 +540,7 @@ CREATE ROLE roleb
 statement ok
 GRANT rolea,roleb TO testuser WITH ADMIN OPTION
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role   member    isAdmin  role_id  member_id
@@ -555,7 +555,7 @@ GRANT rolea,roleb TO root WITH ADMIN OPTION
 
 user root
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role   member    isAdmin  role_id  member_id
@@ -617,7 +617,7 @@ testuser
 statement ok
 REVOKE ADMIN OPTION FOR rolea FROM testuser
 
-statement error testuser must have CREATEROLE or have admin option on role "rolea"
+statement error testuser must belong to admin role or have admin option on role "rolea"
 REVOKE ADMIN OPTION FOR rolea FROM root
 
 statement ok
@@ -625,7 +625,7 @@ REVOKE roleb FROM root
 
 user root
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role   member    isAdmin  role_id  member_id
@@ -648,7 +648,7 @@ admin  root    true     2        1
 statement ok
 GRANT roLea,rOleB TO tEstUSER WITH ADMIN OPTION
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role   member    isAdmin  role_id  member_id
@@ -694,7 +694,7 @@ GRANT admin TO newgroup
 
 user testuser
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role      member    isAdmin  role_id  member_id
@@ -734,7 +734,7 @@ CREATE TABLE db2.s1.foo (k int);
 
 user root
 
-query TTBOO colnames,rowsort
+query TTBOO colnames
 SELECT * FROM system.role_members
 ----
 role      member    isAdmin  role_id  member_id
@@ -746,7 +746,7 @@ GRANT ALL ON DATABASE db2 TO newgroup
 
 user testuser
 
-query TTTB colnames,rowsort
+query TTTB colnames
 SHOW GRANTS ON DATABASE db2
 ----
 database_name  grantee   privilege_type  is_grantable
@@ -762,13 +762,13 @@ statement ok
 SELECT * FROM db2.foo
 
 # We may be in the 'newgroup', but we don't have the admin option.
-statement error testuser must have CREATEROLE or have admin option on role "newgroup"
+statement error testuser must belong to admin role or have admin option on role "newgroup"
 GRANT newgroup TO testuser2
 
-statement error testuser must have CREATEROLE or have admin option on role "newgroup"
+statement error testuser must belong to admin role or have admin option on role "newgroup"
 REVOKE newgroup FROM testuser
 
-statement error testuser must have CREATEROLE or have admin option on role "newgroup"
+statement error testuser must belong to admin role or have admin option on role "newgroup"
 GRANT newgroup TO testuser WITH ADMIN OPTION
 
 # Regression for #31784
@@ -915,9 +915,6 @@ statement error pq: conflicting role options
 CREATE ROLE rolewithcreate NOCREATEROLE CREATEROLE
 
 statement error pq: conflicting role options
-CREATE ROLE rolewithcreate REPLICATION NOREPLICATION
-
-statement error pq: conflicting role options
 ALTER ROLE testrole WITH CREATEROLE NOCREATEROLE
 
 statement error pq: conflicting role options
@@ -999,8 +996,9 @@ CREATE USER testuser3
 statement error testuser must have admin option on role "admin"
 GRANT admin to testuser3
 
-# CREATEROLE should give GRANT role privilege for other roles.
-statement ok
+# CREATEROLE should not give GRANT role privilege for other roles, since
+# the sql.auth.createrole_allows_grant_role_membership.enabled is off by default.
+statement error testuser must belong to admin role or have admin option on role "roleg"
 GRANT roleg to testuser3
 
 user root
@@ -1089,7 +1087,7 @@ statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 
 query TTT
-SELECT username, option, value FROM system.role_options ORDER BY username
+SELECT username, option, value FROM system.role_options
 ----
 rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00
 rolewithnologin  NOLOGIN      NULL
@@ -1098,7 +1096,7 @@ statement ok
 ALTER ROLE rolewithlogin VALID UNTIL NULL
 
 query TTT
-SELECT username, option, value FROM system.role_options ORDER BY username
+SELECT username, option, value FROM system.role_options
 ----
 rolewithlogin    VALID UNTIL  NULL
 rolewithnologin  NOLOGIN      NULL
@@ -1120,12 +1118,11 @@ CREATE ROLE thisshouldntwork LOGIN LOGIN
 statement ok
 DROP ROLE parentrole
 
-query TTB colnames,rowsort
+query TTB colnames
 SHOW GRANTS ON ROLE
 ----
-role_name  member     is_admin
-admin      root       true
-roleg      testuser3  false
+role_name  member  is_admin
+admin      root    true
 
 query TTB colnames
 SHOW GRANTS ON ROLE admin
@@ -1193,7 +1190,7 @@ GRANT SELECT ON privatedb.publictable TO public
 
 user testuser
 
-query TTTTTT rowsort
+query TTTTTT
 SHOW DATABASES
 ----
 db2        root  NULL  NULL  {}  NULL
@@ -1202,7 +1199,7 @@ postgres   root  NULL  NULL  {}  NULL
 publicdb   root  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM publicdb
 ----
 public  privatetable  table  root  0  NULL
@@ -1251,7 +1248,7 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM publicdb
 ----
 public  privatetable  table  root  0  NULL
@@ -1506,40 +1503,6 @@ ALTER USER testuser2 WITH PASSWORD 'abc'
 
 statement ok
 RESET ROLE
-
-subtest end
-
-subtest replication
-
-statement ok
-CREATE ROLE repluser NOREPLICATION LOGIN
-
-query TT rowsort
-SELECT option, value FROM system.role_options WHERE username = 'repluser'
-----
-
-statement ok
-ALTER ROLE repluser REPLICATION
-
-query TT rowsort
-SELECT  option, value FROM system.role_options WHERE username = 'repluser'
-----
-REPLICATION  NULL
-
-statement ok
-DROP ROLE repluser; CREATE ROLE repluser REPLICATION LOGIN
-
-query TT rowsort
-SELECT  option, value FROM system.role_options WHERE username = 'repluser'
-----
-REPLICATION  NULL
-
-statement ok
-ALTER ROLE repluser NOREPLICATION
-
-query TT rowsort
-SELECT option, value FROM system.role_options WHERE username = 'repluser'
-----
 
 subtest end
 

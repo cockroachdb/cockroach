@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,15 +34,22 @@ func TestVerifyPassword(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			// Need to disable the test tenant here because it appears as
+			// though we don't have all the same roles in the tenant as we
+			// have in the host cluster (like root).
+			DisableDefaultTestTenant: true,
+		},
+	)
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.TenantOrServer()
+	ts := s.(*server.TestServer)
 
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the
 		// race detector is on.
-		security.BcryptCost.Override(ctx, &ts.ClusterSettings().SV, int64(bcrypt.MinCost))
+		security.BcryptCost.Override(ctx, &ts.Cfg.Settings.SV, int64(bcrypt.MinCost))
 	}
 
 	//location is used for timezone testing.
@@ -74,8 +82,6 @@ func TestVerifyPassword(t *testing.T) {
 		{"timelord", "12345", "", "VALID UNTIL $1",
 			[]interface{}{timeutil.Now().Add(59 * time.Minute).In(shanghaiLoc)}},
 
-		{"replication_user", "12345", "LOGIN REPLICATION", "", nil},
-
 		{"some_admin", "12345", "LOGIN", "", nil},
 	} {
 		cmd := fmt.Sprintf(
@@ -91,9 +97,6 @@ func TestVerifyPassword(t *testing.T) {
 		t.Fatalf("failed to grant admin: %s", err)
 	}
 
-	_, err = db.Exec("ALTER USER replication_user REPLICATION")
-	require.NoError(t, err)
-
 	// Set up NOSQLLOGIN global privilege.
 	_, err = db.Exec("GRANT SYSTEM NOSQLLOGIN TO has_global_nosqlogin")
 	require.NoError(t, err)
@@ -101,271 +104,45 @@ func TestVerifyPassword(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, tc := range []struct {
-		testName                       string
-		username                       string
-		password                       string
-		isSuperuser                    bool
-		canUseReplicationMode          bool
-		shouldAuthenticateSQL          bool
-		shouldAuthenticateDBConsole    bool
-		shouldHaveReplicateModeEnabled bool
+		testName                    string
+		username                    string
+		password                    string
+		isSuperuser                 bool
+		shouldAuthenticateSQL       bool
+		shouldAuthenticateDBConsole bool
 	}{
-		{
-			testName:                       "valid login",
-			username:                       "azure_diamond",
-			password:                       "hunter2",
-			shouldAuthenticateSQL:          true,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "wrong password",
-			username:                       "azure_diamond",
-			password:                       "hunter",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "empty password",
-			username:                       "azure_diamond",
-			password:                       "",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "wrong emoji password",
-			username:                       "azure_diamond",
-			password:                       "🍦",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
+		{"valid login", "azure_diamond", "hunter2", false, true, true},
+		{"wrong password", "azure_diamond", "hunter", false, false, false},
+		{"empty password", "azure_diamond", "", false, false, false},
+		{"wrong emoji password", "azure_diamond", "🍦", false, false, false},
+		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false, false, false},
+		{"correct password with prefix should fail", "azure_diamond", "shunter2", false, false, false},
+		{"wrong password all numeric", "azure_diamond", "12345", false, false, false},
+		{"wrong password all stars", "azure_diamond", "*******", false, false, false},
+		{"valid login numeric password", "druidia", "12345", false, true, true},
+		{"wrong password matching other user", "druidia", "hunter2", false, false, false},
+		{"root with empty password should fail", "root", "", true, false, false},
+		{"some_admin with empty password should fail", "some_admin", "", true, false, false},
+		{"empty username and password should fail", "", "", false, false, false},
+		{"username does not exist should fail", "doesntexist", "zxcvbn", false, false, false},
 
-		{
-			testName:                       "correct password with suffix should fail",
-			username:                       "azure_diamond",
-			password:                       "hunter2345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "correct password with prefix should fail",
-			username:                       "azure_diamond",
-			password:                       "shunter2",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-
-		{
-			testName:                       "wrong password all numeric",
-			username:                       "azure_diamond",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "wrong password all stars",
-			username:                       "azure_diamond",
-			password:                       "*******",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "valid login numeric password",
-			username:                       "druidia",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          true,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "wrong password matching other user",
-			username:                       "druidia",
-			password:                       "hunter2",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "root with empty password should fail",
-			username:                       "root",
-			password:                       "",
-			isSuperuser:                    true,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: true,
-		},
-		{
-			testName:                       "some_admin with empty password should fail",
-			username:                       "some_admin",
-			password:                       "",
-			isSuperuser:                    true,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: true,
-		},
-		{
-			testName:                       "empty username and password should fail",
-			username:                       "",
-			password:                       "",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "username does not exist should fail",
-			username:                       "doesntexist",
-			password:                       "zxcvbn",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with NOLOGIN role option should fail",
-			username:                       "richardc",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
+		{"user with NOLOGIN role option should fail", "richardc", "12345", false, false, false},
 		// The NOSQLLOGIN cases are the only cases where SQL and DB Console login outcomes differ.
-		{
-			testName:                       "user with NOSQLLOGIN role option should fail SQL but succeed on DB Console",
-			username:                       "richardc2",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with NOSQLLOGIN global privilege should fail SQL but succeed on DB Console",
-			username:                       "has_global_nosqlogin",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user who inherits NOSQLLOGIN global privilege should fail SQL but succeed on DB Console",
-			username:                       "inherits_global_nosqlogin",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "replication user should succeed",
-			username:                       "replication_user",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          true,
-			shouldAuthenticateSQL:          true,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: true,
-		},
-		{
-			testName:                       "user with VALID UNTIL before the Unix epoch should fail",
-			username:                       "before_epoch",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with VALID UNTIL at Unix epoch should fail",
-			username:                       "epoch",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with VALID UNTIL future date should succeed",
-			username:                       "cockroach",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          true,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with VALID UNTIL 10 minutes ago should fail",
-			username:                       "toolate",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          false,
-			shouldAuthenticateDBConsole:    false,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with VALID UNTIL future time in Shanghai time zone should succeed",
-			username:                       "timelord",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          true,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
-		{
-			testName:                       "user with VALID UNTIL NULL should succeed",
-			username:                       "cthon98",
-			password:                       "12345",
-			isSuperuser:                    false,
-			canUseReplicationMode:          false,
-			shouldAuthenticateSQL:          true,
-			shouldAuthenticateDBConsole:    true,
-			shouldHaveReplicateModeEnabled: false,
-		},
+		{"user with NOSQLLOGIN role option should fail SQL but succeed on DB Console", "richardc2", "12345", false, false, true},
+		{"user with NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "has_global_nosqlogin", "12345", false, false, true},
+		{"user who inherits NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "inherits_global_nosqlogin", "12345", false, false, true},
+
+		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false, false, false},
+		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false, false, false},
+		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", false, true, true},
+		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false, false, false},
+		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", false, true, true},
+		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", false, true, true},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLoginSQL, canLoginDBConsole, canUseReplicationMode, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLoginSQL, canLoginDBConsole, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, username, "", /* databaseName */
 			)
 
@@ -437,7 +214,6 @@ func TestVerifyPassword(t *testing.T) {
 				)
 			}
 			require.Equal(t, tc.isSuperuser, isSuperuser)
-			require.Equal(t, tc.shouldHaveReplicateModeEnabled, canUseReplicationMode)
 		})
 	}
 }

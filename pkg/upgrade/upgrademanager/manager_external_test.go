@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -38,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -79,8 +77,6 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107396),
-
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
@@ -245,8 +241,6 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
@@ -307,7 +301,11 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, s := range tc.Servers {
 			id := s.NodeID()
-			if !nl.GetNodeVitalityFromCache(id).IsLive(livenesspb.Upgrade) {
+			live, err := nl.IsLive(id)
+			if err != nil {
+				return err
+			}
+			if !live {
 				return errors.Newf("n%s not live yet", id)
 			}
 		}
@@ -350,8 +348,6 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107395),
-
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(
 				versions[len(versions)-1],
 				versions[0],
@@ -441,8 +437,6 @@ func TestPauseMigration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107393),
-
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
@@ -610,8 +604,6 @@ func TestPrecondition(t *testing.T) {
 	ctx := context.Background()
 	args := func() base.TestServerArgs {
 		return base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107397),
-
 			Knobs: knobs,
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(
 				v2,    // binaryVersion
@@ -683,8 +675,6 @@ func TestMigrationFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 106648)
-
 	ctx := context.Background()
 
 	// Configure the range of versions used by the test
@@ -699,20 +689,24 @@ func TestMigrationFailure(t *testing.T) {
 	fenceVersion := upgrade.FenceVersionFor(ctx, clusterversion.ClusterVersion{Version: failVersion}).Version
 	t.Logf("test will fail at version: %s", failVersion.String())
 
-	// Create a storage cluster for the tenant.
-	s, goDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			SQLEvalContext: &eval.TestingKnobs{
-				TenantLogicalVersionKeyOverride: startVersionKey,
+	// Create a storage cluster for the tenant
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+			Knobs: base.TestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
+					TenantLogicalVersionKeyOverride: startVersionKey,
+				},
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer testCluster.Stopper().Stop(ctx)
 
 	// Set the version override so that the tenant is able to upgrade. If this is
 	// not set, the tenant treats the storage cluster as if it had the oldest
 	// supported binary version.
+	s := testCluster.Server(0)
+	goDB := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "system", false, s.Stopper())
 	_, err := goDB.Exec(`ALTER TENANT ALL SET CLUSTER SETTING version = $1`, endVersion.String())
 	require.NoError(t, err)
 
@@ -728,7 +722,7 @@ func TestMigrationFailure(t *testing.T) {
 		false,
 	)
 	require.NoError(t, clusterversion.Initialize(ctx, startVersion, &tenantSettings.SV))
-	tenant, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
+	tenant, db := serverutils.StartTenant(t, testCluster.Server(0), base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10),
 		Settings: tenantSettings,
 		TestingKnobs: base.TestingKnobs{
@@ -779,7 +773,7 @@ func TestMigrationFailure(t *testing.T) {
 	checkActiveVersion(t, startVersion)
 	checkSettingVersion(t, startVersion)
 
-	// Try to finalize.
+	// Try to finalize
 	_, err = db.Exec(`SET CLUSTER SETTING version = $1`, endVersion.String())
 	require.Error(t, err)
 	checkActiveVersion(t, fenceVersion)

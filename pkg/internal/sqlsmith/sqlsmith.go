@@ -86,7 +86,6 @@ type Smither struct {
 	disableLimits              bool
 	disableWindowFuncs         bool
 	disableAggregateFuncs      bool
-	disableMutations           bool
 	simpleDatums               bool
 	avoidConsts                bool
 	outputSort                 bool
@@ -106,7 +105,6 @@ type Smither struct {
 	disableDivision            bool
 	disableDecimals            bool
 	disableOIDs                bool
-	disableUDFs                bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -277,7 +275,6 @@ var DisableEverything = simpleOption("disable every kind of statement", func(s *
 var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 	s.stmtWeights = nonMutatingStatements
 	s.tableExprWeights = nonMutatingTableExprs
-	s.disableMutations = true
 })
 
 // SetComplexity configures the Smither's complexity, in other words the
@@ -512,11 +509,6 @@ var DisableDecimals = simpleOption("disable decimals", func(s *Smither) {
 // DisableOIDs disables use of OID types in the query.
 var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
 	s.disableOIDs = true
-})
-
-// DisableUDFs causes the Smither to disable user-defined functions.
-var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
-	s.disableUDFs = true
 })
 
 // CompareMode causes the Smither to generate statements that have

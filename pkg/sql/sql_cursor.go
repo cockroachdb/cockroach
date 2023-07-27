@@ -102,9 +102,10 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to DECLARE CURSOR")
 			}
+			inputState := p.txn.GetLeafTxnInputState(ctx)
 			cursor := &sqlCursor{
 				Rows:       rows,
-				readSeqNum: p.txn.GetReadSeqNum(),
+				readSeqNum: inputState.ReadSeqNum,
 				txn:        p.txn,
 				statement:  statement,
 				created:    timeutil.Now(),
@@ -172,11 +173,12 @@ type fetchNode struct {
 }
 
 func (f *fetchNode) startExec(params runParams) error {
+	state := f.cursor.txn.GetLeafTxnInputState(params.ctx)
 	// We need to make sure that we're reading at the same read sequence number
 	// that we had when we created the cursor, to preserve the "sensitivity"
 	// semantics of cursors, which demand that data written after the cursor
 	// was declared is not visible to the cursor.
-	f.origTxnSeqNum = f.cursor.txn.GetReadSeqNum()
+	f.origTxnSeqNum = state.ReadSeqNum
 	return f.cursor.txn.SetReadSeqNum(f.cursor.readSeqNum)
 }
 

@@ -45,7 +45,7 @@ import (
 // validation query to validate against a specific index.
 //
 // It operates entirely on the current goroutine and is thus able to
-// reuse an existing kv.Txn safely.
+// reuse an existing client.Txn safely.
 func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,

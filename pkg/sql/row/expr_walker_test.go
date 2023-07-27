@@ -201,7 +201,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 			}
 
 			for id, val := range test.seqIDToExpectedVal {
-				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, evalCtx.Codec,
+				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, keys.TODOSQLCodec,
 					test.incrementBy, test.seqIDToOpts[id], kvDB)
 				seqMetadata := &row.SequenceMetadata{
 					SeqDesc:         seqDesc,

@@ -2173,7 +2173,6 @@ TxnInfo represents an in flight user transaction on some Session.
 | quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
-| isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
 
 
 
@@ -2319,7 +2318,6 @@ TxnInfo represents an in flight user transaction on some Session.
 | quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
-| isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
 
 
 
@@ -2703,6 +2701,7 @@ Info contains an information about a single DistSQL remote flow.
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [int32](#cockroach.server.serverpb.ListDistSQLFlowsResponse-int32) |  | NodeID is the node on which this remote flow is either running or queued. | [reserved](#support-status) |
 | timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListDistSQLFlowsResponse-google.protobuf.Timestamp) |  | Timestamp must be in the UTC timezone. | [reserved](#support-status) |
+| status | [DistSQLRemoteFlows.Status](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.DistSQLRemoteFlows.Status) |  | Status is the current status of this remote flow. TODO(yuzefovich): remove this in 23.2. | [reserved](#support-status) |
 | stmt | [string](#cockroach.server.serverpb.ListDistSQLFlowsResponse-string) |  | Stmt is the SQL statement for which this flow is executing. | [reserved](#support-status) |
 
 
@@ -2796,6 +2795,7 @@ Info contains an information about a single DistSQL remote flow.
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [int32](#cockroach.server.serverpb.ListDistSQLFlowsResponse-int32) |  | NodeID is the node on which this remote flow is either running or queued. | [reserved](#support-status) |
 | timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListDistSQLFlowsResponse-google.protobuf.Timestamp) |  | Timestamp must be in the UTC timezone. | [reserved](#support-status) |
+| status | [DistSQLRemoteFlows.Status](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.DistSQLRemoteFlows.Status) |  | Status is the current status of this remote flow. TODO(yuzefovich): remove this in 23.2. | [reserved](#support-status) |
 | stmt | [string](#cockroach.server.serverpb.ListDistSQLFlowsResponse-string) |  | Stmt is the SQL statement for which this flow is executing. | [reserved](#support-status) |
 
 
@@ -3043,12 +3043,10 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.ProfileRequest-string) |  | node_id is a string so that "local" or "all" can be used to specify that no forwarding is necessary. node_id translates to a KV node ID on a storage server and SQL instance ID on a SQL only server. | [reserved](#support-status) |
+| node_id | [string](#cockroach.server.serverpb.ProfileRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. node_id translates to a KV node ID on a storage server and SQL instance ID on a SQL only server. | [reserved](#support-status) |
 | type | [ProfileRequest.Type](#cockroach.server.serverpb.ProfileRequest-cockroach.server.serverpb.ProfileRequest.Type) |  | The type of profile to retrieve. | [reserved](#support-status) |
 | seconds | [int32](#cockroach.server.serverpb.ProfileRequest-int32) |  | applies only to Type=CPU, defaults to 30 | [reserved](#support-status) |
-| labels | [bool](#cockroach.server.serverpb.ProfileRequest-bool) |  | Labels can be specified for Type=CPU or Type=GOROUTINE.<br><br>- If true for CPU profiles, we request a CPU profile with pprof labels.<br><br>- If true for GOROUTINE profiles, we request an aggregated goroutine profile with debug=1. | [reserved](#support-status) |
-| label_filter | [string](#cockroach.server.serverpb.ProfileRequest-string) |  | LabelFilter only applies to Type=GOROUTINE. Only goroutines with a pprof label matching the filter will be returned. | [reserved](#support-status) |
-| sender_server_version | [cockroach.roachpb.Version](#cockroach.server.serverpb.ProfileRequest-cockroach.roachpb.Version) |  | SenderServerVersion is the server version of the node sending the Profile request. If this field is set then the node processing the request will only collect the profile if its server version is equal to the sender's server version.<br><br>Currently, this is only used when collecting profiles that will be merged using pprof.Merge as all the samples must be from the same binary version. | [reserved](#support-status) |
+| labels | [bool](#cockroach.server.serverpb.ProfileRequest-bool) |  | applies only to Type=CPU, defaults to false | [reserved](#support-status) |
 
 
 
@@ -5079,212 +5077,6 @@ Support status: [reserved](#support-status)
 
 
 
-## NetworkConnectivity
-
-`GET /_status/connectivity`
-
-
-
-Support status: [reserved](#support-status)
-
-#### Request Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.NetworkConnectivityRequest-string) |  |  | [reserved](#support-status) |
-
-
-
-
-
-
-
-#### Response Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| connections | [NetworkConnectivityResponse.ConnectionsEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionsEntry) | repeated |  | [reserved](#support-status) |
-| errors_by_node_id | [NetworkConnectivityResponse.ErrorsByNodeIdEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ErrorsByNodeIdEntry) | repeated | errors contains any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
-
-
-
-
-
-
-<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionsEntry"></a>
-#### NetworkConnectivityResponse.ConnectionsEntry
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
-| value | [NetworkConnectivityResponse.Connectivity](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity) |  |  |  |
-
-
-
-
-
-<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity"></a>
-#### NetworkConnectivityResponse.Connectivity
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| peers | [NetworkConnectivityResponse.Connectivity.PeersEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity.PeersEntry) | repeated |  | [reserved](#support-status) |
-
-
-
-
-
-<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity.PeersEntry"></a>
-#### NetworkConnectivityResponse.Connectivity.PeersEntry
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
-| value | [NetworkConnectivityResponse.Peer](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Peer) |  |  |  |
-
-
-
-
-
-<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Peer"></a>
-#### NetworkConnectivityResponse.Peer
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| latency | [google.protobuf.Duration](#cockroach.server.serverpb.NetworkConnectivityResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| status | [NetworkConnectivityResponse.ConnectionStatus](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionStatus) |  |  | [reserved](#support-status) |
-| address | [string](#cockroach.server.serverpb.NetworkConnectivityResponse-string) |  |  | [reserved](#support-status) |
-| locality | [cockroach.roachpb.Locality](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.roachpb.Locality) |  |  | [reserved](#support-status) |
-| error | [string](#cockroach.server.serverpb.NetworkConnectivityResponse-string) |  |  | [reserved](#support-status) |
-
-
-
-
-
-<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ErrorsByNodeIdEntry"></a>
-#### NetworkConnectivityResponse.ErrorsByNodeIdEntry
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
-| value | [string](#cockroach.server.serverpb.NetworkConnectivityResponse-string) |  |  |  |
-
-
-
-
-
-
-## GetJobProfilerExecutionDetails
-
-`GET /_status/job_profiler_execution_details/{job_id}/{filename}`
-
-
-
-Support status: [reserved](#support-status)
-
-#### Request Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| job_id | [int64](#cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest-int64) |  |  | [reserved](#support-status) |
-| filename | [string](#cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest-string) |  |  | [reserved](#support-status) |
-
-
-
-
-
-
-
-#### Response Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| data | [bytes](#cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse-bytes) |  |  | [reserved](#support-status) |
-
-
-
-
-
-
-
-## ListJobProfilerExecutionDetails
-
-`GET /_status/list_job_profiler_execution_details/{job_id}`
-
-
-
-Support status: [reserved](#support-status)
-
-#### Request Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| job_id | [int64](#cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest-int64) |  |  | [reserved](#support-status) |
-
-
-
-
-
-
-
-#### Response Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| files | [string](#cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse-string) | repeated |  | [reserved](#support-status) |
-
-
-
-
-
-
-
 ## RequestCA
 
 `GET /_join/v1/ca`
@@ -6679,6 +6471,7 @@ The result of checking a single node's readiness for decommission.
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [int32](#cockroach.server.serverpb.DecommissionPreCheckResponse-int32) |  |  | [reserved](#support-status) |
 | decommission_readiness | [DecommissionPreCheckResponse.NodeReadiness](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeReadiness) |  | The node's decommission readiness status. | [reserved](#support-status) |
+| liveness_status | [cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus) |  | The liveness status of the given node. | [reserved](#support-status) |
 | replica_count | [int64](#cockroach.server.serverpb.DecommissionPreCheckResponse-int64) |  | The number of total replicas on the node, computed by scanning range descriptors. | [reserved](#support-status) |
 | checked_ranges | [DecommissionPreCheckResponse.RangeCheckResult](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.RangeCheckResult) | repeated | The details and recorded traces from preprocessing each range with a replica on the checked nodes that resulted in error, up to the maximum specified in the request. | [reserved](#support-status) |
 

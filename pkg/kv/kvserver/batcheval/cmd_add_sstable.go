@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -46,8 +45,7 @@ func declareKeysAddSSTable(
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	lockSpans *lockspanset.LockSpanSet,
+	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
 	args := req.(*kvpb.AddSSTableRequest)
@@ -156,35 +154,6 @@ func EvalAddSSTable(
 			}
 		}
 	}
-
-	if args.RemoteFile.Path != "" {
-		if len(args.Data) > 0 {
-			return result.Result{}, errors.AssertionFailedf(
-				"AddSSTable requests cannot add bytes and remote file at same time")
-		}
-		log.Infof(ctx, "AddSSTable of remote file: %s in %s", args.RemoteFile.Path, args.RemoteFile.Locator)
-		stats := *args.MVCCStats
-		stats.ContainsEstimates++
-
-		ms.Add(stats)
-
-		mvccHistoryMutation := &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
-			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
-		}
-		return result.Result{
-			Replicated: kvserverpb.ReplicatedEvalResult{
-				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
-					RemoteFileLoc:   args.RemoteFile.Locator,
-					RemoteFilePath:  args.RemoteFile.Path,
-					BackingFileSize: args.RemoteFile.BackingFileSize,
-					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
-				},
-				MVCCHistoryMutation: mvccHistoryMutation,
-			},
-		}, nil
-	}
-
-	log.Infof(ctx, "non-remote AddSSTable")
 
 	// Reject AddSSTable requests not writing at the request timestamp if requested.
 	if AddSSTableRequireAtRequestTimestamp.Get(&cArgs.EvalCtx.ClusterSettings().SV) &&

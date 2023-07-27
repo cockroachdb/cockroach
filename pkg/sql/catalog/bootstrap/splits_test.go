@@ -60,7 +60,7 @@ func TestInitialSplitPoints(t *testing.T) {
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		_, splits, err := opts.GenerateInitialValues()
+		_, splits, err := opts.GetInitialValuesCheckForOverrides()
 		require.NoError(t, err)
 
 		for _, split := range splits {

@@ -1,5 +1,5 @@
 # LogicTest: 3node-tenant
-# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true sql.split_at.allow_for_secondary_tenant.enabled=true
+# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 
 statement ok
 CREATE TABLE tbl1 (a INT PRIMARY KEY, b INT)
@@ -22,20 +22,15 @@ CREATE TABLE tbl2 (k INT PRIMARY KEY, v INT, w INT, x INT,
    FAMILY fam_2 (v, w)
 )
 
-# Currently, the DistSQL planner uses all available SQL instances (when they
-# have no locality information) in naive round-robin fashion. In order to make
-# the output deterministic, we ensure that 3 ranges need to be scanned by the
-# query so that each of the three instances would get 1 range.
-statement ok
-ALTER TABLE tbl2 SPLIT AT VALUES (2), (3)
-
+# This should be a local query, even though it uses two spans due to the column
+# family configuration.
 query T
-EXPLAIN SELECT v, w FROM tbl2 WHERE k <= 3
+EXPLAIN SELECT v, w FROM tbl2 WHERE k = 23
 ----
-distribution: full
+distribution: local
 vectorized: true
 ·
 • scan
   missing stats
   table: tbl2@tbl2_pkey
-  spans: [ - /3]
+  spans: [/23 - /23]

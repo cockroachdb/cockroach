@@ -657,15 +657,12 @@ func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 }
 
 // Copy returns a complete copy of this instance, with a private version of the
-// ordering column slice.
+// ordering column array.
 func (oc *OrderingChoice) Copy() OrderingChoice {
 	var other OrderingChoice
 	other.Optional = oc.Optional.Copy()
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	copy(other.Columns, oc.Columns)
-	for i := range other.Columns {
-		other.Columns[i].Group = other.Columns[i].Group.Copy()
-	}
 	return other
 }
 

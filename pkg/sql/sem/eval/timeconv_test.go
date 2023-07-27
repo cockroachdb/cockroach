@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -61,7 +60,6 @@ func TestClusterTimestampConversion(t *testing.T) {
 		txnProto := roachpb.MakeTransaction(
 			"test",
 			nil, // baseKey
-			isolation.Serializable,
 			roachpb.NormalUserPriority,
 			ts.ToTimestamp(),
 			0, // maxOffsetNs

@@ -3,32 +3,29 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "roachprod-microbench_lib",
     srcs = [
+        "benchmark.go",
         "compare.go",
-        "executor.go",
-        "export.go",
         "main.go",
         "metadata.go",
         "report.go",
-        "util.go",
+        "storage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench",
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cmd/roachprod-microbench/cluster",
         "//pkg/cmd/roachprod-microbench/google",
-        "//pkg/cmd/roachprod-microbench/model",
         "//pkg/roachprod",
-        "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/vm",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//oserror",
         "@com_github_klauspost_compress//gzip",
-        "@com_github_spf13_cobra//:cobra",
-        "@org_golang_x_exp//maps",
-        "@org_golang_x_perf//benchfmt",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_x_perf//benchstat",
+        "@org_golang_x_perf//storage/benchfmt",
     ],
 )
 
@@ -40,20 +37,12 @@ go_binary(
 
 go_test(
     name = "roachprod-microbench_test",
-    srcs = [
-        "compare_test.go",
-        "executor_test.go",
-        "export_test.go",
-    ],
+    srcs = ["benchmark_test.go"],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":roachprod-microbench_lib"],
     deps = [
-        "//pkg/cmd/roachprod-microbench/model",
         "//pkg/testutils/datapathutils",
-        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_stretchr_testify//require",
-        "@org_golang_x_exp//maps",
     ],
 )

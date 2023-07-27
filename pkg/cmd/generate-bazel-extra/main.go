@@ -32,12 +32,6 @@ var (
 		"large":    900,
 		"enormous": 3600,
 	}
-	testSizeToCiTimeout = map[string]int{
-		"small":    60,
-		"medium":   300,
-		"large":    900,
-		"enormous": 900,
-	}
 )
 
 func runBuildozer(args []string) {
@@ -196,8 +190,8 @@ GO_TARGETS = [`)
 	fmt.Fprintln(w, `]
 
 # These suites run only the tests with the appropriate "size" (excepting those
-# tagged "flaky" or "integration") [1]. Note that tests have a default timeout
-# depending on the size [2].
+# tagged "broken_in_bazel", "flaky", or "integration") [1]. Note that tests have
+# a default timeout depending on the size [2].
 
 # [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests`)
@@ -206,17 +200,8 @@ GO_TARGETS = [`)
 test_suite(
     name = "all_tests",
     tags = [
+        "-broken_in_bazel",
         "-integration",
-    ],
-    tests = ALL_TESTS,
-)`)
-
-	fmt.Fprintln(w, `
-test_suite(
-    name = "ccl_tests",
-    tags = [
-        "-integration",
-        "ccl_test",
     ],
     tests = ALL_TESTS,
 )`)
@@ -224,9 +209,9 @@ test_suite(
 	for _, size := range []string{"small", "medium", "large", "enormous"} {
 		fmt.Fprintf(w, `
 test_suite(
-    name = "%[1]s_non_ccl_tests",
+    name = "%[1]s_tests",
     tags = [
-        "-ccl_test",
+        "-broken_in_bazel",
         "-flaky",
         "-integration",
         "%[1]s",
@@ -263,8 +248,6 @@ func excludeReallyEnormousTargets(targets []string) []string {
 		for _, toExclude := range []string{
 			"//pkg/ccl/sqlitelogictestccl",
 			"//pkg/sql/sqlitelogictest",
-			// acceptance is excluded because it's an integration test.
-			"//pkg/acceptance",
 		} {
 			if strings.HasPrefix(targets[i], toExclude) {
 				excluded = true
@@ -286,7 +269,7 @@ func generateTestsTimeouts() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for size, defaultTimeout := range testSizeToDefaultTimeout {
+	for size, timeout := range testSizeToDefaultTimeout {
 		if size == "enormous" {
 			// Exclude really enormous targets since they have a custom timeout that
 			// exceeds the default 1h.
@@ -297,27 +280,11 @@ func generateTestsTimeouts() {
 		// (because of the 5 seconds taken) then the troubled test target size must be bumped
 		// to the next size because it shouldn't be passing at the edge of its deadline
 		// anyways to avoid flakiness.
-		if size == "enormous" {
-			runBuildozer(append([]string{
-				fmt.Sprintf(`set_select args //build/toolchains:use_ci_timeouts "-test.timeout=%ds" //conditions:default "-test.timeout=%ds"`, testSizeToCiTimeout[size]-5, defaultTimeout-5)},
-				targets[size]...,
-			))
-		} else {
-			runBuildozer(append([]string{
-				fmt.Sprintf(`set args "-test.timeout=%ds"`, defaultTimeout-5)},
-				targets[size]...,
-			))
-		}
+		runBuildozer(append([]string{
+			fmt.Sprintf(`set args "-test.timeout=%ds"`, timeout-5)},
+			targets[size]...,
+		))
 	}
-	var ccl_targets []string
-	for _, targetsForSize := range targets {
-		for _, target := range targetsForSize {
-			if strings.HasPrefix(target, "//pkg/ccl") {
-				ccl_targets = append(ccl_targets, target)
-			}
-		}
-	}
-	runBuildozer(append([]string{`add tags "ccl_test"`}, ccl_targets...))
 }
 
 func main() {

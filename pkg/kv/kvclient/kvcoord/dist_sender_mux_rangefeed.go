@@ -226,16 +226,16 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 }
 
 // start begins execution of activeMuxRangeFeed.
-// This method uses the routing and transport information associated with this active stream,
+// This method uses the routine and transport information associated with this active stream,
 // to find the node that hosts range replica, establish MuxRangeFeed RPC stream
 // with the node, and then establish rangefeed for the span with that node.
-// If the routing/transport information are not valid, performs lookup to refresh this
+// If the routine/transport information are not valid, performs lookup to refresh this
 // information.
 // Transient errors while establishing RPCs are retried with backoff.
 // Certain non-recoverable errors (such as grpcutil.IsAuthError) are propagated to the
 // caller and will cause the whole rangefeed to terminate.
 // Upon successfully establishing RPC stream, the ownership of the activeMuxRangeFeed
-// gets transferred to the node event loop goroutine (receiveEventsFromNode).
+// gets transferred to the node event loop go routine (receiveEventsFromNode).
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
 	streamID := atomic.AddInt64(&m.seqID, 1)
 

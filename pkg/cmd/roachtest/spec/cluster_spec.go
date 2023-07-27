@@ -86,13 +86,6 @@ type ClusterSpec struct {
 	RandomlyUseZfs bool
 
 	GatherCores bool
-
-	// GCE-specific arguments.
-	//
-	// TODO(irfansharif): This cluster spec type suffers the curse of
-	// generality. Make it easier to just inject cloud-specific arguments.
-	GCEMinCPUPlatform string
-	GCEVolumeType     string
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -163,7 +156,6 @@ func getGCEOpts(
 	localSSD bool,
 	RAID0 bool,
 	terminateOnMigration bool,
-	minCPUPlatform, volumeType string,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -182,10 +174,6 @@ func getGCEOpts(
 		opts.UseMultipleDisks = !RAID0
 	}
 	opts.TerminateOnMigration = terminateOnMigration
-	opts.MinCPUPlatform = minCPUPlatform
-	if volumeType != "" {
-		opts.PDVolumeType = volumeType
-	}
 
 	return opts
 }
@@ -313,9 +301,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
-			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCEMinCPUPlatform, s.GCEVolumeType,
-		)
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
 	}

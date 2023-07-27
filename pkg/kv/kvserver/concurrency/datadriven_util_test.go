@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/redact"
 )
 
 func nextUUID(counter *uint32) uuid.UUID {
@@ -64,11 +63,10 @@ func scanTxnPriority(t *testing.T, d *datadriven.TestData) enginepb.TxnPriority 
 
 func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority {
 	const key = "priority"
-	if !d.HasArg(key) {
-		return roachpb.NormalUserPriority
+	priS := "normal"
+	if d.HasArg(key) {
+		d.ScanArgs(t, key, &priS)
 	}
-	var priS string
-	d.ScanArgs(t, key, &priS)
 	switch priS {
 	case "low":
 		return roachpb.MinUserPriority
@@ -218,13 +216,11 @@ func scanSingleRequest(
 	}
 }
 
-func scanTxnStatus(
-	t *testing.T, d *datadriven.TestData,
-) (roachpb.TransactionStatus, redact.SafeString) {
+func scanTxnStatus(t *testing.T, d *datadriven.TestData) (roachpb.TransactionStatus, string) {
 	var statusStr string
 	d.ScanArgs(t, "status", &statusStr)
 	status := parseTxnStatus(t, d, statusStr)
-	var verb redact.SafeString
+	var verb string
 	switch status {
 	case roachpb.COMMITTED:
 		verb = "committing"

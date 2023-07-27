@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -249,7 +248,7 @@ func (s *TestState) MayResolveDatabase(
 
 // MayResolveSchema implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveSchema(
-	ctx context.Context, name tree.ObjectNamePrefix, withOffline bool,
+	ctx context.Context, name tree.ObjectNamePrefix,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
 	dbName := name.Catalog()
 	scName := name.Schema()
@@ -286,10 +285,13 @@ func (s *TestState) MayResolveSchema(
 	return db, sc
 }
 
-func (s *TestState) MayResolvePrefix(
+func (s *TestState) MustResolvePrefix(
 	ctx context.Context, name tree.ObjectNamePrefix,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
 	db, sc := s.mayResolvePrefix(name)
+	if sc == nil {
+		panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+	}
 	return db.(catalog.DatabaseDescriptor), sc.(catalog.SchemaDescriptor)
 }
 
@@ -756,15 +758,6 @@ func (s *TestState) DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id
 	return nil
 }
 
-// AddName implements the scexec.Catalog interface.
-func (s *TestState) AddName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
-	if s.catalogChanges.namesToAdd == nil {
-		s.catalogChanges.namesToAdd = make(map[descpb.NameInfo]descpb.ID)
-	}
-	s.catalogChanges.namesToAdd[nameInfo] = id
-	return nil
-}
-
 // DeleteDescriptor implements the scexec.Catalog interface.
 func (s *TestState) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	s.catalogChanges.descriptorsToDelete.Add(id)
@@ -799,35 +792,36 @@ func (s *TestState) DeleteComment(ctx context.Context, key catalogkeys.CommentKe
 
 // Validate implements the scexec.Catalog interface.
 func (s *TestState) Validate(ctx context.Context) error {
-	namesToDelete := getOrderedNameInfos(s.catalogChanges.namesToDelete)
-	for _, nameInfo := range namesToDelete {
+	names := make([]descpb.NameInfo, 0, len(s.catalogChanges.namesToDelete))
+	for nameInfo := range s.catalogChanges.namesToDelete {
+		names = append(names, nameInfo)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		return s.catalogChanges.namesToDelete[names[i]] < s.catalogChanges.namesToDelete[names[j]]
+	})
+	for _, nameInfo := range names {
 		expectedID := s.catalogChanges.namesToDelete[nameInfo]
 		ne := s.uncommittedInMemory.LookupNamespaceEntry(nameInfo)
 		if ne == nil {
 			return errors.AssertionFailedf(
 				"cannot delete missing namespace entry %v", nameInfo)
 		}
+
 		if actualID := ne.GetID(); actualID != expectedID {
 			return errors.AssertionFailedf(
 				"expected deleted namespace entry %v to have ID %d, instead is %d", nameInfo, expectedID, actualID)
 		}
-		s.LogSideEffectf("delete %s namespace entry %v -> %d",
-			getNameEntryDescriptorType(nameInfo.ParentID, nameInfo.ParentSchemaID), nameInfo, expectedID)
+		nameType := "object"
+		if nameInfo.ParentSchemaID == 0 {
+			if nameInfo.ParentID == 0 {
+				nameType = "database"
+			} else {
+				nameType = "schema"
+			}
+		}
+		s.LogSideEffectf("delete %s namespace entry %v -> %d", nameType, nameInfo, expectedID)
 		s.uncommittedInMemory.DeleteByName(nameInfo)
 	}
-
-	namesToAdd := getOrderedNameInfos(s.catalogChanges.namesToAdd)
-	for _, nameInfo := range namesToAdd {
-		expectedID := s.catalogChanges.namesToAdd[nameInfo]
-		ne := s.uncommittedInMemory.LookupNamespaceEntry(nameInfo)
-		if ne != nil {
-			return errors.AssertionFailedf("cannot add an already existing namespace entry %v", nameInfo)
-		}
-		s.LogSideEffectf("add %s namespace entry %v -> %d",
-			getNameEntryDescriptorType(nameInfo.ParentID, nameInfo.ParentSchemaID), nameInfo, expectedID)
-		s.uncommittedInMemory.UpsertNamespaceEntry(nameInfo, expectedID, hlc.Timestamp{})
-	}
-
 	for _, desc := range s.catalogChanges.descs {
 		mut := desc.NewBuilder().BuildCreatedMutable()
 		mut.ResetModificationTime()
@@ -1346,33 +1340,4 @@ func (s *TestState) GetConstraintComment(
 	tableID catid.DescID, constraintID catid.ConstraintID,
 ) (comment string, ok bool) {
 	return s.get(tableID, uint32(constraintID), catalogkeys.ConstraintCommentType)
-}
-
-// getOrderedNameInfos retrieves all keys in nameInfos in sorted order.
-func getOrderedNameInfos(nameInfos map[descpb.NameInfo]descpb.ID) []descpb.NameInfo {
-	ret := make([]descpb.NameInfo, 0, len(nameInfos))
-	for nameInfo := range nameInfos {
-		ret = append(ret, nameInfo)
-	}
-	sort.Slice(ret, func(i, j int) bool {
-		return nameInfos[ret[i]] < nameInfos[ret[j]]
-	})
-	return ret
-}
-
-func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
-	ret := "object"
-	if parentSchemaID == 0 {
-		if parentID == 0 {
-			ret = "database"
-		} else {
-			ret = "schema"
-		}
-	}
-	return ret
-}
-
-// InitializeSequence is part of the scexec.Catalog interface.
-func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
-	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
 }

@@ -1,6 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "tree",
@@ -21,7 +21,6 @@ go_library(
         "analyze.go",
         "annotation.go",
         "backup.go",
-        "batch.go",
         "changefeed.go",
         "col_name.go",
         "comment_on_column.go",
@@ -127,7 +126,6 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
-        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",

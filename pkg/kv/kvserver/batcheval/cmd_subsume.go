@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -34,8 +33,7 @@ func declareKeysSubsume(
 	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	_ kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	// Subsume must not run concurrently with any other command. It declares a
@@ -136,21 +134,6 @@ func Subsume(
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
-
-	// We ship the range ID-local replicated stats as well, since these must be
-	// subtracted from MVCCStats for the merged range.
-	//
-	// NB: lease requests can race with this computation, since they ignore
-	// latches and write to the range ID-local keyspace. This can very rarely
-	// result in a minor SysBytes discrepancy when the GetMVCCStats() call above
-	// is not consistent with this readWriter snapshot. We accept this for now,
-	// rather than introducing additional synchronization complexity.
-	ridPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
-	reply.RangeIDLocalMVCCStats, err = storage.ComputeStats(
-		readWriter, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
-	if err != nil {
-		return result.Result{}, err
-	}
 
 	// Collect a read summary from the RHS leaseholder to ship to the LHS
 	// leaseholder. This is used to instruct the LHS on how to update its

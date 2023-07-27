@@ -107,7 +107,6 @@ type NodeLevelStats struct {
 	MaxMemoryUsageGroupedByNode                     map[base.SQLInstanceID]int64
 	MaxDiskUsageGroupedByNode                       map[base.SQLInstanceID]int64
 	KVBytesReadGroupedByNode                        map[base.SQLInstanceID]int64
-	KVPairsReadGroupedByNode                        map[base.SQLInstanceID]int64
 	KVRowsReadGroupedByNode                         map[base.SQLInstanceID]int64
 	KVBatchRequestsIssuedGroupedByNode              map[base.SQLInstanceID]int64
 	KVTimeGroupedByNode                             map[base.SQLInstanceID]time.Duration
@@ -138,7 +137,6 @@ type QueryLevelStats struct {
 	MaxMemUsage                        int64
 	MaxDiskUsage                       int64
 	KVBytesRead                        int64
-	KVPairsRead                        int64
 	KVRowsRead                         int64
 	KVBatchRequestsIssued              int64
 	KVTime                             time.Duration
@@ -190,7 +188,6 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 		s.MaxDiskUsage = other.MaxDiskUsage
 	}
 	s.KVBytesRead += other.KVBytesRead
-	s.KVPairsRead += other.KVPairsRead
 	s.KVRowsRead += other.KVRowsRead
 	s.KVBatchRequestsIssued += other.KVBatchRequestsIssued
 	s.KVTime += other.KVTime
@@ -220,7 +217,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 		}
 	}
 
-	s.Regions = util.CombineUnique(s.Regions, other.Regions)
+	s.Regions = util.CombineUniqueString(s.Regions, other.Regions)
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -291,7 +288,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		MaxMemoryUsageGroupedByNode:                     make(map[base.SQLInstanceID]int64),
 		MaxDiskUsageGroupedByNode:                       make(map[base.SQLInstanceID]int64),
 		KVBytesReadGroupedByNode:                        make(map[base.SQLInstanceID]int64),
-		KVPairsReadGroupedByNode:                        make(map[base.SQLInstanceID]int64),
 		KVRowsReadGroupedByNode:                         make(map[base.SQLInstanceID]int64),
 		KVBatchRequestsIssuedGroupedByNode:              make(map[base.SQLInstanceID]int64),
 		KVTimeGroupedByNode:                             make(map[base.SQLInstanceID]time.Duration),
@@ -322,7 +318,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		}
 		instanceID := stats.Component.SQLInstanceID
 		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.KV.BytesRead.Value())
-		a.nodeLevelStats.KVPairsReadGroupedByNode[instanceID] += int64(stats.KV.KVPairsRead.Value())
 		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.KV.TuplesRead.Value())
 		a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode[instanceID] += int64(stats.KV.BatchRequestsIssued.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
@@ -381,7 +376,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		for _, v := range stats.stats {
 			// Avoid duplicates and empty string.
 			if v.Component.Region != "" {
-				regions = util.CombineUnique(regions, []string{v.Component.Region})
+				regions = util.CombineUniqueString(regions, []string{v.Component.Region})
 			}
 
 			if v.FlowStats.MaxMemUsage.HasValue() {
@@ -424,10 +419,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, kvBytesRead := range a.nodeLevelStats.KVBytesReadGroupedByNode {
 		a.queryLevelStats.KVBytesRead += kvBytesRead
-	}
-
-	for _, kvPairsRead := range a.nodeLevelStats.KVPairsReadGroupedByNode {
-		a.queryLevelStats.KVPairsRead += kvPairsRead
 	}
 
 	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {

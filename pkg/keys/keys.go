@@ -356,21 +356,21 @@ func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
-func RaftLogKey(rangeID roachpb.RangeID, logIndex kvpb.RaftIndex) roachpb.Key {
+func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLogKey(logIndex)
 }
 
 // RaftLogKeyFromPrefix returns a system-local key for a Raft log entry, using
 // the provided Raft log prefix.
-func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex kvpb.RaftIndex) roachpb.Key {
-	return encoding.EncodeUint64Ascending(raftLogPrefix, uint64(logIndex))
+func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex uint64) roachpb.Key {
+	return encoding.EncodeUint64Ascending(raftLogPrefix, logIndex)
 }
 
 // DecodeRaftLogKeyFromSuffix parses the suffix of a system-local key for a Raft
 // log entry and returns the entry's log index.
-func DecodeRaftLogKeyFromSuffix(raftLogSuffix []byte) (kvpb.RaftIndex, error) {
+func DecodeRaftLogKeyFromSuffix(raftLogSuffix []byte) (uint64, error) {
 	_, logIndex, err := encoding.DecodeUint64Ascending(raftLogSuffix)
-	return kvpb.RaftIndex(logIndex), err
+	return logIndex, err
 }
 
 // RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
@@ -531,34 +531,6 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 			key, len(b))
 	}
 	return lockedKey, err
-}
-
-// ValidateLockTableSingleKey is like DecodeLockTableSingleKey, except that it
-// discards the decoded key. It returns nil iff the provided key is a valid
-// single-key lock table key.
-func ValidateLockTableSingleKey(key roachpb.Key) error {
-	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
-		return errors.Errorf("key %q does not have %q prefix",
-			key, LocalRangeLockTablePrefix)
-	}
-	// Cut the prefix.
-	b := key[len(LocalRangeLockTablePrefix):]
-	// Check that it's a single-key lock.
-	if !bytes.HasPrefix(b, LockTableSingleKeyInfix) {
-		return errors.Errorf("key %q is not for a single-key lock", key)
-	}
-	// Cut the prefix.
-	b = b[len(LockTableSingleKeyInfix):]
-	var err error
-	b, err = encoding.ValidateDecodeBytesAscending(b)
-	if err != nil {
-		return err
-	}
-	if len(b) != 0 {
-		return errors.Errorf("key %q has left-over bytes %d after decoding",
-			key, len(b))
-	}
-	return nil
 }
 
 // IsLocal performs a cheap check that returns true iff a range-local key is
@@ -1120,7 +1092,7 @@ func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
-func (b RangeIDPrefixBuf) RaftLogKey(logIndex kvpb.RaftIndex) roachpb.Key {
+func (b RangeIDPrefixBuf) RaftLogKey(logIndex uint64) roachpb.Key {
 	return RaftLogKeyFromPrefix(b.RaftLogPrefix(), logIndex)
 }
 

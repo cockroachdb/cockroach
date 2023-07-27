@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "testutils",
     srcs = [
-        "backup.go",
         "base.go",
         "dir.go",
         "error.go",
@@ -17,7 +16,6 @@ go_library(
         "subtest.go",
         "tb.go",
         "trace.go",
-        "txn_restart.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils",
     visibility = ["//visibility:public"],

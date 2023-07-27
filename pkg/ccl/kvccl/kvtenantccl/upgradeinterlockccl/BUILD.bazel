@@ -4,20 +4,14 @@ go_test(
     name = "upgradeinterlockccl_test",
     size = "enormous",
     srcs = [
-        "generated_test.go",
-        "local_test_util_test.go",
         "main_test.go",
+        "tenant_upgrade_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
-    shard_count = 14,
+    args = ["-test.timeout=3595s"],
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/sharedtestutil",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/roachpb",
@@ -34,29 +28,14 @@ go_test(
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/stats",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",  # keep
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/upgrade/upgradebase",
-        "//pkg/util/leaktest",  # keep
+        "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "@com_github_stretchr_testify//require",
-    ],
-)
-
-genrule(
-    name = "gen-interlock-tests",
-    outs = ["generated_test.go"],
-    cmd = """
-        $(location //pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/testgen) -output-file-path=$(location generated_test.go)
-       """,
-    exec_tools = [
-        "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/testgen",
-    ],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
     ],
 )

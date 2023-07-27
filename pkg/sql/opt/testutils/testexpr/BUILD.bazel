@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "testexpr",
-    testonly = 1,
     srcs = ["test_expr.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr",
     visibility = ["//visibility:public"],

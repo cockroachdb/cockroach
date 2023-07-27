@@ -41,7 +41,7 @@ test           s            q              testuser  SELECT          false
 statement ok
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA s TO testuser
 
-query TTTTTB colnames,rowsort
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
@@ -51,7 +51,7 @@ test           s            q              testuser  USAGE           false
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTTB colnames,rowsort
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -64,7 +64,7 @@ test           s2           q              testuser2  SELECT          false
 statement ok
 GRANT ALL ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTTB colnames,rowsort
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -80,7 +80,7 @@ CREATE USER testuser3
 statement ok
 GRANT ALL ON ALL TABLES IN SCHEMA s2 TO testuser3
 
-query TTTTTB colnames,rowsort
+query TTTTTB colnames
 SHOW GRANTS FOR testuser3
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -96,7 +96,7 @@ CREATE SCHEMA s4;
 CREATE SEQUENCE s3.q;
 CREATE SEQUENCE s4.q;
 
-query TTTTTB colnames,rowsort
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
@@ -107,7 +107,7 @@ test           s2           q              testuser2  ALL             false
 
 
 
-query TTTTTB colnames,rowsort
+query TTTTTB colnames
 SHOW GRANTS FOR testuser3
 ----
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable

@@ -17,15 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -240,7 +240,7 @@ func (s *Server) Query(
 	// dead. This is a conservatively long span, but gives us a good indication of
 	// when a gap likely indicates an outage (and thus missing values should not
 	// be interpolated).
-	interpolationLimit := liveness.TimeUntilNodeDead.Get(&s.db.st.SV).Nanoseconds()
+	interpolationLimit := storepool.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
 
 	// Get the estimated number of nodes on the cluster, used to compute more
 	// accurate memory usage estimates. Set a minimum of 1 in order to avoid
@@ -315,7 +315,6 @@ func (s *Server) Query(
 							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
 							EstimatedSources:        estimatedSourceCount,
 							InterpolationLimitNanos: interpolationLimit,
-							Columnar:                s.db.WriteColumnar(),
 						},
 					)
 
@@ -393,17 +392,15 @@ func (s *Server) DumpRaw(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpRawSe
 func dumpImpl(
 	ctx context.Context, db *kv.DB, req *tspb.DumpRequest, d func(*roachpb.KeyValue) error,
 ) error {
-	if len(req.Names) == 0 {
-		// In 23.2 behavior changed. Prior to it, tsdump would send an empty slice and
-		// we'd populate it here. Now the client is expected to fill in the slice itself.
-		// Probably the client is running `./cockroach debug tsdump` on a <=23.1 binary.
-		return errors.Errorf("no timeseries names provided, does your cli binary match server's?")
+	names := req.Names
+	if len(names) == 0 {
+		names = catalog.AllInternalTimeseriesMetricNames()
 	}
 	resolutions := req.Resolutions
 	if len(resolutions) == 0 {
 		resolutions = []tspb.TimeSeriesResolution{tspb.TimeSeriesResolution_RESOLUTION_10S}
 	}
-	for _, seriesName := range req.Names {
+	for _, seriesName := range names {
 		for _, res := range resolutions {
 			if err := dumpTimeseriesAllSources(
 				ctx,

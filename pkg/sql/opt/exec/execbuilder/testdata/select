@@ -55,7 +55,7 @@ WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 statement ok
 CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
 
-let $t_id
+let $t_id 
 SELECT id FROM system.namespace WHERE name='num_ref'
 
 statement ok
@@ -540,22 +540,22 @@ CREATE TABLE t (
   FAMILY (a, b, c, d)
 )
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-t           b_idx       true        1             b            b           ASC        false    false     true     1
-t           b_idx       true        2             c            c           N/A        true     false     true     1
-t           b_idx       true        3             d            d           N/A        true     false     true     1
-t           b_idx       true        4             a            a           ASC        false    true      true     1
-t           c_idx       false       1             c            c           ASC        false    false     true     1
-t           c_idx       false       2             b            b           N/A        true     false     true     1
-t           c_idx       false       3             d            d           N/A        true     false     true     1
-t           c_idx       false       4             a            a           ASC        true     true      true     1
-t           t_pkey      false       1             a            a           ASC        false    false     true     1
-t           t_pkey      false       2             b            b           N/A        true     false     true     1
-t           t_pkey      false       3             c            c           N/A        true     false     true     1
-t           t_pkey      false       4             d            d           N/A        true     false     true     1
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           b_idx       true        1             b            b           ASC        false    false     true
+t           b_idx       true        2             c            c           N/A        true     false     true
+t           b_idx       true        3             d            d           N/A        true     false     true
+t           b_idx       true        4             a            a           ASC        false    true      true
+t           c_idx       false       1             c            c           ASC        false    false     true
+t           c_idx       false       2             b            b           N/A        true     false     true
+t           c_idx       false       3             d            d           N/A        true     false     true
+t           c_idx       false       4             a            a           ASC        true     true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             b            b           N/A        true     false     true
+t           t_pkey      false       3             c            c           N/A        true     false     true
+t           t_pkey      false       4             d            d           N/A        true     false     true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -34,41 +33,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
-
-func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	retryFilter, verifyRetryHit := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "stmt-diag-", 1)
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: true,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: retryFilter,
-			},
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-	r := sqlutils.MakeSQLRunner(godb)
-	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
-CREATE SCHEMA s;
-CREATE TABLE s.a (a INT PRIMARY KEY);`)
-
-	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
-	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
-
-	// Set a small chunk size to test splitting into chunks. The bundle files are
-	// on the order of 10KB.
-	r.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.bundle_chunk_size = '2000'")
-
-	rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
-	checkBundle(
-		t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
-		base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
-	)
-	verifyRetryHit()
-}
 
 func TestExplainAnalyzeDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -148,6 +112,33 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 			}
 			return nil
 		}, false /* expectErrors */, base, plans, "distsql.html vec.txt vec-v.txt")
+	})
+
+	// Verify that we can issue the statement with prepare (which can happen
+	// depending on the client).
+	t.Run("prepare", func(t *testing.T) {
+		stmt, err := godb.Prepare("EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stmt.Close()
+		rows, err := stmt.Query()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rowsBuf bytes.Buffer
+		for rows.Next() {
+			var row string
+			if err := rows.Scan(&row); err != nil {
+				t.Fatal(err)
+			}
+			rowsBuf.WriteString(row)
+			rowsBuf.WriteByte('\n')
+		}
+		checkBundle(
+			t, rowsBuf.String(), "public.abc", nil, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+		)
 	})
 
 	// This is a regression test for the situation where wrapped into the
@@ -293,7 +284,6 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 
 	t.Run("redact", func(t *testing.T) {
-		r.Exec(t, "CREATE TYPE plesiosaur AS ENUM ('pterodactyl', '5555555555554444');")
 		r.Exec(t, "CREATE TABLE pterosaur (cardholder STRING PRIMARY KEY, cardno INT, INDEX (cardno));")
 		r.Exec(t, "INSERT INTO pterosaur VALUES ('pterodactyl', 5555555555554444);")
 		r.Exec(t, "CREATE STATISTICS jurassic FROM pterosaur;")
@@ -316,20 +306,6 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 	})
 
-	t.Run("types", func(t *testing.T) {
-		r.Exec(t, "CREATE TYPE test_type1 AS ENUM ('hello','world');")
-		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
-		checkBundle(
-			t, fmt.Sprint(rows), "test_type1", nil, false, /* expectErrors */
-			base, plans, "distsql.html vec.txt vec-v.txt",
-		)
-		checkBundle(
-			t, fmt.Sprint(rows), "test_type2", nil, false, /* expectErrors */
-			base, plans, "distsql.html vec.txt vec-v.txt",
-		)
-	})
-
 	t.Run("udfs", func(t *testing.T) {
 		r.Exec(t, "CREATE FUNCTION add(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
 		r.Exec(t, "CREATE FUNCTION subtract(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
@@ -348,7 +324,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				}
 				return nil
 			}, false /* expectErrors */, base, plans,
-			"distsql.html vec-v.txt vec.txt")
+			"distsql-1-subquery.html distsql-2-main-query.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt")
 	})
 
 	t.Run("permission error", func(t *testing.T) {

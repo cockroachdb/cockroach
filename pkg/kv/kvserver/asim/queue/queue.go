@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // RangeQueue presents an interface to interact with a single consumer
@@ -102,7 +101,6 @@ func (pq *priorityQueue) Pop() interface{} {
 
 // baseQueue is an implementation of the ReplicateQueue interface.
 type baseQueue struct {
-	log.AmbientContext
 	priorityQueue
 	storeID        state.StoreID
 	stateChanger   state.Changer

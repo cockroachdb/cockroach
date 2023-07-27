@@ -13,7 +13,6 @@ package stateloader
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -170,42 +169,11 @@ func (rsl StateLoader) SetLease(
 		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &lease)
 }
 
-// SetLeaseBlind persists a lease using a blind write, updating the MVCC stats
-// based on prevLease. This is particularly beneficial for expiration lease
-// extensions, which do a write per range every 3 seconds. Seeking to the
-// existing record has a significant aggregate cost with many ranges, and can
-// also cause Pebble block cache thrashing.
-//
-// NB: prevLease is usually passed from the in-memory replica state. Since lease
-// requests don't hold latches (they're evaluated on the local replica),
-// prevLease may be modified concurrently. In that case the lease request will
-// fail below Raft, so it doesn't matter if the stats are wrong.
-func (rsl StateLoader) SetLeaseBlind(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	lease, prevLease roachpb.Lease,
-) error {
-	key := rsl.RangeLeaseKey()
-	var value, prevValue roachpb.Value
-	if err := value.SetProto(&lease); err != nil {
-		return err
-	}
-	value.InitChecksum(key)
-	// NB: We persist an empty lease record when writing the initial range state,
-	// so we should always pass a non-empty prevValue.
-	if err := prevValue.SetProto(&prevLease); err != nil {
-		return err
-	}
-	prevValue.InitChecksum(key)
-	return storage.MVCCBlindPutInlineWithPrev(ctx, readWriter, ms, key, value, prevValue)
-}
-
 // LoadRangeAppliedState loads the Range applied state.
 func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader storage.Reader,
-) (*kvserverpb.RangeAppliedState, error) {
-	var as kvserverpb.RangeAppliedState
+) (*enginepb.RangeAppliedState, error) {
+	var as enginepb.RangeAppliedState
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
 		storage.MVCCGetOptions{})
 	return &as, err
@@ -232,21 +200,19 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	appliedIndex kvpb.RaftIndex,
-	leaseAppliedIndex kvpb.LeaseAppliedIndex,
-	appliedIndexTerm kvpb.RaftTerm,
+	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
 	newMS *enginepb.MVCCStats,
 	raftClosedTimestamp hlc.Timestamp,
-	asAlloc *kvserverpb.RangeAppliedState, // optional
+	asAlloc *enginepb.RangeAppliedState, // optional
 ) error {
 	if asAlloc == nil {
-		asAlloc = new(kvserverpb.RangeAppliedState)
+		asAlloc = new(enginepb.RangeAppliedState)
 	}
 	as := asAlloc
-	*as = kvserverpb.RangeAppliedState{
+	*as = enginepb.RangeAppliedState{
 		RaftAppliedIndex:     appliedIndex,
 		LeaseAppliedIndex:    leaseAppliedIndex,
-		RangeStats:           kvserverpb.MVCCPersistentStats(*newMS),
+		RangeStats:           newMS.ToPersistentStats(),
 		RaftClosedTimestamp:  raftClosedTimestamp,
 		RaftAppliedIndexTerm: appliedIndexTerm,
 	}
@@ -366,7 +332,7 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 	return kvserverpb.ReplicaState{
 		Desc:           &roachpb.RangeDescriptor{RangeID: rangeID},
 		Lease:          &roachpb.Lease{},
-		TruncatedState: &kvserverpb.RaftTruncatedState{},
+		TruncatedState: &roachpb.RaftTruncatedState{},
 		GCThreshold:    &hlc.Timestamp{},
 		Stats:          &enginepb.MVCCStats{},
 		GCHint:         &roachpb.GCHint{},

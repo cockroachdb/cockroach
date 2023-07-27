@@ -1046,57 +1046,86 @@ vectorized: true
 │ arbiter indexes: uniq_partial_pkey
 │ arbiter constraints: unique_a, unique_b
 │
-└── • hash join (right anti)
+└── • project
     │ columns: (column1, column2, column3)
-    │ estimated row count: 0 (missing stats)
-    │ equality: (b) = (column3)
-    │ right cols are key
     │
-    ├── • filter
-    │   │ columns: (b)
-    │   │ estimated row count: 333 (missing stats)
-    │   │ filter: b > 0
-    │   │
-    │   └── • scan
-    │         columns: (b)
-    │         estimated row count: 1,000 (missing stats)
-    │         table: uniq_partial@uniq_partial_pkey
-    │         spans: FULL SCAN
-    │
-    └── • hash join (right anti)
-        │ columns: (column1, column2, column3)
+    └── • distinct
+        │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
         │ estimated row count: 0 (missing stats)
-        │ equality: (a) = (column2)
-        │ right cols are key
-        │ pred: column3 > 0
+        │ distinct on: arbiter_unique_b_distinct
+        │ nulls are distinct
         │
-        ├── • filter
-        │   │ columns: (a, b)
-        │   │ estimated row count: 333 (missing stats)
-        │   │ filter: b > 0
-        │   │
-        │   └── • scan
-        │         columns: (a, b)
-        │         estimated row count: 1,000 (missing stats)
-        │         table: uniq_partial@uniq_partial_pkey
-        │         spans: FULL SCAN
-        │
-        └── • cross join (anti)
-            │ columns: (column1, column2, column3)
-            │ estimated row count: 0 (missing stats)
+        └── • render
+            │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
+            │ render arbiter_unique_b_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
             │
-            ├── • values
-            │     columns: (column1, column2, column3)
-            │     size: 3 columns, 1 row
-            │     row 0, expr 0: 1
-            │     row 0, expr 1: 2
-            │     row 0, expr 2: 3
-            │
-            └── • scan
-                  columns: (k)
-                  estimated row count: 1 (missing stats)
-                  table: uniq_partial@uniq_partial_pkey
-                  spans: /1/0
+            └── • distinct
+                │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
+                │ estimated row count: 0 (missing stats)
+                │ distinct on: arbiter_unique_a_distinct
+                │ nulls are distinct
+                │
+                └── • render
+                    │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
+                    │ render arbiter_unique_a_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
+                    │ render column1: column1
+                    │ render column2: column2
+                    │ render column3: column3
+                    │
+                    └── • hash join (right anti)
+                        │ columns: (column1, column2, column3)
+                        │ estimated row count: 0 (missing stats)
+                        │ equality: (b) = (column3)
+                        │ right cols are key
+                        │
+                        ├── • filter
+                        │   │ columns: (b)
+                        │   │ estimated row count: 333 (missing stats)
+                        │   │ filter: b > 0
+                        │   │
+                        │   └── • scan
+                        │         columns: (b)
+                        │         estimated row count: 1,000 (missing stats)
+                        │         table: uniq_partial@uniq_partial_pkey
+                        │         spans: FULL SCAN
+                        │
+                        └── • hash join (right anti)
+                            │ columns: (column1, column2, column3)
+                            │ estimated row count: 0 (missing stats)
+                            │ equality: (a) = (column2)
+                            │ right cols are key
+                            │ pred: column3 > 0
+                            │
+                            ├── • filter
+                            │   │ columns: (a, b)
+                            │   │ estimated row count: 333 (missing stats)
+                            │   │ filter: b > 0
+                            │   │
+                            │   └── • scan
+                            │         columns: (a, b)
+                            │         estimated row count: 1,000 (missing stats)
+                            │         table: uniq_partial@uniq_partial_pkey
+                            │         spans: FULL SCAN
+                            │
+                            └── • cross join (anti)
+                                │ columns: (column1, column2, column3)
+                                │ estimated row count: 0 (missing stats)
+                                │
+                                ├── • values
+                                │     columns: (column1, column2, column3)
+                                │     size: 3 columns, 1 row
+                                │     row 0, expr 0: 1
+                                │     row 0, expr 1: 2
+                                │     row 0, expr 2: 3
+                                │
+                                └── • scan
+                                      columns: (k)
+                                      estimated row count: 1 (missing stats)
+                                      table: uniq_partial@uniq_partial_pkey
+                                      spans: /1/0
 
 # Insert with non-constant input.
 query T

@@ -14,7 +14,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/xml"
@@ -206,7 +205,6 @@ func (s *monitorBuildServer) handleBuildEvent(
 			outputDir = strings.ReplaceAll(outputDir, ":", "/")
 			outputDir = filepath.Join("bazel-testlogs", outputDir)
 			summary := bazelBuildEvent.GetTestSummary()
-			lastAttempt := summary.AttemptCount
 			for _, testResult := range s.testResults[label] {
 				outputDir := outputDir
 				if testResult.run > 1 {
@@ -215,10 +213,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if summary != nil && summary.ShardCount > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
 				}
-				// Add `.tc_ignore_attempt#` to the filename of all attempts but the last one. This ensures that
-				// those results are uploaded to TC in case we need them but the results are ignored
-				// by TC because the filename doesn't end with `.xml`.
-				append_tc_ignore := testResult.attempt != lastAttempt
+				if testResult.attempt > 1 {
+					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
+				}
 				if testResult.testResult == nil {
 					continue
 				}
@@ -226,9 +223,6 @@ func (s *monitorBuildServer) handleBuildEvent(
 					if output.Name == "test.log" || output.Name == "test.xml" {
 						src := strings.TrimPrefix(output.GetUri(), "file://")
 						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
-						if append_tc_ignore {
-							dst += fmt.Sprintf(".tc_ignore_%d", int(testResult.attempt))
-						}
 						if err := doCopy(src, dst); err != nil {
 							return nil, err
 						}
@@ -252,9 +246,6 @@ func (s *monitorBuildServer) handleBuildEvent(
 func (s *monitorBuildServer) Finalize() error {
 	if s.action == "build" {
 		for _, target := range s.builtTargets {
-			if target == nil {
-				continue
-			}
 			for _, outputGroup := range target.OutputGroup {
 				if outputGroup == nil || outputGroup.Incomplete {
 					continue
@@ -359,9 +350,8 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
-	var stdout, stderr bytes.Buffer
-	bazelCmd.Stdout = io.MultiWriter(os.Stdout, bufio.NewWriter(&stdout))
-	bazelCmd.Stderr = io.MultiWriter(os.Stderr, bufio.NewWriter(&stderr))
+	bazelCmd.Stdout = os.Stdout
+	bazelCmd.Stderr = os.Stderr
 	bazelErr := bazelCmd.Run()
 	if bazelErr != nil {
 		fmt.Printf("got error %+v from bazel run\n", bazelErr)
@@ -373,14 +363,6 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Sending BEP data to beaver hub failed - %v\n", err)
 		}
 	}
-
-	removeEmergencyBallasts()
-	// Presumably a build failure.
-	if bazelErr != nil && len(server.testXmls) == 0 {
-		postBuildFailure(fmt.Sprintf("stdout: %s\n, stderr: %s", stdout.String(), stderr.String()))
-		return bazelErr
-	}
-
 	return errors.CombineErrors(processTestXmls(server.testXmls), bazelErr)
 }
 
@@ -475,7 +457,27 @@ func removeEmergencyBallasts() {
 }
 
 func processTestXmls(testXmls []string) error {
-	if doPost() {
+	removeEmergencyBallasts()
+	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
+	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
+	if isReleaseBranch {
+		// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
+		// ever asked to post, so enforce that on all runs.
+		// The way this env var is made available here is quite tricky. The build
+		// calling this method is usually a build that is invoked from PRs, so it
+		// can't have secrets available to it (for the PR could modify
+		// build/teamcity-* to leak the secret). Instead, we provide the secrets
+		// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
+		// pass that env var through when it's there. This means we won't have the
+		// env var on PR builds, but we'll have it for builds that are triggered
+		// from the release branches.
+		if os.Getenv("GITHUB_API_TOKEN") == "" {
+			fmt.Println("GITHUB_API_TOKEN must be set to post results to GitHub; skipping error reporting")
+			// TODO(ricky): Certain jobs (nightlies) probably really
+			// do need to fail outright in this case rather than
+			// silently continuing here. How do we handle them?
+			return nil
+		}
 		var postErrors []string
 		for _, testXml := range testXmls {
 			xmlFile, err := os.Open(testXml)
@@ -495,39 +497,8 @@ func processTestXmls(testXmls []string) error {
 		if len(postErrors) != 0 {
 			return errors.Newf("%s", strings.Join(postErrors, "\n"))
 		}
+	} else {
+		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
 	}
 	return nil
-}
-
-func postBuildFailure(logs string) {
-	if doPost() {
-		githubpost.PostGeneralFailure(githubPostFormatterName, logs)
-	}
-}
-
-func doPost() bool {
-	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
-	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
-	if !isReleaseBranch {
-		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
-		return false
-	}
-	// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
-	// ever asked to post, so enforce that on all runs.
-	// The way this env var is made available here is quite tricky. The build
-	// calling this method is usually a build that is invoked from PRs, so it
-	// can't have secrets available to it (for the PR could modify
-	// build/teamcity-* to leak the secret). Instead, we provide the secrets
-	// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
-	// pass that env var through when it's there. This means we won't have the
-	// env var on PR builds, but we'll have it for builds that are triggered
-	// from the release branches.
-	if os.Getenv("GITHUB_API_TOKEN") == "" {
-		fmt.Println("GITHUB_API_TOKEN must be set to post results to GitHub; skipping error reporting")
-		// TODO(ricky): Certain jobs (nightlies) probably really
-		// do need to fail outright in this case rather than
-		// silently continuing here. How do we handle them?
-		return false
-	}
-	return true
 }

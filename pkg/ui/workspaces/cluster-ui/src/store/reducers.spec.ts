@@ -25,8 +25,8 @@ describe("rootReducer", () => {
 
     assert.deepEqual(initState, resetState);
     assert.notDeepEqual(
-      resetState.statements.error,
-      changedState.statements.error,
+      resetState.statements.lastError,
+      changedState.statements.lastError,
     );
   });
 });

@@ -99,7 +99,7 @@ func TestCanSendToFollower(t *testing.T) {
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
 
 	txn := func(ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 1)
+		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, 1)
 		return &txn
 	}
 	withWriteTimestamp := func(txn *roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction {
@@ -706,16 +706,16 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				UseDatabase:       "t",
+				DisableDefaultTestTenant: true,
+				UseDatabase:              "t",
 			},
 			// n4 pretends to have low latency to n2 and n3, so that it tries to use
 			// them for follower reads.
 			// Also, we're going to collect a trace of the test's final query.
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				3: {
-					DefaultTestTenant: base.TODOTestTenantDisabled,
-					UseDatabase:       "t",
+					DisableDefaultTestTenant: true,
+					UseDatabase:              "t",
 					Knobs: base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
 							// Inhibit the checking of connection health done by the
@@ -901,8 +901,8 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			}
 			localities[i] = locality
 			serverArgs[i] = base.TestServerArgs{
-				Locality:          localities[i],
-				DefaultTestTenant: base.TODOTestTenantDisabled, // we'll create one ourselves below.
+				Locality:                 localities[i],
+				DisableDefaultTestTenant: true, // we'll create one ourselves below.
 			}
 		}
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -28,10 +27,7 @@ import (
 )
 
 func putTruncatedState(
-	t *testing.T,
-	eng storage.Engine,
-	rangeID roachpb.RangeID,
-	truncState kvserverpb.RaftTruncatedState,
+	t *testing.T, eng storage.Engine, rangeID roachpb.RangeID, truncState roachpb.RaftTruncatedState,
 ) {
 	key := keys.RaftTruncatedStateKey(rangeID)
 	if err := storage.MVCCPutProto(
@@ -44,7 +40,7 @@ func putTruncatedState(
 
 func readTruncStates(
 	t *testing.T, eng storage.Engine, rangeID roachpb.RangeID,
-) (truncatedState kvserverpb.RaftTruncatedState) {
+) (truncatedState roachpb.RaftTruncatedState) {
 	t.Helper()
 	found, err := storage.MVCCGetProto(
 		context.Background(), eng, keys.RaftTruncatedStateKey(rangeID),
@@ -79,7 +75,7 @@ func TestTruncateLog(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	truncState := kvserverpb.RaftTruncatedState{
+	truncState := roachpb.RaftTruncatedState{
 		Index: firstIndex + 1,
 		Term:  term,
 	}
@@ -101,7 +97,7 @@ func TestTruncateLog(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expTruncState := kvserverpb.RaftTruncatedState{
+	expTruncState := roachpb.RaftTruncatedState{
 		Index: req.Index - 1,
 		Term:  term,
 	}

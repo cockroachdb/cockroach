@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -45,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -152,11 +152,23 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 	ctx := context.Background()
 
 	const txnName = "descriptor update"
+	haveInjectedRetry := false
 	var serverArgs base.TestServerArgs
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	filterFunc, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, txnName, 1)
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: filterFunc,
+		TestingRequestFilter: func(ctx context.Context, r *kvpb.BatchRequest) *kvpb.Error {
+			if r.Txn == nil || r.Txn.Name != txnName {
+				return nil
+			}
+			if _, ok := r.GetArg(kvpb.EndTxn); ok {
+				if !haveInjectedRetry {
+					haveInjectedRetry = true
+					// Force a retry error the first time.
+					return kvpb.NewError(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected error"))
+				}
+			}
+			return nil
+		},
 	}
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
@@ -845,7 +857,7 @@ parent schema name   id  kind     version dropped public
 `, formatCatalog(allDescs.OrderedDescriptors()))
 		return nil
 	}
-	sd := sql.NewInternalSessionData(ctx, s0.ClusterSettings(), "TestGetAllDescriptorsInDatabase")
+	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV, "TestGetAllDescriptorsInDatabase")
 	sd.Database = "db"
 	require.NoError(t, tm.DescsTxn(ctx, run, isql.WithSessionData(sd)))
 }

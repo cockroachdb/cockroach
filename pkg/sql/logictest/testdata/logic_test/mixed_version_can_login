@@ -1,7 +1,5 @@
 # LogicTest: cockroach-go-testserver-upgrade-to-master
 
-skip 103956
-
 query I
 SELECT 1
 ----
@@ -10,7 +8,7 @@ SELECT 1
 query T
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+22.2
 
 statement ok
 SELECT crdb_internal.create_tenant(1000)
@@ -23,20 +21,20 @@ SELECT crdb_internal.create_tenant(1001)
 upgrade 1
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() = '23.1'
 ----
 true
 
 query T nodeidx=2
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+22.2
 
 # Verify that a non-root user can login on the upgraded node.
 user testuser nodeidx=0
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() = '23.1'
 ----
 true
 
@@ -44,7 +42,7 @@ true
 user root nodeidx=1
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() = '23.1'
 ----
 true
 
@@ -54,7 +52,7 @@ user testuser nodeidx=2
 query T
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+22.2
 
 # Verify that a root user can login on the non-upgraded node.
 user root nodeidx=2
@@ -62,12 +60,12 @@ user root nodeidx=2
 query T
 SELECT crdb_internal.node_executable_version()
 ----
-23.1
+22.2
 
 upgrade 2
 
 query B
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() = '23.1'
 ----
 true
 

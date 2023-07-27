@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -110,8 +109,6 @@ func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, erro
 		return catpb.Function_SQL, nil
 	case tree.FunctionLangPLpgSQL:
 		return catpb.Function_PLPGSQL, nil
-	case tree.FunctionLangC:
-		return -1, unimplemented.NewWithIssue(102201, "C is not yet supported")
 	}
 
 	return -1, pgerror.Newf(pgcode.UndefinedObject, "language %q does not exist", v)

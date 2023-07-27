@@ -19,19 +19,17 @@ import (
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts                    *metric.Counter
-	Commits                   *metric.Counter
-	Commits1PC                *metric.Counter // Commits which finished in a single phase
-	ParallelCommits           *metric.Counter // Commits which entered the STAGING state
-	ParallelCommitAutoRetries *metric.Counter // Commits which were retried after entering the STAGING state
-	CommitWaits               *metric.Counter // Commits that waited for linearizability
+	Aborts          *metric.Counter
+	Commits         *metric.Counter
+	Commits1PC      *metric.Counter // Commits which finished in a single phase
+	ParallelCommits *metric.Counter // Commits which entered the STAGING state
+	CommitWaits     *metric.Counter // Commits that waited for linearizability
 
-	ClientRefreshSuccess                *metric.Counter
-	ClientRefreshFail                   *metric.Counter
-	ClientRefreshFailWithCondensedSpans *metric.Counter
-	ClientRefreshMemoryLimitExceeded    *metric.Counter
-	ClientRefreshAutoRetries            *metric.Counter
-	ServerRefreshSuccess                *metric.Counter
+	RefreshSuccess                *metric.Counter
+	RefreshFail                   *metric.Counter
+	RefreshFailWithCondensedSpans *metric.Counter
+	RefreshMemoryLimitExceeded    *metric.Counter
+	RefreshAutoRetries            *metric.Counter
 
 	Durations metric.IHistogram
 
@@ -83,12 +81,6 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaParallelCommitAutoRetries = metric.Metadata{
-		Name:        "txn.parallelcommits.auto_retries",
-		Help:        "Number of commit tries after successful failed parallel commit attempts",
-		Measurement: "Retries",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaCommitWaitCount = metric.Metadata{
 		Name: "txn.commit_waits",
 		Help: "Number of KV transactions that had to commit-wait on commit " +
@@ -97,9 +89,9 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaClientRefreshSuccess = metric.Metadata{
+	metaRefreshSuccess = metric.Metadata{
 		Name: "txn.refresh.success",
-		Help: "Number of successful client-side transaction refreshes. A refresh may be " +
+		Help: "Number of successful transaction refreshes. A refresh may be " +
 			"preemptive or reactive. A reactive refresh is performed after a " +
 			"request throws an error because a refresh is needed for it to " +
 			"succeed. In these cases, the request will be re-issued as an " +
@@ -107,15 +99,15 @@ var (
 		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaClientRefreshFail = metric.Metadata{
+	metaRefreshFail = metric.Metadata{
 		Name:        "txn.refresh.fail",
-		Help:        "Number of failed client-side transaction refreshes",
+		Help:        "Number of failed transaction refreshes",
 		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaClientRefreshFailWithCondensedSpans = metric.Metadata{
+	metaRefreshFailWithCondensedSpans = metric.Metadata{
 		Name: "txn.refresh.fail_with_condensed_spans",
-		Help: "Number of failed client-side refreshes for transactions whose read " +
+		Help: "Number of failed refreshes for transactions whose read " +
 			"tracking lost fidelity because of condensing. Such a failure " +
 			"could be a false conflict. Failures counted here are also counted " +
 			"in txn.refresh.fail, and the respective transactions are also counted in " +
@@ -123,23 +115,17 @@ var (
 		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaClientRefreshMemoryLimitExceeded = metric.Metadata{
+	metaRefreshMemoryLimitExceeded = metric.Metadata{
 		Name: "txn.refresh.memory_limit_exceeded",
 		Help: "Number of transaction which exceed the refresh span bytes limit, causing " +
 			"their read spans to be condensed",
 		Measurement: "Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaClientRefreshAutoRetries = metric.Metadata{
+	metaRefreshAutoRetries = metric.Metadata{
 		Name:        "txn.refresh.auto_retries",
-		Help:        "Number of request retries after successful client-side refreshes",
+		Help:        "Number of request retries after successful refreshes",
 		Measurement: "Retries",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaServerRefreshSuccess = metric.Metadata{
-		Name:        "txn.refresh.success_server_side",
-		Help:        "Number of successful server-side transaction refreshes",
-		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDurationsHistograms = metric.Metadata{
@@ -272,18 +258,16 @@ var (
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                              metric.NewCounter(metaAbortsRates),
-		Commits:                             metric.NewCounter(metaCommitsRates),
-		Commits1PC:                          metric.NewCounter(metaCommits1PCRates),
-		ParallelCommits:                     metric.NewCounter(metaParallelCommitsRates),
-		ParallelCommitAutoRetries:           metric.NewCounter(metaParallelCommitAutoRetries),
-		CommitWaits:                         metric.NewCounter(metaCommitWaitCount),
-		ClientRefreshSuccess:                metric.NewCounter(metaClientRefreshSuccess),
-		ClientRefreshFail:                   metric.NewCounter(metaClientRefreshFail),
-		ClientRefreshFailWithCondensedSpans: metric.NewCounter(metaClientRefreshFailWithCondensedSpans),
-		ClientRefreshMemoryLimitExceeded:    metric.NewCounter(metaClientRefreshMemoryLimitExceeded),
-		ClientRefreshAutoRetries:            metric.NewCounter(metaClientRefreshAutoRetries),
-		ServerRefreshSuccess:                metric.NewCounter(metaServerRefreshSuccess),
+		Aborts:                        metric.NewCounter(metaAbortsRates),
+		Commits:                       metric.NewCounter(metaCommitsRates),
+		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
+		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
+		CommitWaits:                   metric.NewCounter(metaCommitWaitCount),
+		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
+		RefreshFail:                   metric.NewCounter(metaRefreshFail),
+		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
+		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
+		RefreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
 		Durations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaDurationsHistograms,

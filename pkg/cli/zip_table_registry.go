@@ -130,6 +130,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"flow_id",
 			"node_id",
 			"since",
+			"status",
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
 	},
@@ -179,7 +180,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"granted",
 			"contended",
 			"duration",
-			"isolation_level",
 		},
 	},
 	"crdb_internal.cluster_queries": {
@@ -242,9 +242,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"num_stmts",
 			"num_retries",
 			"num_auto_retries",
-			"isolation_level",
-			"priority",
-			"quality_of_service",
 		},
 	},
 	"crdb_internal.cluster_txn_execution_insights": {
@@ -349,7 +346,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"database_name",
 			"schema_name",
 			"obj_name",
-			"crdb_internal.redact(error_redactable) as error_redactable",
+			"error",
 		},
 	},
 	// `statement` column can contain customer URI params such as
@@ -636,6 +633,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"node_id",
 			"stmt",
 			"since",
+			"status",
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
 	},

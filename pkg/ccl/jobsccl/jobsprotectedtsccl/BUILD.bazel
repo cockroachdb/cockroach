@@ -7,7 +7,6 @@ go_test(
         "main_test.go",
     ],
     args = ["-test.timeout=295s"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -34,7 +33,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

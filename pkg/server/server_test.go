@@ -40,9 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -63,7 +61,7 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	pgx "github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -75,7 +73,7 @@ import (
 func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{})
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +88,7 @@ func TestPanicRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{})
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	require.NoError(t, err)
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -101,7 +99,7 @@ func TestPanicRecovery(t *testing.T) {
 	}))
 
 	// Create a request.
-	req, err := http.NewRequest(http.MethodGet, ts.AdminURL().WithPath("/panic").String(), nil /* body */)
+	req, err := http.NewRequest(http.MethodGet, ts.AdminURL()+"/panic", nil /* body */)
 	require.NoError(t, err)
 
 	// Create a ResponseRecorder to record the response.
@@ -131,7 +129,7 @@ func TestHealthCheck(t *testing.T) {
 
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DefaultZoneConfigOverride: &cfg,
@@ -256,14 +254,14 @@ func TestPlainHTTPServer(t *testing.T) {
 	// still works in insecure mode.
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
-		return srvtestutils.GetStatusJSONProto(s, "metrics/local", &data)
+		return getStatusJSONProto(s, "metrics/local", &data)
 	})
 
 	// Now make a couple of direct requests using both http and https.
 	// They won't succeed because we're not jumping through
 	// authentication hoops, but they verify that the server is using
 	// the correct protocol.
-	url := s.AdminURL().String()
+	url := s.AdminURL()
 	if !strings.HasPrefix(url, "http://") {
 		t.Fatalf("expected insecure admin url to start with http://, but got %s", url)
 	}
@@ -374,7 +372,7 @@ func TestAcceptEncoding(t *testing.T) {
 	}
 	for _, d := range testData {
 		func() {
-			req, err := http.NewRequest("GET", s.AdminURL().WithPath(apiconstants.StatusPrefix+"metrics/local").String(), nil)
+			req, err := http.NewRequest("GET", s.AdminURL()+statusPrefix+"metrics/local", nil)
 			if err != nil {
 				t.Fatalf("could not create request: %s", err)
 			}
@@ -421,7 +419,7 @@ func TestListenerFileCreation(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
@@ -766,7 +764,7 @@ func TestServeIndexHTML(t *testing.T) {
 		require.NoError(t, err)
 
 		t.Run("short build", func(t *testing.T) {
-			resp, err := client.Get(s.AdminURL().String())
+			resp, err := client.Get(s.AdminURL())
 			require.NoError(t, err)
 			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
@@ -787,7 +785,7 @@ Binary built without web UI.
 		t.Run("non-short build", func(t *testing.T) {
 			linkInFakeUI()
 			defer unlinkFakeUI()
-			resp, err := client.Get(s.AdminURL().String())
+			resp, err := client.Get(s.AdminURL())
 			require.NoError(t, err)
 			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
@@ -798,7 +796,7 @@ Binary built without web UI.
 			respString := string(respBytes)
 			require.Equal(t, htmlTemplate, respString)
 
-			resp, err = client.Get(s.AdminURL().WithPath("/uiconfig").String())
+			resp, err = client.Get(s.AdminURL() + "/uiconfig")
 			require.NoError(t, err)
 			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
@@ -853,7 +851,7 @@ Binary built without web UI.
 
 		for i, testCase := range cases {
 			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-				req, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL().String(), nil)
+				req, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL(), nil)
 				require.NoError(t, err)
 
 				resp, err := testCase.client.Do(req)
@@ -867,7 +865,7 @@ Binary built without web UI.
 				respString := string(respBytes)
 				require.Equal(t, htmlTemplate, respString)
 
-				req, err = http.NewRequestWithContext(ctx, "GET", s.AdminURL().WithPath("/uiconfig").String(), nil)
+				req, err = http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/uiconfig", nil)
 				require.NoError(t, err)
 
 				resp, err = testCase.client.Do(req)
@@ -927,7 +925,7 @@ Binary built without web UI.
 		for _, testCase := range cases {
 			t.Run(fmt.Sprintf("bundle caching for %s", testCase.desc), func(t *testing.T) {
 				// Request bundle.js without an If-None-Match header first, to simulate the initial load
-				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL().WithPath("/bundle.js").String(), nil)
+				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
 				require.NoError(t, err)
 
 				uncachedResp, err := testCase.client.Do(uncachedReq)
@@ -939,7 +937,7 @@ Binary built without web UI.
 				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
 
 				// Use that ETag header on the next request to simulate a client reload
-				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL().WithPath("/bundle.js").String(), nil)
+				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
 				require.NoError(t, err)
 				cachedReq.Header.Add("If-None-Match", etag)
 

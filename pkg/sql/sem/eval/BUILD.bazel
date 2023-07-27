@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 filegroup(
     name = "testdata",
@@ -39,12 +39,10 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/geo",
         "//pkg/geo/geopb",
-        "//pkg/inspectz/inspectzpb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
@@ -56,7 +54,6 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/lex",
         "//pkg/sql/parser",
-        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
@@ -75,7 +72,6 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
-        "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/arith",
         "//pkg/util/bitarray",
@@ -120,7 +116,6 @@ go_test(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/faketreeeval",

@@ -1,5 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1
-
+# LogicTest: !3node-tenant-default-configs
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
@@ -74,7 +73,7 @@ SHOW TENANT three
 id  name   data_state  service_mode
 4   three  ready       none
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
@@ -211,7 +210,7 @@ GRANT SYSTEM MANAGETENANT TO testuser
 
 user testuser
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
@@ -285,7 +284,7 @@ CREATE TENANT "1";
 CREATE TENANT "a-b";
 CREATE TENANT "hello-100"
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -325,7 +324,7 @@ DROP TENANT two
 statement error cannot drop tenant.*in service mode external
 DROP TENANT 'tenant-one'
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -344,7 +343,7 @@ ALTER TENANT two STOP SERVICE
 statement ok
 ALTER TENANT 'tenant-one' STOP SERVICE
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SHOW TENANTS
 ----
 id  name             data_state  service_mode

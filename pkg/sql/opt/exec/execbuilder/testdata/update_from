@@ -17,13 +17,20 @@ vectorized: true
 │
 └── • render
     │
-    └── • render
+    └── • merge join
+        │ equality: (a) = (a)
+        │ left cols are key
+        │ right cols are key
+        │
+        ├── • scan
+        │     missing stats
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
         │
         └── • scan
               missing stats
               table: abc@abc_pkey
               spans: FULL SCAN
-              locking strength: for update
 
 # Update from another table.
 statement ok
@@ -79,13 +86,20 @@ vectorized: true
 │
 └── • render
     │
-    └── • render
+    └── • merge join
+        │ equality: (a) = (a)
+        │ left cols are key
+        │ right cols are key
+        │
+        ├── • scan
+        │     missing stats
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
         │
         └── • scan
               missing stats
               table: abc@abc_pkey
               spans: FULL SCAN
-              locking strength: for update
 
 # Check if RETURNING * returns everything
 query T
@@ -112,21 +126,27 @@ vectorized: true
     │ render b: b
     │ render c: c
     │
-    └── • render
+    └── • merge join (inner)
         │ columns: (a, b, c, a, b, c)
-        │ render a: a
-        │ render b: b
-        │ render c: c
-        │ render a: a
-        │ render b: b
-        │ render c: c
+        │ estimated row count: 1,000 (missing stats)
+        │ equality: (a) = (a)
+        │ left cols are key
+        │ right cols are key
+        │ merge ordering: +"(a=a)"
+        │
+        ├── • scan
+        │     columns: (a, b, c)
+        │     ordering: +a
+        │     estimated row count: 1,000 (missing stats)
+        │     table: abc@abc_pkey
+        │     spans: FULL SCAN
         │
         └── • scan
               columns: (a, b, c)
+              ordering: +a
               estimated row count: 1,000 (missing stats)
               table: abc@abc_pkey
               spans: FULL SCAN
-              locking strength: for update
 
 # Update values of table from values expression
 query T

@@ -5,7 +5,6 @@ def gen_sort_partitioner_rule(name, target, visibility = ["//visibility:private"
         name = name,
         srcs = ["//pkg/sql/colexec/colexecbase:distinct_tmpl.go"],
         outs = [target],
-	tags = ["no-remote-exec"],
         cmd = """\
 GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
 GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
@@ -14,7 +13,6 @@ export PATH=$$GO_ABS_PATH:$$PATH
 export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
 export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
-export GOROOT=
 $(location :execgen) -template $(SRCS) -fmt=false pkg/sql/colexec/$@ > $@
 $(location :goimports) -w $@
 """,

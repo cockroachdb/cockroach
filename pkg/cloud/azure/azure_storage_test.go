@@ -13,7 +13,6 @@ package azure
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -110,16 +109,12 @@ func TestAzure(t *testing.T) {
 		return
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
-	testID := cloudtestutils.NewTestID()
-	testPath := fmt.Sprintf("backup-test-%d", testID)
-	testListPath := fmt.Sprintf("listing-test-%d", testID)
-
-	cloudtestutils.CheckExportStore(t, cfg.filePath(testPath),
+	cloudtestutils.CheckExportStore(t, cfg.filePath("backup-test"),
 		false, username.RootUserName(),
 		nil, /* db */
 		testSettings,
 	)
-	cloudtestutils.CheckListFiles(t, cfg.filePath(testListPath),
+	cloudtestutils.CheckListFiles(t, cfg.filePath("listing-test"),
 		username.RootUserName(),
 		nil, /* db */
 		testSettings,
@@ -181,23 +176,21 @@ func TestAntagonisticAzureRead(t *testing.T) {
 		return
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
-	testID := cloudtestutils.NewTestID()
-	antagonistPath := fmt.Sprintf("antagonistic-read-%d", testID)
 
 	conf, err := cloud.ExternalStorageConfFromURI(
-		cfg.filePath(antagonistPath), username.RootUserName())
+		cfg.filePath("antagonistic-read"), username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
 
 	clientAuthConf, err := cloud.ExternalStorageConfFromURI(
-		cfg.filePathClientAuth(antagonistPath), username.RootUserName())
+		cfg.filePathClientAuth("antagonistic-read"), username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, clientAuthConf, testSettings)
 
 	implicitAuthConf, err := cloud.ExternalStorageConfFromURI(
-		cfg.filePathImplicitAuth(antagonistPath), username.RootUserName())
+		cfg.filePathImplicitAuth("antagonistic-read"), username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, implicitAuthConf, testSettings)
@@ -284,15 +277,11 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 		return
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
-	testID := cloudtestutils.NewTestID()
 
 	cleanup := envutil.TestSetEnv(t, "AZURE_CLIENT_ID", "")
 	defer cleanup()
 
-	testPath := fmt.Sprintf("backup-test-%d", testID)
-	testListPath := fmt.Sprintf("listing-test-%d", testID)
-
-	cloudtestutils.CheckNoPermission(t, cfg.filePathImplicitAuth(testPath), username.RootUserName(),
+	cloudtestutils.CheckNoPermission(t, cfg.filePathImplicitAuth("backup-test"), username.RootUserName(),
 		nil /*db*/, testSettings)
 
 	tmpDir, cleanup2 := testutils.TempDir(t)
@@ -304,12 +293,12 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	cleanup3 := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
 	defer cleanup3()
 
-	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
+	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth("backup-test"),
 		false, username.RootUserName(),
 		nil, /* db */
 		testSettings,
 	)
-	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
+	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth("listing-test"),
 		username.RootUserName(),
 		nil, /* db */
 		testSettings,

@@ -57,13 +57,11 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	leftCols := leftEq.ToSet()
-	// NOTE: leftCols cannot be mutated after this point because it is used as a
-	// key to cache the restricted orderings in left's logical properties.
-	orders := ordering.DeriveRestrictedInterestingOrderings(left, leftCols).Copy()
+	orders := ordering.DeriveInterestingOrderings(left).Copy()
+	leftCols, leftFDs := leftEq.ToSet(), &left.Relational().FuncDeps
+	orders.RestrictToCols(leftCols, leftFDs)
 
 	var mustGenerateMergeJoin bool
-	leftFDs := &left.Relational().FuncDeps
 	if len(orders) == 0 && leftCols.SubsetOf(leftFDs.ConstantCols()) {
 		// All left equality columns are constant, so we can trivially create
 		// an ordering.
@@ -368,8 +366,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		return
 	}
 
-	// Initialize the constraint builder.
-	c.cb.Init(
+	var cb lookupjoin.ConstraintBuilder
+	cb.Init(
 		c.e.f,
 		c.e.mem.Metadata(),
 		c.e.evalCtx,
@@ -410,7 +408,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	var pkCols opt.ColList
 	var newScanPrivate *memo.ScanPrivate
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Skip indexes that do not cover all virtual projection columns, if
 		// there are any. This can happen when there are multiple virtual
@@ -431,7 +429,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input2, scanPrivate2, indexCols2, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
-		lookupConstraint, foundEqualityCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
+		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
@@ -806,7 +804,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	var optionalFilters memo.FiltersExpr
 
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
 		numPrefixCols := index.NonInvertedPrefixColumnCount()

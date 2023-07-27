@@ -21,16 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -95,29 +92,10 @@ func TestFirstUpgrade(t *testing.T) {
 		t, `verifying precondition for version .*invalid_objects is not empty`, qUpgrade,
 	)
 
-	// Unbreak the table descriptor, but unset its modification time.
-	// Post-deserialization, this will be set to the MVCC timestamp.
+	// Unbreak the table descriptor.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		mut := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
-		mut.ModificationTime = hlc.Timestamp{}
-		return txn.Put(ctx, descKey, mut.DescriptorProto())
+		return txn.Put(ctx, descKey, tbl.DescriptorProto())
 	}))
-
-	// Check that the descriptor protobuf will undergo changes when read.
-	readDescFromStorage := func() catalog.Descriptor {
-		var b catalog.DescriptorBuilder
-		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			v, err := txn.Get(ctx, descKey)
-			if err != nil {
-				return err
-			}
-			b, err = descbuilder.FromSerializedValue(v.Value)
-			return err
-		}))
-		return b.BuildImmutable()
-	}
-	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
-	require.True(t, readDescFromStorage().GetPostDeserializationChanges().HasChanges())
 
 	// Wait long enough for precondition check to see the unbroken table descriptor.
 	execStmts(t, "CREATE DATABASE test3")
@@ -125,10 +103,6 @@ func TestFirstUpgrade(t *testing.T) {
 
 	// Upgrade the cluster version.
 	tdb.Exec(t, qUpgrade)
-
-	// The table descriptor protobuf should have the modification time set.
-	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
-	require.False(t, readDescFromStorage().GetPostDeserializationChanges().HasChanges())
 }
 
 // TestFirstUpgradeRepair tests the correct repair behavior of upgrade

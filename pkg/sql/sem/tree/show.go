@@ -152,7 +152,6 @@ type ShowBackupOptions struct {
 	DecryptionKMSURI     StringOrPlaceholderOptList
 	EncryptionPassphrase Expr
 	Privileges           bool
-	SkipSize             bool
 
 	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
 	//
@@ -222,10 +221,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("kms = ")
 		ctx.FormatNode(&o.DecryptionKMSURI)
 	}
-	if o.SkipSize {
-		maybeAddSep()
-		ctx.WriteString("skip size")
-	}
 	if o.DebugMetadataSST {
 		maybeAddSep()
 		ctx.WriteString("debug_dump_metadata_sst")
@@ -258,7 +253,6 @@ func (o ShowBackupOptions) IsDefault() bool {
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
-		o.SkipSize == options.SkipSize &&
 		o.DebugMetadataSST == options.DebugMetadataSST &&
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
@@ -325,10 +319,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 		return err
 	}
 	o.Privileges, err = combineBools(o.Privileges, other.Privileges, "privileges")
-	if err != nil {
-		return err
-	}
-	o.SkipSize, err = combineBools(o.SkipSize, other.SkipSize, "skip size")
 	if err != nil {
 		return err
 	}
@@ -505,9 +495,6 @@ type ShowJobs struct {
 	// If non-nil, only display jobs started by the specified
 	// schedules.
 	Schedules *Select
-
-	// Options contain any options that were specified in the `SHOW JOB` query.
-	Options *ShowJobOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -528,32 +515,7 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FOR SCHEDULES ")
 		ctx.FormatNode(node.Schedules)
 	}
-	if node.Options != nil {
-		ctx.WriteString(" WITH")
-		ctx.FormatNode(node.Options)
-	}
 }
-
-// ShowJobOptions describes options for the SHOW JOB execution.
-type ShowJobOptions struct {
-	// ExecutionDetails, if true, will render job specific details about the job's
-	// execution. These details will provide improved observability into the
-	// execution of the job.
-	ExecutionDetails bool
-}
-
-func (s *ShowJobOptions) Format(ctx *FmtCtx) {
-	if s.ExecutionDetails {
-		ctx.WriteString(" EXECUTION DETAILS")
-	}
-}
-
-func (s *ShowJobOptions) CombineWith(other *ShowJobOptions) error {
-	s.ExecutionDetails = other.ExecutionDetails
-	return nil
-}
-
-var _ NodeFormatter = &ShowJobOptions{}
 
 // ShowChangefeedJobs represents a SHOW CHANGEFEED JOBS statement
 type ShowChangefeedJobs struct {

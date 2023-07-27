@@ -34,12 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
@@ -401,7 +401,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
 	expVal3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
-	expVal3.InitChecksum([]byte("m")) // kv.Txn sets value checksum
+	expVal3.InitChecksum([]byte("m")) // client.Txn sets value checksum
 	expVal4 := roachpb.Value{Timestamp: ts4}
 	expVal4.SetInt(18)
 	expVal4.InitChecksum(roachpb.Key("b"))
@@ -814,9 +814,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		})
 
 		// Partition the replica from the rest of its range.
-		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    rangeID,
-			IncomingRaftMessageHandler: partitionStore,
+		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:            rangeID,
+			RaftMessageHandler: partitionStore,
 		})
 
 		// Perform a write on the range.
@@ -849,9 +849,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}
 
 		// Remove the partition. Snapshot should follow.
-		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    rangeID,
-			IncomingRaftMessageHandler: partitionStore,
+		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:            rangeID,
+			RaftMessageHandler: partitionStore,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
@@ -859,7 +859,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 					// to make the test pass reliably.
 					// NB: the Index on the message is the log index that _precedes_ any of the
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 				},
 				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
@@ -1209,7 +1209,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 
 	// The txn should not be able to commit since its commit timestamp was pushed
 	// and it has observed its timestamp.
-	require.Regexp(t, "TransactionRetryWithProtoRefreshError", tx1.Commit())
+	require.Regexp(t, "TransactionRetryError: retry txn", tx1.Commit())
 
 	// Make sure the RangeFeed hasn't errored yet.
 	select {
@@ -1459,7 +1459,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 					if ba.IsSingleLeaseInfoRequest() {
 						atomic.StoreInt64(&nudgeSeen, 1)
 						if !timeoutSimulated {
-							mockTimeout := timeutil.RunWithTimeout(ctx, "test", 0,
+							mockTimeout := contextutil.RunWithTimeout(ctx, "test", 0,
 								func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() })
 							timeoutSimulated = true
 							return kvpb.NewError(mockTimeout)

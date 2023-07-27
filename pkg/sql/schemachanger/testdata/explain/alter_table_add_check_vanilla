@@ -1,0 +1,42 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (ddl) ALTER TABLE t ADD CHECK (i > 0)
+---;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │         └── 1 Mutation operation
+ │              └── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":2}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │         └── 3 Mutation operations
+ │              ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":2}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      ├── Stage 1 of 2 in PostCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+      │    └── 1 Validation operation
+      │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
+      └── Stage 2 of 2 in PostCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+           │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+           └── 4 Mutation operations
+                ├── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":104}
+                ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

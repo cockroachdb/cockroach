@@ -31,7 +31,7 @@ import (
 // should consider changing all the legacy code).
 //
 // The version can have the following lengths in addition to 0 length.
-// - Timestamp of MVCC keys: 8, 12, or 13 bytes.
+// - Timestamp of MVCC keys: 8 or 12 bytes.
 // - Lock table key: 17 bytes.
 type EngineKey struct {
 	Key     roachpb.Key
@@ -153,11 +153,13 @@ func (k EngineKey) ToMVCCKey() (MVCCKey, error) {
 		// No-op.
 	case engineKeyVersionWallTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
-	case engineKeyVersionWallAndLogicalTimeLen, engineKeyVersionWallLogicalAndSyntheticTimeLen:
+	case engineKeyVersionWallAndLogicalTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
-		// NOTE: byte 13 used to store the timestamp's synthetic bit, but this is no
-		// longer consulted and can be ignored during decoding.
+	case engineKeyVersionWallLogicalAndSyntheticTimeLen:
+		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
+		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
+		key.Timestamp.Synthetic = k.Version[12] != 0
 	default:
 		return MVCCKey{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
 	}
@@ -186,11 +188,12 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 
 // Validate checks if the EngineKey is a valid MVCCKey or LockTableKey.
 func (k EngineKey) Validate() error {
-	if k.IsLockTableKey() {
-		return keys.ValidateLockTableSingleKey(k.Key)
-	}
 	_, errMVCC := k.ToMVCCKey()
-	return errMVCC
+	_, errLock := k.ToLockTableKey()
+	if errMVCC != nil && errLock != nil {
+		return errors.Newf("key %s is neither an MVCCKey or LockTableKey", k)
+	}
+	return nil
 }
 
 // DecodeEngineKey decodes the given bytes as an EngineKey. If the caller

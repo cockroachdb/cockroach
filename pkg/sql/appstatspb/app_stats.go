@@ -155,11 +155,11 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
-	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
-	s.Regions = util.CombineUnique(s.Regions, other.Regions)
-	s.PlanGists = util.CombineUnique(s.PlanGists, other.PlanGists)
+	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
+	s.Regions = util.CombineUniqueString(s.Regions, other.Regions)
+	s.PlanGists = util.CombineUniqueString(s.PlanGists, other.PlanGists)
 	s.IndexRecommendations = other.IndexRecommendations
-	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)
+	s.Indexes = util.CombineUniqueString(s.Indexes, other.Indexes)
 
 	s.ExecStats.Add(other.ExecStats)
 	s.LatencyInfo.Add(other.LatencyInfo)

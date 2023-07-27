@@ -13,7 +13,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = true
 
 statement ok
-CREATE TABLE g (a INT PRIMARY KEY)
+CREATE TABLE g (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
 
 statement ok
 ALTER TABLE g INJECT STATISTICS '[
@@ -211,7 +211,7 @@ scan g
 # shrinks at a constant rate.
 
 statement ok
-CREATE TABLE s (b INT PRIMARY KEY)
+CREATE TABLE s (b INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
 
 statement ok
 ALTER TABLE s INJECT STATISTICS '[
@@ -430,7 +430,7 @@ scan s
 # changes at a constant rate.
 
 statement ok
-CREATE TABLE c (h TIMESTAMPTZ PRIMARY KEY)
+CREATE TABLE c (h TIMESTAMPTZ PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
 
 statement ok
 ALTER TABLE c INJECT STATISTICS '[
@@ -608,7 +608,7 @@ scan c
 # Test for issue 86344.
 
 statement ok
-CREATE TABLE x (a INT PRIMARY KEY)
+CREATE TABLE x (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false);
 
 statement ok
 ALTER TABLE x INJECT STATISTICS '[
@@ -745,7 +745,8 @@ WHERE stat->>'name' = '__forecast__';
 # Test that we can disable forecasts for individual tables.
 
 statement ok
-CREATE TABLE d (d DATE PRIMARY KEY) WITH (sql_stats_forecasts_enabled = false)
+CREATE TABLE d (d DATE PRIMARY KEY)
+WITH (sql_stats_automatic_collection_enabled = false, sql_stats_forecasts_enabled = false)
 
 statement ok
 ALTER TABLE d INJECT STATISTICS '[
@@ -1280,7 +1281,7 @@ CREATE TABLE t (
   b INT,
   INDEX (a) STORING (b),
   INDEX (b) STORING (a)
-)
+) WITH (sql_stats_automatic_collection_enabled = false)
 
 statement ok
 ALTER TABLE t INJECT STATISTICS '[
@@ -1451,7 +1452,7 @@ ALTER TABLE t INJECT STATISTICS '[
       }
 ]'
 
-query T nosort
+query T
 SELECT jsonb_pretty(stat)
 FROM (
   SELECT jsonb_array_elements(statistics) AS stat
@@ -1798,24 +1799,23 @@ ALTER TABLE t_103958 INJECT STATISTICS '[
 query TTTIIII
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
 FROM [SHOW STATISTICS FOR TABLE t_103958 WITH FORECAST]
-ORDER BY row_count, avg_size
 ----
 __auto__      {a}    2023-01-01 00:00:00 +0000 +0000  1     1     0  1
-__auto__      {a}    2023-01-02 00:00:00 +0000 +0000  1     1     0  1
-__auto__      {a}    2023-01-03 00:00:00 +0000 +0000  1     1     0  1
-__auto__      {b}    2023-01-01 00:00:00 +0000 +0000  1     1     0  2
-__auto__      {b}    2023-01-02 00:00:00 +0000 +0000  1     1     0  2
-__auto__      {b}    2023-01-03 00:00:00 +0000 +0000  1     1     0  2
 __auto__      {a,b}  2023-01-01 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {b}    2023-01-01 00:00:00 +0000 +0000  1     1     0  2
+__auto__      {a}    2023-01-02 00:00:00 +0000 +0000  1     1     0  1
 __auto__      {a,b}  2023-01-02 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {b}    2023-01-02 00:00:00 +0000 +0000  1     1     0  2
+__auto__      {a}    2023-01-03 00:00:00 +0000 +0000  1     1     0  1
 __auto__      {a,b}  2023-01-03 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {b}    2023-01-03 00:00:00 +0000 +0000  1     1     0  2
 __forecast__  {a,b}  2023-01-04 00:00:00 +0000 +0000  1     1     0  3
 __auto__      {a}    2023-01-04 00:00:00 +0000 +0000  1000  1000  0  1
 __auto__      {b}    2023-01-04 00:00:00 +0000 +0000  1000  2     0  2
-__auto__      {b}    2023-01-05 00:00:00 +0000 +0000  2000  3     0  2
 __auto__      {a}    2023-01-05 00:00:00 +0000 +0000  2000  2000  0  3
-__auto__      {b}    2023-01-06 00:00:00 +0000 +0000  3000  4     0  2
+__auto__      {b}    2023-01-05 00:00:00 +0000 +0000  2000  3     0  2
 __auto__      {a}    2023-01-06 00:00:00 +0000 +0000  3000  3000  0  3
+__auto__      {b}    2023-01-06 00:00:00 +0000 +0000  3000  4     0  2
 
 query T
 SELECT jsonb_pretty(stat)

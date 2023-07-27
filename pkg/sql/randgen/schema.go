@@ -101,7 +101,7 @@ func RandCreateTable(
 	rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
 	return RandCreateTableWithColumnIndexNumberGenerator(rng, prefix, tableIdx,
-		isMultiRegion, true /* allowPartiallyVisibleIndex */, nil /* generateColumnIndexNumber */)
+		isMultiRegion, nil /* generateColumnIndexNumber */)
 }
 
 var nameGenCfg = func() randidentcfg.Config {
@@ -117,22 +117,17 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	prefix string,
 	tableIdx int,
 	isMultiRegion bool,
-	allowPartiallyVisibleIndex bool,
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
 	name := g.GenerateOne(tableIdx)
-	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
-		rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexNumber,
-	)
+	return RandCreateTableWithColumnIndexNumberGeneratorAndName(rng, name, tableIdx, isMultiRegion, generateColumnIndexNumber)
 }
 
 func RandCreateTableWithName(
 	rng *rand.Rand, tableName string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
-		rng, tableName, tableIdx, isMultiRegion, true /* allowPartiallyVisibleIndex */, nil,
-	)
+	return RandCreateTableWithColumnIndexNumberGeneratorAndName(rng, tableName, tableIdx, isMultiRegion, nil)
 }
 
 func RandCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -140,7 +135,6 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	tableName string,
 	tableIdx int,
 	isMultiRegion bool,
-	allowPartiallyVisibleIndex bool,
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
@@ -232,18 +226,8 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 		} else {
 			// Due to parsing issue with creating unique indexes in a CREATE TABLE
 			// definition, we are only supporting not visible non-unique indexes for
-			// rand. Since not visible indexes are pretty rare, we are assigning index
-			// visibility randomly with a float [0.0,1.0) 1/6 of the time.
-			indexDef.Invisibility = 0.0
-			if notvisible := rng.Intn(6) == 0; notvisible {
-				indexDef.Invisibility = 1.0
-				if allowPartiallyVisibleIndex {
-					if rng.Intn(2) == 0 {
-						indexDef.Invisibility = 1 - rng.Float64()
-					}
-				}
-			}
-
+			// now. Make non-unique indexes not visible 1/6 of the time.
+			indexDef.NotVisible = rng.Intn(6) == 0
 			defs = append(defs, &indexDef)
 		}
 	}

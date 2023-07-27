@@ -122,7 +122,7 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
-func (c *conn) sendError(ctx context.Context, err error) error {
+func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) error {
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
@@ -131,19 +131,79 @@ func (c *conn) sendError(ctx context.Context, err error) error {
 	return err
 }
 
+func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
+	// Root user is not affected by connection limits.
+	if c.sessionArgs.User.IsRootUser() {
+		sqlServer.IncrementRootConnectionCount()
+		return nil
+	}
+
+	// First check maxNumNonRootConnections.
+	// Note(alyshan): maxNumNonRootConnections is used by Cockroach Cloud for limiting connections to
+	// serverless clusters.
+	maxNonRootConnectionsValue := maxNumNonRootConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNonRootConnectionsValue >= 0 && sqlServer.GetNonRootConnectionCount() >= maxNonRootConnectionsValue {
+		// Check if there is a reason to use in the error message.
+		msg := "cluster connections are limited"
+		if reason := maxNumNonRootConnectionsReason.Get(&sqlServer.GetExecutorConfig().Settings.SV); reason != "" {
+			msg = reason
+		}
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.Newf(pgcode.TooManyConnections, "%s", msg),
+			"the maximum number of allowed connections is %d",
+			maxNonRootConnectionsValue,
+		))
+	}
+
+	// Then check maxNumNonAdminConnections.
+	if c.sessionArgs.IsSuperuser {
+		// This user is a super user and is therefore not affected by maxNumNonAdminConnections.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+
+	maxNumConnectionsValue := maxNumNonAdminConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNumConnectionsValue < 0 {
+		// Unlimited connections are allowed.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+	if !sqlServer.IncrementConnectionCountIfLessThan(maxNumConnectionsValue) {
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
+			"the maximum number of allowed connections is %d and can be modified using the %s config key",
+			maxNumConnectionsValue,
+			maxNumNonAdminConnections.Key(),
+		))
+	}
+	return nil
+}
+
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
 
-// processCommands authenticates the connection and then processes commands
-// from c.stmtBuf.
+// processCommandsAsync spawns a goroutine that authenticates the connection and
+// then processes commands from c.stmtBuf.
+//
+// It returns a channel that will be signaled when this goroutine is done.
+// Whatever error is returned on that channel has already been written to the
+// client connection, if applicable.
+//
+// If authentication fails, this goroutine finishes and, as always, cancelConn
+// is called.
 //
 // Args:
 // ac: An interface used by the authentication process to receive password data
 // and to ultimately declare the authentication successful.
 // reserved: Reserved memory. This method takes ownership and guarantees that it
 // will be closed when this function returns.
-func (c *conn) processCommands(
+// cancelConn: A function to be called when this goroutine exits. Its goal is to
+// cancel the connection's context, thus stopping the connection's goroutine.
+// The returned channel is also closed before this goroutine dies, but the
+// connection's goroutine is not expected to be reading from that channel
+// (instead, it's expected to always be monitoring the network connection).
+func (c *conn) processCommandsAsync(
 	ctx context.Context,
 	authOpt authOptions,
 	ac AuthConn,
@@ -151,102 +211,110 @@ func (c *conn) processCommands(
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
 	sessionID clusterunique.ID,
-) {
+) <-chan error {
 	// reservedOwned is true while we own reserved, false when we pass ownership
 	// away.
 	reservedOwned := true
-	var retErr error
-	var connHandler sql.ConnectionHandler
-	var authOK bool
-	var connCloseAuthHandler func()
-	defer func() {
-		// Release resources, if we still own them.
-		if reservedOwned {
-			reserved.Close(ctx)
-		}
-		// Notify the connection's goroutine that we're terminating. The
-		// connection might know already, as it might have triggered this
-		// goroutine's finish, but it also might be us that we're triggering the
-		// connection's death. This context cancelation serves to interrupt a
-		// network read on the connection's goroutine.
-		c.cancelConn()
-
-		pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
-		if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
-			if r := recover(); r != nil {
-				// Catch the panic and return it to the client as an error.
-				if err, ok := r.(error); ok {
-					// Mask the cause but keep the details.
-					retErr = errors.Handled(err)
-				} else {
-					retErr = errors.Newf("%+v", r)
-				}
-				retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
-				// Add a prefix. This also adds a stack trace.
-				retErr = errors.Wrap(retErr, "caught fatal error")
-				_ = c.writeErr(ctx, retErr, &c.writerState.buf)
-				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
-				c.stmtBuf.Close()
-				// Send a ready for query to make sure the client can react.
-				// TODO(andrei, jordan): Why are we sending this exactly?
-				c.bufferReadyForQuery('I')
+	retCh := make(chan error, 1)
+	go func() {
+		var retErr error
+		var connHandler sql.ConnectionHandler
+		var authOK bool
+		var connCloseAuthHandler func()
+		defer func() {
+			// Release resources, if we still own them.
+			if reservedOwned {
+				reserved.Close(ctx)
 			}
+			// Notify the connection's goroutine that we're terminating. The
+			// connection might know already, as it might have triggered this
+			// goroutine's finish, but it also might be us that we're triggering the
+			// connection's death. This context cancelation serves to interrupt a
+			// network read on the connection's goroutine.
+			c.cancelConn()
+
+			pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
+			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
+				if r := recover(); r != nil {
+					// Catch the panic and return it to the client as an error.
+					if err, ok := r.(error); ok {
+						// Mask the cause but keep the details.
+						retErr = errors.Handled(err)
+					} else {
+						retErr = errors.Newf("%+v", r)
+					}
+					retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
+					// Add a prefix. This also adds a stack trace.
+					retErr = errors.Wrap(retErr, "caught fatal error")
+					_ = c.writeErr(ctx, retErr, &c.writerState.buf)
+					_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+					c.stmtBuf.Close()
+					// Send a ready for query to make sure the client can react.
+					// TODO(andrei, jordan): Why are we sending this exactly?
+					c.bufferReadyForQuery('I')
+				}
+			}
+			if !authOK {
+				ac.AuthFail(retErr)
+			}
+			if connCloseAuthHandler != nil {
+				connCloseAuthHandler()
+			}
+			// Inform the connection goroutine of success or failure.
+			retCh <- retErr
+		}()
+
+		// Authenticate the connection.
+		if connCloseAuthHandler, retErr = c.handleAuthentication(
+			ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
+		); retErr != nil {
+			// Auth failed or some other error.
+			return
 		}
-		if !authOK {
-			ac.AuthFail(retErr)
+
+		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
+			return
 		}
-		if connCloseAuthHandler != nil {
-			connCloseAuthHandler()
+		if c.sessionArgs.User.IsRootUser() {
+			defer sqlServer.DecrementRootConnectionCount()
+		} else {
+			defer sqlServer.DecrementConnectionCount()
 		}
+
+		if retErr = c.authOKMessage(); retErr != nil {
+			return
+		}
+
+		// Inform the client of the default session settings.
+		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange, sessionID)
+		if retErr != nil {
+			return
+		}
+		// Signal the connection was established to the authenticator.
+		ac.AuthOK(ctx)
+		ac.LogAuthOK(ctx)
+
+		// We count the connection establish latency until we are ready to
+		// serve a SQL query. It includes the time it takes to authenticate and
+		// send the initial ReadyForQuery message.
+		duration := timeutil.Since(c.startTime).Nanoseconds()
+		c.metrics.ConnLatency.RecordValue(duration)
+
+		// Mark the authentication as succeeded in case a panic
+		// is thrown below and we need to report to the client
+		// using the defer above.
+		authOK = true
+
+		// Now actually process commands.
+		reservedOwned = false // We're about to pass ownership away.
+		retErr = sqlServer.ServeConn(
+			ctx,
+			connHandler,
+			reserved,
+			c.cancelConn,
+		)
 	}()
-
-	// Authenticate the connection.
-	if connCloseAuthHandler, retErr = c.handleAuthentication(
-		ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
-	); retErr != nil {
-		// Auth failed or some other error.
-		return
-	}
-
-	var decrementConnectionCount func()
-	if decrementConnectionCount, retErr = sqlServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
-		_ = c.sendError(ctx, retErr)
-		return
-	}
-	defer decrementConnectionCount()
-
-	if retErr = c.authOKMessage(); retErr != nil {
-		return
-	}
-
-	// Inform the client of the default session settings.
-	connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange, sessionID)
-	if retErr != nil {
-		return
-	}
-	// Signal the connection was established to the authenticator.
-	ac.AuthOK(ctx)
-	ac.LogAuthOK(ctx)
-
-	// We count the connection establish latency until we are ready to
-	// serve a SQL query. It includes the time it takes to authenticate and
-	// send the initial ReadyForQuery message.
-	duration := timeutil.Since(c.startTime).Nanoseconds()
-	c.metrics.ConnLatency.RecordValue(duration)
-
-	// Mark the authentication as succeeded in case a panic
-	// is thrown below and we need to report to the client
-	// using the defer above.
-	authOK = true
-
-	// Now actually process commands.
-	reservedOwned = false // We're about to pass ownership away.
-	retErr = sqlServer.ServeConn(
-		ctx,
-		connHandler,
-		reserved,
-		c.cancelConn,
-	)
+	return retCh
 }
 
 func (c *conn) bufferParamStatus(param, value string) error {
@@ -455,24 +523,26 @@ func (c *conn) handleSimpleQuery(
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
+func (c *conn) handleParse(
+	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
+) error {
 	telemetry.Inc(sqltelemetry.ParseRequestCounter)
-	name, err := c.readBuf.GetString()
+	name, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	query, err := c.readBuf.GetString()
+	query, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	// The client may provide type information for (some of) the placeholders.
-	numQArgTypes, err := c.readBuf.GetUint16()
+	numQArgTypes, err := buf.GetUint16()
 	if err != nil {
 		return err
 	}
 	inTypeHints := make([]oid.Oid, numQArgTypes)
 	for i := range inTypeHints {
-		typ, err := c.readBuf.GetUint32()
+		typ, err := buf.GetUint32()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -566,13 +636,13 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleDescribe(ctx context.Context) error {
+func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
 	telemetry.Inc(sqltelemetry.DescribeRequestCounter)
-	typ, err := c.readBuf.GetPrepareType()
+	typ, err := buf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	name, err := c.readBuf.GetString()
+	name, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -586,13 +656,13 @@ func (c *conn) handleDescribe(ctx context.Context) error {
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleClose(ctx context.Context) error {
+func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
 	telemetry.Inc(sqltelemetry.CloseRequestCounter)
-	typ, err := c.readBuf.GetPrepareType()
+	typ, err := buf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	name, err := c.readBuf.GetString()
+	name, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -612,13 +682,13 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // statement.
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleBind(ctx context.Context) error {
+func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
 	telemetry.Inc(sqltelemetry.BindRequestCounter)
-	portalName, err := c.readBuf.GetString()
+	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	statementName, err := c.readBuf.GetString()
+	statementName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -629,7 +699,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 	// specified format code is applied to all arguments; or it can equal the
 	// actual number of arguments.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numQArgFormatCodes, err := c.readBuf.GetUint16()
+	numQArgFormatCodes, err := buf.GetUint16()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -640,7 +710,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 		qArgFormatCodes = formatCodesAllText
 	case 1:
 		// `1` means read one code and apply it to every argument.
-		ch, err := c.readBuf.GetUint16()
+		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -654,7 +724,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgFormatCodes)
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
-			ch, err := c.readBuf.GetUint16()
+			ch, err := buf.GetUint16()
 			if err != nil {
 				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 			}
@@ -662,13 +732,13 @@ func (c *conn) handleBind(ctx context.Context) error {
 		}
 	}
 
-	numValues, err := c.readBuf.GetUint16()
+	numValues, err := buf.GetUint16()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	qargs := make([][]byte, numValues)
 	for i := 0; i < int(numValues); i++ {
-		plen, err := c.readBuf.GetUint32()
+		plen, err := buf.GetUint32()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -677,7 +747,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 			qargs[i] = nil
 			continue
 		}
-		b, err := c.readBuf.GetBytes(int(plen))
+		b, err := buf.GetBytes(int(plen))
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -691,7 +761,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 	// (if any); or it can equal the actual number of result columns of the
 	// query.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numColumnFormatCodes, err := c.readBuf.GetUint16()
+	numColumnFormatCodes, err := buf.GetUint16()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -702,7 +772,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 		columnFormatCodes = formatCodesAllText
 	case 1:
 		// All columns will use the one specified format.
-		ch, err := c.readBuf.GetUint16()
+		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
@@ -716,7 +786,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 		columnFormatCodes = make([]pgwirebase.FormatCode, numColumnFormatCodes)
 		// Read one format code for each column and apply it to that column.
 		for i := range columnFormatCodes {
-			ch, err := c.readBuf.GetUint16()
+			ch, err := buf.GetUint16()
 			if err != nil {
 				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 			}
@@ -737,14 +807,14 @@ func (c *conn) handleBind(ctx context.Context) error {
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, timeReceived time.Time, followedBySync bool,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
-	portalName, err := c.readBuf.GetString()
+	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	limit, err := c.readBuf.GetUint32()
+	limit, err := buf.GetUint32()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}

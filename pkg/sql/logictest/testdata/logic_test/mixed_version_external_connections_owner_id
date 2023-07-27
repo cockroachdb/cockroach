@@ -22,7 +22,7 @@ CREATE EXTERNAL CONNECTION connection2 AS 'userfile:///connection2'
 
 user root nodeidx=0
 
-query TT rowsort
+query TT
 SELECT connection_name, owner FROM system.external_connections
 ----
 connection1  t

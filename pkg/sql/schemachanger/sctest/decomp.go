@@ -13,7 +13,6 @@ package sctest
 import (
 	"bufio"
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"reflect"
 	"sort"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/datadriven"
@@ -36,22 +34,20 @@ import (
 
 // DecomposeToElements exercises the descriptor-to-element decomposition
 // functionality in the form of a data-driven test.
-func DecomposeToElements(t *testing.T, dir string, factory TestServerFactory) {
-	// These tests are expensive.
+func DecomposeToElements(t *testing.T, dir string, newCluster NewClusterFunc) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
-
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
-		factory.Run(ctx, t, func(_ serverutils.TestServerInterface, db *gosql.DB) {
-			tdb := sqlutils.MakeSQLRunner(db)
-			// We need to disable the declarative schema changer so that we don't end
-			// up high-fiving ourselves here.
-			tdb.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
-			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-				return runDecomposeTest(ctx, t, d, tdb)
-			})
+		_, db, cleanup := newCluster(t, nil /* knobs */)
+		tdb := sqlutils.MakeSQLRunner(db)
+		defer cleanup()
+		// We need to disable the declarative schema changer so that we don't end
+		// up high-fiving ourselves here.
+		tdb.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			return runDecomposeTest(ctx, t, d, tdb)
 		})
 	})
 }

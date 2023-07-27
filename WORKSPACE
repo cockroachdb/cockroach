@@ -309,10 +309,10 @@ load(
 go_repository(
     name = "com_github_bazelbuild_buildtools",
     importpath = "github.com/bazelbuild/buildtools",
-    sha256 = "d71a889e3bc50cc8b9d42c859e15a74f7c8d10b6786f8dd82f08f2bf24e5bdc6",
-    strip_prefix = "bazelbuild-buildtools-b182fc4",
+    sha256 = "a9ef5103739dfb5ed2a5b47ab1654842a89695812e4af09e57d7015a5caf97e0",
+    strip_prefix = "buildtools",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v6.1.2-0-gb182fc4/bazelbuild-buildtools-v6.1.2-0-gb182fc4.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v0.0.0-20200718160251-b1667ff58f71/buildtools-v0.0.0-20200718160251-b1667ff58f71.tar.gz",
     ],
 )
 

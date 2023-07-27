@@ -152,13 +152,14 @@ func TestShowChangefeedJobs(t *testing.T) {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	registry.TestingWrapResumerConstructor(jobspb.TypeChangefeed,
-		func(raw jobs.Resumer) jobs.Resumer {
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
 			r := fakeResumer{
 				done: doneCh,
 			}
 			return &r
-		})
+		},
+	}
 
 	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
 	sqlDB.Exec(t, query)
@@ -252,13 +253,14 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
-	registry.TestingWrapResumerConstructor(jobspb.TypeChangefeed,
-		func(raw jobs.Resumer) jobs.Resumer {
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
 			r := fakeResumer{
 				done: doneCh,
 			}
 			return &r
-		})
+		},
+	}
 
 	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
 	sqlDB.Exec(t, query)

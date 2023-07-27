@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -51,7 +50,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
 	auxDir := r.store.TODOEngine().GetAuxiliaryDir()
-	_ = r.store.TODOEngine().MkdirAll(auxDir, os.ModePerm)
+	_ = r.store.TODOEngine().MkdirAll(auxDir)
 	path := base.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:

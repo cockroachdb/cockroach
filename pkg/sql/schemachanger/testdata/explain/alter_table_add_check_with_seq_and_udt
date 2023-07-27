@@ -1,0 +1,53 @@
+/* setup */
+CREATE SEQUENCE s;
+CREATE TYPE typ AS ENUM ('a', 'b');
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+
+/* test */
+EXPLAIN (ddl) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a');
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›));
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+ │         └── 3 Mutation operations
+ │              ├── AddCheckConstraint {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107,"Validity":2}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
+ │              └── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+ │         └── 8 Mutation operations
+ │              ├── AddCheckConstraint {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107,"Validity":2}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      ├── Stage 1 of 2 in PostCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+      │    └── 1 Validation operation
+      │         └── ValidateConstraint {"ConstraintID":2,"TableID":107}
+      └── Stage 2 of 2 in PostCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+           │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
+           └── 7 Mutation operations
+                ├── SetConstraintName {"ConstraintID":2,"Name":"check_i_j","TableID":107}
+                ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

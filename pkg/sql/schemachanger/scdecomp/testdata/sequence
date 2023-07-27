@@ -31,9 +31,7 @@ ElementState:
   Status: PUBLIC
 - Sequence:
     isTemporary: false
-    restartWith: "0"
     sequenceId: 104
-    useRestartWith: false
   Status: PUBLIC
 - TableData:
     databaseId: 100
@@ -78,9 +76,7 @@ ElementState:
   Status: PUBLIC
 - Sequence:
     isTemporary: false
-    restartWith: "0"
     sequenceId: 106
-    useRestartWith: false
   Status: PUBLIC
 - TableData:
     databaseId: 100
@@ -111,7 +107,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 0
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -121,7 +117,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 0
+    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -131,7 +127,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 0
+    pgAttributeNum: 4.294967294e+09
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -141,7 +137,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 0
+    pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
 - ColumnComment:
@@ -355,7 +351,6 @@ ElementState:
     constraintId: 1
     geoConfig: null
     indexId: 1
-    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -418,7 +413,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 0
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -428,7 +423,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 0
+    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -438,7 +433,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 0
+    pgAttributeNum: 4.294967294e+09
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -448,7 +443,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 0
+    pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
 - ColumnComment:
@@ -643,7 +638,6 @@ ElementState:
     constraintId: 1
     geoConfig: null
     indexId: 1
-    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -704,9 +698,7 @@ ElementState:
   Status: PUBLIC
 - Sequence:
     isTemporary: false
-    restartWith: "0"
     sequenceId: 104
-    useRestartWith: false
   Status: PUBLIC
 - TableData:
     databaseId: 100

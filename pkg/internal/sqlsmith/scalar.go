@@ -413,16 +413,11 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	if class == tree.WindowClass && s.d6() != 1 {
 		class = tree.NormalClass
 	}
-	functions.Lock()
-	fns := functions.fns[class][typ.Oid()]
-	functions.Unlock()
+	fns := functions[class][typ.Oid()]
 	if len(fns) == 0 {
 		return nil, false
 	}
 	fn := fns[s.rnd.Intn(len(fns))]
-	if s.disableUDFs && fn.overload.IsUDF {
-		return nil, false
-	}
 	if s.disableNondeterministicFns && fn.overload.Volatility > volatility.Immutable {
 		return nil, false
 	}

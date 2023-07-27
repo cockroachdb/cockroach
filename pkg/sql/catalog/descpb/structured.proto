@@ -493,24 +493,9 @@ message IndexDescriptor {
   // A not visible index is ignored by the optimizer unless it is used for
   // constraint check or is explicitly selected with index hinting (force
   // index). By default, an index should be visible.
-  // NOTE: THIS FIELD IS DEPRECATED in favor of invisibility.
-  optional bool not_visible = 28 [(gogoproto.nullable) = false, deprecated = true];
+  optional bool not_visible = 28 [(gogoproto.nullable) = false];
 
-  // Invisibility specifies the invisibility of an index to the optimizer and
-  // can be any float64 between [0.0, 1.0]. An index with invisibility 0.0 means
-  // that the index is visible. An index with invisibility 1.0 means that the
-  // index is fully not visible. By default, an index should be visible or
-  // invisibility 0.0 (This is also why invisibility is used instead of
-  // visibility here). An index with invisibility 1.0 is ignored by the
-  // optimizer unless it is used for constraint check or is explicitly selected
-  // with index hinting. An index with invisibility between (0.0, 1.0) would be
-  // made fully not visible to a corresponding fraction of the queries. By
-  // convention, we will refer any indexes with invisibility == 0.0 as visible,
-  // any indexes with invisibility == 1.0 as fully not visible, and any indexes
-  // with index visibility in-between as partially not visible.
-  optional double invisibility = 29 [(gogoproto.nullable) = false];
-
-  // Next ID: 30
+  // Next ID: 29
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

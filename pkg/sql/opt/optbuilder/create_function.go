@@ -11,8 +11,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -21,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -108,6 +106,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			if _, err := funcinfo.FunctionLangToProto(opt); err != nil {
 				panic(err)
 			}
+
+			if opt == tree.FunctionLangPLpgSQL {
+				if err := utils.ParseAndCollectTelemetryForPLpgSQLFunc(cf); err != nil {
+					// Until plpgsql is fully implemented DealWithPlpgSQlFunc will always
+					// return an error.
+					panic(err)
+				}
+			}
 		}
 	}
 
@@ -123,18 +129,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	var deps opt.SchemaDeps
 	var typeDeps opt.SchemaTypeDeps
 
-	afterBuildStmt := func() {
-		deps = append(deps, b.schemaDeps...)
-		typeDeps.UnionWith(b.schemaTypeDeps)
-		// Reset the tracked dependencies for next statement.
-		b.schemaDeps = nil
-		b.schemaTypeDeps = intsets.Fast{}
-
-		// Reset the annotations to the original values
-		b.evalCtx.Annotations = oldEvalCtxAnn
-		b.semaCtx.Annotations = oldSemaCtxAnn
-	}
-
 	// bodyScope is the base scope for each statement in the body. We add the
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
@@ -145,16 +139,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		if err != nil {
 			panic(err)
 		}
-		if types.IsRecordType(typ) {
-			if language == tree.FunctionLangSQL {
-				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
-					"SQL functions cannot have arguments of type record"))
-			} else if language == tree.FunctionLangPLpgSQL {
-				panic(unimplemented.NewWithIssueDetail(105713,
-					"PL/pgSQL functions with RECORD input arguments",
-					"PL/pgSQL functions with RECORD input arguments are not yet supported",
-				))
-			}
+		if language == tree.FunctionLangSQL && types.IsRecordType(typ) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"SQL functions cannot have arguments of type record"))
 		}
 
 		// Add the parameter to the base scope of the body.
@@ -177,74 +164,59 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typeDeps.Add(int(id))
 	})
 
-	targetVolatility := tree.GetFuncVolatility(cf.Options)
-	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
-
-	// Validate each statement and collect the dependencies.
-	var stmtScope *scope
-	switch language {
-	case tree.FunctionLangSQL:
-		// Parse the function body.
-		stmts, err := parser.Parse(funcBodyStr)
-		if err != nil {
-			panic(err)
-		}
-		for i, stmt := range stmts {
-			// Add statement ast into CreateFunction node for logging purpose, and set
-			// the annotations for this statement so names can be resolved.
-			cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
-			ann := tree.MakeAnnotations(stmt.NumAnnotations)
-			cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
-
-			// The defer logic will reset the annotations to the old value.
-			b.semaCtx.Annotations = ann
-			b.evalCtx.Annotations = &ann
-
-			// We need to disable stable function folding because we want to catch the
-			// volatility of stable functions. If folded, we only get a scalar and lose
-			// the volatility.
-			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-			})
-			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
-
-			// Format the statements with qualified datasource names.
-			formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
-			afterBuildStmt()
-		}
-	case tree.FunctionLangPLpgSQL:
-		if cf.ReturnType.IsSet {
-			panic(unimplemented.NewWithIssueDetail(105240,
-				"set-returning PL/pgSQL functions",
-				"set-returning PL/pgSQL functions are not yet supported",
-			))
-		}
-
-		// Parse the function body.
-		stmt, err := plpgsql.Parse(funcBodyStr)
-		if err != nil {
-			panic(err)
-		}
-
-		// TODO(drewk): build and check volatility. We will need to remove the hack
-		// to disable UDFs calling other UDFs before doing this.
-		// Format the statements with qualified datasource names.
-		formatFuncBodyStmt(fmtCtx, stmt.AST, false /* newLine */)
-		afterBuildStmt()
-	default:
-		panic(errors.AssertionFailedf("unexpected language: %v", language))
+	// Parse the function body.
+	stmts, err := parser.Parse(funcBodyStr)
+	if err != nil {
+		panic(err)
 	}
 
-	if stmtScope != nil {
+	targetVolatility := tree.GetFuncVolatility(cf.Options)
+	// Validate each statement and collect the dependencies.
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
+	for i, stmt := range stmts {
+		// Add statement ast into CreateFunction node for logging purpose, and set
+		// the annotations for this statement so names can be resolved.
+		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+		ann := tree.MakeAnnotations(stmt.NumAnnotations)
+		cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
+
+		// The defer logic will reset the annotations to the old value.
+		b.semaCtx.Annotations = ann
+		b.evalCtx.Annotations = &ann
+
+		var stmtScope *scope
+		// We need to disable stable function folding because we want to catch the
+		// volatility of stable functions. If folded, we only get a scalar and lose
+		// the volatility.
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			stmtScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		})
+		checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+
+		// Format the statements with qualified datasource names.
+		formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
+
 		// Validate that the result type of the last statement matches the
 		// return type of the function.
-		// TODO(mgartner): stmtScope.cols does not describe the result
-		// columns of the statement. We should use physical.Presentation
-		// instead.
-		err = validateReturnType(funcReturnType, stmtScope.cols)
-		if err != nil {
-			panic(err)
+		if i == len(stmts)-1 {
+			// TODO(mgartner): stmtScope.cols does not describe the result
+			// columns of the statement. We should use physical.Presentation
+			// instead.
+			err := validateReturnType(funcReturnType, stmtScope.cols)
+			if err != nil {
+				panic(err)
+			}
 		}
+
+		deps = append(deps, b.schemaDeps...)
+		typeDeps.UnionWith(b.schemaTypeDeps)
+		// Reset the tracked dependencies for next statement.
+		b.schemaDeps = nil
+		b.schemaTypeDeps = intsets.Fast{}
+
+		// Reset the annotations to the original values
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
 	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
@@ -276,7 +248,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	return outScope
 }
 
-func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, newLine bool) {
+func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.Statement, newLine bool) {
 	if newLine {
 		fmtCtx.WriteString("\n")
 	}
@@ -289,6 +261,10 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 	if expected.Equivalent(types.Void) {
 		return nil
 	}
+	// If return type is RECORD, any column types are valid.
+	if types.IsRecordType(expected) {
+		return nil
+	}
 
 	if len(cols) == 0 {
 		return pgerror.WithCandidateCode(
@@ -298,11 +274,6 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 			),
 			pgcode.InvalidFunctionDefinition,
 		)
-	}
-
-	// If return type is RECORD, any column types are valid.
-	if types.IsRecordType(expected) {
-		return nil
 	}
 
 	if len(cols) == 1 {
@@ -373,7 +344,7 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 }
 
 func checkStmtVolatility(
-	expectedVolatility tree.FunctionVolatility, stmtScope *scope, stmt fmt.Stringer,
+	expectedVolatility tree.FunctionVolatility, stmtScope *scope, stmt tree.Statement,
 ) {
 	switch expectedVolatility {
 	case tree.FunctionImmutable:

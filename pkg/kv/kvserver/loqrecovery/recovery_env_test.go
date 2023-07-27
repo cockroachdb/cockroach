@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -116,8 +115,8 @@ type testReplicaInfo struct {
 	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
 
 	// Raft state.
-	RangeAppliedIndex  kvpb.RaftIndex                `yaml:"RangeAppliedIndex"`
-	RaftCommittedIndex kvpb.RaftIndex                `yaml:"RaftCommittedIndex"`
+	RangeAppliedIndex  uint64                        `yaml:"RangeAppliedIndex"`
+	RaftCommittedIndex uint64                        `yaml:"RaftCommittedIndex"`
 	DescriptorUpdates  []testReplicaDescriptorChange `yaml:"DescriptorUpdates,flow,omitempty"`
 
 	// TODO(oleg): Add ability to have descriptor intents in the store for testing purposes
@@ -349,7 +348,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 				t.Fatalf("failed to serialize metadata entry for raft log")
 			}
 			if err := eng.PutUnversioned(keys.RaftLogKey(replica.RangeID,
-				kvpb.RaftIndex(uint64(i)+hardState.Commit+1)), value); err != nil {
+				uint64(i)+hardState.Commit+1), value); err != nil {
 				t.Fatalf("failed to insert raft log entry into store: %s", err)
 			}
 		}
@@ -413,7 +412,7 @@ func buildReplicaDescriptorFromTestData(
 		LeaseAppliedIndex: 0,
 		Desc:              &desc,
 		Lease:             &lease,
-		TruncatedState: &kvserverpb.RaftTruncatedState{
+		TruncatedState: &roachpb.RaftTruncatedState{
 			Index: 1,
 			Term:  1,
 		},
@@ -426,11 +425,11 @@ func buildReplicaDescriptorFromTestData(
 	hardState := raftpb.HardState{
 		Term:   0,
 		Vote:   0,
-		Commit: uint64(replica.RaftCommittedIndex),
+		Commit: replica.RaftCommittedIndex,
 	}
 	var raftLog []enginepb.MVCCMetadata
 	for i, u := range replica.DescriptorUpdates {
-		entry := raftLogFromPendingDescriptorUpdate(t, replica, u, desc, kvpb.RaftIndex(i))
+		entry := raftLogFromPendingDescriptorUpdate(t, replica, u, desc, uint64(i))
 		raftLog = append(raftLog, enginepb.MVCCMetadata{RawBytes: entry.RawBytes})
 	}
 	return replicaID, key, desc, replicaState, hardState, raftLog
@@ -441,7 +440,7 @@ func raftLogFromPendingDescriptorUpdate(
 	replica testReplicaInfo,
 	update testReplicaDescriptorChange,
 	desc roachpb.RangeDescriptor,
-	entryIndex kvpb.RaftIndex,
+	entryIndex uint64,
 ) roachpb.Value {
 	// We mimic EndTxn messages with commit triggers here. We don't construct
 	// full batches with descriptor updates as we only need data that would be
@@ -488,11 +487,11 @@ func raftLogFromPendingDescriptorUpdate(
 	if err != nil {
 		t.Fatalf("failed to serialize raftCommand: %v", err)
 	}
-	data := raftlog.EncodeCommandBytes(
+	data := raftlog.EncodeRaftCommand(
 		raftlog.EntryEncodingStandardWithoutAC, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out)
 	ent := raftpb.Entry{
 		Term:  1,
-		Index: uint64(replica.RaftCommittedIndex + entryIndex),
+		Index: replica.RaftCommittedIndex + entryIndex,
 		Type:  raftpb.EntryNormal,
 		Data:  data,
 	}
@@ -504,7 +503,7 @@ func raftLogFromPendingDescriptorUpdate(
 }
 
 func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
-	scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
+	scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 	key, err := scanner.Scan(pretty)
 	if err != nil {
 		t.Fatalf("failed to parse key %s: %v", pretty, err)

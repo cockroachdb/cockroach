@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -61,7 +62,7 @@ func WaitForReady(
 	adminAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), nodes)
 	require.NoError(t, err)
 
-	require.NoError(t, timeutil.RunWithTimeout(
+	require.NoError(t, contextutil.RunWithTimeout(
 		ctx, "waiting for ready", time.Minute, func(ctx context.Context) error {
 			for i, adminAddr := range adminAddrs {
 				url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddr)

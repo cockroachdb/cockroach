@@ -16,14 +16,12 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -74,14 +72,6 @@ func Decode(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDInt(tree.DInt(i)), rkey, err
-	case types.PGLSNFamily:
-		var i uint64
-		if dir == encoding.Ascending {
-			rkey, i, err = encoding.DecodeUvarintAscending(key)
-		} else {
-			rkey, i, err = encoding.DecodeUvarintDescending(key)
-		}
-		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(i)}), rkey, err
 	case types.FloatFamily:
 		var f float64
 		if dir == encoding.Ascending {
@@ -127,13 +117,13 @@ func Decode(
 		d, err := a.NewDCollatedString(r, valType.Locale())
 		return d, rkey, err
 	case types.JsonFamily:
-		var json json.JSON
-		json, rkey, err = decodeJSONKey(key, dir)
+		// Don't attempt to decode the JSON value. Instead, just return the
+		// remaining bytes of the key.
+		jsonLen, err := encoding.PeekLength(key)
 		if err != nil {
 			return nil, nil, err
 		}
-		d := a.NewDJSON(tree.DJSON{JSON: json})
-		return d, rkey, err
+		return tree.DNull, key[jsonLen:], nil
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {

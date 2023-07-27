@@ -237,25 +237,15 @@ Use --bench to list benchmarks instead of tests.
 
 Each test has a set of tags. The tags are used to skip tests which don't match
 the tag filter. The tag filter is specified by specifying a pattern with the
-"tag:" prefix.
-
-If multiple "tag:" patterns are specified, the test must match at
-least one of them.
-
-Within a single "tag:" pattern, multiple tags can be specified by separating them
-with a comma. In this case, the test must match all of the tags.
+"tag:" prefix. The default tag filter is "tag:default" which matches any test
+that has the "default" tag. Note that tests are selected based on their name,
+and skipped based on their tag.
 
 Examples:
 
    roachtest list acceptance copy/bank/.*false
-   roachtest list tag:owner-kv
+   roachtest list tag:acceptance
    roachtest list tag:weekly
-
-   # match weekly kv owned tests
-   roachtest list tag:owner-kv,weekly
-
-   # match weekly kv owner tests or aws tests
-   roachtest list tag:owner-kv,weekly tag:aws
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, listBench)
@@ -276,8 +266,6 @@ Examples:
 	}
 	listCmd.Flags().BoolVar(
 		&listBench, "bench", false, "list benchmarks instead of tests")
-	listCmd.Flags().StringVar(
-		&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
 
 	var runCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -293,9 +281,6 @@ the test tags.
 If all invoked tests passed, the exit status is zero. If at least one test
 failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
-
-COCKROACH_ environment variables in the local environment are passed through to
-the cluster nodes on start.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if literalArtifacts == "" {

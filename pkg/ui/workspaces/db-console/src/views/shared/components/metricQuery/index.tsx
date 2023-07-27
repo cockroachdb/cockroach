@@ -87,15 +87,8 @@ export class Axis extends React.Component<AxisProps, {}> {
 export interface MetricProps {
   name: string;
   sources?: string[];
-  tenantSource?: string;
   title?: string;
   rate?: boolean;
-
-  // How much to multiply the value of the underlying metric, for example if the
-  // metric was a duration stored in seconds you'd need a scale of 1_000_000_000
-  // to convert it to our Duration format which assumes Nanoseconds.
-  scale?: number;
-
   nonNegativeRate?: boolean;
   aggregateMax?: boolean;
   aggregateMin?: boolean;
@@ -145,7 +138,6 @@ export interface MetricsDataComponentProps {
   // convenient syntax for a common use case where all metrics on a graph are
   // are from the same source set.
   sources?: string[];
-  tenantSource?: string;
   setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,8 +31,7 @@ func declareKeysQueryLocks(
 	rs ImmutableRangeState,
 	_ *kvpb.Header,
 	_ kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	// Latch on the range descriptor during evaluation of query locks.
@@ -55,7 +53,12 @@ func QueryLocks(
 	reply := resp.(*kvpb.QueryLocksResponse)
 
 	concurrencyManager := cArgs.EvalCtx.GetConcurrencyManager()
+	keyScope := spanset.SpanGlobal
+	if keys.IsLocal(args.Key) {
+		keyScope = spanset.SpanLocal
+	}
 	opts := concurrency.QueryLockTableOptions{
+		KeyScope:           keyScope,
 		MaxLocks:           h.MaxSpanRequestKeys,
 		TargetBytes:        h.TargetBytes,
 		IncludeUncontended: args.IncludeUncontended,

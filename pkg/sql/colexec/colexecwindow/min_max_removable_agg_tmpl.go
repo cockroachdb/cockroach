@@ -76,10 +76,9 @@ const (
 type minMaxRemovableAggBase struct {
 	partitionSeekerBase
 	colexecop.CloserHelper
-	cancelChecker colexecutils.CancelChecker
-	allocator     *colmem.Allocator
-	outputColIdx  int
-	framer        windowFramer
+	allocator    *colmem.Allocator
+	outputColIdx int
+	framer       windowFramer
 
 	// A partial deque of indices into the current partition ordered by the value
 	// of the input column at each index. It contains only indices that are part
@@ -103,7 +102,6 @@ type minMaxRemovableAggBase struct {
 // Init implements the bufferedWindower interface.
 func (b *minMaxRemovableAggBase) Init(ctx context.Context) {
 	b.InitHelper.Init(ctx)
-	b.cancelChecker.Init(b.Ctx)
 }
 
 // transitionToProcessing implements the bufferedWindower interface.
@@ -237,7 +235,6 @@ func (a *_AGG_TYPEAggregator) aggregateOverIntervals(intervals []windowInterval)
 	for _, interval := range intervals {
 		var cmp bool
 		for j := interval.start; j < interval.end; j++ {
-			a.cancelChecker.Check()
 			idxToAdd := uint32(j)
 			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
 			nulls := vec.Nulls()

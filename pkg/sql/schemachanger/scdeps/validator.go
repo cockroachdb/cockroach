@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -66,7 +67,7 @@ type ValidateConstraintFn func(
 
 // NewFakeSessionDataFn callback function used to create session data
 // for the internal executor.
-type NewFakeSessionDataFn func(ctx context.Context, settings *cluster.Settings, opName string) *sessiondata.SessionData
+type NewFakeSessionDataFn func(sv *settings.Values, opName string) *sessiondata.SessionData
 
 type validator struct {
 	db                         *kv.DB
@@ -120,7 +121,7 @@ func (vd validator) ValidateConstraint(
 	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(ctx, vd.settings, "validate-constraint"),
+	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(&vd.settings.SV, "validate-constraint"),
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 

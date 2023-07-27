@@ -581,11 +581,9 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// find potential index candidates in the memo.
 	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
 	if isExplain && p.SessionData().IndexRecommendationsEnabled {
-		indexRecs, err := opc.makeQueryIndexRecommendation(ctx)
-		if err != nil {
+		if err := opc.makeQueryIndexRecommendation(ctx); err != nil {
 			return nil, err
 		}
-		opc.p.instrumentation.explainIndexRecs = indexRecs
 	}
 
 	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
@@ -735,9 +733,7 @@ func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
 // indexes hypothetically added to the table. An index recommendation for the
 // query is outputted based on which hypothetical indexes are helpful in the
 // optimal plan.
-func (opc *optPlanningCtx) makeQueryIndexRecommendation(
-	ctx context.Context,
-) (_ []indexrec.Rec, err error) {
+func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate internal errors without having to add
@@ -773,7 +769,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 		return ruleName.IsNormalize()
 	})
 	if _, err = opc.optimizer.Optimize(); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Walk through the fully normalized memo to determine index candidates and
@@ -791,13 +787,12 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	)
 	opc.optimizer.Memo().Metadata().UpdateTableMeta(f.EvalContext(), hypTables)
 	if _, err = opc.optimizer.Optimize(); err != nil {
-		return nil, err
+		return err
 	}
 
-	var indexRecs []indexrec.Rec
-	indexRecs, err = indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
+	opc.p.instrumentation.indexRecs, err = indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Re-initialize the optimizer (which also re-initializes the factory) and
@@ -811,5 +806,5 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 		f.CopyWithoutAssigningPlaceholders,
 	)
 
-	return indexRecs, nil
+	return nil
 }

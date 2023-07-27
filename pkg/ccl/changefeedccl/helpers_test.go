@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -94,7 +95,8 @@ func readNextMessages(
 			return nil, ctx.Err()
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "About to read a message (%d out of %d)", len(actual), numMessages)
+			log.Infof(context.Background(), "About to read a message (%d out of %d) from %v (%T)",
+				len(actual), numMessages, f, f)
 		}
 		m, err := f.Next()
 		if log.V(1) {
@@ -254,7 +256,7 @@ func withTimeout(
 	if jobFeed, ok := f.(cdctest.EnterpriseTestFeed); ok {
 		jobID = jobFeed.JobID()
 	}
-	return timeutil.RunWithTimeout(context.Background(),
+	return contextutil.RunWithTimeout(context.Background(),
 		fmt.Sprintf("withTimeout-%d", jobID), timeout,
 		func(ctx context.Context) error {
 			defer stopFeedWhenDone(ctx, f)()
@@ -324,12 +326,6 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) (hlc.Timestamp, s
 	return extractResolvedTimestamp(t, m), m.Partition
 }
 
-// resolvedRaw represents a JSON object containing the single key "resolved"
-// with a resolved timestamp value.
-type resolvedRaw struct {
-	Resolved string `json:"resolved"`
-}
-
 func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
 	t.Helper()
 	if m.Key != nil {
@@ -339,12 +335,14 @@ func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Time
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
 
-	var resolved resolvedRaw
-	if err := gojson.Unmarshal(m.Resolved, &resolved); err != nil {
+	var resolvedRaw struct {
+		Resolved string `json:"resolved"`
+	}
+	if err := gojson.Unmarshal(m.Resolved, &resolvedRaw); err != nil {
 		t.Fatal(err)
 	}
 
-	return parseTimeToHLC(t, resolved.Resolved)
+	return parseTimeToHLC(t, resolvedRaw.Resolved)
 }
 
 func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
@@ -394,10 +392,10 @@ func startTestFullServer(
 		Knobs: knobs,
 		// This test suite is already probabilistically running with
 		// tenants. No need for the test tenant.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		UseDatabase:       `d`,
-		ExternalIODir:     options.externalIODir,
-		Settings:          options.settings,
+		DisableDefaultTestTenant: true,
+		UseDatabase:              `d`,
+		ExternalIODir:            options.externalIODir,
+		Settings:                 options.settings,
 	}
 
 	if options.argsFn != nil {
@@ -531,7 +529,6 @@ type updateKnobsFn func(knobs *base.TestingKnobs)
 type feedTestOptions struct {
 	useTenant                    bool
 	forceNoExternalConnectionURI bool
-	forceRootUserConnection      bool
 	argsFn                       updateArgsFn
 	knobsFn                      updateKnobsFn
 	externalIODir                string
@@ -551,12 +548,6 @@ var feedTestNoTenants = func(opts *feedTestOptions) { opts.useTenant = false }
 // from randomly creating an external connection URI and providing that as the sink
 // rather than directly specifying it. (Feed tests never actually connect to anything external.)
 var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExternalConnectionURI = true }
-
-// feedTestUseRootUserConnection is a feedTestOption that will force the cdctest.TestFeedFactory
-// to use the root user connection when creating changefeeds. This disables the typical behavior of cdc tests where
-// tests randomly choose between the root user connection or a test user connection where the test user
-// has privileges to create changefeeds on tables in the default database `d` only.
-var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
 
 // feedTestNoForcedSyntheticTimestamps is a feedTestOption that will prevent
 // the test from randomly forcing timestamps to be synthetic and offset five seconds into the future from
@@ -685,19 +676,6 @@ func expectNotice(t *testing.T, s serverutils.TestTenantInterface, sql string, e
 	sqlDB.Exec(t, sql)
 
 	require.Equal(t, expected, actual)
-}
-
-func loadProgress(
-	t *testing.T, jobFeed cdctest.EnterpriseTestFeed, jobRegistry *jobs.Registry,
-) jobspb.Progress {
-	t.Helper()
-	jobID := jobFeed.JobID()
-	job, err := jobRegistry.LoadJob(context.Background(), jobID)
-	require.NoError(t, err)
-	if job.Status().Terminal() {
-		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.Status(), jobFeed.FetchTerminalJobErr())
-	}
-	return job.Progress()
 }
 
 func feed(
@@ -877,9 +855,6 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 			sinkWeights[sinkType] = 0
 		}
 	}
-	if weight, ok := sinkWeights["cloudstorage"]; ok && weight != 0 {
-		sinkWeights = map[string]int{"cloudstorage": 1}
-	}
 	weightTotal := 0
 	for _, weight := range sinkWeights {
 		weightTotal += weight
@@ -949,128 +924,36 @@ func makeFeedFactoryWithOptions(
 	switch sinkType {
 	case "kafka":
 		f := makeKafkaFeedFactory(srvOrCluster, db)
-		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
-		f.(*kafkaFeedFactory).configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {}
 	case "cloudstorage":
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
 		}
 		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
-		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
-		f.(*cloudFeedFactory).configureUserDB(userDB)
 		return f, func() {
-			cleanup()
+			TestingSetIncludeParquetMetadata()()
 		}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(srvOrCluster, db, sink)
-		userDB, cleanupUserDB := getInitialDBForEnterpriseFactory(t, s, db, options)
-		f.(*tableFeedFactory).configureUserDB(userDB)
-		return f, func() {
-			cleanup()
-			cleanupUserDB()
-		}
+		return f, cleanup
 	case "webhook":
 		f := makeWebhookFeedFactory(srvOrCluster, db)
-		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
-		f.(*webhookFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {}
 	case "pubsub":
 		f := makePubsubFeedFactory(srvOrCluster, db)
-		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
-		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {}
 	case "sinkless":
-		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
-			t.Logf("pgURL %s %s", sinkType, u)
-			if len(pass) < 1 {
-				sink, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
-				sink.Path = "d"
-				return sink, cleanup
-			}
-			return url.URL{
-				Scheme: "postgres",
-				User:   url.UserPassword(u, pass[0]),
-				Host:   s.SQLAddr(), Path: "d"}, func() {}
+		sink, cleanup := pgURLForUser(username.RootUser)
+		f := makeSinklessFeedFactory(s, sink, pgURLForUser)
+		f.(*sinklessFeedFactory).currentDB = func(currentDB *string) error {
+			r := db.QueryRow("SELECT current_database()")
+			return r.Scan(currentDB)
 		}
-		sink, cleanup := getInitialSinkForSinklessFactory(t, db, pgURLForUserSinkless)
-		root, cleanupRoot := pgURLForUserSinkless(username.RootUser)
-		f := makeSinklessFeedFactory(s, sink, root, pgURLForUserSinkless)
-		return f, func() {
-			cleanup()
-			cleanupRoot()
-		}
+		return f, cleanup
 	}
 	t.Fatalf("unhandled sink type %s", sinkType)
 	return nil, nil
-}
-
-func getInitialDBForEnterpriseFactory(
-	t *testing.T, s serverutils.TestTenantInterface, rootDB *gosql.DB, opts feedTestOptions,
-) (*gosql.DB, func()) {
-	// Instead of creating enterprise changefeeds on the root connection, we may
-	// choose to create them on a test user connection. This user should have the
-	// minimum privileges to create a changefeed in the default database `d`. This
-	// means they default to having the CHANGEFEED privilege on all tables in the db.
-	// For changefeed expressions to work, the SELECT privilege is also granted.
-	const percentNonRoot = 1
-	if !opts.forceRootUserConnection && rand.Float32() < percentNonRoot {
-		user := "EnterpriseFeedUser"
-		password := "hunter2"
-		createUserWithDefaultPrivilege(t, rootDB, user, password, "CHANGEFEED", "SELECT")
-		pgURL := url.URL{
-			Scheme: "postgres",
-			User:   url.UserPassword(user, password),
-			Host:   s.SQLAddr(),
-			Path:   `d`,
-		}
-		userDB, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return userDB, func() { _ = userDB.Close() }
-	}
-	return rootDB, func() {}
-}
-
-func getInitialSinkForSinklessFactory(
-	t *testing.T, db *gosql.DB, sinkForUser sinkForUser,
-) (url.URL, func()) {
-	// Instead of creating sinkless changefeeds on the root connection, we may choose to create
-	// them on a test user connection. This user should have the minimum privileges to create a changefeed,
-	// which means they default to having the SELECT privilege on all tables.
-	const percentNonRoot = 1
-	if rand.Float32() < percentNonRoot {
-		user := "SinklessFeedUser"
-		password := "hunter2"
-		createUserWithDefaultPrivilege(t, db, user, password, "SELECT")
-		return sinkForUser(user, password)
-	}
-	return sinkForUser(username.RootUser)
-}
-
-// createUserWithDefaultPrivilege creates a user using the provided db connection
-// such that they have the provided privilege on all existing tables and future tables.
-func createUserWithDefaultPrivilege(
-	t *testing.T, rootDB *gosql.DB, user string, password string, privs ...string,
-) {
-	_, err := rootDB.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS %s WITH PASSWORD '%s'`, user, password))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, priv := range privs {
-		// Ensure the user has privileges on all existing tables.
-		_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON * TO %s`, priv, user))
-		if err != nil && !testutils.IsError(err, "no object matched") {
-			t.Fatal(err)
-		}
-		// Ensure the user has privileges on all tables added in the future.
-		_, err = rootDB.Exec(fmt.Sprintf(`ALTER DEFAULT PRIVILEGES GRANT %s ON TABLES TO %s`, priv, user))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 func cdcTest(t *testing.T, testFn cdcTestFn, testOpts ...feedTestOption) {
@@ -1105,15 +988,12 @@ func cdcTestNamedWithSystem(
 		testLabel = fmt.Sprintf("%s/%s", sinkType, name)
 	}
 	t.Run(testLabel, func(t *testing.T) {
-		// Even if the parquet format is not being used, enable metadata
-		// in all tests for simplicity.
 		testServer, cleanupServer := makeServerWithOptions(t, options)
 		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
 		feedFactory = maybeUseExternalConnection(feedFactory, testServer.DB, sinkType, options, t)
 		defer cleanupServer()
 		defer cleanupSink()
 		defer cleanupCloudStorage()
-
 		testFn(t, testServer, feedFactory)
 	})
 }
@@ -1304,6 +1184,16 @@ func waitForJobStatus(
 	})
 }
 
+// TestingSetIncludeParquetMetadata adds the option to turn on adding metadata
+// (primary key column names) to the parquet file which is used to convert parquet
+// data to JSON format
+func TestingSetIncludeParquetMetadata() func() {
+	includeParquetTestMetadata = true
+	return func() {
+		includeParquetTestMetadata = false
+	}
+}
+
 // ChangefeedJobPermissionsTestSetup creates entities and users with various permissions
 // for tests which test access control for changefeed jobs.
 //
@@ -1330,9 +1220,6 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER adminUser`,
 		`GRANT ADMIN TO adminUser`,
-
-		`CREATE USER otherAdminUser`,
-		`GRANT ADMIN TO otherAdminUser`,
 
 		`CREATE USER feedCreator`,
 		`GRANT CHANGEFEED ON table_a TO feedCreator`,

@@ -145,8 +145,6 @@ type RestoreOptions struct {
 	SchemaOnly                       bool
 	VerifyData                       bool
 	UnsafeRestoreIncompatibleVersion bool
-	ExecutionLocality                Expr
-	ExperimentalOnline               bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -494,17 +492,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("unsafe_restore_incompatible_version")
 	}
-
-	if o.ExecutionLocality != nil {
-		maybeAddSep()
-		ctx.WriteString("execution locality = ")
-		ctx.FormatNode(o.ExecutionLocality)
-	}
-
-	if o.ExperimentalOnline {
-		maybeAddSep()
-		ctx.WriteString("experimental deferred copy")
-	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -645,20 +632,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.UnsafeRestoreIncompatibleVersion = other.UnsafeRestoreIncompatibleVersion
 	}
 
-	if o.ExecutionLocality == nil {
-		o.ExecutionLocality = other.ExecutionLocality
-	} else if other.ExecutionLocality != nil {
-		return errors.New("execution locality option specified multiple times")
-	}
-
-	if o.ExperimentalOnline {
-		if other.ExperimentalOnline {
-			return errors.New("experimental deferred copy specified multiple times")
-		}
-	} else {
-		o.ExperimentalOnline = other.ExperimentalOnline
-	}
-
 	return nil
 }
 
@@ -683,9 +656,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.SchemaOnly == options.SchemaOnly &&
 		o.VerifyData == options.VerifyData &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
-		o.ExecutionLocality == options.ExecutionLocality &&
-		o.ExperimentalOnline == options.ExperimentalOnline
+		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion
 }
 
 // BackupTargetList represents a list of targets.

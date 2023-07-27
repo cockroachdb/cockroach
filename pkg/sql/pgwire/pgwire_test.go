@@ -29,10 +29,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -71,13 +71,13 @@ func trivialQuery(pgURL url.URL) error {
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	params := base.TestServerArgs{Insecure: true}
+	s, _, _ := serverutils.StartServer(t, params)
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	ctx := context.Background()
-	defer srv.Stopper().Stop(ctx)
-	tt := srv.TenantOrServer()
+	defer s.Stopper().Stop(ctx)
 
-	host, port, err := net.SplitHostPort(srv.ServingSQLAddr())
+	host, port, err := net.SplitHostPort(s.ServingSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			return tt.DrainClients(ctx)
+			return s.DrainClients(ctx)
 		}()
 	}()
 
@@ -133,7 +133,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if !tt.PGServer().(*pgwire.Server).IsDraining() {
+	if !s.(*server.TestServer).PGServer().(*pgwire.Server).IsDraining() {
 		t.Fatal("server should be draining, but is not")
 	}
 }
@@ -143,8 +143,8 @@ func TestPGWireDrainClient(t *testing.T) {
 func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	params := base.TestServerArgs{Insecure: true}
+	s, _, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -166,7 +166,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	}
 	defer db.Close()
 
-	pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+	pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
 
 	// Make sure that the server reports correctly the case in which a
 	// connection did not respond to cancellation in time.
@@ -561,12 +561,15 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", username.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", false, 1, "username", "username", "ASC", false, false, true, 1).
-				Results("users", "primary", false, 2, "hashedPassword", "hashedPassword", "N/A", true, false, true, 1).
-				Results("users", "primary", false, 3, "isRole", "isRole", "N/A", true, false, true, 1).
-				Results("users", "primary", false, 4, "user_id", "user_id", "N/A", true, false, true, 1).
-				Results("users", "users_user_id_idx", false, 1, "user_id", "user_id", "ASC", false, false, true, 1).
-				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true, 1),
+			baseTest.Results("users", "primary", false, 1, "username", "username", "ASC", false, false, true).
+				Results("users", "primary", false, 2, "hashedPassword", "hashedPassword", "N/A", true, false, true).
+				Results("users", "primary", false, 3, "isRole", "isRole", "N/A", true, false, true).
+				Results("users", "primary", false, 4, "user_id", "user_id", "N/A", true, false, true).
+				Results("users", "users_user_id_idx", false, 1, "user_id", "user_id", "ASC", false, false, true).
+				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true),
+		}},
+		{"SHOW TABLES FROM system", []preparedQueryTest{
+			baseTest.Results("public", "comments", "table", "node", 0, gosql.NullString{}).Others(bootstrap.NumSystemTablesForSystemTenant - 1),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
@@ -819,11 +822,14 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
-		{"ALTER RANGE default CONFIGURE ZONE = $1", []preparedQueryTest{
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
 			baseTest.SetArgs("num_replicas: 1"),
 		}},
-		{"ALTER RANGE default CONFIGURE ZONE USING num_replicas = $1", []preparedQueryTest{
+		{"ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = $1", []preparedQueryTest{
 			baseTest.SetArgs(1),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs(gosql.NullString{}),
 		}},
 		{"TRUNCATE TABLE d.str", []preparedQueryTest{
 			baseTest.SetArgs(),
@@ -845,10 +851,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		// }},
 	}
 
-	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.TenantOrServer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
@@ -1596,14 +1600,14 @@ func TestPGCommandTags(t *testing.T) {
 // checkSQLNetworkMetrics returns the server's pgwire bytesIn/bytesOut and an
 // error if the bytesIn/bytesOut don't satisfy the given minimums and maximums.
 func checkSQLNetworkMetrics(
-	srv serverutils.TestServerInterface, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
+	s serverutils.TestServerInterface, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
 ) (int64, int64, error) {
-	if err := srv.WriteSummaries(); err != nil {
+	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err
 	}
 
-	bytesIn := srv.TenantOrServer().MustGetSQLNetworkCounter(pgwire.MetaBytesIn.Name)
-	bytesOut := srv.TenantOrServer().MustGetSQLNetworkCounter(pgwire.MetaBytesOut.Name)
+	bytesIn := s.MustGetSQLNetworkCounter(pgwire.MetaBytesIn.Name)
+	bytesOut := s.MustGetSQLNetworkCounter(pgwire.MetaBytesOut.Name)
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, errors.Errorf("bytesin %d < expected min %d", a, min)
 	}
@@ -1622,21 +1626,20 @@ func checkSQLNetworkMetrics(
 func TestSQLNetworkMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, srv.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	const minbytes = 10
 	const maxbytes = 2 * 1024
 
 	// Make sure we're starting at 0.
-	if _, _, err := checkSQLNetworkMetrics(srv, 0, 0, 0, 0); err != nil {
+	if _, _, err := checkSQLNetworkMetrics(s, 0, 0, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1644,7 +1647,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
 	}
-	bytesIn, bytesOut, err := checkSQLNetworkMetrics(srv, minbytes, minbytes, maxbytes, maxbytes)
+	bytesIn, bytesOut, err := checkSQLNetworkMetrics(s, minbytes, minbytes, maxbytes, maxbytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1653,7 +1656,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	}
 
 	// A second query should give us more I/O.
-	_, _, err = checkSQLNetworkMetrics(srv, bytesIn+minbytes, bytesOut+minbytes, maxbytes, maxbytes)
+	_, _, err = checkSQLNetworkMetrics(s, bytesIn+minbytes, bytesOut+minbytes, maxbytes, maxbytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1661,7 +1664,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	// Verify connection counter.
 	expectConns := func(n int) {
 		testutils.SucceedsSoon(t, func() error {
-			if conns := srv.TenantOrServer().MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
+			if conns := s.MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
 				return errors.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil

@@ -9,7 +9,7 @@ CREATE TABLE t (
 INSERT INTO t VALUES (1, 1), (2, 2), (3, 3), (4, 1), (5, 1);
 
 statement ok
-CREATE FUNCTION one() RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT 1';
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
 
 query T
 EXPLAIN SELECT one()
@@ -27,7 +27,7 @@ distribution: local
 vectorized: true
 ·
 • filter
-│ filter: a = 1
+│ filter: a = one()
 │
 └── • scan
       missing stats
@@ -116,40 +116,40 @@ EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn() = 3 AND (SELECT max(a) FROM 
 distribution: local
 vectorized: true
 ·
-• project
+• root
 │ columns: (a)
 │
-└── • lookup join (inner)
-    │ columns: (any_not_null, a)
-    │ estimated row count: 1 (missing stats)
-    │ table: sub3@sub3_pkey
-    │ equality: (any_not_null) = (a)
-    │ equality cols are key
-    │ pred: sub_fn() = 3
+├── • filter
+│   │ columns: (a)
+│   │ estimated row count: 111 (missing stats)
+│   │ filter: (sub_fn() = 3) AND (a = @S1)
+│   │
+│   └── • scan
+│         columns: (a)
+│         estimated row count: 1,000 (missing stats)
+│         table: sub3@sub3_pkey
+│         spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT max(a) FROM sub2)
+    │ exec mode: one row
     │
-    └── • filter
+    └── • group (scalar)
         │ columns: (any_not_null)
-        │ estimated row count: 0 (missing stats)
-        │ filter: sub_fn() = 3
+        │ estimated row count: 1 (missing stats)
+        │ aggregate 0: any_not_null(a)
         │
-        └── • group (scalar)
-            │ columns: (any_not_null)
-            │ estimated row count: 1 (missing stats)
-            │ aggregate 0: any_not_null(a)
-            │
-            └── • revscan
-                  columns: (a)
-                  estimated row count: 1 (missing stats)
-                  table: sub2@sub2_pkey
-                  spans: LIMITED SCAN
-                  limit: 1
-
-statement ok
-CREATE FUNCTION sub_fn_lt() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a < (SELECT max(a) FROM sub2)'
+        └── • revscan
+              columns: (a)
+              estimated row count: 1 (missing stats)
+              table: sub2@sub2_pkey
+              spans: LIMITED SCAN
+              limit: 1
 
 # The uncorrelated subquery in the UDF body is executed only once.
 query T kvtrace
-SELECT sub_fn_lt()
+SELECT sub_fn()
 ----
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
@@ -157,7 +157,7 @@ Scan /Table/113/{1-2}
 # The uncorrelated subquery in the UDF body is executed only once per row
 # produced by generate_series.
 query T kvtrace
-SELECT sub_fn_lt() FROM generate_series(1, 3)
+SELECT sub_fn() FROM generate_series(1, 3)
 ----
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
@@ -174,12 +174,12 @@ CREATE FUNCTION sub_fn2() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE 
 query T kvtrace
 SELECT sub_fn2() FROM generate_series(1, 3)
 ----
+Scan /Table/112/{1-2}
 Scan /Table/113/1/30/0
-Scan /Table/112/1/30/0
+Scan /Table/112/{1-2}
 Scan /Table/113/1/30/0
-Scan /Table/112/1/30/0
+Scan /Table/112/{1-2}
 Scan /Table/113/1/30/0
-Scan /Table/112/1/30/0
 
 statement ok
 CREATE FUNCTION sub_fn3() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE EXISTS (SELECT a FROM sub2 WHERE a = 30)'
@@ -259,51 +259,6 @@ vectorized: true
     └── • emptyrow
           columns: ()
 
-# Immutable UDFs can be inlined for index-acceleration.
-query T
-EXPLAIN (VERBOSE)
-SELECT * FROM t WHERE k = one()
-----
-distribution: local
-vectorized: true
-·
-• scan
-  columns: (k, a)
-  estimated row count: 1 (missing stats)
-  table: t@t_pkey
-  spans: /1/0
-
-statement ok
-CREATE FUNCTION num(n INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
-  SELECT n
-$$
-
-query T
-EXPLAIN (VERBOSE)
-SELECT * FROM t WHERE k = num(2)
-----
-distribution: local
-vectorized: true
-·
-• scan
-  columns: (k, a)
-  estimated row count: 1 (missing stats)
-  table: t@t_pkey
-  spans: /2/0
-
-query T
-EXPLAIN (VERBOSE)
-SELECT * FROM t WHERE k >= num(2)
-----
-distribution: local
-vectorized: true
-·
-• scan
-  columns: (k, a)
-  estimated row count: 333 (missing stats)
-  table: t@t_pkey
-  spans: /2-
-
 
 subtest regressions
 
@@ -339,6 +294,7 @@ values
                      ├── stats: [rows=1]
                      ├── key: ()
                      ├── fd: ()-->(1)
+                     ├── distribution: test
                      ├── scan t93210
                      │    ├── columns: a:1(int!null)
                      │    ├── stats: [rows=1000]

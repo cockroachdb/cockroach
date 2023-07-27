@@ -146,39 +146,26 @@ type Registry struct {
 		// draining indicates whether this node is draining or
 		// not. It is set by the drain server when the drain
 		// process starts.
+		//
+		// TODO(ssd): We may want to prevent the adoption of
+		// jobs onto a draining node. At the moment, jobs can
+		// access this to make per-job decisions about what to
+		// do.
 		draining bool
-
-		// numDrainWait is the number of jobs that are still
-		// processing drain request.
-		numDrainWait int
 
 		// ingestingJobs is a map of jobs which are actively ingesting on this node
 		// including via a processor.
 		ingestingJobs map[jobspb.JobID]struct{}
 	}
 
-	// drainRequested signaled to indicate that this registry will shut
-	// down soon.  It's an opportunity for currently running jobs
-	// to detect this (OnDrain) and to have a bit of time to do cleanup/shutdown
-	// in an orderly fashion, prior to resumer context being canceled.
-	// The registry will no longer adopt new jobs once this channel closed.
-	drainRequested chan struct{}
-	// jobDrained signaled to indicate that the job watching drainRequested channel
-	// completed its drain logic.
-	jobDrained chan struct{}
-
-	// drainJobs closed when registry should drain/cancel all active
-	// jobs and should no longer adopt new jobs.
-	drainJobs chan struct{}
-
+	drainJobs                chan struct{}
 	startedControllerTasksWG sync.WaitGroup
 
 	// withSessionEvery ensures that logging when failing to get a live session
 	// is not too loud.
 	withSessionEvery log.EveryN
 
-	// test only overrides for resumer creation.
-	creationKnobs sync.Map
+	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
 }
 
 func (r *Registry) UpdateJobWithTxn(
@@ -203,7 +190,7 @@ func (r *Registry) UpdateJobWithTxn(
 // subpackage like sqlbase is difficult because of the amount of sql-only
 // stuff that JobExecContext exports. One other choice is to merge this package
 // back into the sql package. There's maybe a better way that I'm unaware of.
-type jobExecCtxMaker func(ctx context.Context, opName string, user username.SQLUsername) (interface{}, func())
+type jobExecCtxMaker func(opName string, user username.SQLUsername) (interface{}, func())
 
 // PreventAdoptionFile is the name of the file which, if present in the first
 // on-disk store, will prevent the adoption of background jobs by that node.
@@ -246,8 +233,6 @@ func MakeRegistry(
 		adoptionCh:       make(chan adoptionNotice, 1),
 		withSessionEvery: log.Every(time.Second),
 		drainJobs:        make(chan struct{}),
-		drainRequested:   make(chan struct{}),
-		jobDrained:       make(chan struct{}, 1),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -429,7 +414,7 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
-	// Insert the job payload and details into the system.job_info table if the
+	// Insert the job payload and details into the system.jobs_info table if the
 	// associated cluster version is active.
 	//
 	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
@@ -677,7 +662,7 @@ func (r *Registry) CreateJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.job_info table if the
+		// Insert the job payload and details into the system.jobs_info table if the
 		// associated cluster version is active.
 		//
 		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
@@ -812,7 +797,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.job_info table if the
+		// Insert the job payload and details into the system.jobs_info table if the
 		// associated cluster version is active.
 		//
 		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
@@ -1204,8 +1189,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				lc.onUpdate()
 			case <-stopper.ShouldQuiesce():
 				return
-			case <-r.drainRequested:
-				return
 			case <-r.drainJobs:
 				return
 			case shouldClaim := <-r.adoptionCh:
@@ -1579,8 +1562,7 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	if fn == nil {
 		return nil, errors.Errorf("no resumer is available for %s", payload.Type())
 	}
-	if v, ok := r.creationKnobs.Load(payload.Type()); ok {
-		wrapper := v.(func(Resumer) Resumer)
+	if wrapper := r.TestingResumerCreationKnobs[payload.Type()]; wrapper != nil {
 		return wrapper(fn(job, settings)), nil
 	}
 	return fn(job, settings), nil
@@ -1848,13 +1830,6 @@ func (r *Registry) MarkIdle(job *Job, isIdle bool) {
 	}
 }
 
-// TestingForgetJob causes the registry to forget it has adopted a job.
-func (r *Registry) TestingForgetJob(id jobspb.JobID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.mu.adoptedJobs, id)
-}
-
 func (r *Registry) cancelAllAdoptedJobs() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -2006,67 +1981,21 @@ func (r *Registry) IsDraining() bool {
 	return r.mu.draining
 }
 
-// WaitForRegistryShutdown waits for all background job registry tasks to complete.
+// WaitForJobShutdown(ctx context.Context) {
 func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
 	log.Infof(ctx, "starting to wait for job registry to shut down")
 	defer log.Infof(ctx, "job registry tasks successfully shut down")
 	r.startedControllerTasksWG.Wait()
 }
 
-// DrainRequested informs the job system that this node is being drained.
-// Waits for the jobs to complete their drain logic (or context cancellation)
-// prior to returning.  After this function returns, no new jobs will be adopted,
-// and all running jobs will be canceled.
-// WaitForRegistryShutdown can then be used to wait for those tasks to complete.
-func (r *Registry) DrainRequested(ctx context.Context) {
+// SetDraining informs the job system if the node is draining.
+func (r *Registry) SetDraining() {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	alreadyDraining := r.mu.draining
-	numWait := r.mu.numDrainWait
 	r.mu.draining = true
-	r.mu.Unlock()
-
-	if alreadyDraining {
-		return
-	}
-
-	close(r.drainRequested)
-	defer close(r.drainJobs)
-
-	if numWait == 0 {
-		return
-	}
-
-	for numWait > 0 {
-		select {
-		case <-ctx.Done():
-			return
-		case <-r.stopper.ShouldQuiesce():
-			return
-		case <-r.jobDrained:
-			r.mu.Lock()
-			numWait = r.mu.numDrainWait
-			r.mu.Unlock()
-		}
-	}
-}
-
-// OnDrain returns a channel that can be selected on to detect when the job
-// registry begins draining.
-// The caller must invoke returned function when drain completes.
-func (r *Registry) OnDrain() (<-chan struct{}, func()) {
-	r.mu.Lock()
-	r.mu.numDrainWait++
-	r.mu.Unlock()
-
-	return r.drainRequested, func() {
-		r.mu.Lock()
-		r.mu.numDrainWait--
-		r.mu.Unlock()
-
-		select {
-		case r.jobDrained <- struct{}{}:
-		default:
-		}
+	if !alreadyDraining {
+		close(r.drainJobs)
 	}
 }
 

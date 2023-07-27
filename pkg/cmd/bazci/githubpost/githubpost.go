@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,7 +63,7 @@ type formatter func(context.Context, failure) (issues.IssueFormatter, issues.Pos
 
 func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
 	teams := getOwner(ctx, f.packageName, f.testName)
-	repro := fmt.Sprintf("./dev test ./pkg/%s --race --count 250 -f %s",
+	repro := fmt.Sprintf("./dev test ./pkg/%s --race --stress -f %s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
 		trimPkg(f.packageName), f.testName)
 
 	var projColID int
@@ -100,10 +101,11 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 
 	return func(ctx context.Context, f failure) error {
 		fmter, req := reqFromFailure(ctx, f)
-		if stress := os.Getenv("COCKROACH_NIGHTLY_STRESS"); stress != "" {
-			req.ExtraParams["stress"] = "true"
+		l, err := logger.RootLogger("", false)
+		if err != nil {
+			return err
 		}
-		return issues.Post(ctx, log.Default(), fmter, req)
+		return issues.Post(ctx, l, fmter, req)
 	}
 }
 
@@ -699,26 +701,4 @@ func formatPebbleMetamorphicIssue(
 		HelpCommand: issues.ReproductionCommandFromString(repro),
 		ExtraLabels: []string{"metamorphic-failure"},
 	}
-}
-
-// PostGeneralFailure posts a "general" GitHub issue that does not correspond
-// to any particular failed test, etc. These will generally be build failures
-// that prevent any tests from having run. In this case we have very little
-// insight into what caused the build failure and can't properly assign owners,
-// so a general issue is filed against test-eng in this case.
-func PostGeneralFailure(formatterName, logs string) {
-	fileIssue := getIssueFilerForFormatter(formatterName)
-	postGeneralFailureImpl(logs, fileIssue)
-}
-
-func postGeneralFailureImpl(logs string, fileIssue func(context.Context, failure) error) {
-	ctx := context.Background()
-	err := fileIssue(ctx, failure{
-		title:       "unexpected build failure",
-		testMessage: logs,
-	})
-	if err != nil {
-		log.Println(err) // keep going
-	}
-
 }

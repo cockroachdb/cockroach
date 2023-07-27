@@ -26,26 +26,19 @@ import (
 )
 
 func registerCostFuzz(r registry.Registry) {
-	for _, setupName := range []string{"workload-replay", sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+	for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
 		setupName := setupName
-		redactResults := false
-		timeOut := time.Hour * 1
 		var clusterSpec spec.ClusterSpec
 		switch setupName {
 		case sqlsmith.SeedMultiRegionSetupName:
 			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
-		case "workload-replay":
-			clusterSpec = r.MakeClusterSpec(1)
-			timeOut = time.Hour * 2
-			redactResults = true
 		default:
 			clusterSpec = r.MakeClusterSpec(1)
 		}
 		r.Add(registry.TestSpec{
 			Name:            fmt.Sprintf("costfuzz/%s", setupName),
 			Owner:           registry.OwnerSQLQueries,
-			Timeout:         timeOut,
-			RedactResults:   redactResults,
+			Timeout:         time.Hour * 1,
 			RequiresLicense: true,
 			Tags:            nil,
 			Cluster:         clusterSpec,
@@ -63,7 +56,7 @@ func registerCostFuzz(r registry.Registry) {
 // runCostFuzzQuery executes the same query two times, once with normal costs
 // and once with randomly perturbed costs. If the results of the two executions
 // are not equal an error is returned.
-func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelper) error {
+func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparisonHelper) error {
 	// Ignore panics from Generate.
 	defer func() {
 		if r := recover(); r != nil {
@@ -71,7 +64,7 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 		}
 	}()
 
-	stmt := qgen.Generate()
+	stmt := smither.Generate()
 
 	// First, run the statement without cost perturbation.
 	controlRows, err := h.runQuery(stmt)
@@ -114,11 +107,7 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 		return nil
 	}
 
-	diff, err := unsortedMatricesDiffWithFloatComp(controlRows, perturbRows, h.colTypes)
-	if err != nil {
-		return err
-	}
-	if diff != "" {
+	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
 		// We have a mismatch in the perturbed vs control query outputs.
 		h.logStatements()
 		h.logVerboseOutput()

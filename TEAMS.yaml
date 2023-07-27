@@ -32,13 +32,9 @@ cockroachdb/sql-queries:
   aliases:
     cockroachdb/sql-optimizer: other
     cockroachdb/sql-opt-prs: other
-  # SQL Queries team uses GH projects v2, which doesn't have a REST API, so
-  # there is no triage column ID.
-  # See .github/workflows/add-issues-to-project.yml.
-  label: T-sql-queries
+  triage_column_id: 13549252
 cockroachdb/cluster-observability:
   triage_column_id: 12618343
-  label: T-cluster-observability
 cockroachdb/kv:
   aliases:
     cockroachdb/admission-control: other
@@ -52,23 +48,18 @@ cockroachdb/replication:
   label: T-kv-replication
 cockroachdb/spatial:
   triage_column_id: 9487269
-  label: T-spatial
 cockroachdb/dev-inf:
   triage_column_id: 10210759
-  label: T-dev-inf
 cockroachdb/multiregion:
   triage_column_id: 11926170
-  label: T-multiregion
 cockroachdb/storage:
   triage_column_id: 6668367
-  label: T-storage
 cockroachdb/test-eng:
   triage_column_id: 14041337
-  label: T-testeng
 cockroachdb/security:
-  label: T-cross-product-security
+  triage_column_id: 0 # TODO
 cockroachdb/prodsec:
-  label: T-cross-product-security
+  triage_column_id: 0 # TODO as well
 cockroachdb/disaster-recovery:
   triage_column_id: 3097123
   label: T-disaster-recovery
@@ -82,26 +73,22 @@ cockroachdb/server:
   aliases:
     cockroachdb/cli-prs: other
     cockroachdb/server-prs: other
+    cockroachdb/http-api-prs: other
   triage_column_id: 2521812
 cockroachdb/admin-ui:
   aliases:
     cockroachdb/admin-ui-prs: other
   triage_column_id: 6598672
-  label: T-observability-inf
+cockroachdb/kv-obs-prs:
+  triage_column_id: 0 # TODO
 cockroachdb/obs-inf-prs:
-  aliases:
-    cockroachdb/http-api-prs: other
   triage_column_id: 14196277
-  label: T-observability-inf
 cockroachdb/multi-tenant:
-  # Multi-tenant team uses GH projects v2, which doesn't have a REST API, so no triage column ID
-  # see .github/workflows/add-issues-to-project.yml
   label: T-multitenant
 cockroachdb/jobs:
   aliases:
     cockroachdb/jobs-prs: other
-  # Jobs uses GH projects v2, which doesn't have a REST API, so no triage column ID
-  # see .github/workflows/add-issues-to-project.yml
+  triage_column_id: 16360666
   label: T-jobs
 cockroachdb/cloud-identity:
   triage_column_id: 18588697

@@ -337,7 +337,6 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -418,14 +417,10 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       BackfilledIndexID: 3
       TableID: 107
       TemporaryIndexID: 4
-PostCommitPhase stage 6 of 7 with 7 MutationType ops
+PostCommitPhase stage 6 of 7 with 6 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
-    *scop.MakeWriteOnlyIndexDeleteOnly
-      IndexID: 4
-      TableID: 107
     *scop.MakeMergedIndexWriteOnly
       IndexID: 3
       TableID: 107
@@ -479,7 +474,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 49 MutationType ops
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
@@ -554,6 +549,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 49 MutationType ops
       IndexID: 3
       Name: foo_pkey
       TableID: 107
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 4
+      TableID: 107
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 4
@@ -609,9 +607,6 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 49 MutationType ops
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 3
       TableID: 107
-    *scop.MakeIndexAbsent
-      IndexID: 4
-      TableID: 107
     *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 2
@@ -652,7 +647,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 49 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 11 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 12 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -661,12 +656,16 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 11 MutationType ops
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 107
     *scop.DeleteDescriptor
       DescriptorID: 108
+    *scop.MakeIndexAbsent
+      IndexID: 4
+      TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 107
@@ -1136,10 +1135,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
-  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  kind: Precedence
-  rule: index is MERGED before its temp index starts to disappear
 - from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
   kind: PreviousTransactionPrecedence
@@ -1232,10 +1227,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
-  kind: Precedence
-  rule: temp index disappeared before its master index reaches WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousTransactionPrecedence
@@ -1680,7 +1671,6 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1768,14 +1758,10 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       BackfilledIndexID: 3
       TableID: 107
       TemporaryIndexID: 4
-PostCommitPhase stage 6 of 7 with 8 MutationType ops
+PostCommitPhase stage 6 of 7 with 7 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
-    *scop.MakeWriteOnlyIndexDeleteOnly
-      IndexID: 4
-      TableID: 107
     *scop.MakeMergedIndexWriteOnly
       IndexID: 3
       TableID: 107
@@ -1832,7 +1818,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 51 MutationType ops
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
@@ -1907,6 +1893,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 51 MutationType ops
       IndexID: 3
       Name: foo_pkey
       TableID: 107
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 4
+      TableID: 107
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 4
@@ -1965,9 +1954,6 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 51 MutationType ops
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 3
       TableID: 107
-    *scop.MakeIndexAbsent
-      IndexID: 4
-      TableID: 107
     *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 2
@@ -2010,7 +1996,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 51 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 12 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 13 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -2019,12 +2005,16 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 12 MutationType ops
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 107
     *scop.DeleteDescriptor
       DescriptorID: 108
+    *scop.MakeIndexAbsent
+      IndexID: 4
+      TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 107
@@ -2533,10 +2523,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
-  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  kind: Precedence
-  rule: index is MERGED before its temp index starts to disappear
 - from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
   kind: PreviousTransactionPrecedence
@@ -2633,10 +2619,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
-  kind: Precedence
-  rule: temp index disappeared before its master index reaches WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousTransactionPrecedence
@@ -2911,7 +2893,6 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
-        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 107
@@ -2978,14 +2959,10 @@ PostCommitPhase stage 5 of 7 with 1 BackfillType op
       BackfilledIndexID: 3
       TableID: 107
       TemporaryIndexID: 4
-PostCommitPhase stage 6 of 7 with 5 MutationType ops
+PostCommitPhase stage 6 of 7 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], MERGED] -> WRITE_ONLY
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
-    *scop.MakeWriteOnlyIndexDeleteOnly
-      IndexID: 4
-      TableID: 107
     *scop.MakeMergedIndexWriteOnly
       IndexID: 3
       TableID: 107
@@ -3009,7 +2986,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
@@ -3027,6 +3004,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
     *scop.SetIndexName
       IndexID: 3
       Name: foo_pkey
+      TableID: 107
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 4
       TableID: 107
     *scop.RemoveColumnFromIndex
       ColumnID: 1
@@ -3046,9 +3026,6 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 3
       TableID: 107
-    *scop.MakeIndexAbsent
-      IndexID: 4
-      TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
     *scop.SetJobStateOnDescriptor
@@ -3056,14 +3033,18 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
+    *scop.MakeIndexAbsent
+      IndexID: 4
+      TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 107
@@ -3352,10 +3333,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
-  to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  kind: Precedence
-  rule: index is MERGED before its temp index starts to disappear
 - from: [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, MERGED]
   kind: PreviousTransactionPrecedence
@@ -3404,10 +3381,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, WRITE_ONLY]
-  kind: Precedence
-  rule: temp index disappeared before its master index reaches WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousTransactionPrecedence

@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/time/rate"
 )
 
@@ -115,7 +113,7 @@ func (s *SSTSnapshotStorageScratch) filename(id int) string {
 }
 
 func (s *SSTSnapshotStorageScratch) createDir() error {
-	err := s.storage.engine.MkdirAll(s.snapDir, os.ModePerm)
+	err := s.storage.engine.MkdirAll(s.snapDir)
 	s.dirCreated = s.dirCreated || err == nil
 	return err
 }
@@ -184,7 +182,7 @@ func (s *SSTSnapshotStorageScratch) Close() error {
 type SSTSnapshotStorageFile struct {
 	scratch      *SSTSnapshotStorageScratch
 	created      bool
-	file         vfs.File
+	file         fs.File
 	filename     string
 	ctx          context.Context
 	bytesPerSync int64
@@ -209,7 +207,7 @@ func (f *SSTSnapshotStorageFile) ensureFile() error {
 	}
 	var err error
 	if f.bytesPerSync > 0 {
-		f.file, err = fs.CreateWithSync(f.scratch.storage.engine, f.filename, int(f.bytesPerSync))
+		f.file, err = f.scratch.storage.engine.CreateWithSync(f.filename, int(f.bytesPerSync))
 	} else {
 		f.file, err = f.scratch.storage.engine.Create(f.filename)
 	}

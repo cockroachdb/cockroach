@@ -26,7 +26,7 @@ func (s *systemStatusServer) ProblemRanges(
 ) (*serverpb.ProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -35,7 +35,7 @@ func (s *systemStatusServer) ProblemRanges(
 		ProblemsByNodeID: make(map[roachpb.NodeID]serverpb.ProblemRangesResponse_NodeProblems),
 	}
 
-	var isLiveMap map[roachpb.NodeID]livenesspb.NodeVitality
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 	// If there is a specific nodeID requested, limited the responses to
 	// just that node.
 	if len(req.NodeID) > 0 {
@@ -43,9 +43,9 @@ func (s *systemStatusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = map[roachpb.NodeID]livenesspb.NodeVitality{requestedNodeID: s.nodeLiveness.GetNodeVitalityFromCache(requestedNodeID)}
-	} else {
-		isLiveMap = s.nodeLiveness.ScanNodeVitalityFromCache()
+		isLiveMap = livenesspb.IsLiveMap{
+			requestedNodeID: livenesspb.IsLiveMapEntry{IsLive: true},
+		}
 	}
 
 	type nodeResponse struct {

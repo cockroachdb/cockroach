@@ -27,7 +27,7 @@ subtest no_capabilities
 statement ok
 CREATE TENANT "no-capabilities-tenant";
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "no-capabilities-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -36,7 +36,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -53,7 +52,7 @@ CREATE TENANT "bool-capability-no-value-tenant";
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" GRANT CAPABILITY can_admin_split
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -62,7 +61,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -72,7 +70,7 @@ span_config_bounds         {}
 statement ok
 ALTER TENANT "bool-capability-no-value-tenant" REVOKE CAPABILITY can_admin_split
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-no-value-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -81,7 +79,6 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -98,7 +95,7 @@ CREATE TENANT "bool-capability-with-value-tenant";
 statement ok
 ALTER TENANT "bool-capability-with-value-tenant" GRANT CAPABILITY can_admin_split=true
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-with-value-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -107,7 +104,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -124,7 +120,7 @@ CREATE TENANT "bool-capability-with-expression-value-tenant";
 statement ok
 ALTER TENANT "bool-capability-with-expression-value-tenant" GRANT CAPABILITY can_admin_split=(2=1+1)
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "bool-capability-with-expression-value-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -133,7 +129,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -150,7 +145,7 @@ CREATE TENANT "multiple-capability-tenant"
 statement ok
 ALTER TENANT "multiple-capability-tenant" GRANT CAPABILITY can_admin_split, can_view_node_info
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -159,7 +154,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         true
 can_view_tsdb_metrics      false
@@ -169,7 +163,7 @@ span_config_bounds         {}
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY can_admin_split, can_view_node_info
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -178,7 +172,6 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -188,7 +181,7 @@ span_config_bounds         {}
 statement ok
 ALTER TENANT "multiple-capability-tenant" GRANT CAPABILITY exempt_from_rate_limiting
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -197,7 +190,6 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -207,7 +199,7 @@ span_config_bounds         {}
 statement ok
 ALTER TENANT "multiple-capability-tenant" REVOKE CAPABILITY exempt_from_rate_limiting
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT "multiple-capability-tenant" WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -216,7 +208,6 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -236,7 +227,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          true
 can_check_consistency      true
-can_debug_process          true
 can_use_nodelocal_storage  true
 can_view_node_info         true
 can_view_tsdb_metrics      true
@@ -268,9 +258,7 @@ ALTER TENANT scb GRANT CAPABILITY span_config_bounds = crdb_internal.json_to_pb(
 # Observe the side-effect.
 
 query TT colnames
-SELECT capability_name, capability_value
-FROM [SHOW TENANT scb WITH CAPABILITIES]
-ORDER BY capability_name, capability_value
+SELECT capability_name, capability_value FROM [SHOW TENANT scb WITH CAPABILITIES]
 ----
 capability_name            capability_value
 can_admin_relocate_range   false
@@ -278,7 +266,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -299,7 +286,7 @@ span_config_bounds         range_min_bytes: *
 statement ok
 ALTER TENANT scb GRANT CAPABILITY span_config_bounds = NULL;
 
-query TT colnames,rowsort
+query TT colnames
 SELECT capability_name, capability_value FROM [SHOW TENANT scb WITH CAPABILITIES]
 ----
 capability_name            capability_value
@@ -308,7 +295,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -343,7 +329,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -362,7 +347,6 @@ can_admin_scatter          false
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
-can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -381,7 +365,6 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          true
 can_check_consistency      true
-can_debug_process          true
 can_use_nodelocal_storage  true
 can_view_node_info         true
 can_view_tsdb_metrics      true

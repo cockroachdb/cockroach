@@ -25,15 +25,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -476,7 +477,7 @@ func testTxnReadWithinUncertaintyInterval(t *testing.T, observedTS bool, readOp 
 	now := s.Clock().Now()
 	maxOffset := s.Clock().MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", key, isolation.Serializable, 1, now, maxOffset, int32(s.SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -628,7 +629,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	// Create a new writer transaction.
 	maxOffset := clocks[0].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	writerTxn := roachpb.MakeTransaction("test_writer", keyA, isolation.Serializable, 1, clocks[0].Now(), maxOffset, int32(tc.Servers[0].NodeID()))
+	writerTxn := roachpb.MakeTransaction("test_writer", keyA, 1, clocks[0].Now(), maxOffset, int32(tc.Servers[0].NodeID()))
 
 	// Write to key A and key B in the writer transaction.
 	for _, key := range []roachpb.Key{keyA, keyB} {
@@ -673,7 +674,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	//
 	// NB: we use writerTxn.MinTimestamp instead of clocks[1].Now() so that a
 	// stray clock update doesn't influence the reader's read timestamp.
-	readerTxn := roachpb.MakeTransaction("test_reader", keyA, isolation.Serializable, 1, writerTxn.MinTimestamp, maxOffset, int32(tc.Servers[1].NodeID()))
+	readerTxn := roachpb.MakeTransaction("test_reader", keyA, 1, writerTxn.MinTimestamp, maxOffset, int32(tc.Servers[1].NodeID()))
 	require.True(t, readerTxn.ReadTimestamp.Less(writerTxn.WriteTimestamp))
 	require.False(t, readerTxn.GlobalUncertaintyLimit.Less(writerTxn.WriteTimestamp))
 
@@ -829,7 +830,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	now := clocks[1].Now()
 	maxOffset := clocks[1].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", keyB, isolation.Serializable, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", keyB, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()))
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -1016,8 +1017,8 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 
 		// Create two identical transactions. The first one will perform a read to a
 		// store before the merge, the second will only read after the merge.
-		txn := roachpb.MakeTransaction("txn1", keyA, isolation.Serializable, 1, now, maxOffset, instanceId)
-		txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, 1, now, maxOffset, instanceId)
+		txn := roachpb.MakeTransaction("txn1", keyA, 1, now, maxOffset, instanceId)
+		txn2 := roachpb.MakeTransaction("txn2", keyA, 1, now, maxOffset, instanceId)
 
 		// Simulate a read which will cause the observed time to be set to now
 		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), kvpb.Header{Txn: &txn}, getArgs(keyA))
@@ -1997,7 +1998,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds(), int32(tc.Servers[1].SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", keyA, 1 /* userPriority */, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[1].SQLInstanceID()))
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, tc.Servers[1].Clock().NowAsClockTimestamp())
 
@@ -2688,6 +2689,118 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
+func TestSystemZoneConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 98905)
+
+	// This test is relatively slow and resource intensive. When run under
+	// stressrace on a loaded machine (as in the nightly tests), sometimes the
+	// SucceedsSoon conditions below take longer than the allotted time (#25273).
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+	skip.UnderStress(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable LBS because when the scan is happening at the rate it's happening
+					// below, it's possible that one of the system ranges trigger a split.
+					DisableLoadBasedSplitting: true,
+				},
+			},
+			// This test was written for the gossip-backed SystemConfigSpan
+			// infrastructure.
+			DisableSpanConfigs: true,
+			// Scan like a bat out of hell to ensure replication and replica GC
+			// happen in a timely manner.
+			ScanInterval: 50 * time.Millisecond,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
+
+	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedUserRanges := 1
+	expectedSystemRanges -= expectedUserRanges
+	systemNumReplicas := int(*zonepb.DefaultSystemZoneConfig().NumReplicas)
+	userNumReplicas := int(*zonepb.DefaultZoneConfig().NumReplicas)
+	expectedReplicas := expectedSystemRanges*systemNumReplicas + expectedUserRanges*userNumReplicas
+	log.Infof(ctx, "TestSystemZoneConfig: expecting %d system ranges and %d user ranges",
+		expectedSystemRanges, expectedUserRanges)
+	log.Infof(ctx, "TestSystemZoneConfig: expected (%dx%d) + (%dx%d) = %d replicas total",
+		expectedSystemRanges, systemNumReplicas, expectedUserRanges, userNumReplicas, expectedReplicas)
+
+	waitForReplicas := func() error {
+		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
+		for _, s := range tc.Servers {
+			if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
+				if len(desc.Replicas().LearnerDescriptors()) > 0 {
+					return fmt.Errorf("descriptor contains learners: %v", desc)
+				}
+				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(&desc) {
+					return fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
+				}
+				replicas[desc.RangeID] = desc
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		var totalReplicas int
+		for _, desc := range replicas {
+			totalReplicas += len(desc.Replicas().VoterDescriptors())
+		}
+		if totalReplicas != expectedReplicas {
+			return fmt.Errorf("got %d voters, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
+		}
+		return nil
+	}
+
+	// Wait until we're down to the expected number of replicas. This is
+	// effectively waiting on replica GC to kick in to destroy any replicas that
+	// got removed during rebalancing of the initial ranges, since the testcluster
+	// waits until nothing is underreplicated but not until all rebalancing has
+	// settled down.
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: initial replication succeeded")
+
+	// Update the meta zone config to have more replicas and expect the number
+	// of replicas to go up accordingly after running all replicas through the
+	// replicate queue.
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", "num_replicas: 7")
+	expectedReplicas += 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of meta ranges succeeded")
+
+	// Do the same thing, but down-replicating the timeseries range.
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE timeseries", "num_replicas: 1")
+	expectedReplicas -= 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
+
+	// Up-replicate the system.jobs table to demonstrate that it is configured
+	// independently from the system database.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE system.jobs", "num_replicas: 7")
+	expectedReplicas += 2
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of jobs table succeeded")
+
+	// Finally, verify the system ranges. Note that in a new cluster there are
+	// two system ranges, which we have to take into account here.
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 7")
+	expectedReplicas += 4
+	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")
+}
+
 func TestClearRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2856,9 +2969,9 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		funcs.snapErr = func(*kvserverpb.SnapshotRequest_Header) error {
 			return errors.New("rejected")
 		}
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.StoreID(), &unreliableRaftHandler{
+		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
 			rangeID:                    repl0.GetRangeID(),
-			IncomingRaftMessageHandler: store2,
+			RaftMessageHandler:         store2,
 			unreliableRaftHandlerFuncs: funcs,
 		})
 
@@ -2889,7 +3002,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// Remove the partition. A snapshot to node 2 should follow. This snapshot
 		// will inform node 2 that it is the new leaseholder for the range. Node 2
 		// should act accordingly and update its internal state to reflect this.
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, store2)
+		tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, store2)
 		tc.WaitForValues(t, keyC, []int64{4, 4, 4})
 
 		// Attempt to write under the read on the new leaseholder. The batch
@@ -2991,9 +3104,9 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		funcs.snapErr = func(*kvserverpb.SnapshotRequest_Header) error {
 			return errors.New("rejected")
 		}
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.StoreID(), &unreliableRaftHandler{
+		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
 			rangeID:                    repl0.GetRangeID(),
-			IncomingRaftMessageHandler: store2,
+			RaftMessageHandler:         store2,
 			unreliableRaftHandlerFuncs: funcs,
 		})
 
@@ -3035,7 +3148,7 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		require.True(t, isRejectedErr, "%+v", transferErr)
 
 		// Remove the partition. A snapshot to node 2 should follow.
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, store2)
+		tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, store2)
 		tc.WaitForValues(t, keyC, []int64{4, 4, 4})
 
 		// Now that node 2 caught up on the log through a snapshot, we should be
@@ -3290,9 +3403,9 @@ func TestReplicaTombstone(t *testing.T) {
 		funcs.dropResp = func(*kvserverpb.RaftMessageResponse) bool {
 			return true
 		}
-		tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+		tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    desc.RangeID,
-			IncomingRaftMessageHandler: store,
+			RaftMessageHandler:         store,
 			unreliableRaftHandlerFuncs: funcs,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(1))
@@ -3346,14 +3459,14 @@ func TestReplicaTombstone(t *testing.T) {
 		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			return req.ToReplica.StoreID == store.StoreID()
 		}
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    desc.RangeID,
-			IncomingRaftMessageHandler: store,
+			RaftMessageHandler:         store,
 			unreliableRaftHandlerFuncs: raftFuncs,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		testutils.SucceedsSoon(t, func() error {
-			repl.MaybeUnquiesce()
+			repl.MaybeUnquiesceAndWakeLeader()
 			if len(sawTooOld) == 0 {
 				return errors.New("still haven't seen ReplicaTooOldError")
 			}
@@ -3390,9 +3503,9 @@ func TestReplicaTombstone(t *testing.T) {
 		// It will never find out it has been removed. We'll remove it
 		// with a manual replica GC.
 		store, _ := getFirstStoreReplica(t, tc.Server(2), key)
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-			rangeID:                    desc.RangeID,
-			IncomingRaftMessageHandler: store,
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:            desc.RangeID,
+			RaftMessageHandler: store,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		repl, err := store.GetReplica(desc.RangeID)
@@ -3429,9 +3542,9 @@ func TestReplicaTombstone(t *testing.T) {
 		rangeID := desc.RangeID
 		// Partition node 2 from all raft communication.
 		store, _ := getFirstStoreReplica(t, tc.Server(2), keyA)
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-			rangeID:                    desc.RangeID,
-			IncomingRaftMessageHandler: store,
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:            desc.RangeID,
+			RaftMessageHandler: store,
 		})
 
 		// We'll move the range from server 2 to 3 and merge key and keyA.
@@ -3510,9 +3623,9 @@ func TestReplicaTombstone(t *testing.T) {
 			waiter.blockSnapshot = true
 		}
 		setMinHeartbeat(repl.ReplicaID() + 1)
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-			rangeID:                    desc.RangeID,
-			IncomingRaftMessageHandler: store,
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+			rangeID:            desc.RangeID,
+			RaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool {
 					return true
@@ -3617,12 +3730,12 @@ func TestReplicaTombstone(t *testing.T) {
 		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
 		}
-		tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    lhsDesc.RangeID,
 			unreliableRaftHandlerFuncs: raftFuncs,
-			IncomingRaftMessageHandler: &unreliableRaftHandler{
+			RaftMessageHandler: &unreliableRaftHandler{
 				rangeID:                    rhsDesc.RangeID,
-				IncomingRaftMessageHandler: store,
+				RaftMessageHandler:         store,
 				unreliableRaftHandlerFuncs: raftFuncs,
 			},
 		})
@@ -3634,7 +3747,7 @@ func TestReplicaTombstone(t *testing.T) {
 			return nil
 		})
 		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, key))
-		var tombstone kvserverpb.RangeTombstone
+		var tombstone roachpb.RangeTombstone
 		testutils.SucceedsSoon(t, func() (err error) {
 			// One of the two other stores better be the raft leader eventually.
 			// We keep trying to send snapshots until one takes.
@@ -4933,6 +5046,26 @@ func TestRangeMigration(t *testing.T) {
 		t.Fatalf("expected migration interceptor to have been called")
 	}
 	assertVersion(endV)
+}
+
+func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Determine the node liveness range ID.
+	livenessRepl := store.LookupReplica(roachpb.RKey(keys.NodeLivenessPrefix))
+	livenessRangeID := livenessRepl.RangeID
+
+	// Assert that the node liveness range is prioritized.
+	priorityID := store.RaftSchedulerPriorityID()
+	require.Equal(t, livenessRangeID, priorityID)
 }
 
 func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {

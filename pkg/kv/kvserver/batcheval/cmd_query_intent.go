@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,8 +30,7 @@ func declareKeysQueryIntent(
 	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	req kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	// QueryIntent requests read the specified keys at the maximum timestamp in
@@ -47,7 +45,9 @@ func declareKeysQueryIntent(
 // happens during the timestamp cache update).
 //
 // QueryIntent returns an error if the intent is missing and its ErrorIfMissing
-// field is set to true.
+// field is set to true. This error is typically an IntentMissingError, but the
+// request is special-cased to return a SERIALIZABLE retry error if a transaction
+// queries its own intent and finds it has been pushed.
 func QueryIntent(
 	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
@@ -81,8 +81,8 @@ func QueryIntent(
 		return result.Result{}, err
 	}
 
-	reply.FoundIntent = false
-	reply.FoundUnpushedIntent = false
+	var curIntentPushed bool
+
 	if intent != nil {
 		// See comment on QueryIntentRequest.Txn for an explanation of this
 		// comparison.
@@ -93,12 +93,12 @@ func QueryIntent(
 			(args.Txn.Epoch == intent.Txn.Epoch) &&
 			(args.Txn.Sequence <= intent.Txn.Sequence)
 
+		// If we found a matching intent, check whether the intent was pushed
+		// past its expected timestamp.
 		if !reply.FoundIntent {
 			log.VEventf(ctx, 2, "intent mismatch requires - %v == %v and %v == %v and %v <= %v",
 				args.Txn.ID, intent.Txn.ID, args.Txn.Epoch, intent.Txn.Epoch, args.Txn.Sequence, intent.Txn.Sequence)
 		} else {
-			// If we found a matching intent, check whether the intent was pushed past
-			// its expected timestamp.
 			cmpTS := args.Txn.WriteTimestamp
 			if ownTxn {
 				// If the request is querying an intent for its own transaction, forward
@@ -106,25 +106,31 @@ func QueryIntent(
 				// in the batch header.
 				cmpTS.Forward(h.Txn.WriteTimestamp)
 			}
-			reply.FoundUnpushedIntent = intent.Txn.WriteTimestamp.LessEq(cmpTS)
-
-			if !reply.FoundUnpushedIntent {
+			if cmpTS.Less(intent.Txn.WriteTimestamp) {
+				// The intent matched but was pushed to a later timestamp. Consider a
+				// pushed intent a missing intent.
+				curIntentPushed = true
 				log.VEventf(ctx, 2, "found pushed intent")
+				reply.FoundIntent = false
+
 				// If the request was querying an intent in its own transaction, update
 				// the response transaction.
-				// TODO(nvanbenschoten): if this is necessary for correctness, say so.
-				// And then add a test to demonstrate that.
 				if ownTxn {
 					reply.Txn = h.Txn.Clone()
 					reply.Txn.WriteTimestamp.Forward(intent.Txn.WriteTimestamp)
 				}
 			}
 		}
-	} else {
-		log.VEventf(ctx, 2, "found no intent")
 	}
 
 	if !reply.FoundIntent && args.ErrorIfMissing {
+		if ownTxn && curIntentPushed {
+			// If the transaction's own intent was pushed, go ahead and return a
+			// TransactionRetryError immediately with an updated transaction proto.
+			// This is an optimization that can help the txn use refresh spans more
+			// effectively.
+			return result.Result{}, kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "intent pushed")
+		}
 		return result.Result{}, kvpb.NewIntentMissingError(args.Key, intent)
 	}
 	return result.Result{}, nil

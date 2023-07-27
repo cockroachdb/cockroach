@@ -80,11 +80,6 @@ message NotLeaseHolderError {
 message NodeUnavailableError {
 }
 
-// A NodeDecommissionedError is returned when trying to connect from or to a
-// peer that is known to have been decommissioned.
-message NodeDecommissionedError {
-}
-
 // An UnsupportedRequestError indicates that the recipient node
 // does not know how to handle the type of request received.
 message UnsupportedRequestError {
@@ -353,12 +348,17 @@ message WriteIntentError {
 
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
-// history. The write must instead be done at or later than actual
-// timestamp, which is the timestamp of the existing version+1.
+// history. The write is instead done at actual timestamp, which is
+// the timestamp of the existing version+1.
+//
+// If a blind write request (see IsBlindWrite) returns a WriteTooOld
+// error during evaluation (in pkg/kvserver/batcheval), it must also
+// complete its work and return a valid result. This allows callers to
+// optionally defer the WriteTooOldError until later in the transaction
+// by instead bumping the transaction's write timestamp, setting the
+// transaction's WriteTooOld flag, and dropping the error.
 message WriteTooOldError {
   optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  // TODO(nvanbenschoten): now that WriteTooOld errors no longer accompany
-  // successful writes, this name is confusing. Rename the field.
   optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
   // One of the keys at which this error was encountered. There's
   // no need to return new WriteTooOldErrors for each colliding key; the key
@@ -464,7 +464,7 @@ message UnhandledRetryableError {
 //
 // It contains the final form of the Transaction proto that should be used on
 // next attempts. After being produced by the TxnCoordSender, this error is
-// handled first by the kv.Txn, which uses the Transaction inside to update
+// handled first by the client.Txn, which uses the Transaction inside to update
 // its state, and then passed along to SQL in a pErr (through the
 // client.Sender() interface).
 message TransactionRetryWithProtoRefreshError {
@@ -494,7 +494,7 @@ message TransactionRetryWithProtoRefreshError {
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
 // transaction that already received an error from a previous request. Once that
-// happens, kv.Txn rejects future requests.
+// happens, client.Txn rejects future requests.
 message TxnAlreadyEncounteredErrorError{
   // prev_error is the message from the error that the txn encountered
   // previously.
@@ -564,10 +564,6 @@ message RangeFeedRetryError {
     REASON_SLOW_CONSUMER = 5;
     // No leaseholder exists or could be created, so closed timestamps won't be emitted.
     REASON_NO_LEASEHOLDER = 6;
-    // Replica decided that rangefeed is no longer used and closed it. This
-    // should not happen unless it was explicitly requested by client and in
-    // that case client is free not to retry.
-    REASON_RANGEFEED_CLOSED = 7;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }

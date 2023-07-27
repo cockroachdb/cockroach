@@ -534,7 +534,7 @@ func ValidateTTLExpressionDoesNotDependOnColumn(
 // ValidateTTLExpirationExpression verifies that the ttl_expiration_expression,
 // if any, is valid according to the following rules:
 // * type-checks as a TIMESTAMPTZ.
-// * is not volatile.
+// * is an immutable expression.
 // * references valid columns in the table.
 func ValidateTTLExpirationExpression(
 	ctx context.Context,
@@ -565,13 +565,6 @@ func ValidateTTLExpirationExpression(
 		)
 	}
 
-	// ttl_expiration_expression requires a maximum volatility of stable to
-	// handle one of its main use cases: timestamptz + interval.
-	// Altering config while the job is running can affect some (instead of all)
-	// SELECT and DELETE statements because the statements in the job are NOT run
-	// inside a single transaction.
-	// Only config changes can affect the results of Stable functions in the TTL
-	// job because session data cannot be modified.
 	if _, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		tableDesc,
@@ -579,7 +572,7 @@ func ValidateTTLExpirationExpression(
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
 		semaCtx,
-		volatility.Stable,
+		volatility.Immutable,
 		tableName,
 		version,
 	); err != nil {

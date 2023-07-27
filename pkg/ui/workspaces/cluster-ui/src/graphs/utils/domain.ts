@@ -16,6 +16,7 @@ import {
   ComputeByteScale,
   ComputeDurationScale,
   DATE_WITH_SECONDS_FORMAT_24_TZ,
+  DurationFitScale,
   FormatWithTimezone,
 } from "src/util/format";
 
@@ -222,20 +223,15 @@ export function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
-export function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
-  const extentScales = extent.map(e => ComputeDurationScale(e));
+function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
+  const scale = ComputeDurationScale(extent[1]);
+  const prefixFactor = scale.value;
 
-  const axisDomain = computeAxisDomain(extent, extentScales[1].value);
-  axisDomain.label = extentScales[1].units;
+  const axisDomain = computeAxisDomain(extent, prefixFactor);
 
-  axisDomain.guideFormat = (nanoseconds: number) => {
-    if (!nanoseconds) {
-      return `0.00 ${extentScales[0].units}`;
-    }
-    const scale = ComputeDurationScale(nanoseconds);
-    return `${(nanoseconds / scale.value).toFixed(2)} ${scale.units}`;
-  };
+  axisDomain.label = scale.units;
 
+  axisDomain.guideFormat = DurationFitScale(scale.units);
   return axisDomain;
 }
 

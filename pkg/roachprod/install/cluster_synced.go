@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -544,8 +543,6 @@ func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) ([]NodeSta
 vers=$(` + binary + ` version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
   echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
-elif [ -n "${vers}" ]; then
-  echo "not-running cockroach-${vers}"
 else
   echo ${out}
 fi
@@ -562,12 +559,8 @@ fi
 		}
 
 		msg := strings.TrimSpace(string(res.CombinedOut))
-		if msg == "" || strings.HasPrefix(msg, "not-running") {
+		if msg == "" {
 			results[i] = NodeStatus{Running: false}
-			if msg != "" {
-				info := strings.Split(msg, " ")
-				results[i].Version = info[1]
-			}
 			return res, nil
 		}
 		info := strings.Split(msg, " ")
@@ -2370,18 +2363,9 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 // which we do want to be able to retry.
 func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	args := []string{
-		// Enable recursive copies, compression.
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "ConnectTimeout=10",
-	}
-	if runtime.GOOS == "darwin" {
-		// SSH to src node and excute SCP there using agent-forwarding,
-		// as these are not the defaults on MacOS.
-		// TODO(sarkesian): Rather than checking Darwin, it would be preferable
-		// to check the output of `ssh-V` and check the version to see what flags
-		// are supported.
-		args = append(args, "-R", "-A")
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
@@ -2445,9 +2429,6 @@ func WithDisplay(display string) ParallelOption {
 // Parallel runs a user-defined function across the nodes in the
 // cluster. If any of the commands fail, Parallel will log an error
 // and exit the program.
-//
-// A user may also pass in a RunRetryOpts to control how the function is retried
-// in the case of a failure.
 //
 // See ParallelE for more information.
 func (c *SyncedCluster) Parallel(

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -77,11 +76,7 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
-	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
-		Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: requestFilter,
-		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
@@ -101,17 +96,9 @@ func newRowLevelTTLTestJobTestHelper(
 	if numNodes > 1 {
 		replicationMode = base.ReplicationManual
 	}
-
-	var defaultTestTenant base.DefaultTestTenantOptions
-	// Disable the default test tenant when running multi-tenant tests.
-	if testMultiTenant {
-		defaultTestTenant = base.TODOTestTenantDisabled
-	}
-
 	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: defaultTestTenant,
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
 		},
@@ -156,7 +143,7 @@ func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 	require.NoError(t, h.executeSchedules())
 
 	query := fmt.Sprintf(
-		`SELECT status, error FROM [SHOW JOBS]
+		`SELECT status, error FROM [SHOW JOBS] 
 		WHERE job_id IN (
 			SELECT id FROM %s
 			WHERE created_by_id IN (SELECT schedule_id FROM %s WHERE executor_type = 'scheduled-row-level-ttl-executor')
@@ -593,10 +580,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	var indexableTyps []*types.T
 	for _, typ := range types.Scalar {
 		// TODO(#76419): DateFamily has a broken `-infinity` case.
-		// TODO(#99432): JsonFamily has broken cases. This is because the test is wrapping JSON
-		//   objects in multiple single quotes which causes parsing errors.
-		if colinfo.ColumnTypeIsIndexable(typ) && typ.Family() != types.DateFamily &&
-			typ.Family() != types.JsonFamily {
+		if colinfo.ColumnTypeIsIndexable(typ) && typ.Family() != types.DateFamily {
 			indexableTyps = append(indexableTyps, typ)
 		}
 	}
@@ -678,18 +662,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	"quote-kw-col" TIMESTAMPTZ,
 	text TEXT,
 	PRIMARY KEY (id, other_col, "quote-kw-col")
-) WITH (ttl_expire_after = '30 days')`,
-			numExpiredRows:    1001,
-			numNonExpiredRows: 5,
-		},
-		{
-			desc: "three column pk DESC",
-			createTable: `CREATE TABLE tbl (
-	id UUID DEFAULT gen_random_uuid(),
-	other_col INT,
-	"quote-kw-col" TIMESTAMPTZ,
-	text TEXT,
-	PRIMARY KEY (id, other_col DESC, "quote-kw-col")
 ) WITH (ttl_expire_after = '30 days')`,
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,

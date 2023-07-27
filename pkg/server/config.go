@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
@@ -56,14 +55,14 @@ import (
 
 // Context defaults.
 const (
-	// DefaultCacheSize is the default size of the Pebble cache. We default the
-	// cache size to 128MiB and SQL memory pool size to 256 MiB. Larger values
+	// DefaultCacheSize is the default size of the RocksDB and Pebble caches. We
+	// default the cache size and SQL memory pool size to 128 MiB. Larger values
 	// might provide significantly better performance, but we're not sure what
 	// type of system we're running on (development or production or some shared
 	// environment). Production users should almost certainly override these
 	// settings and we'll warn in the logs about doing so.
-	DefaultCacheSize         = 128 << 20 // 128 MiB
-	defaultSQLMemoryPoolSize = 256 << 20 // 256 MiB
+	DefaultCacheSize         = 128 << 20 // 128 MB
+	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
 	defaultScanInterval      = 10 * time.Minute
 	defaultScanMinIdleTime   = 10 * time.Millisecond
 	defaultScanMaxIdleTime   = 1 * time.Second
@@ -537,10 +536,6 @@ type LocalKVServerInfo struct {
 	InternalServer     kvpb.InternalServer
 	ServerInterceptors rpc.ServerInterceptorInfo
 	Tracer             *tracing.Tracer
-
-	// SameProcessCapabilityAuthorizer is the tenant capability authorizer to
-	// use for servers running in the same process as the KV node.
-	SameProcessCapabilityAuthorizer tenantcapabilities.Authorizer
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.

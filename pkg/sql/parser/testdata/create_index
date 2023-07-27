@@ -452,11 +452,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 NOT VISIBLE
 CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) NOT VISIBLE -- fully parenthesized
 CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > _ NOT VISIBLE -- literals removed
 CREATE UNIQUE INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 NOT VISIBLE -- identifiers removed
-
-parse
-CREATE INDEX a ON b (c) VISIBILITY 0.2
-----
-CREATE INDEX a ON b (c) VISIBILITY 0.20 -- normalized!
-CREATE INDEX a ON b (c) VISIBILITY 0.20 -- fully parenthesized
-CREATE INDEX a ON b (c) VISIBILITY 0.20 -- literals removed
-CREATE INDEX _ ON _ (_) VISIBILITY 0.20 -- identifiers removed

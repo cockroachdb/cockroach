@@ -24,12 +24,9 @@ go_proto_library(
 
 go_library(
     name = "kvflowcontrolpb",
-    srcs = ["kvflowcontrol.go"],
+    srcs = ["raft_log_position.go"],
     embed = [":kvflowcontrolpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/admission/admissionpb",
-        "@com_github_cockroachdb_redact//:redact",
-    ],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
 )

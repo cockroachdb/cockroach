@@ -217,6 +217,7 @@ func (s *PreServeConnHandler) SendRoutingError(
 		`Double check your "-ccluster=" connection option or your "cluster:" database name prefix.`)
 
 	_ = s.sendErr(ctx, s.st, conn, err)
+	_ = conn.Close()
 }
 
 // sendErr sends errors to the client during the connection startup
@@ -234,6 +235,7 @@ func (s *PreServeConnHandler) sendErr(
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
 	_ /* err */ = w.writeErr(ctx, err, conn)
+	_ = conn.Close()
 	return err
 }
 
@@ -322,7 +324,7 @@ func (s *PreServeConnHandler) PreServe(
 	case versionCancel:
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		if ok, key := readCancelKey(ctx, &buf); ok {
+		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
 			return conn, PreServeStatus{
 				State:     PreServeCancel,
 				CancelKey: key,
@@ -372,7 +374,7 @@ func (s *PreServeConnHandler) PreServe(
 		// Yet, we've found clients in the wild that send the cancel
 		// after the TLS handshake, for example at
 		// https://github.com/cockroachlabs/support/issues/600.
-		if ok, key := readCancelKey(ctx, &buf); ok {
+		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
 			return conn, PreServeStatus{
 				State:     PreServeCancel,
 				CancelKey: key,

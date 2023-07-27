@@ -167,7 +167,7 @@ func findBestExistingIndexToReplace(
 			// Skip any partial indexes.
 			continue
 		}
-		if existingIndex.GetInvisibility() != 0.0 {
+		if existingIndex.IsNotVisible() {
 			existingIndexAllCols := getAllCols(existingIndex)
 			if actuallyScannedCols.Difference(existingIndexAllCols).Empty() {
 				// There exists an invisible index containing every explicit column in

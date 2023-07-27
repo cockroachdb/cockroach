@@ -34,9 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -588,8 +586,8 @@ func mergeCheckingTimestampCaches(
 	// Simulate a txn abort on the RHS from a node with a newer clock. Because
 	// the transaction record for the pushee was not yet written, this will bump
 	// the timestamp cache to record the abort.
-	pushee := roachpb.MakeTransaction("pushee", rhsKey, isolation.Serializable, roachpb.MinUserPriority, readTS, 0, 0)
-	pusher := roachpb.MakeTransaction("pusher", rhsKey, isolation.Serializable, roachpb.MaxUserPriority, readTS, 0, 0)
+	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0, 0)
+	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0, 0)
 	ba = &kvpb.BatchRequest{}
 	ba.Timestamp = readTS.Next()
 	ba.RangeID = rhsDesc.RangeID
@@ -665,7 +663,7 @@ func mergeCheckingTimestampCaches(
 		}
 
 		// Applied to leaseholder after the partition heals.
-		var truncIndex kvpb.RaftIndex
+		var truncIndex uint64
 		restoredLeaseholderFuncs := noopRaftHandlerFuncs()
 		restoredLeaseholderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Make sure that even going forward no MsgApp for what we just
@@ -676,7 +674,7 @@ func mergeCheckingTimestampCaches(
 			//
 			// NB: the Index on the message is the log index that _precedes_ any of the
 			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-			return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < truncIndex
+			return req.Message.Type == raftpb.MsgApp && req.Message.Index < truncIndex
 		}
 
 		// Because we enter a split leader-leaseholder state, none of the
@@ -699,9 +697,9 @@ func mergeCheckingTimestampCaches(
 				} else {
 					funcs = partitionedLeaderFuncs
 				}
-				tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(s.StoreID(), &unreliableRaftHandler{
+				tc.Servers[i].RaftTransport().Listen(s.StoreID(), &unreliableRaftHandler{
 					rangeID:                    lhsDesc.GetRangeID(),
-					IncomingRaftMessageHandler: s,
+					RaftMessageHandler:         s,
 					unreliableRaftHandlerFuncs: funcs,
 				})
 			}
@@ -709,7 +707,7 @@ func mergeCheckingTimestampCaches(
 			// Make sure the LHS range in uniquiesced so that it elects a new
 			// Raft leader after the partition is established.
 			for _, r := range lhsRepls {
-				r.MaybeUnquiesce()
+				r.MaybeUnquiesceAndWakeLeader()
 			}
 
 			// Issue an increment on the range. The leaseholder should evaluate
@@ -731,13 +729,13 @@ func mergeCheckingTimestampCaches(
 			// largest log index on the leader, or it will panic. So we choose
 			// the minimum of these two and just pick the smallest "last index"
 			// in the range, which does the trick.
-			min := func(a, b kvpb.RaftIndex) kvpb.RaftIndex {
+			min := func(a, b uint64) uint64 {
 				if a < b {
 					return a
 				}
 				return b
 			}
-			minLastIndex := kvpb.RaftIndex(math.MaxUint64)
+			minLastIndex := uint64(math.MaxUint64)
 			for _, r := range lhsRepls {
 				lastIndex := r.GetLastIndex()
 				minLastIndex = min(minLastIndex, lastIndex)
@@ -801,17 +799,17 @@ func mergeCheckingTimestampCaches(
 		// Remove the partition. A snapshot to the leaseholder should follow.
 		// This snapshot will inform the leaseholder about the range merge.
 		for i, s := range lhsStores {
-			var h kvserver.IncomingRaftMessageHandler
+			var h kvserver.RaftMessageHandler
 			if i == 0 {
 				h = &unreliableRaftHandler{
 					rangeID:                    lhsDesc.GetRangeID(),
-					IncomingRaftMessageHandler: s,
+					RaftMessageHandler:         s,
 					unreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
 				}
 			} else {
 				h = s
 			}
-			tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(s.StoreID(), h)
+			tc.Servers[i].RaftTransport().Listen(s.StoreID(), h)
 		}
 		close(filterMu.blockHBAndGCs)
 		filterMu.Lock()
@@ -2475,14 +2473,10 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(tc.Servers[0].Gossip())),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
-		kvflowdispatch.NewDummyDispatch(),
-		kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
-		nil, /* knobs */
 	)
 	errChan := errorChannelTestHandler(make(chan *kvpb.Error, 1))
-	transport.ListenIncomingRaftMessages(store0.StoreID(), errChan)
-	transport.ListenIncomingRaftMessages(store1.StoreID(), errChan)
+	transport.Listen(store0.StoreID(), errChan)
+	transport.Listen(store1.StoreID(), errChan)
 
 	sendHeartbeat := func(
 		rangeID roachpb.RangeID,
@@ -2543,7 +2537,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 
 	// Be extra paranoid and verify the exact value of the replica tombstone.
 	checkTombstone := func(eng storage.Engine) {
-		var rhsTombstone kvserverpb.RangeTombstone
+		var rhsTombstone roachpb.RangeTombstone
 		rhsTombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
 		ok, err = storage.MVCCGetProto(ctx, eng, rhsTombstoneKey, hlc.Timestamp{},
 			&rhsTombstone, storage.MVCCGetOptions{})
@@ -2736,9 +2730,9 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 
 	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
 	// aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    lhsDesc.RangeID,
-		IncomingRaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            lhsDesc.RangeID,
+		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				return true
@@ -3017,9 +3011,9 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 
 	// Start dropping all Raft traffic to the LHS replica on store2 so that it
 	// won't be aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    lhsDesc.RangeID,
-		IncomingRaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            lhsDesc.RangeID,
+		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(*kvserverpb.RaftMessageRequest) bool {
 				return true
@@ -3219,7 +3213,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 type slowSnapRaftHandler struct {
 	rangeID roachpb.RangeID
 	waitCh  chan struct{}
-	kvserver.IncomingRaftMessageHandler
+	kvserver.RaftMessageHandler
 	syncutil.Mutex
 }
 
@@ -3245,7 +3239,7 @@ func (h *slowSnapRaftHandler) HandleSnapshot(
 			<-waitCh
 		}
 	}
-	return h.IncomingRaftMessageHandler.HandleSnapshot(ctx, header, respStream)
+	return h.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // TestStoreRangeMergeUninitializedLHSFollower reproduces a rare bug in which a
@@ -3326,15 +3320,15 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// of range 1 never processes the split trigger, which would create an
 	// initialized replica of A.
 	unreliableHandler := &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
-		IncomingRaftMessageHandler: store2,
+		rangeID:            desc.RangeID,
+		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
 	}
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, unreliableHandler)
+	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, unreliableHandler)
 
 	// Perform the split of A, now that store2 won't be able to initialize its
 	// replica of A.
@@ -3343,12 +3337,12 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// Wedge a Raft snapshot that's destined for A. This allows us to capture a
 	// pre-merge Raft snapshot, which we'll let loose after the merge commits.
 	slowSnapHandler := &slowSnapRaftHandler{
-		rangeID:                    aRangeID,
-		waitCh:                     make(chan struct{}),
-		IncomingRaftMessageHandler: unreliableHandler,
+		rangeID:            aRangeID,
+		waitCh:             make(chan struct{}),
+		RaftMessageHandler: unreliableHandler,
 	}
 	defer slowSnapHandler.unblock()
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, slowSnapHandler)
+	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, slowSnapHandler)
 
 	// Remove the replica of range 1 on store2. If we were to leave it in place,
 	// store2 would refuse to GC its replica of C after the merge commits, because
@@ -3891,7 +3885,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
-			tombstoneValue := &kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32}
+			tombstoneValue := &roachpb.RangeTombstone{NextReplicaID: math.MaxInt32}
 			if err := storage.MVCCBlindPutProto(
 				context.Background(), &sst, nil, tombstoneKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, tombstoneValue, nil,
 			); err != nil {
@@ -4007,9 +4001,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
 
 	// Start dropping all Raft traffic to the first range on store2.
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    aRepl0.RangeID,
-		IncomingRaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            aRepl0.RangeID,
+		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
@@ -4031,7 +4025,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	}
 
 	// Truncate the logs of the LHS.
-	index := func() kvpb.RaftIndex {
+	index := func() uint64 {
 		repl := store0.LookupReplica(roachpb.RKey(keyA))
 		index := repl.GetLastIndex()
 		truncArgs := &kvpb.TruncateLogRequest{
@@ -4050,9 +4044,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Restore Raft traffic to the LHS on store2.
 	log.Infof(ctx, "restored traffic to store 2")
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    aRepl0.RangeID,
-		IncomingRaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            aRepl0.RangeID,
+		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				// Make sure that even going forward no MsgApp for what we just
@@ -4063,7 +4057,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				//
 				// NB: the Index on the message is the log index that _precedes_ any of the
 				// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+				return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 			},
 			// Don't drop heartbeats or responses.
 			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
@@ -4722,6 +4716,10 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 		t.Run(subtest.name, func(t *testing.T) {
 			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, dbName, "kv", numNodes)
 			defer tc.Stopper().Stop(ctx)
+			// We're controlling merge queue operation via
+			// `store.SetMergeQueueActive`, so enable the cluster setting here.
+			_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled=true`)
+			require.NoError(t, err)
 
 			store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(1)
 			require.Nil(t, err)
@@ -4809,7 +4807,7 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 			1: {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						ReceiveSnapshot: func(_ context.Context, header *kvserverpb.SnapshotRequest_Header) error {
+						ReceiveSnapshot: func(header *kvserverpb.SnapshotRequest_Header) error {
 							val := delaySnapshotTrap.Load()
 							if val != nil {
 								fn := val.(func() error)
@@ -4953,7 +4951,8 @@ func sendWithTxn(
 	maxOffset time.Duration,
 	args kvpb.Request,
 ) error {
-	txn := roachpb.MakeTransaction("test txn", desc.StartKey.AsRawKey(), 0, 0, ts, maxOffset.Nanoseconds(), 0)
+	txn := roachpb.MakeTransaction("test txn", desc.StartKey.AsRawKey(),
+		0, ts, maxOffset.Nanoseconds(), 0)
 	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), kvpb.Header{Txn: &txn}, args)
 	return pErr.GoError()
 }

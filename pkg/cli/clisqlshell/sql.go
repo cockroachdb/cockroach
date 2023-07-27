@@ -131,10 +131,10 @@ Commands specific to the demo shell (EXPERIMENTAL):
   \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
 `
 
-	defaultPromptPattern = "%n@%M:%>/%C%/%x>"
+	defaultPromptPattern = "%n@%M/%C%/%x>"
 
 	// debugPromptPattern avoids substitution patterns that require a db roundtrip.
-	debugPromptPattern = "%n@%M:%> %C>"
+	debugPromptPattern = "%n@%M %C>"
 )
 
 // cliState defines the current state of the CLI during
@@ -321,9 +321,7 @@ func (c *cliState) addHistory(line string) {
 }
 
 func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
-	return c.cliError(nextState,
-		errors.WithHint(errors.Newf("invalid syntax: %s", c.lastInputLine),
-			`Try \? for help.`))
+	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
 }
 
 // inCopy implements the sqlShell interface (to support the editor).
@@ -335,23 +333,26 @@ func (c *cliState) resetCopy() {
 	c.copyFromState = nil
 }
 
-func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
-	return c.cliError(nextState, errors.Newf("cannot change option during multi-line editing: %s", opt))
+func (c *cliState) invalidSyntaxf(
+	nextState cliStateEnum, format string, args ...interface{},
+) cliStateEnum {
+	fmt.Fprint(c.iCtx.stderr, "invalid syntax: ")
+	fmt.Fprintf(c.iCtx.stderr, format, args...)
+	fmt.Fprintln(c.iCtx.stderr)
+	c.exitErr = errInvalidSyntax
+	return nextState
 }
 
-func (c *cliState) cliError(nextState cliStateEnum, err error) cliStateEnum {
-	c.exitErr = err
-	if !c.singleStatement {
-		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-	}
-	if c.iCtx.errExit {
-		return cliStop
-	}
+func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
+	c.exitErr = errors.Newf("cannot change option during multi-line editing: %s\n", opt)
+	fmt.Fprintln(c.iCtx.stderr, c.exitErr)
 	return nextState
 }
 
 func (c *cliState) internalServerError(nextState cliStateEnum, err error) cliStateEnum {
-	return c.cliError(nextState, errors.Wrap(err, "internal server error"))
+	fmt.Fprintf(c.iCtx.stderr, "internal server error: %v\n", err)
+	c.exitErr = err
+	return nextState
 }
 
 var options = map[string]struct {
@@ -408,7 +409,7 @@ var options = map[string]struct {
 		display: func(c *cliState) string { return strconv.Itoa(c.sqlExecCtx.TableBorderMode) },
 	},
 	`display_format`: {
-		description:               fmt.Sprintf("the output format for tabular data (%s)", clisqlexec.TableFormatHelp),
+		description:               "the output format for tabular data (table, csv, tsv, html, ndjson, sql, records, raw)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
@@ -530,7 +531,7 @@ var options = map[string]struct {
 		deprecated:                true,
 	},
 	`prompt1`: {
-		description:               "prompt string to use before each command (expansions: %M full host, %m host, %> port number, %n user, %/ database, %x txn status, %C logical cluster)",
+		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
@@ -556,44 +557,32 @@ var optionNames = func() []string {
 	return names
 }()
 
-func getSetArgs(args []string) (ok bool, option string, hasValue bool, value string) {
-	if len(args) == 0 {
-		// Used in testing only.
+var setArgsRe = regexp.MustCompile(`^\s*` + // zero or more leading space.
+	`(?P<option>(?:[a-zA-Z_.0-9]|-)+)` + // 1 or more non-space option characters.
+	`(?:` +
+	`\s*(?:=\s*|\s+)` + // separator: either some spaces, or an equal sign surrounded by optional spaces.
+	`(?P<value>` +
+	`"(?:[^"]|\\.)*"` + // value is either a double-quoted string, which might be empty; or
+	`|` +
+	`[^\s"]+` + // value may be a string of non-space, non-quote characters.
+	`))?` + // value, as a whole, is optional.
+	`\s*$`, // either a standalone option or the value can be followed by optional spaces.
+)
+
+func getSetArgs(sargs string) (ok bool, option string, hasValue bool, value string) {
+	m := setArgsRe.FindStringSubmatch(sargs)
+	if m == nil {
 		return false, "", false, ""
 	}
-
-	if strings.Contains(args[0], "=") {
-		// Syntax: a=b, a= b.
-		parts := strings.SplitN(args[0], "=", 2)
-		args[0] = parts[0]
-		if len(args) == 1 {
-			args = append(args, "")
-		}
-		args[1] = parts[1] + args[1]
-	} else if len(args) >= 2 && strings.HasPrefix(args[1], "=") {
-		// Syntax: a =b, a = b.
-		if len(args) == 2 {
-			args = append(args, "")
-		}
-		args[2] = args[1][1:] + args[2]
-		copy(args[1:], args[2:])
-		args = args[:len(args)-1]
+	option = m[1]
+	if len(m) == 2 || m[2] == "" {
+		return true, option, false, ""
 	}
-
-	if len(args) == 1 {
-		return true, args[0], false, ""
-	}
-
-	// This is the same behavior as in postgres: multiple arguments
-	// in set are concatenated together to form the value string.
-	// To introduce spaces, use quotes.
-	return true, args[0], true, strings.Join(args[1:], "")
+	return true, option, true, m[2]
 }
 
 // handleSet supports the \set client-side command.
-func (c *cliState) handleSet(
-	line string, args []string, nextState, errState cliStateEnum,
-) cliStateEnum {
+func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) == 0 {
 		optData := make([][]string, 0, len(options))
 		for _, n := range optionNames {
@@ -612,14 +601,20 @@ func (c *cliState) handleSet(
 		return nextState
 	}
 
-	ok, optName, hasValue, val := getSetArgs(args)
+	// For \set, we're not trusting the default field separator which
+	// simply splits at spaces, because it doesn't help us handle
+	// "a=b", "a = b", "a b" and "a =b" effectively.
+	// Regular expressions to the rescue.
+	sargs := strings.Join(args, " ")
+
+	ok, optName, hasValue, val := getSetArgs(sargs)
 	if !ok {
 		return c.invalidSyntax(errState)
 	}
 
 	opt, ok := options[optName]
 	if !ok {
-		return c.cliError(errState, errors.Newf("unknown variable name: %q", optName))
+		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, optName)
@@ -649,7 +644,9 @@ func (c *cliState) handleSet(
 	}
 
 	if err != nil {
-		return c.cliError(errState, errors.Wrapf(err, "%s", line))
+		fmt.Fprintf(c.iCtx.stderr, "\\set %s: %v\n", sargs, err)
+		c.exitErr = err
+		return errState
 	}
 
 	return nextState
@@ -662,13 +659,15 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	}
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.cliError(errState, errors.Newf("unknown variable name: %q", args[0]))
+		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
 	}
 	if err := opt.reset(c); err != nil {
-		return c.cliError(errState, errors.Wrapf(err, "\\unset %s", args[0]))
+		fmt.Fprintf(c.iCtx.stderr, "\\unset %s: %v\n", args[0], err)
+		c.exitErr = err
+		return errState
 	}
 	return nextState
 }
@@ -682,7 +681,7 @@ func isEndOfStatement(lastTok int) bool {
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
 	if c.sqlCtx.DemoCluster == nil {
-		return c.cliError(errState, errors.New(`\demo can only be run with cockroach demo`))
+		return c.invalidSyntaxf(errState, `\demo can only be run with cockroach demo`)
 	}
 
 	// The \demo command has one of three patterns:
@@ -765,8 +764,10 @@ func (c *cliState) handleDemoNodeCommands(
 ) cliStateEnum {
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
-		return c.cliError(errState,
-			errors.Wrapf(err, "invalid syntax: %q is not a valid node ID", cmd[1]),
+		return c.invalidSyntaxf(
+			errState,
+			"%s",
+			errors.Wrapf(err, "%q is not a valid node ID", cmd[1]),
 		)
 	}
 
@@ -808,9 +809,10 @@ func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cl
 	if helpText != "" {
 		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		return c.cliError(errState, errors.WithHint(
-			errors.Newf("no help available for %q", command),
-			`Try \h with no argument to see available help.`))
+		fmt.Fprintf(c.iCtx.stderr,
+			"no help available for %q.\nTry \\h with no argument to see available help.\n", command)
+		c.exitErr = errors.New("no help available")
+		return errState
 	}
 	return nextState
 }
@@ -822,9 +824,10 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 	if helpText != "" {
 		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		return c.cliError(errState, errors.WithHint(
-			errors.Newf("no help available for %q", funcName),
-			`Try \hf with no argument to see available help.`))
+		fmt.Fprintf(c.iCtx.stderr,
+			"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
+		c.exitErr = errors.New("no help available")
+		return errState
 	}
 	return nextState
 }
@@ -860,7 +863,9 @@ func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliS
 
 	cmdOut, err := c.execSyscmd(command)
 	if err != nil {
-		return c.cliError(errState, errors.Wrap(err, "command failed"))
+		fmt.Fprintf(c.iCtx.stderr, "command failed: %s\n", err)
+		c.exitErr = err
+		return errState
 	}
 
 	fmt.Fprint(c.iCtx.stdout, cmdOut)
@@ -878,7 +883,9 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 
 	cmdOut, err := c.execSyscmd(command)
 	if err != nil {
-		return c.cliError(errState, errors.Wrap(err, "command failed"))
+		fmt.Fprintf(c.iCtx.stderr, "command failed: %s\n", err)
+		c.exitErr = err
+		return errState
 	}
 
 	c.lastInputLine = cmdOut
@@ -971,92 +978,31 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		}
 
 		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
-			// See:
-			// https://www.postgresql.org/docs/15/app-psql.html#APP-PSQL-PROMPTING
 			switch m {
 			case "%M":
-				// "The full host name (with domain name) of the database
-				// server, or [local] if the connection is over a Unix domain
-				// socket, or [local:/dir/name], if the Unix domain socket is
-				// not at the compiled in default location."
-				net, host, _ := parsedURL.GetNetworking()
-				switch net {
-				case pgurl.ProtoTCP:
-					return host
-				case pgurl.ProtoUnix:
-					// We do not have "compiled-in default location" in
-					// CockroachDB so the location is always explicit.
-					return fmt.Sprintf("[local:%s]", host)
-				default:
-					// unreachable
-					return ""
-				}
-
+				_, host, port := parsedURL.GetNetworking()
+				return host + ":" + port // server:port
 			case "%m":
-				// "The host name of the database server, truncated at the
-				// first dot, or [local] if the connection is over a Unix
-				// domain socket."
-				net, host, _ := parsedURL.GetNetworking()
-				switch net {
-				case pgurl.ProtoTCP:
-					return strings.SplitN(host, ".", 2)[0]
-				case pgurl.ProtoUnix:
-					return "[local]"
-				default:
-					// unreachable
-					return ""
-				}
-
+				_, host, _ := parsedURL.GetNetworking()
+				return host
 			case "%>":
-				// "The port number at which the database server is listening."
 				_, _, port := parsedURL.GetNetworking()
 				return port
-
-			case "%n":
-				// "The database session user name."
-				//
-				// TODO(sql): in psql this is updated based on the current user
-				// in the session set via SET SESSION AUTHORIZATION.
-				// See: https://github.com/cockroachdb/cockroach/issues/105136
+			case "%n": // user name.
 				return userName
-
-			case "%/":
-				// "The name of the current database."
+			case "%/": // database name.
 				return dbName
-
-			case "%x":
-				// "Transaction status:..."
-				// Note: the specific string here is incompatible with psql.
-				// For example we use "OPEN" instead of '*". This was an extremely
-				// early decision in the SQL shell's history.
+			case "%x": // txn status.
 				return c.lastKnownTxnStatus
-
 			case "%%":
 				return "%"
-
 			case "%C":
-				// CockroachDB extension: the logical cluster name.
 				return logicalCluster
-
 			default:
-				// Not implemented:
-				// %~: "Like %/, but the output is ~ (tilde) if the database is your default database."
-				//     CockroachDB does not have per-user default databases (yet).
-				// %#: "If the session user is a database superuser, then a #, otherwise a >."
-				//     The shell does not know how to determine this yet. See: #105136
-				// %p: "The process ID of the backend currently connected to."
-				//     CockroachDB does not have "backend process IDs" like PostgreSQL.
-				// %R: continuation character
-				//     The mechanism for continuation is handled internally by the input editor.
-				// %l: "The line number inside the current statement, starting from 1."
-				//     Lines are handled internally by the input editor.
-				// %w: "Whitespace of the same width as the most recent output of PROMPT1."
-				//     The prompt alignment for multi-line edits is handled internally by the input editor.
-				// %digits: "Character with given octal code."
-				//     This can also be done via `\set prompt1 '\NNN'`
 				err = fmt.Errorf("unrecognized format code in prompt: %q", m)
 				return ""
 			}
+
 		})
 		if err != nil {
 			c.fullPrompt = err.Error()
@@ -1222,11 +1168,14 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 				c.partialStmtsLen = 0
 				c.useContinuePrompt = false
 			}()
-			if err := errors.CombineErrors(
+			c.exitErr = errors.CombineErrors(
 				pgerror.Newf(pgcode.QueryCanceled, "COPY canceled by user"),
 				c.copyFromState.Cancel(),
-			); err != nil {
-				_ = c.cliError(cliRefreshPrompt, err)
+			)
+			if c.exitErr != nil {
+				if !c.singleStatement {
+					clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+				}
 			}
 			return cliRefreshPrompt
 		}
@@ -1273,7 +1222,9 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 
 	default:
 		// Other errors terminate the shell.
-		return c.cliError(cliStop, errors.Wrap(err, "input error"))
+		fmt.Fprintf(c.iCtx.stderr, "input error: %s\n", err)
+		c.exitErr = err
+		return cliStop
 	}
 
 	c.lastInputLine = l
@@ -1341,9 +1292,13 @@ func (c *cliState) setupChangefeedOutput() (undo func(), err error) {
 }
 
 func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum) cliStateEnum {
-	title, sql, qargs, foreach, err := pgInspect(cmd)
-	if err != nil {
-		return c.cliError(errState, err)
+	var title, sql string
+	var qargs []interface{}
+	var foreach func([]string) []describeStage
+	title, sql, qargs, foreach, c.exitErr = pgInspect(cmd)
+	if c.exitErr != nil {
+		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		return errState
 	}
 
 	if title != "" {
@@ -1358,7 +1313,7 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 		// There's N stages, each produced by the foreach function
 		// applied on the result of the original SQL. Used mainly by \d.
 		var rows [][]string
-		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
 			q := clisqlclient.MakeQuery(fmt.Sprintf(sql, qargs...))
 			var err error
 			_, rows, err = c.sqlExecCtx.RunQuery(
@@ -1366,8 +1321,12 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 				true, /* showMoreChars */
 			)
 			return err
-		}); err != nil {
-			return c.cliError(errState, err)
+		})
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			return errState
 		}
 
 		for _, row := range rows {
@@ -1380,7 +1339,7 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 		if st.title != "" {
 			fmt.Fprintln(c.iCtx.queryOutput, st.title)
 		}
-		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
 			q := clisqlclient.MakeQuery(fmt.Sprintf(st.sql, st.qargs...))
 			return c.sqlExecCtx.RunQueryAndFormatResults(
 				ctx,
@@ -1390,8 +1349,12 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 				c.iCtx.stderr,
 				q,
 			)
-		}); err != nil {
-			return c.cliError(errState, err)
+		})
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			return errState
 		}
 	}
 	return loopState
@@ -1417,10 +1380,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	// any, in all cases.
 	line := strings.TrimRight(c.lastInputLine, "; ")
 
-	cmd, err := scanLocalCmdArgs(line)
-	if err != nil {
-		return c.cliError(cliStartLine, err)
-	}
+	cmd := strings.Fields(line)
 	if cmd[0] == `\z` {
 		// psql compatibility.
 		cmd[0] = `\dp`
@@ -1447,7 +1407,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		c.maybeFlushOutput()
 
 	case `\set`:
-		return c.handleSet(line, cmd[1:], loopState, errState)
+		return c.handleSet(cmd[1:], loopState, errState)
 
 	case `\unset`:
 		return c.handleUnset(cmd[1:], loopState, errState)
@@ -1531,11 +1491,17 @@ ORDER BY 1`
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
 	case `\copy`:
-		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
 			// Strip out the starting \ in \copy.
 			return c.beginCopyFrom(ctx, line[1:])
-		}); err != nil {
-			return c.cliError(cliStartLine, err)
+		})
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			if c.iCtx.errExit {
+				return cliStop
+			}
 		}
 		return cliStartLine
 
@@ -1597,7 +1563,9 @@ func (c *cliState) handlePassword(
 
 	passwordHashMethod, err := c.getPasswordHashMethod()
 	if err != nil {
-		return c.cliError(errState, errors.Wrap(err, "retrieving hash method from server"))
+		fmt.Fprintf(c.iCtx.stderr, "retrieving hash method from server: %v\n", err)
+		c.exitErr = err
+		return errState
 	}
 
 	var escapedUserName string
@@ -1614,16 +1582,22 @@ func (c *cliState) handlePassword(
 	// to stop the entry. This needs to be cleaned up.
 	password1, err := pprompt.PromptForPassword("" /* prompt */)
 	if err != nil {
-		return c.cliError(errState, errors.Wrap(err, "reading password"))
+		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+		c.exitErr = err
+		return errState
 	}
 
 	password2, err := pprompt.PromptForPassword("Enter it again: ")
 	if err != nil {
-		return c.cliError(errState, errors.Wrap(err, "reading password"))
+		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+		c.exitErr = err
+		return errState
 	}
 
 	if password1 != password2 {
-		return c.cliError(errState, errors.New("passwords didn't match"))
+		c.exitErr = errors.New("passwords didn't match")
+		fmt.Fprintln(c.iCtx.stderr, c.exitErr)
+		return errState
 	}
 
 	var hashedPassword []byte
@@ -1636,7 +1610,9 @@ func (c *cliState) handlePassword(
 	)
 
 	if err != nil {
-		return c.cliError(errState, errors.Wrap(err, "hashing password"))
+		fmt.Fprintf(c.iCtx.stderr, "hashing password: %v\n", err)
+		c.exitErr = err
+		return errState
 	}
 
 	c.concatLines = fmt.Sprintf(
@@ -1655,7 +1631,9 @@ func (c *cliState) handleConnect(
 	cmd []string, loopState, errState cliStateEnum,
 ) (resState cliStateEnum) {
 	if err := c.handleConnectInternal(cmd, false /*omitConnString*/); err != nil {
-		return c.cliError(errState, err)
+		clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
+		c.exitErr = err
+		return errState
 	}
 	return loopState
 }
@@ -1867,7 +1845,9 @@ func (c *cliState) runInclude(
 	}
 
 	if c.levels >= maxRecursionLevels {
-		return c.cliError(errState, errors.Newf(`\i: too many recursion levels (max %d)`, maxRecursionLevels))
+		c.exitErr = errors.Newf(`\i: too many recursion levels (max %d)`, maxRecursionLevels)
+		fmt.Fprintf(c.iCtx.stderr, "%v\n", c.exitErr)
+		return errState
 	}
 
 	if len(c.partialLines) > 0 {
@@ -1890,7 +1870,9 @@ func (c *cliState) runInclude(
 	// Close the file at the end.
 	defer func() {
 		if err := f.Close(); err != nil {
-			resState = c.cliError(errState, errors.Wrapf(err, "closing %s", filename))
+			fmt.Fprintf(c.iCtx.stderr, "error: closing %s: %v\n", filename, err)
+			c.exitErr = errors.CombineErrors(c.exitErr, err)
+			resState = errState
 		}
 	}()
 
@@ -2066,7 +2048,10 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Fprintln(c.iCtx.stdout, helpText)
 		}
 
-		_ = c.cliError(cliStart, errors.Wrap(err, "statement ignored"))
+		_ = c.invalidSyntaxf(
+			cliStart, "statement ignored: %v",
+			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/),
+		)
 
 		// Stop here if exiterr is set.
 		if c.iCtx.errExit {
@@ -2099,16 +2084,19 @@ var copyToRe = regexp.MustCompile(`(?i)COPY.*TO\s+STDOUT`)
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	if err := c.iCtx.maybeWrapStatement(context.Background(), c.concatLines, c); err != nil {
-		return c.cliError(nextState, err)
+		c.exitErr = err
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
+		if c.iCtx.errExit {
+			return cliStop
+		}
+		return nextState
 	}
 	if c.iCtx.afterRun != nil {
 		defer c.iCtx.afterRun()
 		c.iCtx.afterRun = nil
 	}
-
-	// Clear the error state - the new statement will define a new error
-	// status.
-	c.exitErr = nil
 
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
@@ -2118,15 +2106,22 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	if c.iCtx.autoTrace != "" {
 		// Clear the trace by disabling tracing, then restart tracing
 		// with the specified options.
-		if err := c.conn.Exec(
+		c.exitErr = c.conn.Exec(
 			context.Background(),
-			"SET tracing = off; SET tracing = "+c.iCtx.autoTrace); err != nil {
-			return c.cliError(nextState, err)
+			"SET tracing = off; SET tracing = "+c.iCtx.autoTrace)
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			if c.iCtx.errExit {
+				return cliStop
+			}
+			return nextState
 		}
 	}
 
 	// Now run the statement/query.
-	if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
 		if scanner.FirstLexicalToken(c.concatLines) == lexbase.COPY {
 			// Ideally this is parsed using the parser, but we've avoided doing so
 			// for clisqlshell to be small.
@@ -2157,10 +2152,11 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			c.iCtx.stderr,
 			q,
 		)
-	}); err != nil {
-		// Display the error and set c.exitErr, but do not stop the shell
-		// immediately. We still want to display the trace below.
-		_ = c.cliError(nextState, err)
+	})
+	if c.exitErr != nil {
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
@@ -2709,7 +2705,9 @@ func (c *cliState) runOpen(cmd []string, contState, errState cliStateEnum) (resS
 		outputFile = cmd[0]
 	}
 	if err := c.openOutputFile(outputFile); err != nil {
-		return c.cliError(errState, err)
+		c.exitErr = err
+		fmt.Fprintf(c.iCtx.stderr, "%v\n", c.exitErr)
+		return errState
 	}
 	return contState
 }

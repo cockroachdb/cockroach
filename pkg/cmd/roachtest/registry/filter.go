@@ -19,15 +19,9 @@ import (
 // See NewTestFilter.
 type TestFilter struct {
 	Name *regexp.Regexp
-	// Multiple `tag:` parameters can be passed for which only one needs to match, but the
-	// value of a single `tag:` parameter can be a comma-separated list of tags which all need
-	// to match.
-	// e.g. `tag:foo,bar` matches tests with tags `foo` and `bar`, and `tag:foo tag:bar` matches
-	// tests with either tag `foo` or tag `bar`.
-	//
-	// This set contains each tag, so the above examples would be represented as `["foo,bar"]` and
-	// `["foo", "bar"]` respectively..
-	Tags       map[string]struct{}
+	Tag  *regexp.Regexp
+	// RawTag is the string representation of the regexps in tag.
+	RawTag     []string
 	RunSkipped bool
 }
 
@@ -37,13 +31,20 @@ type TestFilter struct {
 // name.
 func NewTestFilter(filter []string, runSkipped bool) *TestFilter {
 	var name []string
-	tags := make(map[string]struct{})
+	var tag []string
+	var rawTag []string
 	for _, v := range filter {
 		if strings.HasPrefix(v, "tag:") {
-			tags[strings.TrimPrefix(v, "tag:")] = struct{}{}
+			tag = append(tag, strings.TrimPrefix(v, "tag:"))
+			rawTag = append(rawTag, v)
 		} else {
 			name = append(name, v)
 		}
+	}
+
+	if len(tag) == 0 {
+		tag = []string{DefaultTag}
+		rawTag = []string{"tag:" + DefaultTag}
 	}
 
 	makeRE := func(strs []string) *regexp.Regexp {
@@ -62,7 +63,8 @@ func NewTestFilter(filter []string, runSkipped bool) *TestFilter {
 
 	return &TestFilter{
 		Name:       makeRE(name),
-		Tags:       tags,
+		Tag:        makeRE(tag),
+		RawTag:     rawTag,
 		RunSkipped: runSkipped,
 	}
 }

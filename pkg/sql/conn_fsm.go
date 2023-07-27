@@ -19,7 +19,6 @@ package sql
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -39,7 +38,7 @@ const (
 	InternalErrorStateStr = sqlfsm.InternalErrorStateStr
 )
 
-// States.
+/// States.
 
 type stateNoTxn struct{}
 
@@ -105,7 +104,7 @@ func (stateAborted) State()       {}
 func (stateCommitWait) State()    {}
 func (stateInternalError) State() {}
 
-// Events.
+/// Events.
 
 type eventTxnStart struct {
 	ImplicitTxn fsm.Bool
@@ -123,7 +122,6 @@ type eventTxnStartPayload struct {
 	// qualityOfService denotes the user-level admission queue priority to use for
 	// any new Txn started using this payload.
 	qualityOfService sessiondatapb.QoSLevel
-	isoLevel         isolation.Level
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
@@ -134,7 +132,6 @@ func makeEventTxnStartPayload(
 	historicalTimestamp *hlc.Timestamp,
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
-	isoLevel isolation.Level,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
 		pri:                 pri,
@@ -143,7 +140,6 @@ func makeEventTxnStartPayload(
 		historicalTimestamp: historicalTimestamp,
 		tranCtx:             tranCtx,
 		qualityOfService:    qualityOfService,
-		isoLevel:            isoLevel,
 	}
 }
 
@@ -266,7 +262,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 	},
 
-	// Open
+	/// Open
 	stateOpen{ImplicitTxn: fsm.Any, WasUpgraded: fsm.Any}: {
 		eventTxnFinishCommitted{}: {
 			Description: "COMMIT, or after a statement running as an implicit txn",
@@ -380,7 +376,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 	},
 
-	// Aborted
+	/// Aborted
 	//
 	// Note that we don't handle any error events here. Any statement but a
 	// ROLLBACK (TO SAVEPOINT) is expected to not be passed to the state machine.
@@ -456,7 +452,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		},
 	},
 
-	// Commit Wait
+	/// Commit Wait
 	stateCommitWait{}: {
 		eventTxnFinishCommitted{}: {
 			Description: "COMMIT",
@@ -513,7 +509,6 @@ func noTxnToOpen(args fsm.Args) error {
 		nil, /* txn */
 		payload.tranCtx,
 		payload.qualityOfService,
-		payload.isoLevel,
 	)
 	ts.setAdvanceInfo(
 		advCode,

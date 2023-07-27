@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -312,7 +312,7 @@ func normalizeAndPlan(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
-	sd *sessiondata.SessionData,
+	sd sessiondatapb.SessionData,
 	descr catalog.TableDescriptor,
 	schemaTS hlc.Timestamp,
 	target jobspb.ChangefeedTargetSpecification,

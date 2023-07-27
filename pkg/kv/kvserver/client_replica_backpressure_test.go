@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,8 +40,6 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "takes >1m under race")
-
 	rRand, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
@@ -50,12 +47,10 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	// range size parameters. We want something not too tiny but also not too big
 	// that it takes a while to load.
 	const (
-		rowSize             = 5 << 20   // 5 MiB
-		dataSize            = 200 << 20 // 200 MiB
-		numRows             = dataSize / rowSize
-		min_range_max_bytes = 64 << 20 // 64 MiB
+		rowSize  = 16 << 10  // 16 KiB
+		dataSize = 512 << 10 // 512 KiB
+		numRows  = dataSize / rowSize
 	)
-	val := randutil.RandBytes(rRand, rowSize)
 
 	// setup will set up a testcluster with a table filled with data. All splits
 	// will be blocked until the returned closure is called.
@@ -110,7 +105,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		for i := 0; i < numRows; i++ {
 			tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
-				rRand.Intn(numRows), val)
+				rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 		}
 
 		// Block splits and return.
@@ -182,18 +177,19 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		defer unblockSplits()
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
-			"range_max_bytes = $1, range_min_bytes = $2", min_range_max_bytes, dataSize/10)
-		waitForSpanConfig(t, tc, tablePrefix, min_range_max_bytes)
+			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Don't observe backpressure.
 		tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
-			rRand.Intn(10000000), val)
+			rRand.Intn(10000000), randutil.RandBytes(rRand, rowSize))
 	})
 
 	t.Run("no backpressure when much larger on new node", func(t *testing.T) {
 		tc, args, tdb, tablePrefix, unblockSplits, _ := setup(t, 1)
 		defer tc.Stopper().Stop(ctx)
 		defer unblockSplits()
+
 		// We didn't want to have to load too much data into these ranges because
 		// it makes the testing slower so let's lower the threshold at which we'll
 		// consider the range to be way over the backpressure limit from megabytes
@@ -201,15 +197,15 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		tdb.Exec(t, "SET CLUSTER SETTING kv.range.backpressure_byte_tolerance = '1 KiB'")
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
-			"range_max_bytes = $1, range_min_bytes = $2", min_range_max_bytes, dataSize/10)
-		waitForSpanConfig(t, tc, tablePrefix, min_range_max_bytes)
+			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
 
 		// Don't observe backpressure.
 		tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
-			rRand.Intn(10000000), val)
+			rRand.Intn(10000000), randutil.RandBytes(rRand, rowSize))
 	})
 
 	t.Run("no backpressure when near limit on existing node", func(t *testing.T) {
@@ -228,7 +224,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// backpressureByteTolerance. We won't see backpressure because the range
 		// will remember its previous zone config setting.
 		s, repl := getFirstStoreReplica(t, tc.Server(0), tablePrefix.Next())
-		newMax := repl.GetMVCCStats().Total()/2 - 32<<20
+		newMax := repl.GetMVCCStats().Total()/2 - 32<<10
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
@@ -237,7 +233,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Don't observe backpressure because we remember the previous max size on
 		// this node.
 		tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
-			rRand.Intn(10000000), val)
+			rRand.Intn(10000000), randutil.RandBytes(rRand, rowSize))
 
 		// Allow one split to occur and make sure that the remembered value is
 		// cleared.
@@ -251,7 +247,6 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			return nil
 		})
 	})
-
 	// This case is very similar to the above case but differs in that the range
 	// is moved to a new node after the range size is decreased. This new node
 	// never knew about the old, larger range size, and thus will backpressure
@@ -265,7 +260,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Now we'll change the range_max_bytes to be half the range size less a
 		// bit. This is the range where we expect to observe backpressure.
 		_, repl := getFirstStoreReplica(t, tc.Server(0), tablePrefix.Next())
-		newMax := repl.GetMVCCStats().Total()/2 - 32<<20
+		newMax := repl.GetMVCCStats().Total()/2 - 32<<10
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)

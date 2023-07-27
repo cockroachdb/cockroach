@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,7 +70,7 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 		"closed-timestamp updates to some rangefeeds; "+
 		"set to 0 to use kv.rangefeed.closed_timestamp_refresh_interval"+
 		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
-	1*time.Millisecond,
+	0,
 	settings.NonNegativeDuration,
 )
 
@@ -768,7 +769,7 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error 
 		// current lease is invalid and the current replica is not a leader, the
 		// current replica will not take a lease.
 		log.VEventf(ctx, 2, "ensuring lease for rangefeed range. current lease invalid: %s", lease.Lease)
-		err := timeutil.RunWithTimeout(ctx, "read forcing lease acquisition", 5*time.Second,
+		err := contextutil.RunWithTimeout(ctx, "read forcing lease acquisition", 5*time.Second,
 			func(ctx context.Context) error {
 				var b kv.Batch
 				liReq := &kvpb.LeaseInfoRequest{}
@@ -777,7 +778,7 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error 
 				return r.store.DB().Run(ctx, &b)
 			})
 		if err != nil {
-			if errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
+			if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
 				err = &kvpb.RangeFeedRetryError{
 					Reason: kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
 				}

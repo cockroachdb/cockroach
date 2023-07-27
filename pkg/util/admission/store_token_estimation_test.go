@@ -77,7 +77,7 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					admissionStats.statsToIgnore.Bytes += uint64(ignoreIngestedIntoL0)
 				}
 				estimator.updateEstimates(l0Metrics, cumLSMIngestedBytes, admissionStats)
-				wL0lm, iL0lm, ilm := estimator.getModelsAtDone()
+				wL0lm, iL0lm, ilm := estimator.getModelsAtAdmittedDone()
 				require.Equal(t, wL0lm, estimator.atDoneL0WriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, iL0lm, estimator.atDoneL0IngestTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, ilm, estimator.atDoneIngestTokensLinearModel.smoothedLinearModel)

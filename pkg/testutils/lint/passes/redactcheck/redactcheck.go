@@ -78,16 +78,11 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"timing": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvpb": {
-						"Method":            {},
-						"LeaseAppliedIndex": {},
-						"RaftIndex":         {},
-						"RaftTerm":          {},
+						"Method": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
+						"LAI":    {},
 						"SeqNum": {},
-					},
-					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation": {
-						"Level": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock": {
 						"Durability": {},
@@ -97,10 +92,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
 						"SnapshotRequest_Type": {},
-					},
-					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset": {
-						"SpanAccess": {},
-						"SpanScope":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
@@ -117,7 +108,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ReplicaID":         {},
 						"ReplicaType":       {},
 						"StoreID":           {},
-						"StoreIDSlice":      {},
 						"TenantID":          {},
 						"TransactionStatus": {},
 					},
@@ -165,9 +155,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FamilyID":       {},
 						"IndexID":        {},
 						"PGAttributeNum": {},
-					},
-					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
-						"IsolationLevel": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness": {
 						"SessionID": {},

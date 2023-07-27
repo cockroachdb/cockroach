@@ -417,7 +417,7 @@ export class IndexDetailsPage extends React.Component<
 
   private filteredStatements = (): AggregateStatistics[] => {
     const { filters, search, statements } = this.state;
-    const { isTenant } = this.props;
+    const { nodeRegions, isTenant } = this.props;
     let filteredStatements = statements;
     const isInternal = (statement: AggregateStatistics) =>
       statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX);
@@ -442,6 +442,7 @@ export class IndexDetailsPage extends React.Component<
       filters,
       search,
       filteredStatements,
+      nodeRegions,
       isTenant,
     );
   };

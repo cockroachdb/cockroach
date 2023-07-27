@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "testcluster",
-    testonly = 1,
     srcs = ["testcluster.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/testcluster",
     visibility = ["//visibility:public"],
@@ -27,6 +26,7 @@ go_library(
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/util/allstacks",
+        "//pkg/util/contextutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/retry",

@@ -21,7 +21,7 @@ ALTER DATABASE system PRIMARY REGION "test"
 statement ok
 ALTER DATABASE system ADD REGION "test1"
 
-query TTBBT colnames,rowsort
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE system
 ----
 database  region  primary  secondary  zones
@@ -33,7 +33,7 @@ system    test1   false    false      {}
 statement ok
 CREATE DATABASE "defaults-to-system";
 
-query TTBBT colnames,rowsort
+query TTBBT colnames
 SHOW REGIONS FROM DATABASE "defaults-to-system"
 ----
 database            region  primary  secondary  zones

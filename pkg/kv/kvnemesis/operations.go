@@ -162,10 +162,6 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		newFctx.receiver = txnName
 		w.WriteString(fctx.receiver)
 		fmt.Fprintf(w, `.Txn(ctx, func(ctx context.Context, %s *kv.Txn) error {`, txnName)
-		w.WriteString("\n")
-		w.WriteString(newFctx.indent)
-		w.WriteString(newFctx.receiver)
-		fmt.Fprintf(w, `.SetIsoLevel(isolation.%s)`, o.IsoLevel)
 		formatOps(w, newFctx, o.Ops)
 		if o.CommitInBatch != nil {
 			newFctx.receiver = `b`
@@ -316,7 +312,7 @@ func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s, hlc.MaxTimestamp)`, fctx.receiver, fmtKey(op.Key))
+	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s)`, fctx.receiver, fmtKey(op.Key))
 	op.Result.format(w)
 }
 
@@ -333,18 +329,12 @@ func (op BatchOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
-	changes := make([]string, len(op.Changes))
-	for i, c := range op.Changes {
-		changes[i] = fmt.Sprintf("kvpb.ReplicationChange{ChangeType: roachpb.%s, Target: roachpb.ReplicationTarget{NodeID: %d, StoreID: %d}}",
-			c.ChangeType, c.Target.NodeID, c.Target.StoreID)
-	}
-	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, getRangeDesc(ctx, %s, %s), %s)`, fctx.receiver,
-		fmtKey(op.Key), fmtKey(op.Key), fctx.receiver, strings.Join(changes, ", "))
+	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), op.Changes)
 	op.Result.format(w)
 }
 
 func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminTransferLease(ctx, %s, %d)`, fctx.receiver, fmtKey(op.Key), op.Target)
+	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, fmtKey(op.Key), op.Target)
 	op.Result.format(w)
 }
 

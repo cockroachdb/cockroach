@@ -15,7 +15,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis";
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
 import "kv/kvpb/api.proto";
-import "kv/kvserver/concurrency/isolation/levels.proto";
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
 
@@ -35,7 +34,6 @@ message ClosureTxnOperation {
   repeated Operation ops = 2 [(gogoproto.nullable) = false];
   BatchOperation commit_in_batch = 3;
   ClosureTxnType type = 4;
-  cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
 }

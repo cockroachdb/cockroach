@@ -53,7 +53,7 @@ func (w WorkPriority) SafeFormat(p redact.SafePrinter, verb rune) {
 		p.Print(s)
 		return
 	}
-	p.Printf("custom-pri=%d", int8(w))
+	p.Printf("custom-pri=%d", w)
 }
 
 // WorkPriorityDict is a mapping of the priorities to a short string name. The
@@ -67,17 +67,6 @@ var WorkPriorityDict = map[WorkPriority]string{
 	UserHighPri:   "user-high-pri",
 	LockingPri:    "locking-pri",
 	HighPri:       "high-pri",
-}
-
-// TestingReverseWorkPriorityDict is the reverse-lookup dictionary for
-// WorkPriorityDict, for use in tests.
-var TestingReverseWorkPriorityDict map[string]WorkPriority
-
-func init() {
-	TestingReverseWorkPriorityDict = make(map[string]WorkPriority)
-	for k, v := range WorkPriorityDict {
-		TestingReverseWorkPriorityDict[v] = k
-	}
 }
 
 // WorkClass represents the class of work, which is defined entirely by its

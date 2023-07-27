@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,11 +28,13 @@ func TestSplitAtTableBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testClusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+	}
+	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
 	defer tc.Stopper().Stop(context.Background())
-	s := tc.TenantOrServer(0)
 
-	runner := sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, s.SQLAddr(), "system", false, tc.Stopper()))
+	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
 	runner.Exec(t, `CREATE DATABASE test`)
 	runner.Exec(t, `CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
 
@@ -43,7 +45,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	runner.QueryRow(t, tableIDQuery, "test", "t").Scan(&tableID)
-	tableStartKey := s.Codec().TablePrefix(tableID)
+	tableStartKey := keys.SystemSQLCodec.TablePrefix(tableID)
 
 	// Wait for new table to split.
 	testutils.SucceedsSoon(t, func() error {

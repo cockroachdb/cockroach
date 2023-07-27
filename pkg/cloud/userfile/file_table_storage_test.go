@@ -128,7 +128,7 @@ func TestUserScoping(t *testing.T) {
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, db, nil,
 		cloud.NilMetrics)
 	require.NoError(t, err)
-	_, _, err = fileTableSystem2.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
+	_, err = fileTableSystem2.ReadFile(ctx, filename)
 	require.Error(t, err)
 	require.Error(t, cloud.WriteFile(ctx, fileTableSystem2, filename, bytes.NewReader([]byte("aaa"))))
 
@@ -137,6 +137,6 @@ func TestUserScoping(t *testing.T) {
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), db,
 		nil, cloud.NilMetrics)
 	require.NoError(t, err)
-	_, _, err = fileTableSystem3.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
+	_, err = fileTableSystem3.ReadFile(ctx, filename)
 	require.NoError(t, err)
 }

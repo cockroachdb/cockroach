@@ -805,7 +805,7 @@ error (42803): sum(): aggregate functions are not allowed in RETURNING
 build
 UPDATE abcde SET c=1 RETURNING generate_series(1, 10)
 ----
-error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
+error (0A000): generate_series(): generator functions are not allowed in RETURNING
 
 # ------------------------------------------------------------------------------
 # Test DEFAULT values.
@@ -1727,7 +1727,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7 + c:9
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95, NULL, 15::DECIMAL(10,2)] [as=b_new:14]
@@ -1772,7 +1772,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7 + c:9
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15.00] [as=b_new:14]
@@ -1812,7 +1812,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │              └── d:14 + 10.0
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
@@ -1849,7 +1849,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │              └── d:14 + 10.0
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
@@ -1881,7 +1881,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │              └── d:14 + 10.0
       │    │    └── projections
       │    │         └── 10::INT2 [as=i_new:19]
       │    └── projections
@@ -1913,7 +1913,7 @@ update assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:15
-      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │    │              └── d:14 + 10.0
       │    │    │    └── projections
       │    │    │         └── 1.45::DECIMAL(10,2) [as=d_new:19]
       │    │    └── projections
@@ -1948,7 +1948,7 @@ update assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:15
-      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │    │              └── d:14 + 10.0
       │    │    │    └── projections
       │    │    │         └── 1.45 [as=d_new:19]
       │    │    └── projections
@@ -1986,7 +1986,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7 + c:9
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95, NULL, 15::DECIMAL(10,2)] [as=b_new:14]
@@ -2030,7 +2030,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7 + c:9
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15.00] [as=b_new:14]
@@ -2068,7 +2068,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │              └── d:14 + 10.0
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
@@ -2100,7 +2100,7 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    └── computed column expressions
       │    │    │         └── d_comp:15
-      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │              └── d:14 + 10.0
       │    │    └── projections
       │    │         ├── ' ' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
@@ -2137,7 +2137,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7 + c:9
       │    │    │    │    ├── max1-row
       │    │    │    │    │    ├── columns: n:13!null
       │    │    │    │    │    └── project
@@ -2185,7 +2185,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 decimals.crdb_internal_mvcc_timestamp:11 decimals.tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
+      │    │    │    │    │              └── a:7 + c:9
       │    │    │    │    ├── max1-row
       │    │    │    │    │    ├── columns: u:13!null "?column?":18!null
       │    │    │    │    │    └── project
@@ -2236,7 +2236,7 @@ update assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 assn_cast.rowid:16!null assn_cast.crdb_internal_mvcc_timestamp:17 assn_cast.tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:15
-      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
+      │    │    │    │              └── d:14 + 10.0
       │    │    │    ├── max1-row
       │    │    │    │    ├── columns: "?column?":24!null "?column?":25!null
       │    │    │    │    └── project
@@ -2283,7 +2283,7 @@ update assn_cast_on_update
       │    │    │    │    ├── columns: i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d_comp:14
-      │    │    │    │              └── d:12::DECIMAL(10)
+      │    │    │    │              └── d:12
       │    │    │    └── projections
       │    │    │         ├── 1 [as=i_new:19]
       │    │    │         └── true [as=b_new:20]

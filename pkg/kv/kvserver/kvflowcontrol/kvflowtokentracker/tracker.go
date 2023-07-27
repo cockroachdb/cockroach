@@ -13,14 +13,11 @@ package kvflowtokentracker
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -35,8 +32,6 @@ type Tracker struct {
 	// we ignore token deductions.
 	lowerBound kvflowcontrolpb.RaftLogPosition
 
-	stream kvflowcontrol.Stream // used for logging only
-
 	knobs *kvflowcontrol.TestingKnobs
 }
 
@@ -50,11 +45,7 @@ type tracked struct {
 
 // New constructs a new Tracker with the given lower bound raft log position
 // (below which we're not allowed to deduct tokens).
-func New(
-	lb kvflowcontrolpb.RaftLogPosition,
-	stream kvflowcontrol.Stream,
-	knobs *kvflowcontrol.TestingKnobs,
-) *Tracker {
+func New(lb kvflowcontrolpb.RaftLogPosition, knobs *kvflowcontrol.TestingKnobs) *Tracker {
 	if knobs == nil {
 		knobs = &kvflowcontrol.TestingKnobs{}
 	}
@@ -62,7 +53,6 @@ func New(
 		trackedM:   make(map[admissionpb.WorkPriority][]tracked),
 		lowerBound: lb,
 		knobs:      knobs,
-		stream:     stream,
 	}
 }
 
@@ -73,7 +63,7 @@ func (dt *Tracker) Track(
 	pri admissionpb.WorkPriority,
 	tokens kvflowcontrol.Tokens,
 	pos kvflowcontrolpb.RaftLogPosition,
-) bool {
+) {
 	if !(dt.lowerBound.Less(pos)) {
 		// We're trying to track a token deduction at a position less than the
 		// stream's lower-bound. Shout loudly but ultimately no-op. This
@@ -88,37 +78,23 @@ func (dt *Tracker) Track(
 		//     Handle.ConnectStream).
 		// - token returns upto some log position don't precede deductions at
 		//   lower log positions (see Handle.ReturnTokensUpto);
-		logFn := log.Errorf
-		if buildutil.CrdbTestBuild {
-			logFn = log.Fatalf
-		}
-		logFn(ctx, "observed raft log position less than per-stream lower bound (%s <= %s)",
+		log.Errorf(ctx, "observed raft log position less than per-stream lower bound (%s <= %s)",
 			pos, dt.lowerBound)
-		return false
+		return
 	}
 	dt.lowerBound = pos
 
 	if len(dt.trackedM[pri]) >= 1 {
 		last := dt.trackedM[pri][len(dt.trackedM[pri])-1]
 		if !last.position.Less(pos) {
-			logFn := log.Errorf
-			if buildutil.CrdbTestBuild {
-				logFn = log.Fatalf
-			}
-			logFn(ctx, "expected in order tracked log positions (%s < %s)",
+			log.Fatalf(ctx, "expected in order tracked log positions (%s < %s)",
 				last.position, pos)
-			return false
 		}
 	}
 	dt.trackedM[pri] = append(dt.trackedM[pri], tracked{
 		tokens:   tokens,
 		position: pos,
 	})
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "tracking %s flow control tokens for pri=%s stream=%s pos=%s",
-			tokens, pri, dt.stream, pos)
-	}
-	return true
 }
 
 // Untrack all token deductions of the given priority that have log positions
@@ -160,8 +136,8 @@ func (dt *Tracker) Untrack(
 		if len(dt.trackedM[pri]) > 0 {
 			remaining = fmt.Sprintf(" (%s, ...)", dt.trackedM[pri][0].tokens)
 		}
-		log.Infof(ctx, "released %s flow control tokens for %d out of %d tracked deductions for pri=%s stream=%s, up to %s; %d tracked deduction(s) remain%s",
-			tokens, untracked, trackedBefore, pri, dt.stream, upto, len(dt.trackedM[pri]), remaining)
+		log.VInfof(ctx, 1, "released flow control tokens for %d/%d pri=%s tracked deductions, upto %s; %d tracked deduction(s) remain%s",
+			untracked, trackedBefore, pri, upto, len(dt.trackedM[pri]), remaining)
 	}
 	if len(dt.trackedM[pri]) == 0 {
 		delete(dt.trackedM, pri)
@@ -183,35 +159,6 @@ func (dt *Tracker) Iter(_ context.Context, f func(admissionpb.WorkPriority, kvfl
 		}
 		f(pri, tokens)
 	}
-}
-
-// LowerBound returns the log position below which we ignore token deductions.
-func (dt *Tracker) LowerBound() kvflowcontrolpb.RaftLogPosition {
-	return dt.lowerBound
-}
-
-// Inspect returns a snapshot of all tracked token deductions. It's used to
-// power /inspectz-style debugging pages.
-func (dt *Tracker) Inspect(ctx context.Context) []kvflowinspectpb.TrackedDeduction {
-	var deductions []kvflowinspectpb.TrackedDeduction
-	dt.TestingIter(func(pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens, pos kvflowcontrolpb.RaftLogPosition) bool {
-		deductions = append(deductions, kvflowinspectpb.TrackedDeduction{
-			Priority:        int32(pri),
-			Tokens:          int64(tokens),
-			RaftLogPosition: pos,
-		})
-		return true
-	})
-	sort.Slice(deductions, func(i, j int) bool { // for determinism
-		if deductions[i].Priority != deductions[j].Priority {
-			return deductions[i].Priority < deductions[j].Priority
-		}
-		if deductions[i].RaftLogPosition != deductions[j].RaftLogPosition {
-			return deductions[i].RaftLogPosition.Less(deductions[j].RaftLogPosition)
-		}
-		return deductions[i].Tokens < deductions[j].Tokens
-	})
-	return deductions
 }
 
 // TestingIter is a testing-only re-implementation of Iter. It iterates through

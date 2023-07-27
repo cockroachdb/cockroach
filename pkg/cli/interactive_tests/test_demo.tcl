@@ -44,7 +44,7 @@ end_test
 start_test "Check that demo insecure, env var, says hello properly"
 # With env var.
 set ::env(COCKROACH_INSECURE) "true"
-spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
+spawn $argv demo --no-line-editor --no-example-database --multitenant=true --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 end_test
@@ -103,7 +103,7 @@ start_test "Check that demo secure says hello properly"
 
 # With env var.
 set ::env(COCKROACH_INSECURE) "false"
-spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
+spawn $argv demo --no-line-editor --no-example-database --multitenant=true --log-dir=logs
 eexpect "Welcome"
 
 eexpect "(webui)"
@@ -266,7 +266,7 @@ eexpect "defaultdb>"
 send_eof
 eexpect eof
 
-spawn $argv demo --no-line-editor --no-example-database --nodes 3 --sql-port 23000 --log-dir=logs
+spawn $argv demo --no-line-editor --no-example-database --nodes 3 --sql-port 23000 --multitenant=true --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 

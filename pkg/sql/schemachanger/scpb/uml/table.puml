@@ -304,15 +304,7 @@ SecondaryIndexPartial :  Expression
 object Sequence
 
 Sequence :  SequenceID
-Sequence :  RestartWith
-Sequence :  UseRestartWith
 Sequence :  IsTemporary
-
-object SequenceOption
-
-SequenceOption :  SequenceID
-SequenceOption :  Key
-SequenceOption :  Value
 
 object SequenceOwner
 
@@ -477,7 +469,6 @@ Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
 SecondaryIndex <|-- SecondaryIndexPartial
-Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
 Table <|-- TableComment
 View <|-- TableComment

@@ -795,7 +795,7 @@ func (sc *SchemaChanger) validateConstraints(
 				semaCtx.TypeResolver = &resolver
 				semaCtx.NameResolver = NewSkippingCacheSchemaResolver(
 					txn.Descriptors(),
-					sessiondata.NewStack(NewInternalSessionData(ctx, sc.settings, "validate constraint")),
+					sessiondata.NewStack(NewFakeSessionData(&sc.settings.SV, "validate constraint")),
 					txn.KV(),
 					nil, /* authAccessor */
 				)
@@ -1055,7 +1055,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if err != nil {
 			return err
 		}
-		sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "dist-index-backfill")
+		sd := NewFakeSessionData(sc.execCfg.SV(), "dist-index-backfill")
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, /* planner */
 			txn.KV(), DistributionTypeSystemTenantOnly)
@@ -1351,7 +1351,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 				return nil
 			}
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-			sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "dist-column-backfill")
+			sd := NewFakeSessionData(sc.execCfg.SV(), "dist-column-backfill")
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 			recv := MakeDistSQLReceiver(
 				ctx,

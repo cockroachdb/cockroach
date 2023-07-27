@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -186,15 +185,7 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 	}
 	col.Nullable.Nullability = s.randNullability()
 	if s.coin() {
-		// Find a type that can be assignment-casted to the column's type.
-		var defaultType *types.T
-		for {
-			defaultType = randgen.RandColumnType(s.rnd)
-			if cast.ValidCast(defaultType, t, cast.ContextAssignment) {
-				break
-			}
-		}
-		col.DefaultExpr.Expr = &tree.ParenExpr{Expr: makeScalar(s, defaultType, nil)}
+		col.DefaultExpr.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, nil)}
 	} else if s.coin() {
 		col.Computed.Computed = true
 		col.Computed.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, colRefs)}
@@ -364,14 +355,6 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		storing = append(storing, col.Name)
 	}
 
-	visibility := 1.0
-	if notvisible := s.d6() == 1; notvisible {
-		visibility = 0.0
-		if s.coin() {
-			visibility = s.rnd.Float64() // [0.0, 1.0)
-		}
-	}
-
 	return &tree.CreateIndex{
 		Name:         s.name("idx"),
 		Table:        *tableRef.TableName,
@@ -380,7 +363,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Storing:      storing,
 		Inverted:     inverted,
 		Concurrently: s.coin(),
-		Invisibility: 1 - visibility,
+		NotVisible:   s.d6() == 1, // NotVisible index is rare 1/6 chance.
 	}, true
 }
 

@@ -10,6 +10,10 @@
 
 import { DatabasesListResponse, SqlExecutionErrorMessage } from "../api";
 import { DatabasesPageDataDatabase } from "../databasesPage";
+import { createSelector } from "@reduxjs/toolkit";
+import { TableDetailsState } from "../store/databaseTableDetails";
+import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
+import { DatabaseDetailsState } from "../store/databaseDetails/databaseDetails.reducer";
 import {
   buildIndexStatToRecommendationsMap,
   combineLoadingErrors,
@@ -17,16 +21,11 @@ import {
   normalizePrivileges,
   normalizeRoles,
 } from "./util";
-import { DatabaseDetailsState } from "../store/databaseDetails";
-import { createSelector } from "@reduxjs/toolkit";
-import { TableDetailsState } from "../store/databaseTableDetails";
 import { generateTableID, longToInt, TimestampToMoment } from "../util";
-import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
 import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
 import { IndexStatsState } from "../store/indexStats";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RecommendationType as RecType } from "../indexDetailsPage";
-import { TableIndexStatsResponse } from "../api/indexDetailsApi";
 type IndexUsageStatistic =
   cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
 const { RecommendationType } = cockroach.sql.IndexRecommendation;

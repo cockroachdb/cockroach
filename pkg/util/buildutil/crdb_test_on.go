@@ -11,7 +11,6 @@
 //go:build crdb_test && !crdb_test_off
 // +build crdb_test,!crdb_test_off
 
-// Package buildutil provides a constant CrdbTestBuild.
 package buildutil
 
 // CrdbTestBuild is a flag that is set to true if the binary was compiled

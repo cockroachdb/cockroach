@@ -11,7 +11,6 @@
 package loqrecoverypb
 
 import (
-	_ "github.com/cockroachdb/cockroach/pkg/kv/kvpb" // Needed for recovery.proto.
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -37,7 +36,7 @@ func (r *RecoveryKey) UnmarshalYAML(fn func(interface{}) error) error {
 	if err := fn(&pretty); err != nil {
 		return err
 	}
-	scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
+	scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 	key, err := scanner.Scan(pretty)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse key %s", pretty)

@@ -18,12 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
 )
 
 func TestReadProbe(t *testing.T) {
@@ -94,7 +93,7 @@ func TestReadProbe(t *testing.T) {
 		m := &mock{
 			t:       t,
 			read:    true,
-			planErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+			planErr: errors.New("n2 was permanently removed from the cluster at 2009-11-10 23:00:00 +0000 UTC m=+0.000000001; it is not allowed to rejoin the cluster"),
 		}
 		p := initTestProber(ctx, m)
 		p.readProbeImpl(ctx, m, m, m)
@@ -140,7 +139,7 @@ func TestReadProbe(t *testing.T) {
 		m := &mock{
 			t:       t,
 			read:    true,
-			readErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+			readErr: errors.New("n2 was permanently removed from the cluster at 2009-11-10 23:00:00 +0000 UTC m=+0.000000001; it is not allowed to rejoin the cluster"),
 		}
 		p := initTestProber(ctx, m)
 		p.readProbeImpl(ctx, m, m, m)
@@ -211,7 +210,7 @@ func TestWriteProbe(t *testing.T) {
 		m := &mock{
 			t:       t,
 			write:   true,
-			planErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+			planErr: errors.New("n2 was permanently removed from the cluster at 2009-11-10 23:00:00 +0000 UTC m=+0.000000001; it is not allowed to rejoin the cluster"),
 		}
 		p := initTestProber(ctx, m)
 		p.writeProbeImpl(ctx, m, m, m)
@@ -257,7 +256,7 @@ func TestWriteProbe(t *testing.T) {
 		m := &mock{
 			t:        t,
 			write:    true,
-			writeErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+			writeErr: errors.New("n2 was permanently removed from the cluster at 2009-11-10 23:00:00 +0000 UTC m=+0.000000001; it is not allowed to rejoin the cluster"),
 		}
 		p := initTestProber(ctx, m)
 		p.writeProbeImpl(ctx, m, m, m)

@@ -310,6 +310,5 @@ func munge(s string) string {
 	s = strings.ReplaceAll(s, "-", "_")
 	s = strings.ReplaceAll(s, ".", "_")
 	s = strings.ReplaceAll(s, "/", "")
-	s = strings.ReplaceAll(s, "^", "^Test[a-zA-Z0-9]+_")
 	return s
 }

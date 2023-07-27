@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -60,14 +61,13 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 			internalPlanner, cleanup := NewInternalPlanner(
 				"test",
 				kv.NewTxn(ctx, db, s.NodeID()),
 				username.RootUserName(),
 				&MemoryMetrics{},
 				&execCfg,
-				sd,
+				sessiondatapb.SessionData{},
 			)
 			defer cleanup()
 			p := internalPlanner.(*planner)

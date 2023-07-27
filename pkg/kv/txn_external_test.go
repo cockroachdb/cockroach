@@ -602,18 +602,22 @@ func TestGenerateForcedRetryableErrorAfterRollback(t *testing.T) {
 	}
 	var i int
 	txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		i++
-		require.Equal(t, 1, i)
 		e1 := txn.Put(ctx, mkKey("a"), 1)
-		require.NoError(t, e1)
-		// Prepare an error to return after the rollback.
-		retryErr := txn.GenerateForcedRetryableError(ctx, "force retry")
-		// Rolling back completes the transaction, returning an error is invalid.
-		require.NoError(t, txn.Rollback(ctx))
-		return retryErr
+		i++
+		require.LessOrEqual(t, i, 2)
+		if i == 1 {
+			require.NoError(t, e1)
+			// Prepare an error to return after the rollback.
+			retryErr := txn.GenerateForcedRetryableError(ctx, "force retry")
+			// Rolling back completes the transaction, returning an error is invalid.
+			require.NoError(t, txn.Rollback(ctx))
+			return retryErr
+		} else {
+			require.ErrorContains(t, e1, "TransactionStatusError", i)
+			return nil
+		}
 	})
-	require.ErrorContains(t, txnErr, "client already committed or rolled back")
-	require.True(t, errors.IsAssertionFailure(txnErr))
+	require.ErrorContains(t, txnErr, "TransactionStatusError")
 	checkKey(t, "a", 0)
 }
 
@@ -788,9 +792,9 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 
-	performConflictingWrite := func(ctx context.Context, key roachpb.Key) (hlc.Timestamp, error) {
+	performConflictingRead := func(ctx context.Context, key roachpb.Key) (hlc.Timestamp, error) {
 		conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
-		if err := conflictTxn.Put(ctx, key, "conflict"); err != nil {
+		if _, err := conflictTxn.Get(ctx, key); err != nil {
 			return hlc.Timestamp{}, err
 		}
 		if err := conflictTxn.Commit(ctx); err != nil {
@@ -803,17 +807,18 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 		_, err := txn.Get(ctx, keyA)
 		require.NoError(t, err)
 		// Fork off a leaf transaction before the root is refreshed.
-		leafInputState, err := txn.GetLeafTxnInputState(ctx)
-		require.NoError(t, err)
+		leafInputState := txn.GetLeafTxnInputState(ctx)
 		leafTxn := kv.NewLeafTxn(ctx, db, 0, leafInputState)
 
-		writeTS, err := performConflictingWrite(ctx, keyB)
+		readTS, err := performConflictingRead(ctx, keyB)
 		require.NoError(t, err)
-		require.True(t, leafTxn.TestingCloneTxn().ReadTimestamp.Less(writeTS))
+		require.True(t, leafTxn.TestingCloneTxn().ReadTimestamp.Less(readTS))
 
-		// Write to keyB using the root transaction. This should hit a write-write
-		// conflict and cause the root transaction to be immediately refreshed.
+		// Write to KeyB using the root transaction. This should cause the timestamp
+		// to get bumped, which we will refresh to further down.
 		err = txn.Put(ctx, keyB, "garbage")
+		require.NoError(t, err)
+		err = txn.ManualRefresh(ctx)
 		require.NoError(t, err)
 
 		// Finally, try and update the root with the leaf transaction's state.

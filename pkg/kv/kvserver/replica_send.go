@@ -14,9 +14,7 @@ import (
 	"context"
 	"reflect"
 	"runtime/pprof"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -24,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -35,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -145,8 +141,8 @@ func (r *Replica) SendWithWriteBytes(
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)
 
-	// If the internal Raft group is quiesced, wake it and the leader.
-	r.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
+	// If the internal Raft group is not initialized, create it and wake the leader.
+	r.maybeInitializeRaftGroup(ctx)
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
@@ -310,22 +306,12 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 func (r *Replica) maybeAddRangeInfoToResponse(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) {
-	// Only return range info if ClientRangeInfo is non-empty. In particular, we
-	// don't want to populate this for lease requests, since these bypass
-	// DistSender and never use ClientRangeInfo.
-	//
-	// From 23.2, all DistSenders ensure ExplicitlyRequested is set when otherwise
-	// empty. Fall back to check for lease requests, to avoid 23.1 regressions.
-	if r.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) {
-		if ba.ClientRangeInfo == (roachpb.ClientRangeInfo{}) {
-			return
-		}
-	} else if ba.IsSingleRequestLeaseRequest() {
-		// TODO(erikgrinaker): Remove this branch when 23.1 support is dropped.
-		_ = clusterversion.V23_1
+	// Ignore lease requests. These are submitted directly to the replica,
+	// bypassing the DistSender. They don't need range info returned, but their
+	// ClientRangeInfo is always empty, so they'll otherwise always get it.
+	if ba.IsSingleRequestLeaseRequest() {
 		return
 	}
-
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
 	// than the replica in case this is a follower.
@@ -424,8 +410,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *kvpb.BatchRequest, fn batchExecutionFn,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Try to execute command; exit retry loop on success.
-	var latchSpans *spanset.SpanSet
-	var lockSpans *lockspanset.LockSpanSet
+	var latchSpans, lockSpans *spanset.SpanSet
 	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
@@ -814,7 +799,7 @@ func (r *Replica) handleReadWithinUncertaintyIntervalError(
 	// Attempt a server-side retry of the request. Note that we pass nil for
 	// latchSpans, because we have already released our latches and plan to
 	// re-acquire them if the retry is allowed.
-	if !canDoServersideRetry(ctx, pErr, ba, nil /* g */, hlc.Timestamp{} /* deadline */) {
+	if !canDoServersideRetry(ctx, pErr, ba, nil /* br */, nil /* g */, hlc.Timestamp{} /* deadline */) {
 		r.store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetryFailure.Inc(1)
 		return nil, pErr
 	}
@@ -1107,13 +1092,8 @@ func (r *Replica) checkBatchRequest(ba *kvpb.BatchRequest, isReadOnly bool) erro
 
 func (r *Replica) collectSpans(
 	ba *kvpb.BatchRequest,
-) (
-	latchSpans *spanset.SpanSet,
-	lockSpans *lockspanset.LockSpanSet,
-	requestEvalKind concurrency.RequestEvalKind,
-	_ error,
-) {
-	latchSpans, lockSpans = spanset.New(), lockspanset.New()
+) (latchSpans, lockSpans *spanset.SpanSet, requestEvalKind concurrency.RequestEvalKind, _ error) {
+	latchSpans, lockSpans = spanset.New(), spanset.New()
 	r.mu.RLock()
 	desc := r.descRLocked()
 	liveCount := r.mu.state.Stats.LiveCount
@@ -1135,11 +1115,10 @@ func (r *Replica) collectSpans(
 			latchGuess += len(et.(*kvpb.EndTxnRequest).LockSpans) - 1
 		}
 		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, latchGuess)
-		// TODO(arul): Use the correct locking strength here.
-		lockSpans.Reserve(lock.Intent, len(ba.Requests))
+		lockSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
 	} else {
 		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
-		lockSpans.Reserve(lock.None, len(ba.Requests))
+		lockSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	}
 
 	// Note that we are letting locking readers be considered for optimistic
@@ -1203,17 +1182,15 @@ func (r *Replica) collectSpans(
 	}
 
 	// Commands may create a large number of duplicate spans. De-duplicate
-	// them to reduce the number of spans we pass to the {spanlatch,Lock}Manager.
-	latchSpans.SortAndDedup()
-	lockSpans.SortAndDeDup()
+	// them to reduce the number of spans we pass to the spanlatch manager.
+	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
+		s.SortAndDedup()
 
-	// If any command gave us spans that are invalid, bail out early
-	// (before passing them to the {spanlatch,Lock}Manager, which may panic).
-	if err := latchSpans.Validate(); err != nil {
-		return nil, nil, concurrency.PessimisticEval, err
-	}
-	if err := lockSpans.Validate(); err != nil {
-		return nil, nil, concurrency.PessimisticEval, err
+		// If any command gave us spans that are invalid, bail out early
+		// (before passing them to the spanlatch manager, which may panic).
+		if err := s.Validate(); err != nil {
+			return nil, nil, concurrency.PessimisticEval, err
+		}
 	}
 
 	optEvalForLimit := false
@@ -1261,59 +1238,22 @@ func (r *Replica) collectSpans(
 // either after a write request has achieved consensus and been applied to Raft
 // or after a read-only request has finished evaluation.
 type endCmds struct {
-	repl             *Replica
-	g                *concurrency.Guard
-	st               kvserverpb.LeaseStatus // empty for follower reads
-	replicatingSince time.Time
-}
-
-// makeUnreplicatedEndCmds sets up an endCmds to track an unreplicated,
-// that is, read-only, command.
-func makeUnreplicatedEndCmds(
-	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
-) endCmds {
-	return makeReplicatedEndCmds(repl, g, st, time.Time{})
-}
-
-// makeReplicatedEndCmds initializes an endCmds representing a command that
-// needs to undergo replication. This is not used for read-only commands
-// (including read-write commands that end up not queueing any mutations to the
-// state machine).
-func makeReplicatedEndCmds(
-	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
-) endCmds {
-	return endCmds{repl: repl, g: g, st: st, replicatingSince: replicatingSince}
-}
-
-func makeEmptyEndCmds() endCmds {
-	return endCmds{}
+	repl *Replica
+	g    *concurrency.Guard
+	st   kvserverpb.LeaseStatus // empty for follower reads
 }
 
 // move moves the endCmds into the return value, clearing and making a call to
 // done on the receiver a no-op.
 func (ec *endCmds) move() endCmds {
 	res := *ec
-	*ec = makeEmptyEndCmds()
+	*ec = endCmds{}
 	return res
 }
 
-// poison marks the Guard held by the endCmds as poisoned, which
-// induces fail-fast behavior for requests waiting for our latches.
-// This method must only be called for commands in the Replica.mu.proposals
-// map and the Replica mutex must be held throughout.
 func (ec *endCmds) poison() {
 	if ec.repl == nil {
-		// Already cleared. This path may no longer be hit thanks to a re-work
-		// of reproposals[1]. The caller to poison holds the replica mutex and
-		// the command is in r.mu.proposals, meaning the command hasn't been
-		// signaled by log application yet, i.e. latches must not have been
-		// released (even if refreshProposalsLocked has already signaled the
-		// client with an ambiguous result).
-		//
-		// [1]: https://github.com/cockroachdb/cockroach/pull/106750
-		//
-		// TODO(repl): verify that and put an assertion here. This is similar to
-		// the TODO on ProposalData.endCmds.
+		// Already cleared.
 		return
 	}
 	ec.repl.concMgr.PoisonReq(ec.g)
@@ -1330,8 +1270,7 @@ func (ec *endCmds) done(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
 ) {
 	if ec.repl == nil {
-		// The endCmds were cleared. This may no longer be necessary, see the comment on
-		// ProposalData.endCmds.
+		// The endCmds were cleared.
 		return
 	}
 	defer ec.move() // clear
@@ -1344,18 +1283,9 @@ func (ec *endCmds) done(
 		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
 	}
 
-	if ts := ec.replicatingSince; !ts.IsZero() {
-		ec.repl.store.metrics.RaftReplicationLatency.RecordValue(timeutil.Since(ts).Nanoseconds())
-	}
-
-	// Release the latches acquired by the request and exit lock wait-queues. Must
-	// be done AFTER the timestamp cache is updated. ec.g is set both for reads
-	// and for writes. For writes, it is set only when the Raft proposal has
-	// assumed responsibility for the request.
-	//
-	// TODO(replication): at the time of writing, there is no code path in which
-	// this method is called and the Guard is not set. Consider removing this
-	// check and upgrading the previous observation to an invariant.
+	// Release the latches acquired by the request and exit lock wait-queues.
+	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
+	// the Raft proposal has assumed responsibility for the request.
 	if ec.g != nil {
 		ec.repl.concMgr.FinishReq(ec.g)
 	}

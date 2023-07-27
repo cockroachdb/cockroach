@@ -21,10 +21,15 @@ import {
   TransactionsPageDispatchProps,
 } from "./transactionsPage";
 import {
+  selectTransactionsData,
+  selectTransactionsLastError,
   selectTxnColumns,
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectTransactionsDataValid,
+  selectTransactionsLastUpdated,
+  selectTransactionsDataInFlight,
   selectRequestTime,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
@@ -48,22 +53,22 @@ import {
   TransactionsPageRootProps,
 } from "./transactionsPageRoot";
 import {
-  mapStateToActiveTransactionsPageProps,
-  mapDispatchToActiveTransactionsPageProps,
-} from "./activeTransactionsPage.selectors";
+  mapStateToRecentTransactionsPageProps,
+  mapDispatchToRecentTransactionsPageProps,
+} from "./recentTransactionsPage.selectors";
 import {
-  ActiveTransactionsViewStateProps,
-  ActiveTransactionsViewDispatchProps,
-} from "./activeTransactionsView";
+  RecentTransactionsViewStateProps,
+  RecentTransactionsViewDispatchProps,
+} from "./recentTransactionsView";
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveTransactionsViewStateProps;
+  activePageProps: RecentTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: ActiveTransactionsViewDispatchProps;
+  activePageProps: RecentTransactionsViewDispatchProps;
 };
 
 export const TransactionsPageConnected = withRouter(
@@ -77,8 +82,12 @@ export const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...props,
         columns: selectTxnColumns(state),
-        txnsResp: state.adminUI?.transactions,
+        data: selectTransactionsData(state),
+        isDataValid: selectTransactionsDataValid(state),
+        isReqInFlight: selectTransactionsDataInFlight(state),
+        lastUpdated: selectTransactionsLastUpdated(state),
         timeScale: selectTimeScale(state),
+        error: selectTransactionsLastError(state),
         filters: selectFilters(state),
         isTenant: selectIsTenant(state),
         nodeRegions: nodeRegionsByIDSelector(state),
@@ -89,7 +98,7 @@ export const TransactionsPageConnected = withRouter(
         reqSortSetting: selectTxnsPageReqSort(state),
         requestTime: selectRequestTime(state),
       },
-      activePageProps: mapStateToActiveTransactionsPageProps(state),
+      activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
@@ -183,7 +192,7 @@ export const TransactionsPageConnected = withRouter(
           );
         },
       },
-      activePageProps: mapDispatchToActiveTransactionsPageProps(dispatch),
+      activePageProps: mapDispatchToRecentTransactionsPageProps(dispatch),
     }),
     (stateProps, dispatchProps) => ({
       fingerprintsPageProps: {

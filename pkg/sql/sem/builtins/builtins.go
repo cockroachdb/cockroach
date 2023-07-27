@@ -27,7 +27,6 @@ import (
 	"math/bits"
 	"math/rand"
 	"net"
-	"regexp"
 	"regexp/syntax"
 	"strconv"
 	"strings"
@@ -79,7 +78,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,7 +86,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -150,10 +147,6 @@ CockroachDB supports the following flags:
 | w    | yes                              | yes                                  |
 | p    | no                               | no                                   |
 | m/n  | no                               | yes                                  |`
-
-// enableUnsafeTestBuiltins enables unsafe builtins for testing purposes.
-var enableUnsafeTestBuiltins = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS", false)
 
 // builtinDefinition represents a built-in function before it becomes
 // a tree.FunctionDefinition.
@@ -436,20 +429,20 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "str", Typ: types.Bytes}, {Name: "enc", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				str := string(tree.MustBeDBytes(args[0]))
+				str := []byte(tree.MustBeDBytes(args[0]))
 				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
 				// All the following are aliases to each other in PostgreSQL.
 				case "utf8", "unicode", "cp65001":
-					if !utf8.Valid(encoding.UnsafeConvertStringToBytes(str)) {
+					if !utf8.Valid(str) {
 						return nil, newDecodeError("UTF8")
 					}
-					return tree.NewDString(str), nil
+					return tree.NewDString(string(str)), nil
 
 					// All the following are aliases to each other in PostgreSQL.
 				case "latin1", "iso88591", "cp28591":
 					var buf strings.Builder
-					for _, c := range encoding.UnsafeConvertStringToBytes(str) {
+					for _, c := range str {
 						buf.WriteRune(rune(c))
 					}
 					return tree.NewDString(buf.String()), nil
@@ -1170,11 +1163,11 @@ var regularBuiltins = map[string]builtinDefinition{
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
-				res, err := lex.DecodeRawBytesToByteArray(encoding.UnsafeConvertStringToBytes(data), be)
+				res, err := lex.DecodeRawBytesToByteArray(data, be)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDBytes(tree.DBytes(encoding.UnsafeConvertBytesToString(res))), nil
+				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
 			Info:       "Decodes `data` using `format` (`hex` / `escape` / `base64`).",
 			Volatility: volatility.Immutable,
@@ -4126,29 +4119,6 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		}),
 
-	"crdb_internal.job_execution_details": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "job_id", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
-				}
-				jobID := tree.MustBeDInt(args[0])
-				json, err := evalCtx.JobsProfiler.GenerateExecutionDetailsJSON(ctx, evalCtx, jobspb.JobID(jobID))
-				if err != nil {
-					return nil, err
-				}
-				return tree.ParseDJSON(string(json))
-			},
-			Info: "Output a JSONB version of the specified job's execution details. The execution details are collected" +
-				"and persisted during the lifetime of the job and provide more observability into the job's execution",
-			Volatility: volatility.Volatile,
-		}),
-
 	"crdb_internal.read_file": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
@@ -4304,7 +4274,7 @@ value if you rely on the HLC for accuracy.`,
 					metadata.Query = statistics.Key.Query
 					metadata.QuerySummary = statistics.Key.QuerySummary
 					metadata.StmtType = statistics.Stats.SQLType
-					metadata.Databases = util.CombineUnique(metadata.Databases, []string{statistics.Key.Database})
+					metadata.Databases = util.CombineUniqueString(metadata.Databases, []string{statistics.Key.Database})
 
 					if statistics.Key.DistSQL {
 						metadata.DistSQLCount++
@@ -4357,7 +4327,7 @@ value if you rely on the HLC for accuracy.`,
 					}
 
 					// Aggregate relevant stats.
-					metadata.Databases = util.CombineUnique(metadata.Databases, other.Databases)
+					metadata.Databases = util.CombineUniqueString(metadata.Databases, other.Databases)
 
 					metadata.DistSQLCount += other.DistSQLCount
 					metadata.FailedCount += other.FailedCount
@@ -4993,7 +4963,6 @@ value if you rely on the HLC for accuracy.`,
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 		// This overload is provided for use in tests.
 		tree.Overload{
@@ -5005,7 +4974,6 @@ value if you rely on the HLC for accuracy.`,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 		// This overload is deprecated. Use CREATE VIRTUAL CLUSTER instead.
 		tree.Overload{
@@ -5017,7 +4985,6 @@ value if you rely on the HLC for accuracy.`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 	),
 
@@ -5053,7 +5020,6 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Body:       `SELECT crdb_internal.destroy_tenant($1, false)`,
 			Info:       "DO NOT USE -- USE 'DROP VIRTUAL CLUSTER' INSTEAD.",
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -5330,7 +5296,6 @@ SELECT
 			Info: "repair_catalog_corruption(descriptor_id,corruption) attempts to repair corrupt" +
 				" records in system tables associated with that descriptor id",
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 	),
 
@@ -5377,7 +5342,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				return crdbInternalBufferNotice(ctx, evalCtx, "NOTICE", msg)
+				return crdbInternalSendNotice(ctx, evalCtx, "NOTICE", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
@@ -5399,7 +5364,7 @@ SELECT
 				if _, ok := pgnotice.ParseDisplaySeverity(severityString); !ok {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "severity %s is invalid", severityString)
 				}
-				return crdbInternalBufferNotice(ctx, evalCtx, severityString, msg)
+				return crdbInternalSendNotice(ctx, evalCtx, severityString, msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
@@ -5560,6 +5525,22 @@ SELECT
 		},
 	),
 
+	// Identity function which is marked as impure to avoid constant folding.
+	"crdb_internal.no_constant_folding": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.Any}},
+			ReturnType: tree.IdentityReturnType(0),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return args[0], nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.trim_tenant_prefix": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
@@ -5632,8 +5613,19 @@ SELECT
 				if err != nil {
 					return nil, err
 				}
-				codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(uint64(sTenID)))
-				return spanToDatum(codec.TenantSpan())
+				start := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(sTenID)))
+				end := start.PrefixEnd()
+
+				result := tree.NewDArray(types.Bytes)
+				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
+					return nil, err
+				}
+
+				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
+					return nil, err
+				}
+
+				return result, nil
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
@@ -5650,7 +5642,11 @@ SELECT
 				if err != nil {
 					return nil, err
 				}
-				return spanToDatum(keys.MakeSQLCodec(tid).TenantSpan())
+				start := keys.MakeTenantPrefix(tid)
+				return spanToDatum(roachpb.Span{
+					Key:    start,
+					EndKey: start.PrefixEnd(),
+				})
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
@@ -5747,25 +5743,6 @@ SELECT
 				}
 				skip := int(tree.MustBeDInt(args[2]))
 				return tree.NewDString(catalogkeys.PrettySpan(nil /* valDirs */, span, skip)), nil
-			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Immutable,
-		},
-	),
-
-	"crdb_internal.pretty_value": makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				tree.ParamType{Name: "raw_value", Typ: types.Bytes},
-			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				var v roachpb.Value
-				v.RawBytes = []byte(tree.MustBeDBytes(args[0]))
-				return tree.NewDString(v.PrettyPrint()), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Immutable,
@@ -6472,59 +6449,6 @@ SELECT
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.unsafe_lock_replica": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryTesting,
-			DistsqlBlocklist: true,
-			Undocumented:     true,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "range_id", Typ: types.Int},
-				{Name: "lock", Typ: types.Bool}, // true to lock, false to unlock
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if !enableUnsafeTestBuiltins {
-					return nil, errors.Errorf("requires COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
-				} else if isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx); err != nil {
-					return nil, err
-				} else if !isAdmin {
-					return nil, errInsufficientPriv
-				}
-
-				rangeID := roachpb.RangeID(*args[0].(*tree.DInt))
-				lock := *args[1].(*tree.DBool)
-
-				var replicaMu *syncutil.RWMutex
-				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
-					if replicaMu == nil {
-						replicaMu = store.GetReplicaMutexForTesting(rangeID)
-					}
-					return nil
-				}); err != nil {
-					return nil, err
-				} else if replicaMu == nil {
-					return tree.DBoolFalse, nil // return false for easier race handling in tests
-				}
-
-				log.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
-
-				if lock {
-					replicaMu.Lock() // deadlocks if called twice
-				} else {
-					// Unlocking a non-locked mutex will irrecoverably fatal the process.
-					// We do TryLock() as a best-effort guard against this, but it will be
-					// racey. The caller is expected to have locked the mutex first.
-					replicaMu.TryLock()
-					replicaMu.Unlock()
-				}
-				return tree.DBoolTrue, nil
-			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Volatile,
-		},
-	),
 	"crdb_internal.upsert_dropped_relation_gc_ttl": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,
@@ -6573,7 +6497,6 @@ generate_test_objects(pat, num) is an alias for
 generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 `,
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6589,7 +6512,6 @@ generate_test_objects(pat, counts) is an alias for
 generate_test_objects('{"names":pat, "counts":counts}'::jsonb)
 `,
 			Volatility: volatility.Volatile,
-			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -7699,43 +7621,6 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 
-	"crdb_internal.request_job_execution_details": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "jobID", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// TODO(adityamaru): Figure out the correct permissions for collecting a
-				// job profiler bundle. For now only allow the admin role.
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
-					return nil, err
-				}
-
-				if !isAdmin {
-					return nil, errors.New("must be admin to request a job profiler bundle")
-				}
-
-				jobID := int(tree.MustBeDInt(args[0]))
-				if err := evalCtx.JobsProfiler.RequestExecutionDetailFiles(
-					ctx,
-					jobspb.JobID(jobID),
-				); err != nil {
-					return nil, err
-				}
-
-				return tree.DBoolTrue, nil
-			},
-			Volatility: volatility.Volatile,
-			Info:       `Used to request the collection of execution details for a given job ID`,
-		},
-	),
-
 	"crdb_internal.request_statement_bundle": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,
@@ -7938,7 +7823,7 @@ expires until the statement bundle is collected`,
 			},
 			types.String,
 			"Removes constants from a SQL statement. String provided must contain at most "+
-				"1 statement. (Hint: one way to easily quote arbitrary SQL is to use dollar-quotes.)",
+				"1 statement.",
 			volatility.Immutable,
 		),
 		tree.Overload{
@@ -7975,8 +7860,7 @@ expires until the statement bundle is collected`,
 				return result, nil
 			},
 			Info: "Hide constants for each element in an array of SQL statements. " +
-				"Note that maximum 1 statement is permitted per string element. (Hint: one way to easily " +
-				"quote arbitrary SQL is to use dollar-quotes.)",
+				"Note that maximum 1 statement is permitted per string element.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -8015,8 +7899,7 @@ expires until the statement bundle is collected`,
 			},
 			types.String,
 			"Surrounds constants in SQL statement with redaction markers. String provided must "+
-				"contain at most 1 statement. (Hint: one way to easily quote arbitrary SQL is to use "+
-				"dollar-quotes.)",
+				"contain at most 1 statement.",
 			volatility.Immutable,
 		),
 		tree.Overload{
@@ -8053,8 +7936,7 @@ expires until the statement bundle is collected`,
 				return result, nil
 			},
 			Info: "Surrounds constants with redaction markers for each element in an array of SQL " +
-				"statements. Note that maximum 1 statement is permitted per string element. (Hint: one " +
-				"way to easily quote arbitrary SQL is to use dollar-quotes.)",
+				"statements. Note that maximum 1 statement is permitted per string element.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -8096,77 +7978,6 @@ expires until the statement bundle is collected`,
 				"(substrings surrounded by the redaction markers, '‹' and '›') with the redacted marker, " +
 				"'‹×›'.",
 			Volatility: volatility.Immutable,
-		},
-	),
-	"crdb_internal.plpgsql_raise": makeBuiltin(tree.FunctionProperties{
-		Category:     builtinconstants.CategoryString,
-		Undocumented: true,
-	},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "severity", Typ: types.String},
-				{Name: "message", Typ: types.String},
-				{Name: "detail", Typ: types.String},
-				{Name: "hint", Typ: types.String},
-				{Name: "code", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				argStrings := make([]string, len(args))
-				for i := range args {
-					s, ok := tree.AsDString(args[i])
-					if !ok {
-						return nil, errors.Newf("expected string value, got %T", args[i])
-					}
-					argStrings[i] = string(s)
-				}
-				// Build the error.
-				severity := strings.ToUpper(argStrings[0])
-				if _, ok := pgnotice.ParseDisplaySeverity(severity); !ok {
-					return nil, pgerror.Newf(
-						pgcode.InvalidParameterValue, "severity %s is invalid", severity,
-					)
-				}
-				message := argStrings[1]
-				err := errors.Newf("%s", message)
-				err = pgerror.WithSeverity(err, severity)
-				if detail := argStrings[2]; detail != "" {
-					err = errors.WithDetail(err, detail)
-				}
-				if hint := argStrings[3]; hint != "" {
-					err = errors.WithHint(err, hint)
-				}
-				if codeString := argStrings[4]; codeString != "" {
-					var code string
-					if regexp.MustCompile(`[A-Z0-9]{5}`).MatchString(codeString) {
-						// The supplied argument is a valid PG code.
-						code = codeString
-					} else {
-						// The supplied string may be a condition name.
-						if candidates, ok := pgcode.PLpgSQLConditionNameToCode[codeString]; ok {
-							// Some condition names map to more than one code, but postgres
-							// seems to just use the first (smallest) one.
-							code = candidates[0]
-						} else {
-							return nil, pgerror.Newf(pgcode.UndefinedObject,
-								"unrecognized exception condition: \"%s\"", codeString,
-							)
-						}
-					}
-					err = pgerror.WithCandidateCode(err, pgcode.MakeCode(code))
-				}
-				if severity == "ERROR" {
-					// Directly return the error from the function call.
-					return nil, err
-				}
-				// Send the error as a notice to the client, then return NULL.
-				if sendErr := crdbInternalSendNotice(ctx, evalCtx, err); sendErr != nil {
-					return nil, sendErr
-				}
-				return tree.DNull, nil
-			},
-			Info:       "This function is used internally to implement the PLpgSQL RAISE statement.",
-			Volatility: volatility.Volatile,
 		},
 	),
 }
@@ -10593,7 +10404,7 @@ func asJSONBuildObjectKey(
 	case *tree.DBitArray, *tree.DBool, *tree.DBox2D, *tree.DBytes, *tree.DDate,
 		*tree.DDecimal, *tree.DEnum, *tree.DFloat, *tree.DGeography,
 		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval, *tree.DOid,
-		*tree.DOidWrapper, *tree.DPGLSN, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
+		*tree.DOidWrapper, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
 		*tree.DTSQuery, *tree.DTSVector, *tree.DUuid, *tree.DVoid:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:

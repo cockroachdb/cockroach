@@ -58,7 +58,7 @@ type TestCLI struct {
 
 	// t is the testing.T instance used for this test.
 	// Example_xxx tests may have this set to nil.
-	t testing.TB
+	t *testing.T
 	// logScope binds the lifetime of the log files to this test, when t
 	// is not nil.
 	logScope *log.TestLogScope
@@ -72,7 +72,7 @@ type TestCLI struct {
 
 // TestCLIParams contains parameters used by TestCLI.
 type TestCLIParams struct {
-	T        testing.TB
+	T        *testing.T
 	Insecure bool
 	// NoServer, if true, starts the test without a DB server.
 	NoServer bool
@@ -163,7 +163,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		if params.NoNodelocal {
 			args.ExternalIODir = ""
 		}
-		s, err := serverutils.StartServerRaw(params.T, args)
+		s, err := serverutils.StartServerRaw(args)
 		if err != nil {
 			c.fail(err)
 		}
@@ -232,7 +232,7 @@ func (c *TestCLI) stopServer() {
 func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.stopServer()
 	log.Info(context.Background(), "restarting server")
-	s, err := serverutils.StartServerRaw(params.T, base.TestServerArgs{
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
 		Insecure:    params.Insecure,
 		SSLCertsDir: c.certsDir,
 		StoreSpecs:  params.StoreSpecs,

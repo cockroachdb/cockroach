@@ -141,11 +141,6 @@ func (s *ColBatchDirectScan) GetBytesRead() int64 {
 	return s.fetcher.GetBytesRead()
 }
 
-// GetKVPairsRead is part of the colexecop.KVReader interface.
-func (s *ColBatchDirectScan) GetKVPairsRead() int64 {
-	return s.fetcher.GetKVPairsRead()
-}
-
 // GetBatchRequestsIssued is part of the colexecop.KVReader interface.
 func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 	return s.fetcher.GetBatchRequestsIssued()

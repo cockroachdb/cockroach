@@ -66,9 +66,6 @@ func performClusterSetup(t test.Test, conn *gosql.DB, clusterSetup []string) {
 }
 
 type tpchVecTestCase interface {
-	// sharedProcessMT returns whether this test is running in shared-process
-	// multi-tenant mode.
-	sharedProcessMT() bool
 	// getRunConfig returns the configuration of tpchvec test run.
 	getRunConfig() tpchVecTestRunConfig
 	// preQueryRunHook is called before each tpch query is run.
@@ -84,10 +81,6 @@ type tpchVecTestCase interface {
 // tpchVecTestCaseBase is a default tpchVecTestCase implementation that can be
 // embedded and extended.
 type tpchVecTestCaseBase struct{}
-
-func (b tpchVecTestCaseBase) sharedProcessMT() bool {
-	return false
-}
 
 func (b tpchVecTestCaseBase) getRunConfig() tpchVecTestRunConfig {
 	return tpchVecTestRunConfig{
@@ -217,24 +210,16 @@ type tpchVecPerfTest struct {
 
 	settingName       string
 	slownessThreshold float64
-	sharedProcess     bool
 }
 
 var _ tpchVecTestCase = &tpchVecPerfTest{}
 
-func newTpchVecPerfTest(
-	settingName string, slownessThreshold float64, sharedProcessMT bool,
-) *tpchVecPerfTest {
+func newTpchVecPerfTest(settingName string, slownessThreshold float64) *tpchVecPerfTest {
 	return &tpchVecPerfTest{
 		tpchVecPerfHelper: newTpchVecPerfHelper([]string{"OFF", "ON"}),
 		settingName:       settingName,
 		slownessThreshold: slownessThreshold,
-		sharedProcess:     sharedProcessMT,
 	}
-}
-
-func (p tpchVecPerfTest) sharedProcessMT() bool {
-	return p.sharedProcess
 }
 
 func (p tpchVecPerfTest) getRunConfig() tpchVecTestRunConfig {
@@ -279,7 +264,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				performClusterSetup(t, conn, setup)
 				result, err := c.RunWithDetailsSingleNode(
 					ctx, t.L(), c.Node(1),
-					getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum, p.sharedProcess),
+					getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum),
 				)
 				workloadOutput := result.Stdout + result.Stderr
 				t.L().Printf(workloadOutput)
@@ -494,17 +479,13 @@ func (d tpchVecDiskTest) getRunConfig() tpchVecTestRunConfig {
 	return runConfig
 }
 
-func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) string {
-	url := "{pgurl:1}"
-	if sharedProcessMT {
-		url = fmt.Sprintf("{pgurl:1:%s}", appTenantName)
-	}
+func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int) string {
 	// Note that we use --default-vectorize flag which tells tpch workload to
 	// use the current cluster setting sql.defaults.vectorize which must have
 	// been set correctly in preQueryRunHook.
 	return fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-		"--default-vectorize --max-ops=%d --queries=%d %s --enable-checks=true",
-		numRunsPerQuery, queryNum, url)
+		"--default-vectorize --max-ops=%d --queries=%d {pgurl:1} --enable-checks=true",
+		numRunsPerQuery, queryNum)
 }
 
 func baseTestRun(
@@ -516,7 +497,7 @@ func baseTestRun(
 			tc.preQueryRunHook(t, conn, setup)
 			result, err := c.RunWithDetailsSingleNode(
 				ctx, t.L(), c.Node(1),
-				getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum, tc.sharedProcessMT()),
+				getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum),
 			)
 			workloadOutput := result.Stdout + result.Stderr
 			t.L().Printf(workloadOutput)
@@ -593,23 +574,10 @@ func runTPCHVec(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
-	var conn *gosql.DB
-	var disableMergeQueue bool
-	if testCase.sharedProcessMT() {
-		singleTenantConn := c.Conn(ctx, t.L(), 1)
-		// Disable merge queue in the system tenant.
-		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
-			t.Fatal(err)
-		}
-		conn = createInMemoryTenant(ctx, t, c, appTenantName, c.All(), false /* secure */)
-	} else {
-		conn = c.Conn(ctx, t.L(), 1)
-		disableMergeQueue = true
-	}
-
+	conn := c.Conn(ctx, t.L(), 1)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue, false, /* secure */
+		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), true /* disableMergeQueue */, false, /* secure */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -630,15 +598,13 @@ const tpchVecNodeCount = 3
 
 func registerTPCHVec(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "tpchvec/perf",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		Name:    "tpchvec/perf",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.defaults.vectorize", /* settingName */
 				1.5,                      /* slownessThreshold */
-				false,                    /* sharedProcessMT */
 			), baseTestRun)
 		},
 	})
@@ -663,43 +629,13 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:      "tpchvec/streamer",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		Name:    "tpchvec/streamer",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
 				1.5,                                /* slownessThreshold */
-				false,                              /* sharedProcessMT */
-			), baseTestRun)
-		},
-	})
-
-	r.Add(registry.TestSpec{
-		Name:      "tpchvec/direct_scans",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
-				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
-				1.5,   /* slownessThreshold */
-				false, /* sharedProcessMT */
-			), baseTestRun)
-		},
-	})
-
-	r.Add(registry.TestSpec{
-		Name:      "tpchvec/direct_scans/mt-shared-process",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
-				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
-				1.5,  /* slownessThreshold */
-				true, /* sharedProcessMT */
 			), baseTestRun)
 		},
 	})

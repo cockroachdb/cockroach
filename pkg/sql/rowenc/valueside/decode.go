@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -116,12 +115,6 @@ func DecodeUntaggedDatum(
 			return nil, b, err
 		}
 		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(data))), b, nil
-	case types.PGLSNFamily:
-		b, data, err := encoding.DecodeUntaggedIntValue(buf)
-		if err != nil {
-			return nil, b, err
-		}
-		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(data)}), b, nil
 	case types.Box2DFamily:
 		b, data, err := encoding.DecodeUntaggedBox2DValue(buf)
 		if err != nil {

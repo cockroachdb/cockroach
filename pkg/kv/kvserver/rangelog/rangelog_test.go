@@ -245,10 +245,10 @@ type teeWriter struct {
 }
 
 func (t teeWriter) WriteRangeLogEvent(
-	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
 ) error {
-	if err := t.a.WriteRangeLogEvent(ctx, runner, event); err != nil {
+	if err := t.a.WriteRangeLogEvent(ctx, txn, event); err != nil {
 		return err
 	}
-	return t.b.WriteRangeLogEvent(ctx, runner, event)
+	return t.b.WriteRangeLogEvent(ctx, txn, event)
 }

@@ -13,7 +13,6 @@ package vm
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -112,15 +111,8 @@ type VM struct {
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
 
-	// NonBootAttachedVolumes are the non-bootable, _persistent_ volumes attached to the VM.
+	// NonBootAttachedVolumes are the non-bootable volumes attached to the VM.
 	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
-
-	// LocalDisks are the ephemeral SSD disks attached to the VM.
-	LocalDisks []Volume `json:"local_disks"`
-
-	// CostPerHour is the estimated cost per hour of this VM, in US dollars. 0 if
-	//there is no estimate available.
-	CostPerHour float64
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -170,44 +162,13 @@ func (vm *VM) ZoneEntry() (string, error) {
 	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP), nil
 }
 
-func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, _ error) {
+func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, err error) {
 	vm.NonBootAttachedVolumes = append(vm.NonBootAttachedVolumes, v)
-	if err := ForProvider(vm.Provider, func(provider Provider) error {
-		var err error
-		deviceName, err = provider.AttachVolume(l, v, vm)
+	err = ForProvider(vm.Provider, func(provider Provider) error {
+		deviceName, err = provider.AttachVolumeToVM(l, v, vm)
 		return err
-	}); err != nil {
-		return "", err
-	}
-	return deviceName, nil
-}
-
-const vmNameFormat = "user-<clusterid>-<nodeid>"
-
-// ClusterName returns the cluster name a VM belongs to.
-func (vm *VM) ClusterName() (string, error) {
-	if vm.IsLocal() {
-		return vm.LocalClusterName, nil
-	}
-	name := vm.Name
-	parts := strings.Split(name, "-")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("expected VM name in the form %s, got %s", vmNameFormat, name)
-	}
-	return strings.Join(parts[:len(parts)-1], "-"), nil
-}
-
-// UserName returns the username of a VM.
-func (vm *VM) UserName() (string, error) {
-	if vm.IsLocal() {
-		return config.Local, nil
-	}
-	name := vm.Name
-	parts := strings.Split(name, "-")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("expected VM name in the form %s, got %s", vmNameFormat, name)
-	}
-	return parts[0], nil
+	})
+	return deviceName, err
 }
 
 // List represents a list of VMs.
@@ -309,58 +270,6 @@ type ProviderOpts interface {
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
 }
 
-// VolumeSnapshot is an abstract representation of a specific volume snapshot.
-// This type is used across various cloud providers supported by roachprod.
-type VolumeSnapshot struct {
-	ID   string
-	Name string
-}
-
-type VolumeSnapshots []VolumeSnapshot
-
-func (v VolumeSnapshots) Len() int {
-	return len(v)
-}
-
-func (v VolumeSnapshots) Less(i, j int) bool {
-	// This sorting-by-name looks like it happens by default in the gcloud API,
-	// but it doesn't hurt to be paranoid. Since node index number is part of
-	// the fingerprint, this plays nicely with applying snapshots in index
-	// order. That matters -- if the workload is being run on the 10th node,
-	// it's not expecting to have CRDB state. Nor should we expect the 9-node
-	// CRDB cluster to have to work out that now the 10th roachprod node should
-	// be running the CRDB process post snapshot application.
-	return strings.Compare(v[i].Name, v[j].Name) < 0
-}
-
-func (v VolumeSnapshots) Swap(i, j int) {
-	v[i], v[j] = v[j], v[i]
-}
-
-var _ sort.Interface = VolumeSnapshots{}
-
-// VolumeSnapshotCreateOpts groups input callers can provide when creating
-// volume snapshots. Namely, what name it has, the labels it's created with, and
-// a description (visible through cloud consoles).
-type VolumeSnapshotCreateOpts struct {
-	Name        string
-	Labels      map[string]string
-	Description string
-}
-
-// VolumeSnapshotListOpts provides a way to search for specific volume
-// snapshots. Callers can regex match snapshot names, search by exact labels, or
-// filter only for snapshots created before some timestamp. Individual
-// parameters are optional and can be combined with others.
-type VolumeSnapshotListOpts struct {
-	NamePrefix    string
-	Labels        map[string]string
-	CreatedBefore time.Time
-}
-
-// Volume is an abstract representation of a specific volume/disks. This type is
-// used across various cloud providers supported by roachprod, and can typically
-// be snapshotted or attached, detached, mounted from existing VMs.
 type Volume struct {
 	ProviderResourceID string
 	ProviderVolumeType string
@@ -371,7 +280,6 @@ type Volume struct {
 	Size               int
 }
 
-// VolumeCreateOpts groups input callers can provide when creating volumes.
 type VolumeCreateOpts struct {
 	Name string
 	// N.B. Customer managed encryption is not supported at this time
@@ -386,8 +294,7 @@ type VolumeCreateOpts struct {
 }
 
 type ListOptions struct {
-	IncludeVolumes       bool
-	ComputeEstimatedCost bool
+	IncludeVolumes bool
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
@@ -420,24 +327,9 @@ type Provider interface {
 	// provider.
 	ProjectActive(project string) bool
 
-	// Volume and volume snapshot related APIs.
-
-	// CreateVolume creates a new volume using the given options.
 	CreateVolume(l *logger.Logger, vco VolumeCreateOpts) (Volume, error)
-	// ListVolumes lists all volumes already attached to the given VM.
-	ListVolumes(l *logger.Logger, vm *VM) ([]Volume, error)
-	// DeleteVolume detaches and deletes the given volume from the given VM.
-	DeleteVolume(l *logger.Logger, volume Volume, vm *VM) error
-	// AttachVolume attaches the given volume to the given VM.
-	AttachVolume(l *logger.Logger, volume Volume, vm *VM) (string, error)
-	// CreateVolumeSnapshot creates a snapshot of the given volume, using the
-	// given options.
-	CreateVolumeSnapshot(l *logger.Logger, volume Volume, vsco VolumeSnapshotCreateOpts) (VolumeSnapshot, error)
-	// ListVolumeSnapshots lists the individual volume snapshots that satisfy
-	// the search criteria.
-	ListVolumeSnapshots(l *logger.Logger, vslo VolumeSnapshotListOpts) ([]VolumeSnapshot, error)
-	// DeleteVolumeSnapshots permanently deletes the given snapshots.
-	DeleteVolumeSnapshots(l *logger.Logger, snapshot ...VolumeSnapshot) error
+	AttachVolumeToVM(l *logger.Logger, volume Volume, vm *VM) (string, error)
+	SnapshotVolume(l *logger.Logger, volume Volume, name, description string, labels map[string]string) (string, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can

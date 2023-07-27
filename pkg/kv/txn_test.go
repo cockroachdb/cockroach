@@ -61,14 +61,15 @@ func TestTxnVerboseTrace(t *testing.T) {
 	dump := collectedSpans.String()
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
-	//    0.275ms      0.171ms    event:kv.Txn did AutoCommit. err: <nil>
+	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>
+	//txn: "internal/client/txn_test.go:67 TestTxnVerboseTrace" id=<nil> key=/Min lock=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
 	//    0.278ms      0.173ms    event:txn complete
 	found, err := regexp.MatchString(
 		// The (?s) makes "." match \n. This makes the test resilient to other log
 		// lines being interspersed.
 		`(?s)`+
 			`.*event:[^:]*:\d+ inside txn\n`+
-			`.*event:[^:]*:\d+ kv\.Txn did AutoCommit\. err: <nil>\n`+
+			`.*event:[^:]*:\d+ client\.Txn did AutoCommit\. err: <nil>\n`+
 			`.*event:[^:]*:\d+ txn complete.*`,
 		dump)
 	if err != nil {
@@ -779,59 +780,4 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 			require.False(t, txn.CommitTimestampFixed())
 		}
 	})
-}
-
-// TestTxnCommitTriggers tests the behavior of invoking commit triggers, as part
-// of a Commit or a manual EndTxnRequest that includes a commit.
-func TestTxnCommitTriggers(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	for _, test := range []struct {
-		name string
-		// A function that specifies how a transaction ends.
-		endTxnFn func(txn *Txn) error
-		// Assuming a trigger bool value starts off as false, expTrigger is the
-		// expected value of the trigger after the transaction ends.
-		expTrigger bool
-	}{
-		{
-			name:       "explicit commit",
-			endTxnFn:   func(txn *Txn) error { return txn.Commit(ctx) },
-			expTrigger: true,
-		},
-		{
-			name: "manual commit",
-			endTxnFn: func(txn *Txn) error {
-				b := txn.NewBatch()
-				b.AddRawRequest(&kvpb.EndTxnRequest{Commit: true})
-				return txn.Run(ctx, b)
-			},
-			expTrigger: true,
-		},
-		{
-			name: "manual abort",
-			endTxnFn: func(txn *Txn) error {
-				b := txn.NewBatch()
-				b.AddRawRequest(&kvpb.EndTxnRequest{Commit: false})
-				return txn.Run(ctx, b)
-			},
-			expTrigger: false,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			clock := hlc.NewClockForTesting(nil)
-			db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(nil), clock, stopper)
-			txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-			triggerVal := false
-			triggerFn := func(ctx context.Context) { triggerVal = true }
-			txn.AddCommitTrigger(triggerFn)
-			err := test.endTxnFn(txn)
-			require.NoError(t, err)
-			require.Equal(t, test.expTrigger, triggerVal)
-		})
-	}
 }

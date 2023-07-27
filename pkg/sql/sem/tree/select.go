@@ -1199,42 +1199,6 @@ func (p LockingWaitPolicy) Max(p2 LockingWaitPolicy) LockingWaitPolicy {
 	return LockingWaitPolicy(max(byte(p), byte(p2)))
 }
 
-// LockingDurability represents the durability of a lock. It is currently not
-// exposed through SQL, but is instead set according to statement type and
-// isolation level. It is included here for completeness.
-type LockingDurability byte
-
-const (
-	// LockDurabilityBestEffort represents the default: make a best-effort attempt
-	// to hold the lock until commit while keeping it unreplicated and in-memory
-	// on the leaseholder of the locked row. Best-effort locks do not propagate
-	// via Raft to other nodes, and are therefore much faster to acquire than
-	// guaranteed-durable locks. For this reason we prefer to use best-effort
-	// locks when possible (i.e. when locking is used as an optimization rather
-	// than as a guarantor of exclusion).
-	LockDurabilityBestEffort LockingDurability = iota
-
-	// LockDurabilityGuaranteed guarantees that if the transaction commits, the
-	// lock was held until commit, even in the face of lease transfers, range
-	// splits, range merges, node failures, memory limits, etc. Guaranteed-durable
-	// locks *must* be used when correctness depends on locking.
-	LockDurabilityGuaranteed
-)
-
-var lockingDurabilityName = [...]string{
-	LockDurabilityBestEffort: "best-effort",
-	LockDurabilityGuaranteed: "guaranteed",
-}
-
-func (d LockingDurability) String() string {
-	return lockingDurabilityName[d]
-}
-
-// Max returns the most durable of the two locking durabilities.
-func (d LockingDurability) Max(d2 LockingDurability) LockingDurability {
-	return LockingDurability(max(byte(d), byte(d2)))
-}
-
 func max(a, b byte) byte {
 	if a > b {
 		return a

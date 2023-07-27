@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/op",
@@ -15,7 +14,6 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/util/log",
     ],
 )
 

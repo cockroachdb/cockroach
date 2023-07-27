@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -76,7 +78,7 @@ func TestPlanDataDriven(t *testing.T) {
 				return ""
 			case "ops", "deps":
 				var plan scplan.Plan
-				sctestutils.WithBuilderDependenciesFromTestServer(s.TenantOrServer(), s.NodeID(), func(deps scbuild.Dependencies) {
+				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
 					var state scpb.CurrentState
@@ -95,7 +97,7 @@ func TestPlanDataDriven(t *testing.T) {
 				}
 				return marshalDeps(t, &plan)
 			case "unimplemented":
-				sctestutils.WithBuilderDependenciesFromTestServer(s.TenantOrServer(), s.NodeID(), func(deps scbuild.Dependencies) {
+				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
 					require.Len(t, stmts, 1)
@@ -247,15 +249,11 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 // Such monitoring is important to prevent OOM for explaining a large plan as
 // it can take up a lot of memory to serialize the plan into a string.
 func TestExplainPlanIsMemoryMonitored(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		SQLMemoryPoolSize: 10 << 20, /* 10MiB */
-	})
+	params, _ := tests.CreateTestServerParams()
+	params.SQLMemoryPoolSize = 1.049e+7 /* 10MiB */
+	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	tt, nodeID := s.TenantOrServer(), s.NodeID()
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t, `use defaultdb;`)
@@ -263,7 +261,7 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	tdb.Exec(t, `use system;`)
 
 	var incumbent scpb.CurrentState
-	sctestutils.WithBuilderDependenciesFromTestServer(tt, nodeID, func(dependencies scbuild.Dependencies) {
+	sctestutils.WithBuilderDependenciesFromTestServer(s, func(dependencies scbuild.Dependencies) {
 		stmt, err := parser.ParseOne(`DROP DATABASE defaultdb CASCADE`)
 		require.NoError(t, err)
 		incumbent, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, nil /* memAcc */)
@@ -277,7 +275,7 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 		nil,           /* maxHist */
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
-		tt.ClusterSettings(),
+		cluster.MakeTestingClusterSettings(),
 	)
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5.243e+6 /* 5MiB */))
 	memAcc := monitor.MakeBoundAccount()
@@ -290,7 +288,4 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	_, err = plan.ExplainVerbose()
 	require.Regexp(t, `test-sc-plan-mon: memory budget exceeded: .*`, err.Error())
 	memAcc.Clear(ctx)
-
-	// SHAPE plans don't depend on the number of elements and won't
-	// exceed the memory budget, so we don't test them for errors.
 }

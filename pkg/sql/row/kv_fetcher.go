@@ -96,7 +96,6 @@ func newTxnKVFetcher(
 		lockTimeout:                lockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
-		kvPairsRead:                new(int64),
 		batchRequestsIssued:        &batchRequestsIssued,
 	}
 	if txn != nil {
@@ -178,7 +177,6 @@ func NewStreamingKVFetcher(
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
 ) *KVFetcher {
-	var kvPairsRead int64
 	var batchRequestsIssued int64
 	streamer := kvstreamer.NewStreamer(
 		distSender,
@@ -188,7 +186,6 @@ func NewStreamingKVFetcher(
 		getWaitPolicy(lockWaitPolicy),
 		streamerBudgetLimit,
 		streamerBudgetAcc,
-		&kvPairsRead,
 		&batchRequestsIssued,
 		GetKeyLockingStrength(lockStrength),
 	)
@@ -205,7 +202,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc, &batchRequestsIssued))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
@@ -338,10 +335,6 @@ func (f *KVFetcher) SetupNextFetch(
 	)
 }
 
-func (f *KVFetcher) reset(b KVBatchFetcher) {
-	*f = KVFetcher{KVBatchFetcher: b}
-}
-
 // KVProvider is a KVBatchFetcher that returns a set slice of kvs.
 type KVProvider struct {
 	KVs []roachpb.KeyValue
@@ -371,11 +364,6 @@ func (f *KVProvider) SetupNextFetch(
 
 // GetBytesRead implements the KVBatchFetcher interface.
 func (f *KVProvider) GetBytesRead() int64 {
-	return 0
-}
-
-// GetKVPairsRead implements the KVBatchFetcher interface.
-func (f *KVProvider) GetKVPairsRead() int64 {
 	return 0
 }
 

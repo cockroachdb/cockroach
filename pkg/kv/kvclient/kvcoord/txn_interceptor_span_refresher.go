@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -108,7 +109,6 @@ type txnSpanRefresher struct {
 	knobs   *ClientTestingKnobs
 	riGen   rangeIteratorFactory
 	wrapped lockedSender
-	metrics *TxnMetrics
 
 	// refreshFootprint contains key spans which were read during the
 	// transaction. In case the transaction's timestamp needs to be pushed, we can
@@ -129,6 +129,12 @@ type txnSpanRefresher struct {
 
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
 	canAutoRetry bool
+
+	refreshSuccess                *metric.Counter
+	refreshFail                   *metric.Counter
+	refreshFailWithCondensedSpans *metric.Counter
+	refreshMemoryLimitExceeded    *metric.Counter
+	refreshAutoRetries            *metric.Counter
 }
 
 // SendLocked implements the lockedSender interface.
@@ -139,7 +145,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	ba.CanForwardReadTimestamp = sr.canForwardReadTimestampWithoutRefresh(ba.Txn)
 
 	// Attempt a refresh before sending the batch.
-	ba, pErr := sr.maybeRefreshPreemptively(ctx, ba)
+	ba, pErr := sr.maybeRefreshPreemptivelyLocked(ctx, ba, false)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -200,7 +206,7 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 			sr.refreshFootprint.clear()
 		}
 		if sr.refreshFootprint.condensed && !condensedBefore {
-			sr.metrics.ClientRefreshMemoryLimitExceeded.Inc(1)
+			sr.refreshMemoryLimitExceeded.Inc(1)
 		}
 	}
 }
@@ -226,20 +232,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		pErr.GetTxn().WriteTooOld = false
 	}
 
-	// Check for server-side refresh.
-	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
-		return nil, kvpb.NewError(err)
-	}
-
 	if pErr == nil && br.Txn.WriteTooOld {
-		// If the transaction is no longer pending, terminate the WriteTooOld flag
-		// without hitting the logic below. It's not clear that this can happen in
-		// practice, but it's better to be safe.
-		if br.Txn.Status != roachpb.PENDING {
-			br.Txn = br.Txn.Clone()
-			br.Txn.WriteTooOld = false
-			return br, nil
-		}
 		// If we got a response with the WriteTooOld flag set, then we pretend that
 		// we got a WriteTooOldError, which will cause us to attempt to refresh and
 		// propagate the error if we failed. When it can, the server prefers to
@@ -277,6 +270,9 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
 		}
 	}
+	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
+		return nil, kvpb.NewError(err)
+	}
 	return br, pErr
 }
 
@@ -299,19 +295,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	}
 	refreshFrom := txn.ReadTimestamp
 	refreshToTxn := txn.Clone()
-	refreshToTxn.BumpReadTimestamp(refreshTS)
-	switch refreshToTxn.Status {
-	case roachpb.PENDING:
-	case roachpb.STAGING:
-		// If the batch resulted in an error but the EndTxn request succeeded,
-		// staging the transaction record in the process, downgrade the status
-		// back to PENDING. Even though the transaction record may have a status
-		// of STAGING, we know that the transaction failed to implicitly commit.
-		refreshToTxn.Status = roachpb.PENDING
-	default:
-		return nil, kvpb.NewError(errors.AssertionFailedf(
-			"unexpected txn status during refresh: %v", refreshToTxn))
-	}
+	refreshToTxn.Refresh(refreshTS)
 	log.VEventf(ctx, 2, "trying to refresh to %s because of %s",
 		refreshToTxn.ReadTimestamp, pErr)
 
@@ -327,10 +311,18 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	log.Eventf(ctx, "refresh succeeded; retrying original request")
 	ba = ba.ShallowCopy()
 	ba.UpdateTxn(refreshToTxn)
-	sr.metrics.ClientRefreshAutoRetries.Inc(1)
+	sr.refreshAutoRetries.Inc(1)
 
-	// To prevent starvation of batches and to ensure the correctness of parallel
-	// commits, split off the EndTxn request into its own batch on auto-retries.
+	// To prevent starvation of batches that are trying to commit, split off the
+	// EndTxn request into its own batch on auto-retries. This avoids starvation
+	// in two ways. First, it helps ensure that we lay down intents if any of
+	// the other requests in the batch are writes. Second, it ensures that if
+	// any writes are getting pushed due to contention with reads or due to the
+	// closed timestamp, they will still succeed and allow the batch to make
+	// forward progress. Without this, each retry attempt may get pushed because
+	// of writes in the batch and then rejected wholesale when the EndTxn tries
+	// to evaluate the pushed batch. When split, the writes will be pushed but
+	// succeed, the transaction will be refreshed, and the EndTxn will succeed.
 	args, hasET := ba.GetArg(kvpb.EndTxn)
 	if len(ba.Requests) > 1 && hasET && !args.(*kvpb.EndTxnRequest).Require1PC {
 		log.Eventf(ctx, "sending EndTxn separately from rest of batch on retry")
@@ -351,34 +343,6 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 // requests up to but not including the EndTxn request and a suffix containing
 // only the EndTxn request. It then issues the two partial batches in order,
 // stitching their results back together at the end.
-//
-// This is done for two reasons:
-//
-// First, we split off the EndTxn request into its own batch on auto-retries to
-// prevent starvation of batches that are trying to commit. This avoids
-// starvation by ensuring that if any other requests in the batch are writes
-// that are getting pushed due to contention with reads or due to the closed
-// timestamp, they will still succeed and allow the batch to make forward
-// progress. Without this, each retry attempt may get pushed because of writes
-// in the batch and then rejected wholesale when the EndTxn tries to evaluate
-// the pushed batch. When split, the writes will be pushed but succeed, the
-// transaction will be refreshed, and the EndTxn will succeed.
-//
-// Second, splitting off the EndTxn and disabling parallel commits on retries is
-// also necessary for correctness, since the previous attempt might have
-// partially succeeded (i.e. the batch might have been split into sub-batches
-// and some of them might have evaluated successfully). In such cases, there
-// might be intents lying around from the first attempt. If we performed another
-// parallel commit, and the batch gets split again, and the STAGING txn record
-// were written before we evaluate some other sub-batches, we could enter the
-// "implicitly committed" state before all the sub-batches are evaluated. This
-// would be problematic: there is a race between evaluating those requests and
-// other pushers coming along and transitioning the txn to explicitly committed
-// (and cleaning up all the intents), and the evaluations of the outstanding
-// sub-batches. If the randos win, then the re-evaluations will fail because we
-// don't have idempotency of evaluations across a txn commit (for example, the
-// re-evaluations might notice that their transaction is already committed and
-// get confused). This behavior is tested in TestTxnCoordSenderRetriesAcrossEndTxn.
 func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -400,16 +364,6 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	baSuffix := ba.ShallowCopy()
 	baSuffix.Requests = ba.Requests[etIdx:]
 	baSuffix.UpdateTxn(brPrefix.Txn)
-	// If necessary, update the EndTxn request to move the in-flight writes
-	// currently attached to the EndTxn request to the LockSpans and clear the
-	// in-flight write set; the writes already succeeded and will not be in-flight
-	// concurrently with the EndTxn request.
-	if et := baSuffix.Requests[0].GetEndTxn(); et.IsParallelCommit() {
-		et = et.ShallowCopy().(*kvpb.EndTxnRequest)
-		et.LockSpans, _ = mergeIntoSpans(et.LockSpans, et.InFlightWrites)
-		et.InFlightWrites = nil
-		baSuffix.Requests[0].MustSetInner(et)
-	}
 	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
 	if pErr != nil {
 		return nil, pErr
@@ -424,13 +378,15 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	return br, nil
 }
 
-// maybeRefreshPreemptively attempts to refresh a transaction's read timestamp
+// maybeRefreshPreemptivelyLocked attempts to refresh a transaction's read timestamp
 // eagerly. Doing so can take advantage of opportunities where the refresh is
 // free or can avoid wasting work issuing a batch containing an EndTxn that will
 // necessarily throw a serializable error. The method returns a batch with an
 // updated transaction if the refresh is successful, or a retry error if not.
-func (sr *txnSpanRefresher) maybeRefreshPreemptively(
-	ctx context.Context, ba *kvpb.BatchRequest,
+// If the force flag is true, the refresh will be attempted even if a refresh
+// is not inevitable.
+func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
+	ctx context.Context, ba *kvpb.BatchRequest, force bool,
 ) (*kvpb.BatchRequest, *kvpb.Error) {
 	// If we know that the transaction will need a refresh at some point because
 	// its write timestamp has diverged from its read timestamp, consider doing
@@ -481,16 +437,10 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 
 	// If true, this batch is guaranteed to fail without a refresh.
 	args, hasET := ba.GetArg(kvpb.EndTxn)
-	refreshInevitable := hasET && args.(*kvpb.EndTxnRequest).Commit &&
-		// If the transaction can tolerate write skew, no preemptive refresh is
-		// necessary, even if its write timestamp has been bumped. Transactions run
-		// at weak isolation levels may refresh in response to WriteTooOld errors or
-		// ReadWithinUncertaintyInterval errors returned by requests, but they do
-		// not need to refresh preemptively ahead of an EndTxn request.
-		!ba.Txn.IsoLevel.ToleratesWriteSkew()
+	refreshInevitable := hasET && args.(*kvpb.EndTxnRequest).Commit
 
 	// If neither condition is true, defer the refresh.
-	if !refreshFree && !refreshInevitable {
+	if !refreshFree && !refreshInevitable && !force {
 		return ba, nil
 	}
 
@@ -502,7 +452,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 
 	refreshFrom := ba.Txn.ReadTimestamp
 	refreshToTxn := ba.Txn.Clone()
-	refreshToTxn.BumpReadTimestamp(ba.Txn.WriteTimestamp)
+	refreshToTxn.Refresh(ba.Txn.WriteTimestamp)
 	log.VEventf(ctx, 2, "preemptively refreshing to timestamp %s before issuing %s",
 		refreshToTxn.ReadTimestamp, ba)
 
@@ -551,11 +501,11 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// Track the result of the refresh in metrics.
 	defer func() {
 		if err == nil {
-			sr.metrics.ClientRefreshSuccess.Inc(1)
+			sr.refreshSuccess.Inc(1)
 		} else {
-			sr.metrics.ClientRefreshFail.Inc(1)
+			sr.refreshFail.Inc(1)
 			if sr.refreshFootprint.condensed {
-				sr.metrics.ClientRefreshFailWithCondensedSpans.Inc(1)
+				sr.refreshFailWithCondensedSpans.Inc(1)
 			}
 		}
 	}()
@@ -629,16 +579,6 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 	})
 }
 
-// resetRefreshSpansLocked clears the txnSpanRefresher's refresh span set and
-// marks the empty set as valid. This is used when a transaction is establishing
-// a new read snapshot and no longer needs to maintain consistency with previous
-// reads.
-func (sr *txnSpanRefresher) resetRefreshSpansLocked() {
-	sr.refreshFootprint.clear()
-	sr.refreshInvalid = false
-	sr.refreshedTimestamp.Reset()
-}
-
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can
 // forward its read timestamp after refreshing all the reads that has performed
 // to this point. This requires that the transaction's timestamp has not leaked.
@@ -690,12 +630,7 @@ func (sr *txnSpanRefresher) forwardRefreshTimestampOnResponse(
 		return nil
 	}
 	if baTxn.ReadTimestamp.Less(brTxn.ReadTimestamp) {
-		if !ba.CanForwardReadTimestamp {
-			return errors.AssertionFailedf("unexpected server-side refresh without "+
-				"CanForwardReadTimestamp set. ba: %s, ba.Txn: %s, br.Txn: %s", ba.Summary(), baTxn, brTxn)
-		}
 		sr.refreshedTimestamp.Forward(brTxn.ReadTimestamp)
-		sr.metrics.ServerRefreshSuccess.Inc(1)
 	} else if brTxn.ReadTimestamp.Less(baTxn.ReadTimestamp) {
 		return errors.AssertionFailedf("received transaction in response with "+
 			"earlier read timestamp than in the request. ba.Txn: %s, br.Txn: %s", baTxn, brTxn)
@@ -768,14 +703,13 @@ func (sr *txnSpanRefresher) importLeafFinalState(
 
 // epochBumpedLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) epochBumpedLocked() {
-	sr.resetRefreshSpansLocked()
+	sr.refreshFootprint.clear()
+	sr.refreshInvalid = false
+	sr.refreshedTimestamp.Reset()
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepoint) {
-	// TODO(nvanbenschoten): make sure this works correctly with ReadCommitted.
-	// The refresh spans should either be empty when captured into a savepoint or
-	// should be cleared when the savepoint is rolled back to.
 	s.refreshSpans = make([]roachpb.Span, len(sr.refreshFootprint.asSlice()))
 	copy(s.refreshSpans, sr.refreshFootprint.asSlice())
 	s.refreshInvalid = sr.refreshInvalid

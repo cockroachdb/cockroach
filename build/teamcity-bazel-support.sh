@@ -7,20 +7,6 @@ fi
 # FYI: You can run `./dev builder` to run this Docker image. :)
 BAZEL_IMAGE=$(cat $root/build/.bazelbuilderversion)
 
-# Capture all "COCKROACH_*" environment variables, generating a string
-# in the format:
-#
-# -e COCKROACH_VAR1 -e COCKROACH_VAR2 ...
-#
-# This can be passed to the `docker` call in run_bazel, allowing
-# engineers to set COCKROACH_* variables via TeamCity and have those
-# set in the environment where `cockroach` runs.
-#
-# NB: `|| true` stops the command from returning 1 if there are no
-# COCKROACH_* variables; that would cause builds that use `pipefail`
-# to fail.
-DOCKER_EXPORT_COCKROACH_VARS=$(env | grep '^COCKROACH_' | cut -d= -f1 | sed -e 's/\(.*\)/-e \1/' | tr '\n' ' ') || true
-
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
 # BAZEL_SUPPORT_EXTRA_DOCKER_ARGS will be passed on to `docker run` unchanged.
@@ -42,7 +28,6 @@ run_bazel() {
     docker run -i ${tty-} --rm --init \
         -u "$(id -u):$(id -g)" \
         --workdir="/go/src/github.com/cockroachdb/cockroach" \
-	${DOCKER_EXPORT_COCKROACH_VARS} \
 	${BAZEL_SUPPORT_EXTRA_DOCKER_ARGS:+$BAZEL_SUPPORT_EXTRA_DOCKER_ARGS} \
         ${vols} \
         $BAZEL_IMAGE "$@" || exit_status=$?

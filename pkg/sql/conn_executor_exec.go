@@ -54,7 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -399,7 +399,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var cancelQuery context.CancelFunc
 	addActiveQuery := func() {
-		ctx, cancelQuery = ctxlog.WithCancel(ctx)
+		ctx, cancelQuery = contextutil.WithCancel(ctx)
 		ex.incrementStartedStmtCounter(ast)
 		func(st *txnState) {
 			st.mu.Lock()
@@ -874,7 +874,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// change would forget to add the call).
 	//
 	// TODO(andrei): really the code should be rearchitected to ensure
-	// that all uses of SQL execution initialize the kv.Txn using a
+	// that all uses of SQL execution initialize the client.Txn using a
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
@@ -1512,7 +1512,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						int(ex.state.mu.autoRetryCounter),
 						ex.extraTxnState.txnCounter,
 						ppInfo.dispatchToExecutionEngine.rowsAffected,
-						ex.state.mu.stmtCount,
 						bulkJobId,
 						ppInfo.curRes.ErrAllowReleased(),
 						ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -1540,7 +1539,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				int(ex.state.mu.autoRetryCounter),
 				ex.extraTxnState.txnCounter,
 				nonBulkJobNumRows,
-				ex.state.mu.stmtCount,
 				bulkJobId,
 				res.Err(),
 				ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
@@ -1685,6 +1683,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
+
+	// The transaction (from planner.txn) may already have been committed at this point,
+	// due to one-phase commit optimization or an error. Since we use that transaction
+	// on the optimizer, check if is still open before generating index recommendations.
+	if planner.txn.IsOpen() {
+		// Set index recommendations, so it can be saved on statement statistics.
+		// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
+		// to true for the internal executors.
+		isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
+		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
+	}
 
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
@@ -1999,12 +2008,6 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 		ex.extraTxnState.numDDL++
 	}
 
-	// Set index recommendations, so it can be saved on statement statistics.
-	// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
-	// to true for the internal executors.
-	isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
-	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
-
 	return nil
 }
 
@@ -2186,9 +2189,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				sqlTs,
 				historicalTs,
 				ex.transitionCtx,
-				ex.QualityOfService(),
-				ex.txnIsolationLevelToKV(ctx, s.Modes.Isolation),
-			)
+				ex.QualityOfService())
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
@@ -2211,9 +2212,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				sqlTs,
 				historicalTs,
 				ex.transitionCtx,
-				ex.QualityOfService(),
-				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
-			)
+				ex.QualityOfService())
 	}
 }
 
@@ -2244,7 +2243,6 @@ func (ex *connExecutor) beginImplicitTxn(
 			historicalTs,
 			ex.transitionCtx,
 			ex.QualityOfService(),
-			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 		)
 }
 

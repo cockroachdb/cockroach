@@ -295,12 +295,12 @@ CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 statement ok
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM unindexed
 ----
-table_name  index_name      non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-unindexed   unindexed_pkey  false       1             rowid        rowid       ASC        false    false     true     1
-unindexed   unindexed_pkey  false       2             customer     customer    N/A        true     false     true     1
+table_name  index_name      non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+unindexed   unindexed_pkey  false       1             rowid        rowid       ASC        false    false     true
+unindexed   unindexed_pkey  false       2             customer     customer    N/A        true     false     true
 
 statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
@@ -429,7 +429,7 @@ CREATE TABLE "user content".review_stats (
 )
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM "user content".review_stats] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM "user content".review_stats
 ----
 review_stats  review_stats_pkey  PRIMARY KEY  PRIMARY KEY (id ASC)                                true
 review_stats  reviewfk           FOREIGN KEY  FOREIGN KEY (id) REFERENCES "customer reviews"(id)  true
@@ -554,7 +554,7 @@ statement error pgcode 23503 foreign key violation: "delivery" row item='8851550
 ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM delivery] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM delivery
 ----
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
 delivery  delivery_pkey                 PRIMARY KEY  PRIMARY KEY (rowid ASC)                                          true
@@ -566,7 +566,7 @@ statement ok
 ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM delivery] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM delivery
 ----
 delivery  delivery_item_fkey            FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      true
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
@@ -635,7 +635,7 @@ statement ok
 TRUNCATE delivery, products, orders, "user content"."customer reviews"
 
 query TTTTB colnames
-SELECT * FROM [SHOW CONSTRAINTS FROM orders] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM orders
 ----
 table_name  constraint_name      constraint_type  details                                                                               validated
 orders      orders_pkey          PRIMARY KEY      PRIMARY KEY (id ASC, shipment ASC)                                                    true
@@ -657,9 +657,23 @@ ALTER TABLE delivery DROP COLUMN "item"
 statement ok
 DROP INDEX products@products_upc_key CASCADE
 
+skipif config local-legacy-schema-changer
+statement error "products" is referenced by foreign key from table "customer reviews"
+DROP TABLE products
+
+# Legacy schema changer orders dependent fks differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
 statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products
 
+skipif config local-legacy-schema-changer
+statement error referenced by foreign key from table "customer reviews"
+DROP TABLE products RESTRICT
+
+# Legacy schema changer orders dependent fks differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
 statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products RESTRICT
 
@@ -769,32 +783,32 @@ CREATE TABLE refpairs_wrong_order (
   INDEX (b, a)
 )
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM refpairs_wrong_order
 ----
-table_name            index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        1             b            b           ASC        false    false     true     1
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        2             a            a           ASC        false    false     true     1
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        3             rowid        rowid       ASC        false    true      true     1
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       1             rowid        rowid       ASC        false    false     true     1
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       2             a            a           N/A        true     false     true     1
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b            b           N/A        true     false     true     1
+table_name            index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        1             b            b           ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        2             a            a           ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        3             rowid        rowid       ASC        false    true      true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       1             rowid        rowid       ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       2             a            a           N/A        true     false     true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b            b           N/A        true     false     true
 
 statement ok
 CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM refpairs_c_between
 ----
-table_name          index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        1             a            a           ASC        false    false     true     1
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        2             c            c           ASC        false    false     true     1
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        3             b            b           ASC        false    false     true     1
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        4             rowid        rowid       ASC        false    true      true     1
-refpairs_c_between  refpairs_c_between_pkey       false       1             rowid        rowid       ASC        false    false     true     1
-refpairs_c_between  refpairs_c_between_pkey       false       2             a            a           N/A        true     false     true     1
-refpairs_c_between  refpairs_c_between_pkey       false       3             b            b           N/A        true     false     true     1
-refpairs_c_between  refpairs_c_between_pkey       false       4             c            c           N/A        true     false     true     1
+table_name          index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        1             a            a           ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        2             c            c           ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        3             b            b           ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        4             rowid        rowid       ASC        false    true      true
+refpairs_c_between  refpairs_c_between_pkey       false       1             rowid        rowid       ASC        false    false     true
+refpairs_c_between  refpairs_c_between_pkey       false       2             a            a           N/A        true     false     true
+refpairs_c_between  refpairs_c_between_pkey       false       3             b            b           N/A        true     false     true
+refpairs_c_between  refpairs_c_between_pkey       false       4             c            c           N/A        true     false     true
 
 statement ok
 CREATE TABLE refpairs (
@@ -806,18 +820,18 @@ CREATE TABLE refpairs (
   FAMILY "primary" (a, b, c, rowid)
 )
 
-query TTBITTTBBBF colnames,rowsort
+query TTBITTTBBB colnames
 SHOW INDEXES FROM refpairs
 ----
-table_name  index_name          non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-refpairs    refpairs_a_b_c_idx  true        1             a            a           ASC        false    false     true     1
-refpairs    refpairs_a_b_c_idx  true        2             b            b           ASC        false    false     true     1
-refpairs    refpairs_a_b_c_idx  true        3             c            c           ASC        false    false     true     1
-refpairs    refpairs_a_b_c_idx  true        4             rowid        rowid       ASC        false    true      true     1
-refpairs    refpairs_pkey       false       1             rowid        rowid       ASC        false    false     true     1
-refpairs    refpairs_pkey       false       2             a            a           N/A        true     false     true     1
-refpairs    refpairs_pkey       false       3             b            b           N/A        true     false     true     1
-refpairs    refpairs_pkey       false       4             c            c           N/A        true     false     true     1
+table_name  index_name          non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+refpairs    refpairs_a_b_c_idx  true        1             a            a           ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        2             b            b           ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        3             c            c           ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        4             rowid        rowid       ASC        false    true      true
+refpairs    refpairs_pkey       false       1             rowid        rowid       ASC        false    false     true
+refpairs    refpairs_pkey       false       2             a            a           N/A        true     false     true
+refpairs    refpairs_pkey       false       3             b            b           N/A        true     false     true
+refpairs    refpairs_pkey       false       4             c            c           N/A        true     false     true
 
 query TT
 SHOW CREATE TABLE refpairs
@@ -910,7 +924,7 @@ CREATE TABLE domain_modules (
 )
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM domain_modules] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM domain_modules
 ----
 domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  FOREIGN KEY (domain_id) REFERENCES domains(id)  true
 domain_modules  domain_modules_module_id_fk  FOREIGN KEY  FOREIGN KEY (module_id) REFERENCES modules(id)  true
@@ -1055,7 +1069,7 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
-query TTTTIT rowsort
+query TTTTIT
 SHOW TABLES FROM test
 ----
 public  bar                   table  root  0  NULL
@@ -2776,7 +2790,7 @@ statement ok
 ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id) NOT VALID
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM pet] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM pet
 ----
 pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id) NOT VALID  false
 pet  pet_pkey       PRIMARY KEY  PRIMARY KEY (id ASC)                              true
@@ -2791,7 +2805,7 @@ statement ok
 ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
 
 query TTTTB
-SELECT * FROM [SHOW CONSTRAINTS FROM pet] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM pet
 ----
 pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  true
 pet  pet_pkey       PRIMARY KEY  PRIMARY KEY (id ASC)                    true
@@ -3870,7 +3884,7 @@ CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
 
 # Validate that cross DB foreign keys are detected by internal tables
 query TTTTTTT
-select * from "".crdb_internal.cross_db_references ORDER BY object_name
+select * from "".crdb_internal.cross_db_references;
 ----
 db2  public  child   db1  public  parent  table foreign key reference
 db2  public  child2  db1  public  parent  table foreign key reference

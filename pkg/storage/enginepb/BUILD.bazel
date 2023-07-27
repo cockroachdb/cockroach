@@ -14,7 +14,6 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/concurrency/isolation:isolation_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -27,7 +26,6 @@ go_proto_library(
     proto = ":enginepb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/util/hlc",
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
@@ -67,7 +65,6 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":enginepb"],
     deps = [
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils/zerofields",

@@ -168,7 +168,7 @@ func (k *mvccKey) Set(value string) error {
 		}
 		*k = mvccKey(storage.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
 	case human:
-		scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
+		scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 		key, err := scanner.Scan(keyStr)
 		if err != nil {
 			return err

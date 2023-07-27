@@ -286,13 +286,6 @@ func (s *ColBatchScan) GetBytesRead() int64 {
 	return s.cf.getBytesRead()
 }
 
-// GetKVPairsRead is part of the colexecop.KVReader interface.
-func (s *ColBatchScan) GetKVPairsRead() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.cf.getKVPairsRead()
-}
-
 // GetBatchRequestsIssued is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 	s.mu.Lock()

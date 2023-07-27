@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
@@ -214,19 +213,13 @@ const unlimitedTokens = math.MaxInt64
 
 // Token changes are made at a coarse time granularity of 15s since
 // compactions can take ~10s to complete. The totalNumByteTokens to give out over
-// the 15s interval are given out in a smoothed manner, at either 1ms intervals,
-// or 250ms intervals depending on system load.
+// the 15s interval are given out in a smoothed manner, at 250ms intervals.
 // This has similarities with the following kinds of token buckets:
 //   - Zero replenishment rate and a burst value that is changed every 15s. We
 //     explicitly don't want a huge burst every 15s.
-//   - For loaded systems, a replenishment rate equal to
-//     totalNumByteTokens/15000(once per ms), with a burst capped at
-//     totalNumByteTokens/60.
-//   - For unloaded systems, a replenishment rate equal to
-//     totalNumByteTokens/60(once per 250ms), with a burst capped at
-//     totalNumByteTokens/60.
-//   - The only difference with the code here is that if totalNumByteTokens is
-//     small, the integer rounding effects are compensated for.
+//   - A replenishment rate equal to totalNumByteTokens/60, with a burst capped at
+//     totalNumByteTokens/60. The only difference with the code here is that if
+//     totalNumByteTokens is small, the integer rounding effects are compensated for.
 //
 // In an experiment with extreme overload using KV0 with block size 64KB,
 // and 4096 clients, we observed the following states of L0 at 1min
@@ -256,101 +249,21 @@ const unlimitedTokens = math.MaxInt64
 // complete (as opposed to also tracking progress in bytes of on-going
 // compactions).
 //
-// An interval < 250ms is picked to hand out the computed tokens due to the needs
-// of flush tokens. For compaction tokens, a 1s interval is fine-grained enough.
+// The 250ms interval to hand out the computed tokens is due to the needs of
+// flush tokens. For compaction tokens, a 1s interval is fine-grained enough.
 //
-// If flushing a memtable takes 100ms, then 10 memtables can be sustainably
+// If flushing a memtable take 100ms, then 10 memtables can be sustainably
 // flushed in 1s. If we dole out flush tokens in 1s intervals, then there are
 // enough tokens to create 10 memtables at the very start of a 1s interval,
 // which will cause a write stall. Intuitively, the faster it is to flush a
 // memtable, the smaller the interval for doling out these tokens. We have
-// observed flushes taking ~0.5s, so we need to pick an interval less than 0.5s,
-// say 250ms, for doling out these tokens.
-//
-// We use a 1ms interval for handing out tokens, to avoid upto 250ms wait times
-// for high priority requests. As a simple example, consider a scenario where
-// each request needs 1 byte token, and there are 1000 tokens added every 250ms.
-// There is a uniform arrival rate of 2000 high priority requests/s, so 500
-// requests uniformly distributed over 250ms. And a uniform arrival rate of
-// 10,000/s of low priority requests, so 2500 requests uniformly distributed over
-// 250ms. There are more than enough tokens to fully satisfy the high priority
-// tokens (they use only 50% of the tokens), but not enough for the low priority
-// requests. Ignore the fact that the latter will result in indefinite queue
-// growth in the admission control WorkQueue. At a particular 250ms tick, the
-// token bucket will go from 0 tokens to 1000 tokens. Any queued high priority
-// requests will be immediately granted their token, until there are no queued
-// high priority requests. Then since there are always a large number of low
-// priority requests waiting, they will be granted until 0 tokens remain. Now we
-// have a 250ms duration until the next replenishment and 0 tokens, so any high
-// priority requests arriving will have to wait. The maximum wait time is 250ms.
-//
-// We use a 250ms intervals for underloaded systems, to avoid CPU utilization
-// issues (see the discussion in runnable.go).
+// observed flushes taking ~0.5s, so we picked a 250ms interval for doling out
+// these tokens. We could use a value smaller than 250ms, but we've observed
+// CPU utilization issues at lower intervals (see the discussion in
+// runnable.go).
 const adjustmentInterval = 15
-
-type tickDuration time.Duration
-
-func (t tickDuration) ticksInAdjustmentInterval() int64 {
-	return 15 * int64(time.Second/time.Duration(t))
-}
-
-const unloadedDuration = tickDuration(250 * time.Millisecond)
-const loadedDuration = tickDuration(1 * time.Millisecond)
-
-// tokenAllocationTicker wraps a time.Ticker, and also computes the remaining
-// ticks in the adjustment interval, given an expected tick rate. If every tick
-// from the ticker was always equal to the expected tick rate, then we could
-// easily determine the remaining ticks, but each tick of time.Ticker can have
-// drift, especially for tiny tick rates like 1ms.
-type tokenAllocationTicker struct {
-	expectedTickDuration        time.Duration
-	adjustmentIntervalStartTime time.Time
-	ticker                      *time.Ticker
-}
-
-// Start a new adjustment interval. adjustmentStart must be called before tick
-// is called. After the initial call, adjustmentStart must also be called if
-// remainingticks returns 0, to indicate that a new adjustment interval has
-// started.
-func (t *tokenAllocationTicker) adjustmentStart(loaded bool) {
-	// For each adjustmentInterval, we pick a tick rate depending on the system
-	// load. If the system is unloaded, we tick at a 250ms rate, and if the system
-	// is loaded, we tick at a 1ms rate. See the comment above the
-	// adjustmentInterval definition to see why we tick at different rates.
-	tickDuration := unloadedDuration
-	if loaded {
-		tickDuration = loadedDuration
-	}
-	t.expectedTickDuration = time.Duration(tickDuration)
-	if t.ticker == nil {
-		t.ticker = time.NewTicker(t.expectedTickDuration)
-	} else {
-		t.ticker.Reset(t.expectedTickDuration)
-	}
-	t.adjustmentIntervalStartTime = timeutil.Now()
-}
-
-func (t *tokenAllocationTicker) tick() {
-	<-t.ticker.C
-}
-
-// remainingTicks will return the remaining ticks before the next adjustment
-// interval is reached while assuming that all future ticks will have a duration of
-// expectedTickDuration. A return value of 0 indicates that adjustmentStart must
-// be called, as the previous adjustmentInterval is over.
-func (t *tokenAllocationTicker) remainingTicks() uint64 {
-	timePassed := timeutil.Since(t.adjustmentIntervalStartTime)
-	if timePassed > adjustmentInterval*time.Second {
-		return 0
-	}
-	remainingTime := adjustmentInterval*time.Second - timePassed
-	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
-}
-
-func (t *tokenAllocationTicker) stop() {
-	t.ticker.Stop()
-	*t = tokenAllocationTicker{}
-}
+const ticksInAdjustmentInterval = 60
+const ioTokenTickDuration = 250 * time.Millisecond
 
 func cumLSMWriteAndIngestedBytes(
 	m *pebble.Metrics,
@@ -363,9 +276,8 @@ func cumLSMWriteAndIngestedBytes(
 }
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
-// the token allocations until the next call. Returns true iff the system is
-// loaded.
-func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) bool {
+// the token allocations until the next call.
+func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) {
 	ctx = logtags.AddTag(ctx, "s", io.storeID)
 	m := metrics.Metrics
 	if !io.statsInitialized {
@@ -395,37 +307,24 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
 		io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 		io.copyAuxEtcFromPerWorkEstimator()
-
-		// Assume system starts off unloaded.
-		return false
+		return
 	}
 	io.adjustTokens(ctx, metrics)
 	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
-	// We assume that the system is loaded if there is less than unlimited tokens
-	// available.
-	return io.totalNumByteTokens < unlimitedTokens
 }
 
-// For both byte and disk bandwidth tokens, allocateTokensTick gives out
-// remainingTokens/remainingTicks tokens in the current tick.
-func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
-	allocateFunc := func(total int64, allocated int64, remainingTicks int64) (toAllocate int64) {
-		remainingTokens := total - allocated
-		// remainingTokens can be equal to unlimitedTokens(MaxInt64) if allocated ==
-		// 0. In such cases remainingTokens + remainingTicks - 1 will overflow.
-		if remainingTokens >= unlimitedTokens-(remainingTicks-1) {
-			toAllocate = remainingTokens / remainingTicks
+// allocateTokensTick gives out 1/ticksInAdjustmentInterval of the
+// various tokens every 250ms.
+func (io *ioLoadListener) allocateTokensTick() {
+	allocateFunc := func(total int64, allocated int64) (toAllocate int64) {
+		// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
+		// calculation.
+		if total >= unlimitedTokens-(ticksInAdjustmentInterval-1) {
+			toAllocate = total / ticksInAdjustmentInterval
 		} else {
-			// Round up so that we don't accumulate tokens to give in a burst on
-			// the last tick.
-			//
-			// TODO(bananabrick): Rounding up is a problem for 1ms tick rate as we tick
-			// up to 15000 times. Say totalNumByteTokens is 150001. We round up to give
-			// 11 tokens per ms. So, we'll end up distributing the 150001 available
-			// tokens in 150000/11 == 13637 remainingTicks. So, we'll have over a
-			// second where we grant no tokens. Larger values of totalNumBytesTokens
-			// will ease this problem.
-			toAllocate = (remainingTokens + remainingTicks - 1) / remainingTicks
+			// Round up so that we don't accumulate tokens to give in a burst on the
+			// last tick.
+			toAllocate = (total + ticksInAdjustmentInterval - 1) / ticksInAdjustmentInterval
 			if toAllocate < 0 {
 				panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
 			}
@@ -436,20 +335,12 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		return toAllocate
 	}
 	// INVARIANT: toAllocate* >= 0.
-	toAllocateByteTokens := allocateFunc(
-		io.totalNumByteTokens,
-		io.byteTokensAllocated,
-		remainingTicks,
-	)
+	toAllocateByteTokens := allocateFunc(io.totalNumByteTokens, io.byteTokensAllocated)
 	if toAllocateByteTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateByteTokens is negative %d", toAllocateByteTokens))
 	}
 	toAllocateElasticDiskBWTokens :=
-		allocateFunc(
-			io.elasticDiskBWTokens,
-			io.elasticDiskBWTokensAllocated,
-			remainingTicks,
-		)
+		allocateFunc(io.elasticDiskBWTokens, io.elasticDiskBWTokensAllocated)
 	if toAllocateElasticDiskBWTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateElasticDiskBWTokens is negative %d",
 			toAllocateElasticDiskBWTokens))
@@ -461,18 +352,7 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 	}
 	io.elasticDiskBWTokensAllocated += toAllocateElasticDiskBWTokens
 
-	tokensMaxCapacity := allocateFunc(
-		io.totalNumByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
-	)
-	diskBWTokenMaxCapacity := allocateFunc(
-		io.elasticDiskBWTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
-	)
-	io.byteTokensUsed += io.kvGranter.setAvailableTokens(
-		toAllocateByteTokens,
-		toAllocateElasticDiskBWTokens,
-		tokensMaxCapacity,
-		diskBWTokenMaxCapacity,
-	)
+	io.byteTokensUsed += io.kvGranter.setAvailableTokens(toAllocateByteTokens, toAllocateElasticDiskBWTokens)
 }
 
 func computeIntervalDiskLoadInfo(
@@ -536,10 +416,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.copyAuxEtcFromPerWorkEstimator()
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
-	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
-	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if score, _ := io.ioThreshold.Score(); score >= 0.5 || io.aux.doLogFlush ||
-		io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
+	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
+	io.kvGranter.setAdmittedDoneModels(l0WriteLM, l0IngestLM, ingestLM)
+	if _, overloaded := io.ioThreshold.Score(); overloaded || io.aux.doLogFlush ||
+		io.elasticDiskBWTokens != unlimitedTokens {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
 	}
 }
@@ -553,7 +433,7 @@ func (io *ioLoadListener) copyAuxEtcFromPerWorkEstimator() {
 	io.adjustTokensResult.aux.perWorkTokensAux = io.perWorkTokenEstimator.aux
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.adjustTokensResult.requestEstimates = requestEstimates
-	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
+	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
 	io.adjustTokensResult.l0WriteLM = l0WriteLM
 	io.adjustTokensResult.l0IngestLM = l0IngestLM
 	io.adjustTokensResult.ingestLM = ingestLM
@@ -815,57 +695,17 @@ func (*ioLoadListener) adjustTokensInner(
 	var totalNumByteTokens int64
 	var smoothedCompactionByteTokens float64
 
-	score, _ := ioThreshold.Score()
-	// Multiplying score by 2 for ease of calculation.
-	score *= 2
-	// We define four levels of load:
-	// Let C be smoothedIntL0CompactedBytes.
-	//
-	// Underload: Score is less than 0.5, which means sublevels is less than 5.
-	// In this case, we don't limit compaction tokens. Flush tokens will likely
-	// become the limit.
-	//
-	// Low load: Score is >= 0.5 and score is less than 1. In this case, we limit
-	// compaction tokens, and interpolate between C tokens when score is 1, and
-	// 2C tokens when score is 0.5.
-	//
-	// Medium load: Score is >= 1 and < 2. We limit compaction tokens, and limit
-	// them between C and C/2 tokens when score is 1 and 2 respectively.
-	//
-	// Overload: Score is >= 2. We limit compaction tokens, and limit tokens to
-	// at most C/2 tokens.
-	if score < 0.5 {
-		// Underload. Maintain a smoothedCompactionByteTokens based on what was
-		// removed, so that when we go over the threshold we have some history.
-		// This is also useful when we temporarily dip below the threshold --
-		// we've seen extreme situations with alternating 15s intervals of above
-		// and below the threshold.
-		numTokens := intL0CompactedBytes
+	_, overloaded := ioThreshold.Score()
+	if overloaded {
+		// Don't admit more byte work than we can remove via compactions. totalNumByteTokens
+		// tracks our goal for admission.
+		// Scale down since we want to get under the thresholds over time. This
+		// scaling could be adjusted based on how much above the threshold we are,
+		// but for now we just use a constant.
+		fTotalNumByteTokens := float64(smoothedIntL0CompactedBytes / 2.0)
 		// Smooth it. This may seem peculiar since we are already using
-		// smoothedIntL0CompactedBytes, but the clauses below use different
-		// computations so we also want the history of smoothedCompactionByteTokens.
-		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
-		totalNumByteTokens = unlimitedTokens
-	} else {
-		var fTotalNumByteTokens float64
-		if score >= 2 {
-			// Overload.
-			//
-			// Don't admit more byte work than we can remove via compactions.
-			// totalNumByteTokens tracks our goal for admission. Scale down
-			// since we want to get under the thresholds over time.
-			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
-		} else if score >= 0.5 && score < 1 {
-			// Low load. Score in [0.5, 1). Score should be smoothedIntL0CompactedBytes at 1,
-			// and 2 * smoothedIntL0CompactedBytes at 0.5.
-			fTotalNumByteTokens = -score*(2*float64(smoothedIntL0CompactedBytes)) + 3*float64(smoothedIntL0CompactedBytes)
-		} else {
-			// Medium load. Score in [1, 2). We use linear interpolation from
-			// medium load to overload, to slowly give out fewer tokens as we
-			// move towards overload.
-			halfSmoothedBytes := float64(smoothedIntL0CompactedBytes / 2.0)
-			fTotalNumByteTokens = -score*halfSmoothedBytes + 3*halfSmoothedBytes
-		}
+		// smoothedIntL0CompactedBytes, but the else clause below uses a different
+		// computation so we also want the history of smoothedTotalNumByteTokens.
 		smoothedCompactionByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedCompactionByteTokens
 		if float64(math.MaxInt64) < smoothedCompactionByteTokens {
 			// Avoid overflow. This should not really happen.
@@ -873,8 +713,16 @@ func (*ioLoadListener) adjustTokensInner(
 		} else {
 			totalNumByteTokens = int64(smoothedCompactionByteTokens)
 		}
+	} else {
+		// Under the threshold. Maintain a smoothedTotalNumByteTokens based on what was
+		// removed, so that when we go over the threshold we have some history.
+		// This is also useful when we temporarily dip below the threshold --
+		// we've seen extreme situations with alternating 15s intervals of above
+		// and below the threshold.
+		numTokens := intL0CompactedBytes
+		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
+		totalNumByteTokens = unlimitedTokens
 	}
-
 	// Use the minimum of the token count calculated using compactions and
 	// flushes.
 	tokenKind := compactionTokenKind
@@ -985,7 +833,6 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			ib(res.aux.diskBW.intervalDiskLoadInfo.writeBandwidth),
 			ib(res.aux.diskBW.intervalDiskLoadInfo.provisionedBandwidth))
 	}
-	p.Printf("; write stalls %d", res.aux.intWriteStalls)
 }
 
 func (res adjustTokensResult) String() string {

@@ -15,7 +15,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/username",
-        "//pkg/server/authserver",
+        "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -43,7 +43,6 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":oidcccl"],
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

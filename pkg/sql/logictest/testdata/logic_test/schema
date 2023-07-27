@@ -581,7 +581,7 @@ statement ok
 CREATE SCHEMA user1_schema AUTHORIZATION user1
 
 # The created schemas should both be owned by user1.
-query TT rowsort
+query TT
 SELECT
   nspname, usename
 FROM
@@ -1139,37 +1139,6 @@ USE test;
 DROP DATABASE d;
 DROP FUNCTION fn;
 
-# Regression test for #97757 - invalidate the query cache after changes to the
-# search path cause a function call to resolve to a UDF when it previously
-# resolved to a builtin function.
-subtest invalidate-builtin
-
-statement ok
-CREATE FUNCTION public.abs(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val+100 $$;
-
-query I
-SELECT abs(1);
-----
-1
-
-statement ok
-SET search_path = public, pg_catalog;
-
-# This should use the UDF abs which returns 101.
-query I
-SELECT abs(1);
-----
-101
-
-statement ok
-RESET search_path;
-
-# This should use the builtin abs again.
-query I
-SELECT abs(1);
-----
-1
-
 subtest search_path
 
 # Verify that spaces are trimmed.
@@ -1258,6 +1227,37 @@ SHOW search_path
 statement error syntax error
 SET search_path = abc, def,
 
+# Regression test for #97757 - invalidate the query cache after changes to the
+# search path cause a function call to resolve to a UDF when it previously
+# resolved to a builtin function.
+subtest invalidate-builtin
+
+statement ok
+CREATE FUNCTION public.abs(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val+100 $$;
+
+query I
+SELECT abs(1);
+----
+1
+
+statement ok
+SET search_path = public, pg_catalog;
+
+# This should use the UDF abs which returns 101.
+query I
+SELECT abs(1);
+----
+101
+
+statement ok
+RESET search_path;
+
+# This should use the builtin abs again.
+query I
+SELECT abs(1);
+----
+1
+
 subtest end
 
 # Regression test for #102375 - check that all data sources resolve to the same
@@ -1322,35 +1322,5 @@ REVOKE ALL ON testdb2.ab FROM testuser2;
 DROP USER testuser2;
 DROP DATABASE testdb1 CASCADE;
 DROP DATABASE testdb2 CASCADE;
-
-subtest end
-
-subtest public_schema_create_privilege
-
-statement ok
-CREATE DATABASE should_have_create
-
-statement ok
-USE should_have_create
-
-query TTTT rowsort
-SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA public] WHERE grantee = 'public'
-----
-should_have_create  public  public  CREATE
-should_have_create  public  public  USAGE
-
-statement ok
-SET CLUSTER SETTING sql.auth.public_schema_create_privilege.enabled = false
-
-statement ok
-CREATE DATABASE should_not_have_create
-
-statement ok
-USE should_not_have_create
-
-query TTTT
-SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA public] WHERE grantee = 'public'
-----
-should_not_have_create  public  public  USAGE
 
 subtest end

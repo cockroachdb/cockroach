@@ -13,6 +13,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y -o Dpkg::Options::="
 sudo apt-get install -y --no-install-recommends \
   mosh \
   autoconf \
+  ccache \
   docker.io \
   libncurses-dev \
   libresolv-wrapper \
@@ -29,7 +30,8 @@ curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
 sudo adduser "${USER}" docker
 
 # Configure environment variables.
-echo 'export PATH="${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
+echo 'export PATH="/usr/lib/ccache:${PATH}:$HOME/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
+echo 'export COCKROACH_BUILDER_CCACHE=1' >> ~/.bashrc_bootstrap
 echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 . ~/.bashrc_bootstrap
 

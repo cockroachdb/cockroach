@@ -280,28 +280,24 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			scName = scDesc.GetName()
 		}
 
-		// Create an entry for the descriptor in `r.ObjsByName` (if it's not a
-		// function) and `r.ObjIDsBySchema`.
-		// Note: `r.DescByID` has been previously populated already.
-		if kind != "function" {
-			objMap := schemaMap[scName]
-			if objMap == nil {
-				objMap = make(map[string]descpb.ID)
-			}
-			descName := desc.GetName()
-			// Handle special case of system.namespace table which used to be named
-			// system.namespace2.
-			if desc.GetID() == keys.NamespaceTableID &&
-				desc.GetPostDeserializationChanges().Contains(catalog.UpgradedNamespaceName) {
-				descName = catconstants.PreMigrationNamespaceTableName
-			}
-			if _, ok := objMap[descName]; ok {
-				return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
-					kind, parentDesc.GetName(), scName, descName, desc.GetID(), objMap[descName])
-			}
-			objMap[descName] = desc.GetID()
-			r.ObjsByName[parentDesc.GetID()][scName] = objMap
+		// Create an entry for the descriptor.
+		objMap := schemaMap[scName]
+		if objMap == nil {
+			objMap = make(map[string]descpb.ID)
 		}
+		descName := desc.GetName()
+		// Handle special case of system.namespace table which used to be named
+		// system.namespace2.
+		if desc.GetID() == keys.NamespaceTableID &&
+			desc.GetPostDeserializationChanges().Contains(catalog.UpgradedNamespaceName) {
+			descName = catconstants.PreMigrationNamespaceTableName
+		}
+		if _, ok := objMap[descName]; ok {
+			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
+				kind, parentDesc.GetName(), scName, descName, desc.GetID(), objMap[descName])
+		}
+		objMap[descName] = desc.GetID()
+		r.ObjsByName[parentDesc.GetID()][scName] = objMap
 
 		objIDsMap := r.ObjIDsBySchema[parentDesc.GetID()]
 		objIDs := objIDsMap[scName]
@@ -402,23 +398,19 @@ func DescriptorsMatchingTargets(
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
-			if schemaDesc == nil {
+			if schemaDesc == nil || !schemaDesc.Public() {
 				if requirePublic {
-					return errors.Wrapf(err, "cannot find schema %d", id)
+					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
+				} else if schemaDesc == nil || !schemaDesc.Offline() {
+					// If the schema is not public, but we don't require it to be, ignore
+					// it.
+					return nil
 				}
-				return nil
-			}
-			// Ignore schemas in `DROP` state. This means we will include `PUBLIC`,
-			// `OFFLINE`, and `ADD` schemas into the backup.
-			if schemaDesc.Dropped() {
-				if requirePublic {
-					return errors.Wrapf(err, "schema %d was expected to be PUBLIC; get DROP", id)
-				}
-				return nil
 			}
 			alreadyRequestedSchemas[id] = struct{}{}
 			ret.Descs = append(ret.Descs, r.DescByID[id])
 		}
+
 		return nil
 	}
 	getSchemaIDByName := func(scName string, dbID descpb.ID) (descpb.ID, error) {

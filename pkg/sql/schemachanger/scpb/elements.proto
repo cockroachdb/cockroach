@@ -81,7 +81,7 @@ message ElementProto {
     IndexZoneConfig index_zone_config = 122 [(gogoproto.moretags) = "parent:\"Index\""];
     TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
     TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
-    TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
+  TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -97,10 +97,6 @@ message ElementProto {
     SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
-
-    // Sequence elements.
-    SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
-
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -128,7 +124,6 @@ message ElementProto {
     // Schema elements.
     SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
     SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
-
 
     // SchemaChild elements.
     SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
@@ -255,15 +250,10 @@ message Index {
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
-  cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];
-
   // IsNotVisible specifies whether this index is not visible.
-  // NOTE: THIS FIELD IS DEPRECATED in favor of invisibility.
-  bool is_not_visible = 23 [deprecated = true];
+  bool is_not_visible = 23;
 
-  // Invisibility specifies index invisibility to the optimizer.
-  double invisibility = 25;
-
+  cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];
   reserved 3, 4, 5, 6, 7;
 }
 
@@ -308,17 +298,9 @@ message SchemaChild {
 
 message Sequence {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  int64 restart_with = 2;
-  bool use_restart_with = 3;
+
   bool is_temporary = 10;
 }
-
-message SequenceOption {
-  uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  string key = 2;
-  string value = 3;
-}
-
 
 message SequenceOwner {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];

@@ -13,8 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -139,7 +137,7 @@ func (b *appBatch) addWriteBatch(
 	if wb == nil {
 		return nil
 	}
-	if mutations, err := storage.BatchCount(wb.Data); err != nil {
+	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
 		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 	} else {
 		b.numMutations += mutations
@@ -155,7 +153,6 @@ type postAddEnv struct {
 	eng         storage.Engine
 	sideloaded  logstore.SideloadStorage
 	bulkLimiter *rate.Limiter
-	external    *cloud.ExternalStorageAccessor
 }
 
 func (b *appBatch) runPostAddTriggers(
@@ -179,10 +176,13 @@ func (b *appBatch) runPostAddTriggers(
 	if res.AddSSTable != nil {
 		copied := addSSTablePreApply(
 			ctx,
-			env,
-			kvpb.RaftTerm(cmd.Term),
+			env.st,
+			env.eng,
+			env.sideloaded,
+			cmd.Term,
 			cmd.Index(),
 			*res.AddSSTable,
+			env.bulkLimiter,
 		)
 		b.numAddSST++
 		if copied {

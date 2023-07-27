@@ -54,6 +54,7 @@ go_library(
         "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
         "//pkg/featureflag",
+        "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
@@ -124,12 +125,11 @@ go_library(
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/storage",
-        "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/bulk",
+        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/interval",
@@ -141,7 +141,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
-        "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/span",
@@ -174,7 +173,6 @@ go_test(
         "bench_covering_test.go",
         "bench_test.go",
         "create_scheduled_backup_test.go",
-        "data_driven_generated_test.go",  # keep
         "datadriven_test.go",
         "file_sst_sink_test.go",
         "full_cluster_backup_restore_test.go",
@@ -183,9 +181,6 @@ go_test(
         "main_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
-        "restore_entry_cover_generated_test.go",  # keep
-        "restore_memory_monitoring_generated_test.go",  # keep
-        "restore_mid_schema_change_generated_test.go",  # keep
         "restore_mid_schema_change_test.go",
         "restore_old_sequences_test.go",
         "restore_old_versions_test.go",
@@ -199,18 +194,13 @@ go_test(
         "tenant_backup_nemesis_test.go",
         "utils_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
-    shard_count = 48,
-    tags = ["ccl_test"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/blobs",
-        "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupdest",
@@ -218,7 +208,6 @@ go_test(
         "//pkg/ccl/backupccl/backupinfo",
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backuptestutils",
-        "//pkg/ccl/backupccl/backuputils",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
@@ -226,6 +215,7 @@ go_test(
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
+        "//pkg/ccl/utilccl/sampledataccl",
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/azure",
@@ -299,9 +289,7 @@ go_test(
         "//pkg/util/admission",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
-        "//pkg/util/humanizeutil",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/limit",
@@ -347,27 +335,4 @@ stringer(
     src = "backup_telemetry.go",
     additional_args = ["-linecomment"],
     typ = "targetScope",
-)
-
-genrule(
-    name = "gen-backupccl-tests",
-    srcs = glob(["testdata/**"]),
-    outs = [
-        "restore_memory_monitoring_generated_test.go",
-        "data_driven_generated_test.go",
-        "restore_entry_cover_generated_test.go",
-        "restore_mid_schema_change_generated_test.go",
-    ],
-    cmd = """
-        $(location //pkg/ccl/backupccl/testgen) -restore-memory-monitoring=$(location restore_memory_monitoring_generated_test.go) \
-        -data-driven=$(location data_driven_generated_test.go) -restore-entry-cover=$(location restore_entry_cover_generated_test.go) \
-        -restore-mid-schema-change=$(location restore_mid_schema_change_generated_test.go)
-       """,
-    exec_tools = [
-        "//pkg/ccl/backupccl/testgen",
-    ],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
-    ],
 )

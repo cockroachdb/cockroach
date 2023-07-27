@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -424,9 +425,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
 
-		{`CALL foo`, 17511, `call procedure`, ``},
-		{`CREATE PROCEDURE a`, 17511, `create procedure`, ``},
-
 		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
@@ -558,6 +556,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b MACADDR8)`, 45813, `macaddr8`, ``},
 		{`CREATE TABLE a(b MONEY)`, 41578, `money`, ``},
 		{`CREATE TABLE a(b PATH)`, 21286, `path`, ``},
+		{`CREATE TABLE a(b PG_LSN)`, 0, `pg_lsn`, ``},
 		{`CREATE TABLE a(b POINT)`, 21286, `point`, ``},
 		{`CREATE TABLE a(b POLYGON)`, 21286, `polygon`, ``},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},

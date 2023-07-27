@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package encoding exposes some utilities for encoding data as bytes.
 package encoding
 
 import (
@@ -105,16 +104,6 @@ const (
 	emptyArray = geoInvertedIndexMarker + 1
 	voidMarker = emptyArray + 1
 
-	// Defining different key markers, for the ascending designation,
-	// for handling different JSON values.
-	jsonNullKeyMarker   = voidMarker + 1
-	jsonStringKeyMarker = jsonNullKeyMarker + 1
-	jsonNumberKeyMarker = jsonStringKeyMarker + 1
-	jsonFalseKeyMarker  = jsonNumberKeyMarker + 1
-	jsonTrueKeyMarker   = jsonFalseKeyMarker + 1
-	jsonArrayKeyMarker  = jsonTrueKeyMarker + 1
-	jsonObjectKeyMarker = jsonArrayKeyMarker + 1
-
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
 	// We use different null encodings for nulls within key arrays. Doing this
@@ -124,20 +113,6 @@ const (
 	// Because of the context, they cannot be ambiguous with these other bytes.
 	ascendingNullWithinArrayKey  byte = 0x01
 	descendingNullWithinArrayKey byte = 0xFE
-
-	// Defining different key markers, for the descending designation,
-	// for handling different JSON values.
-	jsonNullKeyDescendingMarker   = jsonObjectKeyMarker + 7
-	jsonStringKeyDescendingMarker = jsonNullKeyDescendingMarker - 1
-	jsonNumberKeyDescendingMarker = jsonStringKeyDescendingMarker - 1
-	jsonFalseKeyDescendingMarker  = jsonNumberKeyDescendingMarker - 1
-	jsonTrueKeyDescendingMarker   = jsonFalseKeyDescendingMarker - 1
-	jsonArrayKeyDescendingMarker  = jsonTrueKeyDescendingMarker - 1
-	jsonObjectKeyDescendingMarker = jsonArrayKeyDescendingMarker - 1
-
-	// Terminators for JSON Key encoding.
-	jsonKeyTerminator           byte = 0x00
-	jsonKeyDescendingTerminator byte = 0xFF
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -742,12 +717,6 @@ func DecodeBytesAscending(b []byte, r []byte) ([]byte, []byte, error) {
 	return decodeBytesInternal(b, r, ascendingBytesEscapes, true /* expectMarker */, false /* deepCopy */)
 }
 
-// ValidateDecodeBytesAscending is like DecodeBytesAscending, but discards the
-// decoded bytes. The remainder of the input buffer is returned on success.
-func ValidateDecodeBytesAscending(b []byte) ([]byte, error) {
-	return validateDecodeBytesInternal(b, ascendingBytesEscapes, true /* expectMarker */)
-}
-
 // DecodeBytesAscendingDeepCopy is the same as DecodeBytesAscending, but the
 // decoded []byte will never alias memory of b.
 func DecodeBytesAscendingDeepCopy(b []byte, r []byte) ([]byte, []byte, error) {
@@ -812,37 +781,6 @@ func decodeBytesInternal(
 	}
 }
 
-// validateDecodeBytesInternal decodes an encoded []byte value from b,
-// discarding the decoded value. The remainder of b is returned on success, or a
-// non-nil error otherwise.
-func validateDecodeBytesInternal(b []byte, e escapes, expectMarker bool) ([]byte, error) {
-	if expectMarker {
-		if len(b) == 0 || b[0] != e.marker {
-			return nil, errors.Errorf("did not find marker %#x in buffer %#x", e.marker, b)
-		}
-		b = b[1:]
-	}
-
-	for {
-		i := bytes.IndexByte(b, e.escape)
-		if i == -1 {
-			return nil, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
-		}
-		if i+1 >= len(b) {
-			return nil, errors.Errorf("malformed escape in buffer %#x", b)
-		}
-		v := b[i+1]
-		if v == e.escapedTerm {
-			return b[i+2:], nil
-		}
-
-		if v != e.escaped00 {
-			return nil, errors.Errorf("unknown escape sequence: %#x %#x", e.escape, v)
-		}
-		b = b[i+2:]
-	}
-}
-
 // getBytesLength finds the length of a bytes encoding.
 func getBytesLength(b []byte, e escapes) (int, error) {
 	// Skip the tag.
@@ -881,7 +819,7 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 		switch tempB[i+1] {
 		case escapedTerm:
 			if len(tempB[:i]) > 0 {
-				outBytes = outBytes + strconv.Quote(UnsafeConvertBytesToString(tempB[:i]))
+				outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i]))
 			} else {
 				lenOut := len(outBytes)
 				if lenOut > 1 && outBytes[lenOut-1] == '/' {
@@ -890,7 +828,7 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 			}
 			return outBytes, tempB[i+escapeLength:], nil
 		case escapedJSONObjectKeyTerm:
-			outBytes = outBytes + strconv.Quote(UnsafeConvertBytesToString(tempB[:i])) + "/"
+			outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i])) + "/"
 		case escapedJSONArray:
 			outBytes = outBytes + "Arr/"
 		default:
@@ -994,12 +932,11 @@ func EncodeStringDescending(b []byte, s string) []byte {
 	return EncodeBytesDescending(b, arg)
 }
 
-// UnsafeConvertBytesToString performs an unsafe conversion from a []byte to a
-// string. The returned string will share the underlying memory with the
-// []byte which thus allows the string to be mutable through the []byte. We're
-// careful to use this method only in situations in which the []byte will not
-// be modified.
-func UnsafeConvertBytesToString(b []byte) string {
+// unsafeString performs an unsafe conversion from a []byte to a string. The
+// returned string will share the underlying memory with the []byte which thus
+// allows the string to be mutable through the []byte. We're careful to use
+// this method only in situations in which the []byte will not be modified.
+func unsafeString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
@@ -1010,7 +947,7 @@ func UnsafeConvertBytesToString(b []byte) string {
 // string may share storage with the input buffer.
 func DecodeUnsafeStringAscending(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesAscending(b, r)
-	return b, UnsafeConvertBytesToString(r), err
+	return b, unsafeString(r), err
 }
 
 // DecodeUnsafeStringAscendingDeepCopy is the same as
@@ -1018,7 +955,7 @@ func DecodeUnsafeStringAscending(b []byte, r []byte) ([]byte, string, error) {
 // with the input buffer.
 func DecodeUnsafeStringAscendingDeepCopy(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesAscendingDeepCopy(b, r)
-	return b, UnsafeConvertBytesToString(r), err
+	return b, unsafeString(r), err
 }
 
 // DecodeUnsafeStringDescending decodes a string value from the input buffer which
@@ -1029,7 +966,7 @@ func DecodeUnsafeStringAscendingDeepCopy(b []byte, r []byte) ([]byte, string, er
 // buffer.
 func DecodeUnsafeStringDescending(b []byte, r []byte) ([]byte, string, error) {
 	b, r, err := DecodeBytesDescending(b, r)
-	return b, UnsafeConvertBytesToString(r), err
+	return b, unsafeString(r), err
 }
 
 // EncodeNullAscending encodes a NULL value. The encodes bytes are appended to the
@@ -1761,34 +1698,20 @@ const (
 	// value requires more than 4 bits, and thus will be encoded in two bytes. It
 	// is not used as a type value, and thus intentionally overlaps with the
 	// subsequent type value. The 'Type' annotation is intentionally omitted here.
-	SentinelType        = 15
-	JSON           Type = 15
-	Tuple          Type = 16
-	BitArray       Type = 17
-	BitArrayDesc   Type = 18 // BitArray encoded descendingly
-	TimeTZ         Type = 19
-	Geo            Type = 20
-	GeoDesc        Type = 21
-	ArrayKeyAsc    Type = 22 // Array key encoding
-	ArrayKeyDesc   Type = 23 // Array key encoded descendingly
-	Box2D          Type = 24
-	Void           Type = 25
-	TSQuery        Type = 26
-	TSVector       Type = 27
-	JSONNull       Type = 28
-	JSONNullDesc   Type = 29
-	JSONString     Type = 30
-	JSONStringDesc Type = 31
-	JSONNumber     Type = 32
-	JSONNumberDesc Type = 33
-	JSONFalse      Type = 34
-	JSONFalseDesc  Type = 35
-	JSONTrue       Type = 36
-	JSONTrueDesc   Type = 37
-	JSONArray      Type = 38
-	JSONArrayDesc  Type = 39
-	JSONObject     Type = 40
-	JSONObjectDesc Type = 41
+	SentinelType      = 15
+	JSON         Type = 15
+	Tuple        Type = 16
+	BitArray     Type = 17
+	BitArrayDesc Type = 18 // BitArray encoded descendingly
+	TimeTZ       Type = 19
+	Geo          Type = 20
+	GeoDesc      Type = 21
+	ArrayKeyAsc  Type = 22 // Array key encoding
+	ArrayKeyDesc Type = 23 // Array key encoded descendingly
+	Box2D        Type = 24
+	Void         Type = 25
+	TSQuery      Type = 26
+	TSVector     Type = 27
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1825,34 +1748,6 @@ func slowPeekType(b []byte) Type {
 			return ArrayKeyAsc
 		case m == arrayKeyDescendingMarker:
 			return ArrayKeyDesc
-		case m == jsonNullKeyMarker:
-			return JSONNull
-		case m == jsonNullKeyDescendingMarker:
-			return JSONNullDesc
-		case m == jsonStringKeyMarker:
-			return JSONString
-		case m == jsonStringKeyDescendingMarker:
-			return JSONStringDesc
-		case m == jsonNumberKeyMarker:
-			return JSONNumber
-		case m == jsonNumberKeyDescendingMarker:
-			return JSONNumberDesc
-		case m == jsonFalseKeyMarker:
-			return JSONFalse
-		case m == jsonFalseKeyDescendingMarker:
-			return JSONFalseDesc
-		case m == jsonTrueKeyMarker:
-			return JSONTrue
-		case m == jsonTrueKeyDescendingMarker:
-			return JSONTrueDesc
-		case m == jsonArrayKeyMarker:
-			return JSONArray
-		case m == jsonArrayKeyDescendingMarker:
-			return JSONArrayDesc
-		case m == jsonObjectKeyMarker:
-			return JSONObject
-		case m == jsonObjectKeyDescendingMarker:
-			return JSONObjectDesc
 		case m == bytesMarker:
 			return Bytes
 		case m == bytesDescMarker:
@@ -1919,16 +1814,15 @@ func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
 	return p, nil
 }
 
-func getArrayOrJSONLength(
-	buf []byte, dir Direction, keyDoneFn func(buf []byte, dir Direction) bool,
-) (int, error) {
+// getArrayLength returns the length of a key encoded array. The input
+// must have had the array type marker stripped from the front.
+func getArrayLength(buf []byte, dir Direction) (int, error) {
 	result := 0
-
 	for {
 		if len(buf) == 0 {
-			return 0, errors.AssertionFailedf("invalid encoding (unterminated)")
+			return 0, errors.AssertionFailedf("invalid array encoding (unterminated)")
 		}
-		if keyDoneFn(buf, dir) {
+		if IsArrayKeyDone(buf, dir) {
 			// Increment to include the terminator byte.
 			result++
 			break
@@ -1977,9 +1871,7 @@ func PeekLength(b []byte) (int, error) {
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
 		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False),
-		emptyArray, voidMarker, jsonNullKeyMarker, jsonNullKeyDescendingMarker,
-		jsonFalseKeyMarker, jsonFalseKeyDescendingMarker, jsonTrueKeyMarker,
-		jsonTrueKeyDescendingMarker:
+		emptyArray, voidMarker:
 		// ascendingNullWithinArrayKey and descendingNullWithinArrayKey also
 		// contain the same byte values as encodedNotNull and encodedNotNullDesc
 		// respectively, but they cannot be included explicitly in the case
@@ -1999,40 +1891,12 @@ func PeekLength(b []byte) (int, error) {
 			return 1 + n + m + 1, err
 		}
 		return 1 + n + m + 1, nil
-	case jsonStringKeyMarker, jsonStringKeyDescendingMarker,
-		jsonNumberKeyMarker, jsonNumberKeyDescendingMarker:
-		dir := Ascending
-		if (m == jsonStringKeyDescendingMarker) ||
-			(m == jsonNumberKeyDescendingMarker) {
-			dir = Descending
-		}
-		length, err := getArrayOrJSONLength(b[1:], dir, IsJSONKeyDone)
-		return 1 + length, err
-	case jsonArrayKeyMarker, jsonArrayKeyDescendingMarker,
-		jsonObjectKeyMarker, jsonObjectKeyDescendingMarker:
-		dir := Ascending
-		if (m == jsonArrayKeyDescendingMarker) ||
-			(m == jsonObjectKeyDescendingMarker) {
-			dir = Descending
-		}
-		// removing the starter tag
-		b = b[1:]
-
-		// Getting the number of elements present
-		// in the container.
-		numberElems, err := getVarintLen(b)
-		if err != nil {
-			return -1, errors.AssertionFailedf("failed to get the number of elements" +
-				"in the container")
-		}
-		length, err := getArrayOrJSONLength(b[numberElems:], dir, IsJSONKeyDone)
-		return 1 + numberElems + length, err
 	case arrayKeyMarker, arrayKeyDescendingMarker:
 		dir := Ascending
 		if m == arrayKeyDescendingMarker {
 			dir = Descending
 		}
-		length, err := getArrayOrJSONLength(b[1:], dir, IsArrayKeyDone)
+		length, err := getArrayLength(b[1:], dir)
 		return 1 + length, err
 	case bytesMarker:
 		return getBytesLength(b, ascendingBytesEscapes)
@@ -3433,136 +3297,6 @@ func getGeoInvertedIndexKeyLength(buf []byte) (int, error) {
 	return 1 + cellLen + 1 + floatsLen, nil
 }
 
-// EncodeJSONNullKeyMarker adds a JSON Null key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONNullKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonNullKeyMarker)
-	case Descending:
-		return append(buf, jsonNullKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONStringKeyMarker adds a JSON String key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONStringKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonStringKeyMarker)
-	case Descending:
-		return append(buf, jsonStringKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONNumberKeyMarker adds a JSON Number key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONNumberKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonNumberKeyMarker)
-	case Descending:
-		return append(buf, jsonNumberKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONFalseKeyMarker adds a JSON False key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONFalseKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonFalseKeyMarker)
-	case Descending:
-		return append(buf, jsonFalseKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONTrueKeyMarker adds a JSON True key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONTrueKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonTrueKeyMarker)
-	case Descending:
-		return append(buf, jsonTrueKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONArrayKeyMarker adds a JSON Array key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONArrayKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonArrayKeyMarker)
-	case Descending:
-		return append(buf, jsonArrayKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONKeyTerminator adds a JSON Key terminator
-// to buf and returns the buffer.
-func EncodeJSONKeyTerminator(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonKeyTerminator)
-	case Descending:
-		return append(buf, jsonKeyDescendingTerminator)
-	default:
-		panic("invalid direction")
-	}
-}
-
-// EncodeJSONObjectKeyMarker adds a JSON Object key encoding marker
-// to buf and returns the new buffer.
-func EncodeJSONObjectKeyMarker(buf []byte, dir Direction) []byte {
-	switch dir {
-	case Ascending:
-		return append(buf, jsonObjectKeyMarker)
-	case Descending:
-		return append(buf, jsonObjectKeyDescendingMarker)
-	default:
-		panic("invalid direction")
-	}
-}
-
-func EncodeJSONValueLength(buf []byte, dir Direction, v int64) []byte {
-	switch dir {
-	case Ascending:
-		return EncodeVarintAscending(buf, v)
-	case Descending:
-		return EncodeVarintDescending(buf, v)
-	default:
-		panic("invalid direction")
-	}
-}
-
-func DecodeJSONValueLength(buf []byte, dir Direction) ([]byte, int64, error) {
-	var v int64
-	var err error
-	switch dir {
-	case Ascending:
-		buf, v, err = DecodeVarintAscending(buf)
-		return buf, v, err
-	case Descending:
-		buf, v, err = DecodeVarintDescending(buf)
-		return buf, v, err
-	default:
-		panic("invalid direction")
-	}
-}
-
 // EncodeArrayKeyMarker adds the array key encoding marker to buf and
 // returns the new buffer.
 func EncodeArrayKeyMarker(buf []byte, dir Direction) []byte {
@@ -3611,34 +3345,6 @@ func IsNextByteArrayEncodedNull(buf []byte, dir Direction) bool {
 	return buf[0] == expected
 }
 
-// ValidateAndConsumeJSONKeyMarker checks that the marker at the front
-// of buf is valid/invalid for a given JSON value for the given direction.
-// If the JSON marker is valid, the marker is consumed and the remaining
-// bytes in the array are returned.
-func ValidateAndConsumeJSONKeyMarker(buf []byte, dir Direction) ([]byte, Type, error) {
-	typ := PeekType(buf)
-	switch dir {
-	case Descending:
-		switch typ {
-		case JSONNullDesc, JSONNumberDesc, JSONStringDesc, JSONFalseDesc,
-			JSONTrueDesc, JSONArrayDesc, JSONObjectDesc:
-			return buf[1:], typ, nil
-		default:
-			return nil, Unknown, errors.Newf("invalid type found %s", typ)
-		}
-	case Ascending:
-		switch typ {
-		case JSONNull, JSONNumber, JSONString, JSONFalse, JSONTrue, JSONArray,
-			JSONObject:
-			return buf[1:], typ, nil
-		default:
-			return nil, Unknown, errors.Newf("invalid type found %s", typ)
-		}
-	default:
-		return nil, Unknown, errors.Newf("invalid direction %s", dir)
-	}
-}
-
 // ValidateAndConsumeArrayKeyMarker checks that the marker at the front
 // of buf is valid for an array of the given direction, and consumes it
 // if so. It returns an error if the tag is invalid.
@@ -3660,16 +3366,6 @@ func IsArrayKeyDone(buf []byte, dir Direction) bool {
 	expected := arrayKeyTerminator
 	if dir == Descending {
 		expected = arrayKeyDescendingTerminator
-	}
-	return buf[0] == expected
-}
-
-// isJSONKeyDone returns if the first byte in the input is the JSON
-// terminator for the input direction.
-func IsJSONKeyDone(buf []byte, dir Direction) bool {
-	expected := jsonKeyTerminator
-	if dir == Descending {
-		expected = jsonKeyDescendingTerminator
 	}
 	return buf[0] == expected
 }

@@ -62,7 +62,7 @@ func TestTenantVars(t *testing.T) {
 		}
 
 		startNowNanos := timeutil.Now().UnixNano()
-		url := tenant.AdminURL().WithPath("/_status/load").String()
+		url := tenant.AdminURL() + "/_status/load"
 		client := http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

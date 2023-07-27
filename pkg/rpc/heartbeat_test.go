@@ -80,11 +80,7 @@ type ManualHeartbeatService struct {
 	version            clusterversion.Handle
 	nodeID             *base.NodeIDContainer
 	// Heartbeats are processed when a value is sent here.
-	// If ready is nil, readyFn must be set instead and is
-	// invoked whenever a heartbeat arrives to supply the
-	// error, if one is to be injected.
 	ready   chan error
-	readyFn func() error
 	stopper *stop.Stopper
 }
 
@@ -92,22 +88,15 @@ type ManualHeartbeatService struct {
 func (mhs *ManualHeartbeatService) Ping(
 	ctx context.Context, args *PingRequest,
 ) (*PingResponse, error) {
-	extraCh := make(chan error, 1)
-	if mhs.ready == nil {
-		extraCh <- mhs.readyFn()
-	}
-
-	var err error
 	select {
-	case err = <-extraCh:
-	case err = <-mhs.ready:
+	case err := <-mhs.ready:
+		if err != nil {
+			return nil, err
+		}
 	case <-ctx.Done():
-		err = ctx.Err()
+		return nil, ctx.Err()
 	case <-mhs.stopper.ShouldQuiesce():
-		err = errors.New("quiesce")
-	}
-	if err != nil {
-		return nil, err
+		return nil, errors.New("quiesce")
 	}
 	hs := HeartbeatService{
 		clock:              mhs.clock,

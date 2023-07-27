@@ -314,9 +314,10 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 
 // testingOverrideMonitor is a test-only implementation of OverrideMonitor.
 type testingOverrideMonitor struct {
+	ch chan struct{}
+
 	mu struct {
 		syncutil.Mutex
-		ch        chan struct{}
 		overrides map[string]settings.EncodedValue
 	}
 }
@@ -324,17 +325,18 @@ type testingOverrideMonitor struct {
 var _ settingswatcher.OverridesMonitor = (*testingOverrideMonitor)(nil)
 
 func newTestingOverrideMonitor() *testingOverrideMonitor {
-	m := &testingOverrideMonitor{}
-	m.mu.ch = make(chan struct{})
+	m := &testingOverrideMonitor{
+		ch: make(chan struct{}, 1),
+	}
 	m.mu.overrides = make(map[string]settings.EncodedValue)
 	return m
 }
 
 func (m *testingOverrideMonitor) notify() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	close(m.mu.ch)
-	m.mu.ch = make(chan struct{})
+	select {
+	case m.ch <- struct{}{}:
+	default:
+	}
 }
 
 func (m *testingOverrideMonitor) set(key string, val string, valType string) {
@@ -353,20 +355,20 @@ func (m *testingOverrideMonitor) unset(key string) {
 	delete(m.mu.overrides, key)
 }
 
-// WaitForStart is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) WaitForStart(ctx context.Context) error {
-	return nil
+// RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor interface.
+func (m *testingOverrideMonitor) RegisterOverridesChannel() <-chan struct{} {
+	return m.ch
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) Overrides() (map[string]settings.EncodedValue, <-chan struct{}) {
+func (m *testingOverrideMonitor) Overrides() map[string]settings.EncodedValue {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	res := make(map[string]settings.EncodedValue)
 	for k, v := range m.mu.overrides {
 		res[k] = v
 	}
-	return res, m.mu.ch
+	return res
 }
 
 // Test that an error occurring during processing of the

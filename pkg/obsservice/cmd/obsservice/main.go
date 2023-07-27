@@ -18,18 +18,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/router"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
@@ -49,6 +47,9 @@ var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
 // shutdown (i.e. second occurrence does not incur hard shutdown).
 var termSignal os.Signal = unix.SIGTERM
 
+// defaultSinkDBName is the name of the database to be used by default.
+const defaultSinkDBName = "obsservice"
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "obsservice",
@@ -66,18 +67,18 @@ from one or more CockroachDB clusters.`,
 			UICertKeyPath: uiCertKeyPath,
 		}
 
-		// TODO(abarganier): migrate DB migrations over to target storage for aggregated outputs
-		//connCfg, err := pgxpool.ParseConfig(sinkPGURL)
-		//if err != nil {
-		//	return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
-		//}
-		//if connCfg.ConnConfig.Database == "" {
-		//	fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
-		//	connCfg.ConnConfig.Database = defaultSinkDBName
-		//}
-		//if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-		//	return errors.Wrap(err, "failed to run DB migrations")
-		//}
+		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
+		if err != nil {
+			return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
+		}
+		if connCfg.ConnConfig.Database == "" {
+			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
+			connCfg.ConnConfig.Database = defaultSinkDBName
+		}
+
+		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
+			return errors.Wrap(err, "failed to run DB migrations")
+		}
 
 		signalCh := make(chan os.Signal, 1)
 		signal.Notify(signalCh, drainSignals...)
@@ -85,18 +86,19 @@ from one or more CockroachDB clusters.`,
 		stop := stop.NewStopper()
 
 		// Run the event ingestion in the background.
-		eventRouter := router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
-			obspb.EventlogEvent: &obsutil.StdOutConsumer{},
-		})
-		ingester := ingest.MakeEventIngester(ctx, eventRouter, nil)
+		ingester, err := ingest.MakeEventIngester(ctx, connCfg)
+		if err != nil {
+			return err
+		}
 		listener, err := net.Listen("tcp", otlpAddr)
 		if err != nil {
 			return errors.Wrapf(err, "failed to listen for incoming HTTP connections on address %s", otlpAddr)
 		}
 		fmt.Printf("Listening for OTLP connections on %s.", otlpAddr)
 		grpcServer := grpc.NewServer()
-		logspb.RegisterLogsServiceServer(grpcServer, ingester)
+		logspb.RegisterLogsServiceServer(grpcServer, &ingester)
 		if err := stop.RunAsyncTask(ctx, "event ingester", func(ctx context.Context) {
+			defer ingester.Close()
 			_ = grpcServer.Serve(listener)
 		}); err != nil {
 			return err

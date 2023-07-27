@@ -63,6 +63,10 @@ func run(in, out string) error {
 package scpb
 
 import "fmt"
+
+type ElementStatusIterator interface {
+	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
+}
 {{ range . }}
 
 func (e {{ . }}) element() {}
@@ -73,33 +77,32 @@ func (e * ElementProto_{{ . }}) Element() Element {
 }
 
 // ForEach{{ . }} iterates over elements of type {{ . }}.
-// Deprecated
 func ForEach{{ . }}(
-	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *{{ . }}),
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *{{ . }}),
 ) {
-  c.Filter{{ . }}().ForEach(fn)
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*{{ . }}); ok {
+			fn(current, target, elt)
+		}
+	})
 }
 
 // Find{{ . }} finds the first element of type {{ . }}.
-// Deprecated
-func Find{{ . }}(
-	c *ElementCollection[Element],
-) (current Status, target TargetStatus, element *{{ . }}) {
-	if tc := c.Filter{{ . }}(); !tc.IsEmpty() {
-		var e Element
-		current, target, e = tc.Get(0)
-		element = e.(*{{ . }})
-	}
-	return current, target, element
-}
-
-// {{ . }}Elements filters elements of type {{ . }}.
-func (c *ElementCollection[E]) Filter{{ . }}() *ElementCollection[*{{ . }}] {
-	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
-		_, ok := e.(*{{ . }})
-		return ok
+func Find{{ . }}(b ElementStatusIterator) (current Status, target TargetStatus, element *{{ . }}) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*{{ . }}); ok {
+			element = elt
+			current = c
+			target = t
+		}
 	})
-	return (*ElementCollection[*{{ . }}])(ret)
+	return current, target, element
 }
 
 {{- end -}}

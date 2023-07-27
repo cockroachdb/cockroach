@@ -21,10 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/jackc/pgx/v4"
-	"github.com/stretchr/testify/require"
 )
 
 var printUnknown = flag.Bool("unknown", false, "print unknown types during walk")
@@ -34,23 +33,24 @@ func TestReduceSQL(t *testing.T) {
 	skip.IgnoreLint(t, "unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	isInterestingSQLWrapper := func(contains string) reduce.InterestingFn {
-		return isInterestingSQL(t, contains)
-	}
-
-	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQLWrapper, reduce.ModeInteresting,
+	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting,
 		nil /* chunkReducer */, reducesql.SQLPasses)
 }
 
-func isInterestingSQL(t *testing.T, contains string) reduce.InterestingFn {
+func isInterestingSQL(contains string) reduce.InterestingFn {
 	return func(ctx context.Context, f string) (bool, func()) {
 		args := base.TestServerArgs{
 			Insecure: true,
 		}
-
-		serv, err := serverutils.StartServerRaw(t, args)
-		require.NoError(t, err)
+		ts, err := server.TestServerFactory.New(args)
+		if err != nil {
+			panic(err)
+		}
+		serv := ts.(*server.TestServer)
 		defer serv.Stopper().Stop(ctx)
+		if err := serv.Start(context.Background()); err != nil {
+			panic(err)
+		}
 
 		options := url.Values{}
 		options.Add("sslmode", "disable")
@@ -62,7 +62,9 @@ func isInterestingSQL(t *testing.T, contains string) reduce.InterestingFn {
 		}
 
 		db, err := pgx.Connect(ctx, url.String())
-		require.NoError(t, err)
+		if err != nil {
+			panic(err)
+		}
 		_, err = db.Exec(ctx, f)
 		if err == nil {
 			return false, nil

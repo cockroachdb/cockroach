@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package sidetransport contains definitions for the sidetransport layer of
-// the kvserver.
 package sidetransport
 
 import (
@@ -22,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,11 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
 
@@ -119,7 +114,7 @@ type connTestingKnobs struct {
 // trackedRange contains the information that the side-transport last published
 // about a particular range.
 type trackedRange struct {
-	lai    kvpb.LeaseAppliedIndex
+	lai    ctpb.LAI
 	policy roachpb.RangeClosedTimestampPolicy
 }
 
@@ -172,7 +167,7 @@ type BumpSideTransportClosedResult struct {
 	// Fields only set when ok.
 
 	// The range's current LAI, to be associated with the closed timestamp.
-	LAI kvpb.LeaseAppliedIndex
+	LAI ctpb.LAI
 	// The range's current policy.
 	Policy roachpb.RangeClosedTimestampPolicy
 }
@@ -804,7 +799,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 					return
 				}
 				if err := r.maybeConnect(ctx, stopper); err != nil {
-					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
+					if everyN.ShouldLog() {
 						log.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
 					}
 					time.Sleep(errSleepTime)

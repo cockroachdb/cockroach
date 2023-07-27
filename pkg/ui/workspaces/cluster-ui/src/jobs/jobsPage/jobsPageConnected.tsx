@@ -13,20 +13,20 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AppState } from "src/store";
 import {
+  selectJobsState,
   selectShowSetting,
   selectSortSetting,
   selectTypeSetting,
   selectStatusSetting,
   selectColumns,
-  initialState,
-  actions as jobsActions,
-} from "src/store/jobs";
+} from "../../store/jobs";
 import {
   JobsPageStateProps,
   JobsPageDispatchProps,
   JobsPage,
 } from "./jobsPage";
 import { JobsRequest } from "src/api/jobsApi";
+import { actions as jobsActions } from "src/store/jobs";
 import { actions as localStorageActions } from "../../store/localStorage";
 import { Dispatch } from "redux";
 import { SortSetting } from "../../sortedtable";
@@ -41,13 +41,21 @@ const mapStateToProps = (
   const show = selectShowSetting(state);
   const type = selectTypeSetting(state);
   const columns = selectColumns(state);
+  const jobsState = selectJobsState(state);
+  const jobs = jobsState ? jobsState.data : null;
+  const jobsError = jobsState ? jobsState.lastError : null;
+  const lastUpdated = jobsState?.lastUpdated;
   return {
     sort,
     status,
     show,
     type,
     columns,
-    jobsResponse: state.adminUI?.jobs ?? initialState,
+    jobs,
+    reqInFlight: jobsState?.inFlight,
+    isDataValid: jobsState?.valid,
+    jobsError,
+    lastUpdated,
   };
 };
 

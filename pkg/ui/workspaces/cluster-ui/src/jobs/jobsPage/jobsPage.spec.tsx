@@ -34,16 +34,14 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
     setShow: () => {},
     setType: () => {},
     onColumnsChange: () => {},
-    jobsResponse: {
-      data: {
-        jobs,
-        earliest_retained_time: earliestRetainedTime,
-      },
-      valid: true,
-      lastUpdated: moment(),
-      error: null,
-      inFlight: false,
+    jobs: {
+      jobs: jobs,
+      earliest_retained_time: earliestRetainedTime,
     },
+    reqInFlight: false,
+    isDataValid: true,
+    lastUpdated: moment(),
+    jobsError: null,
     refreshJobs: () => {},
     location: history.location,
     history,

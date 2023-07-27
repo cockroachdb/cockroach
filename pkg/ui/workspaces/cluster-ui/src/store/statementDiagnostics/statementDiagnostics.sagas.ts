@@ -70,16 +70,10 @@ export function* requestStatementsDiagnosticsSaga(): any {
   }
 }
 
-export const receivedStatementsDiagnosticsSaga = (delayMs: number) => {
-  const frequentPollingDelay = Math.min(delayMs, 30000);
-  return function* (action: ReturnType<typeof actions.received>) {
-    // If we have active requests for statement diagnostics then poll for new data more often (every 30s or as defined
-    // with CACHE_INVALIDATION_PERIOD (if it less than 30s).
-    const hasActiveRequests = action.payload.some(s => !s.completed);
-    yield delay(hasActiveRequests ? frequentPollingDelay : delayMs);
-    yield put(actions.invalidated());
-  };
-};
+export function* receivedStatementsDiagnosticsSaga(delayMs: number) {
+  yield delay(delayMs);
+  yield put(actions.invalidated());
+}
 
 export function* statementsDiagnosticsSagas(
   delayMs: number = CACHE_INVALIDATION_PERIOD,
@@ -94,6 +88,6 @@ export function* statementsDiagnosticsSagas(
     takeLatest(actions.request, requestStatementsDiagnosticsSaga),
     takeEvery(actions.createReport, createDiagnosticsReportSaga),
     takeEvery(actions.cancelReport, cancelDiagnosticsReportSaga),
-    takeLatest(actions.received, receivedStatementsDiagnosticsSaga(delayMs)),
+    takeLatest(actions.received, receivedStatementsDiagnosticsSaga, delayMs),
   ]);
 }

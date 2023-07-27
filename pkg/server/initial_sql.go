@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,11 +32,7 @@ func (s *Server) RunInitialSQL(
 	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
 ) error {
 	if s.cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
-		var knobs *obs.EventExporterTestingKnobs
-		if s.cfg.TestingKnobs.EventExporter != nil {
-			knobs = s.cfg.TestingKnobs.EventExporter.(*obs.EventExporterTestingKnobs)
-		}
-		if err := s.startEmbeddedObsService(ctx, knobs); err != nil {
+		if err := s.startEmbeddedObsService(ctx); err != nil {
 			return err
 		}
 	}

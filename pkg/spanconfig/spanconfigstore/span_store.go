@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -25,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// tenantCoalesceAdjacentSetting is a public cluster setting that
+// tenantCoalesceAdjacentSetting is a hidden cluster setting that
 // controls whether we coalesce adjacent ranges across all secondary
 // tenant keyspaces if they have the same span config.
 var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
@@ -33,17 +32,17 @@ var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	"spanconfig.tenant_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs across all secondary tenant keyspaces`,
 	true,
-).WithPublic()
+)
 
-// StorageCoalesceAdjacentSetting is a public cluster setting that controls
-// whether we coalesce adjacent ranges outside of the secondary tenant keyspaces
-// if they have the same span config.
+// StorageCoalesceAdjacentSetting is a hidden cluster setting that
+// controls whether we coalesce adjacent ranges outside of the
+// secondary tenant keyspaces if they have the same span config.
 var StorageCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.storage_coalesce_adjacent.enabled",
-	`collapse adjacent ranges with the same span configs, for the ranges specific to the system tenant`,
-	true,
-).WithPublic()
+	`collapse adjacent ranges with the same span configs for the ranges specific to the system tenant`,
+	false,
+)
 
 // spanConfigStore is an in-memory data structure to store and retrieve
 // SpanConfigs associated with a single span. Internally it makes use of a
@@ -105,9 +104,7 @@ func (s *spanConfigStore) forEachOverlapping(
 
 // computeSplitKey returns the first key we should split on because of the
 // presence a span config given a start and end key pair.
-func (s *spanConfigStore) computeSplitKey(
-	ctx context.Context, start, end roachpb.RKey,
-) (roachpb.RKey, error) {
+func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey, error) {
 	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
 
 	// Generally split keys are going to be the start keys of span config entries.
@@ -155,8 +152,7 @@ func (s *spanConfigStore) computeSplitKey(
 			// ranges.
 			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
 			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
-				!(StorageCoalesceAdjacentSetting.Get(&s.settings.SV) &&
-					s.settings.Version.IsActive(ctx, clusterversion.V23_2_EnableRangeCoalescingForSystemTenant)) {
+				!StorageCoalesceAdjacentSetting.Get(&s.settings.SV) {
 				return roachpb.RKey(match.span.Key), nil
 			}
 		} else {

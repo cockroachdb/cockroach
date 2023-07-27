@@ -37,24 +37,20 @@ func (s *Store) TestingApplyInternal(
 
 // TestingSplitKeys returns the computed list of range split points between
 // [start, end).
-func (s *Store) TestingSplitKeys(
-	tb testing.TB, ctx context.Context, start, end roachpb.RKey,
-) []roachpb.RKey {
+func (s *Store) TestingSplitKeys(tb testing.TB, start, end roachpb.RKey) []roachpb.RKey {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.mu.spanConfigStore.TestingSplitKeys(tb, ctx, start, end)
+	return s.mu.spanConfigStore.TestingSplitKeys(tb, start, end)
 }
 
 // TestingSplitKeys returns the computed list of range split points between
 // [start, end).
-func (s *spanConfigStore) TestingSplitKeys(
-	tb testing.TB, ctx context.Context, start, end roachpb.RKey,
-) []roachpb.RKey {
+func (s *spanConfigStore) TestingSplitKeys(tb testing.TB, start, end roachpb.RKey) []roachpb.RKey {
 	var splitKeys []roachpb.RKey
 	computeStart := start
 	for {
-		splitKey, err := s.computeSplitKey(ctx, computeStart, end)
+		splitKey, err := s.computeSplitKey(computeStart, end)
 		require.NoError(tb, err)
 		if splitKey == nil {
 			break
@@ -122,10 +118,12 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	boundsReader := newMockBoundsReader()
+	settings := cluster.MakeTestingClusterSettings()
+	boundsEnabled.Override(ctx, &settings.SV, true)
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		store := New(
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
-			cluster.MakeClusterSettings(),
+			settings,
 			boundsReader,
 			&spanconfig.TestingKnobs{
 				StoreIgnoreCoalesceAdjacentExceptions: true,
@@ -188,7 +186,7 @@ func TestDataDriven(t *testing.T) {
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 
 				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
-				splitKeys := store.TestingSplitKeys(t, ctx, start, end)
+				splitKeys := store.TestingSplitKeys(t, start, end)
 				var b strings.Builder
 				for _, splitKey := range splitKeys {
 					b.WriteString(fmt.Sprintf("key=%s\n", string(splitKey)))

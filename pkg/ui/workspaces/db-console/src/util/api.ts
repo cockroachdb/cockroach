@@ -90,11 +90,6 @@ export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
 export type JobRequestMessage = protos.cockroach.server.serverpb.JobRequest;
 export type JobResponseMessage = protos.cockroach.server.serverpb.JobResponse;
 
-export type ListJobProfilerExecutionDetailsRequestMessage =
-  protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
-export type ListJobProfilerExecutionDetailsResponseMessage =
-  protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse;
-
 export type QueryPlanRequestMessage =
   protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage =
@@ -207,16 +202,6 @@ export type ListTracingSnapshotsRequestMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
 export type ListTracingSnapshotsResponseMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
-
-export type ListTenantsRequestMessage =
-  protos.cockroach.server.serverpb.ListTenantsRequest;
-export type ListTenantsResponseMessage =
-  protos.cockroach.server.serverpb.ListTenantsResponse;
-
-export type NetworkConnectivityRequest =
-  protos.cockroach.server.serverpb.NetworkConnectivityRequest;
-export type NetworkConnectivityResponse =
-  protos.cockroach.server.serverpb.NetworkConnectivityResponse;
 
 // API constants
 
@@ -471,18 +456,6 @@ export function getJob(
   return timeoutFetch(
     serverpb.JobResponse,
     `${API_PREFIX}/jobs/${req.job_id}`,
-    null,
-    timeout,
-  );
-}
-
-export function getExecutionDetails(
-  req: ListJobProfilerExecutionDetailsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<ListJobProfilerExecutionDetailsResponseMessage> {
-  return timeoutFetch(
-    serverpb.ListJobProfilerExecutionDetailsResponse,
-    `${STATUS_PREFIX}/list_job_profiler_execution_details/${req.job_id}`,
     null,
     timeout,
   );
@@ -856,30 +829,6 @@ export function getKeyVisualizerSamples(
   return timeoutFetch(
     serverpb.KeyVisSamplesResponse,
     `${STATUS_PREFIX}/keyvissamples`,
-    req as any,
-    timeout,
-  );
-}
-
-export function getTenants(
-  req: ListTenantsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<ListTenantsResponseMessage> {
-  return timeoutFetch(
-    serverpb.ListTenantsResponse,
-    `${API_PREFIX}/tenants`,
-    req as any,
-    timeout,
-  );
-}
-
-export function getNetworkConnectivity(
-  req: NetworkConnectivityRequest,
-  timeout?: moment.Duration,
-): Promise<NetworkConnectivityResponse> {
-  return timeoutFetch(
-    serverpb.NetworkConnectivityResponse,
-    `${STATUS_PREFIX}/connectivity`,
     req as any,
     timeout,
   );

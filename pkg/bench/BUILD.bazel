@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bench",
-    testonly = 1,
     srcs = [
         "foreachdb.go",
         "query.go",
@@ -48,6 +47,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

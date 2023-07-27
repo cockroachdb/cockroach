@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -33,7 +32,7 @@ import (
 // directly.
 func CreateDeclarativeSchemaChangeJobs(
 	ctx context.Context, registry *jobs.Registry, txn isql.Txn, allMut nstree.Catalog,
-) ([]jobspb.JobID, error) {
+) error {
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
 	_ = allMut.ForEachDescriptor(func(d catalog.Descriptor) error {
 		if s := d.GetDeclarativeSchemaChangerState(); s != nil {
@@ -60,53 +59,19 @@ func CreateDeclarativeSchemaChangeJobs(
 			descriptorStates,
 		)
 		if err != nil {
-			return nil, err
-		}
-
-		// If all targets have reached their target status, simply clear the
-		// declarative schema changer state on all descriptors and skip creating a
-		// declarative schema changer job.
-		if haveAllTargetsReachedTheirTargetStatus(currentState) {
-			for _, desc := range descs {
-				desc.SetDeclarativeSchemaChangerState(nil)
-			}
-			continue
-		}
-		// If a descriptor has zero targets, and it does not need to be schema
-		// changed, then clear its declarative schema changer state. This can
-		// happen, for example, if a dropped schema clears the schemaID in its
-		// parent database but was excluded from the BACKUP (bc it's in DROP state),
-		// and the parent database will have a non-nil but empty declarative schema
-		// changer state, which we can safely clear out.
-		descsToSchemaChange := screl.AllTargetStateDescIDs(currentState.TargetState)
-		for _, desc := range descs {
-			if len(desc.GetDeclarativeSchemaChangerState().Targets) == 0 &&
-				!descsToSchemaChange.Contains(desc.GetID()) {
-				desc.SetDeclarativeSchemaChangerState(nil)
-			}
+			return err
 		}
 
 		const runningStatus = "restored from backup"
 		records = append(records, scexec.MakeDeclarativeSchemaChangeJobRecord(
 			newID,
 			currentState.Statements,
-			!currentState.Revertible, /* isNonCancelable */
+			!currentState.Revertible, // NonCancelable
 			currentState.Authorization,
 			screl.AllTargetStateDescIDs(currentState.TargetState),
 			runningStatus,
 		))
 	}
-	jobIDs, err := registry.CreateJobsWithTxn(ctx, txn, records)
-	return jobIDs, err
-}
-
-// haveAllTargetsReachedTheirTargetStatus determines whether all targets have
-// reached their target status.
-func haveAllTargetsReachedTheirTargetStatus(initial scpb.CurrentState) bool {
-	for i, status := range initial.Current {
-		if status != initial.Targets[i].TargetStatus {
-			return false
-		}
-	}
-	return true
+	_, err := registry.CreateJobsWithTxn(ctx, txn, records)
+	return err
 }

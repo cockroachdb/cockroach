@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -710,11 +709,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 
 	})
 	t.Run("compression options validation", func(t *testing.T) {
-		testCases := make([]string, 0, len(saramaCompressionCodecOptions)*2)
 		for option := range saramaCompressionCodecOptions {
-			testCases = append(testCases, option, strings.ToLower(option))
-		}
-		for _, option := range testCases {
 			opts := changefeedbase.SinkSpecificJSONConfig(fmt.Sprintf(`{"Compression": "%s"}`, option))
 			cfg, err := getSaramaConfig(opts)
 			require.NoError(t, err)
@@ -723,25 +718,6 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 			err = cfg.Apply(saramaCfg)
 			require.NoError(t, err)
 		}
-
-		forEachSupportedCodec := func(fn func(name string, c sarama.CompressionCodec)) {
-			defer func() { _ = recover() }()
-
-			for c := sarama.CompressionCodec(0); c.String() != ""; c++ {
-				fn(c.String(), c)
-			}
-		}
-
-		forEachSupportedCodec(func(option string, c sarama.CompressionCodec) {
-			opts := changefeedbase.SinkSpecificJSONConfig(fmt.Sprintf(`{"Compression": "%s"}`, option))
-			cfg, err := getSaramaConfig(opts)
-			require.NoError(t, err)
-
-			saramaCfg := &sarama.Config{}
-			err = cfg.Apply(saramaCfg)
-			require.NoError(t, err)
-			require.Equal(t, c, saramaCfg.Producer.Compression)
-		})
 
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Compression": "invalid"}`)
 		_, err := getSaramaConfig(opts)
@@ -870,36 +846,4 @@ func TestSinkConfigParsing(t *testing.T) {
 		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "invalid character 's' looking for beginning of value")
 	})
-}
-
-func TestChangefeedConsistentPartitioning(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// We test that these arbitrary strings get mapped to these
-	// arbitrary partitions to ensure that if an upgrade occurs
-	// while a changefeed is running, partitioning remains the same
-	// and therefore ordering guarantees are preserved. Changing
-	// these values is a breaking change.
-	referencePartitions := map[string]int32{
-		"0":         1003,
-		"01":        351,
-		"10":        940,
-		"a":         292,
-		"\x00":      732,
-		"\xff \xff": 164,
-	}
-	longString1 := strings.Repeat("a", 2048)
-	referencePartitions[longString1] = 755
-	longString2 := strings.Repeat("a", 2047) + "A"
-	referencePartitions[longString2] = 592
-
-	partitioner := newChangefeedPartitioner("topic1")
-
-	for key, expected := range referencePartitions {
-		actual, err := partitioner.Partition(&sarama.ProducerMessage{Key: sarama.ByteEncoder(key)}, 1031)
-		require.NoError(t, err)
-		require.Equal(t, expected, actual)
-	}
-
 }

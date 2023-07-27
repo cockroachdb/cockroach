@@ -166,7 +166,6 @@ func TestTenantRateLimiter(t *testing.T) {
 	timeSource := timeutil.NewManualTime(t0)
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TenantRateKnobs: tenantrate.TestingKnobs{
@@ -282,7 +281,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
-		resp, err := httpClient.Get(s.AdminURL().WithPath("/_status/vars").String())
+		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")
 		require.NoError(t, err)
 		read, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -327,8 +326,6 @@ func TestTenantCtx(t *testing.T) {
 		getErr := make(chan error)
 		pushErr := make(chan error)
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-			// Disable the default test tenant since we're going to create our own.
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {

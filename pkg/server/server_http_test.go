@@ -40,7 +40,7 @@ func TestHSTS(t *testing.T) {
 
 	urlsToTest := []string{"/", "/_status/vars", "/index.html"}
 
-	adminURLHTTPS := s.AdminURL().String()
+	adminURLHTTPS := s.AdminURL()
 	adminURLHTTP := strings.Replace(adminURLHTTPS, "https", "http", 1)
 
 	for _, u := range urlsToTest {

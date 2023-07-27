@@ -1886,7 +1886,7 @@ upsert decimals
       │    │    │    │    ├── columns: a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── d:18
-      │    │    │    │    │         └── (a:15 + c:17)::DECIMAL(10,1)
+      │    │    │    │    │         └── a:15 + c:17
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         └── a_cast:9 = a:15
@@ -1964,7 +1964,7 @@ upsert decimals
       │    │    │    │    ├── columns: a:14!null b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── d:17
-      │    │    │    │    │         └── (a:14 + c:16)::DECIMAL(10,1)
+      │    │    │    │    │         └── a:14 + c:16
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         └── a_cast:8 = a:14
@@ -2043,7 +2043,7 @@ upsert decimals
       │    │    │    │    ├── columns: a:14!null b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── d:17
-      │    │    │    │    │         └── (a:14 + c:16)::DECIMAL(10,1)
+      │    │    │    │    │         └── a:14 + c:16
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         └── a_cast:8 = a:14
@@ -2131,7 +2131,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    │    └── d:18
-      │    │    │    │    │    │    │         └── (a:15 + c:17)::DECIMAL(10,1)
+      │    │    │    │    │    │    │         └── a:15 + c:17
       │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a_cast:9 = a:15
@@ -2224,7 +2224,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    │    └── d:18
-      │    │    │    │    │    │    │         └── (a:15 + c:17)::DECIMAL(10,1)
+      │    │    │    │    │    │    │         └── a:15 + c:17
       │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a_cast:9 = a:15
@@ -2319,7 +2319,7 @@ upsert assn_cast
       │    │    │    ├── columns: k:22!null c:23 qc:24 i:25 s:26 d:27 d_comp:28 crdb_internal_mvcc_timestamp:29 tableoid:30
       │    │    │    ├── computed column expressions
       │    │    │    │    └── d_comp:28
-      │    │    │    │         └── (d:27 + 10.0)::DECIMAL(10)
+      │    │    │    │         └── d:27 + 10.0
       │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── k_cast:15 = k:22
@@ -2403,7 +2403,7 @@ upsert assn_cast
       │    │    │    ├── columns: k:21!null c:22 qc:23 i:24 s:25 d:26 d_comp:27 crdb_internal_mvcc_timestamp:28 tableoid:29
       │    │    │    ├── computed column expressions
       │    │    │    │    └── d_comp:27
-      │    │    │    │         └── (d:26 + 10.0)::DECIMAL(10)
+      │    │    │    │         └── d:26 + 10.0
       │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── k_cast:14 = k:21
@@ -2466,7 +2466,7 @@ insert assn_cast
       │    │    ├── columns: k:22!null c:23 qc:24 i:25 s:26 d:27 d_comp:28
       │    │    ├── computed column expressions
       │    │    │    └── d_comp:28
-      │    │    │         └── (d:27 + 10.0)::DECIMAL(10)
+      │    │    │         └── d:27 + 10.0
       │    │    └── flags: disabled not visible index feature
       │    └── filters
       │         └── k_cast:15 = k:22
@@ -2562,7 +2562,7 @@ upsert assn_cast
       │    │    │    │    │    ├── columns: k:21!null c:22 qc:23 i:24 s:25 d:26 d_comp:27 crdb_internal_mvcc_timestamp:28 tableoid:29
       │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    └── d_comp:27
-      │    │    │    │    │    │         └── (d:26 + 10.0)::DECIMAL(10)
+      │    │    │    │    │    │         └── d:26 + 10.0
       │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         └── k_cast:15 = k:21
@@ -2658,7 +2658,7 @@ upsert assn_cast
       │    │    │    ├── columns: k:19!null c:20 qc:21 i:22 s:23 d:24 d_comp:25 crdb_internal_mvcc_timestamp:26 tableoid:27
       │    │    │    ├── computed column expressions
       │    │    │    │    └── d_comp:25
-      │    │    │    │         └── (d:24 + 10.0)::DECIMAL(10)
+      │    │    │    │         └── d:24 + 10.0
       │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:10 = k:19
@@ -2740,7 +2740,7 @@ upsert assn_cast
       │    │    │    │    │    ├── columns: k:18!null c:19 qc:20 i:21 s:22 d:23 d_comp:24 crdb_internal_mvcc_timestamp:25 tableoid:26
       │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    └── d_comp:24
-      │    │    │    │    │    │         └── (d:23 + 10.0)::DECIMAL(10)
+      │    │    │    │    │    │         └── d:23 + 10.0
       │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         └── column1:10 = k:18
@@ -2834,7 +2834,7 @@ upsert assn_cast
       │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
       │    │    ├── computed column expressions
       │    │    │    └── d_comp:26
-      │    │    │         └── (d:25 + 10.0)::DECIMAL(10)
+      │    │    │         └── d:25 + 10.0
       │    │    └── flags: disabled not visible index feature
       │    └── filters
       │         └── column1:10 = k:20
@@ -2919,7 +2919,7 @@ upsert assn_cast
       │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
       │    │    ├── computed column expressions
       │    │    │    └── d_comp:26
-      │    │    │         └── (d:25 + 10.0)::DECIMAL(10)
+      │    │    │         └── d:25 + 10.0
       │    │    └── flags: disabled not visible index feature
       │    └── filters
       │         └── column1:10 = k:20
@@ -2984,7 +2984,7 @@ insert assn_cast
       │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26
       │    │    ├── computed column expressions
       │    │    │    └── d_comp:26
-      │    │    │         └── (d:25 + 10.0)::DECIMAL(10)
+      │    │    │         └── d:25 + 10.0
       │    │    └── flags: disabled not visible index feature
       │    └── filters
       │         └── column1:10 = k:20
@@ -3084,7 +3084,7 @@ upsert assn_cast
       │    │    │    │    │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
       │    │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    │    └── d_comp:26
-      │    │    │    │    │    │    │         └── (d:25 + 10.0)::DECIMAL(10)
+      │    │    │    │    │    │    │         └── d:25 + 10.0
       │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column1:10 = k:20
@@ -3165,7 +3165,7 @@ upsert assn_cast_on_update
       │    │    │    │    │    │    ├── columns: k:12!null i:13 d:14 d2:15 d_comp:16 crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    │    └── d_comp:16
-      │    │    │    │    │    │    │         └── d:14::DECIMAL(10)
+      │    │    │    │    │    │    │         └── d:14
       │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column1:8 = k:12

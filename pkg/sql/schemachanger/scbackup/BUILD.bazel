@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "scbackup",
@@ -10,7 +10,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
-        "//pkg/jobs/jobspb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/nstree",
@@ -18,34 +17,5 @@ go_library(
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
-    ],
-)
-
-go_test(
-    name = "scbackup_test",
-    srcs = [
-        "job_test.go",
-        "main_test.go",
-    ],
-    args = ["-test.timeout=295s"],
-    deps = [
-        ":scbackup",
-        "//pkg/base",
-        "//pkg/ccl",
-        "//pkg/security/securityassets",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/catalog/dbdesc",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/nstree",
-        "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/isql",
-        "//pkg/sql/schemachanger/scpb",
-        "//pkg/testutils/serverutils",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
     ],
 )

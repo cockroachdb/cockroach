@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -99,7 +100,7 @@ func newTestTenant(
 	tenant, tenantConn := serverutils.StartTenant(t, server, args)
 	sqlDB := sqlutils.MakeSQLRunner(tenantConn)
 	status := tenant.StatusServer().(serverpb.SQLStatusServer)
-	sqlStats := tenant.SQLServer().(*sql.Server).
+	sqlStats := tenant.PGServer().(*pgwire.Server).SQLServer.
 		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	contentionRegistry := tenant.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
 
@@ -144,9 +145,12 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
+	t.Helper()
+
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = knobs
-	params.DefaultTestTenant = base.TestControlsTenantsExplicitly
+	// We're running tenant tests, no need for a default tenant.
+	params.DisableDefaultTestTenant = true
 	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
@@ -246,7 +250,7 @@ func (c tenantCluster) TenantHTTPClient(t *testing.T, idx serverIdx, isAdmin boo
 		client, err = c.Tenant(idx).GetTenant().GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	}
 	require.NoError(t, err)
-	return &httpClient{t: t, client: client, baseURL: c[idx].GetTenant().AdminURL().String()}
+	return &httpClient{t: t, client: client, baseURL: c[idx].GetTenant().AdminURL()}
 }
 
 func (c tenantCluster) TenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {

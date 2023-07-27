@@ -39,19 +39,14 @@ func getStreamer(
 	ctx context.Context, s serverutils.TestServerInterface, limitBytes int64, acc *mon.BoundAccount,
 ) *Streamer {
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
-	if err != nil {
-		panic(err)
-	}
 	return NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.Stopper(),
-		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState),
+		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), rootTxn.GetLeafTxnInputState(ctx)),
 		cluster.MakeTestingClusterSettings(),
 		lock.WaitPolicy(0),
 		limitBytes,
 		acc,
-		nil, /* kvPairsRead */
 		nil, /* batchRequestsIssued */
 		lock.None,
 	)
@@ -104,7 +99,6 @@ func TestStreamerLimitations(t *testing.T) {
 				lock.WaitPolicy(0),
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
-				nil,           /* kvPairsRead */
 				nil,           /* batchRequestsIssued */
 				lock.None,
 			)

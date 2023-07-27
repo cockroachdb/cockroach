@@ -423,11 +423,3 @@ ALTER INDEX db.t@i NOT VISIBLE
 ALTER INDEX db.t@i NOT VISIBLE -- fully parenthesized
 ALTER INDEX db.t@i NOT VISIBLE -- literals removed
 ALTER INDEX _._@_ NOT VISIBLE -- identifiers removed
-
-parse
-ALTER INDEX db.t@i VISIBILITY 0.2
-----
-ALTER INDEX db.t@i VISIBILITY 0.20 -- normalized!
-ALTER INDEX db.t@i VISIBILITY 0.20 -- fully parenthesized
-ALTER INDEX db.t@i VISIBILITY 0.20 -- literals removed
-ALTER INDEX _._@_ VISIBILITY 0.20 -- identifiers removed

@@ -258,6 +258,8 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 ) (QualifiedOverload, error) {
 	matched := func(ol QualifiedOverload, schema string) bool {
 		if ol.IsUDF {
+			// TODO(mgartner/chengxiong-ruan): Differentiate between functions
+			// defined with `Body` and UDFs, now that we use `Body` for built-in functions.
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))

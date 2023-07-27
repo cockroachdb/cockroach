@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package exec contains execution-related utilities. (See README.md.)
 package exec
 
 import (
@@ -335,7 +334,6 @@ type ExecutionStats struct {
 	KVTime                optional.Duration
 	KVContentionTime      optional.Duration
 	KVBytesRead           optional.Uint
-	KVPairsRead           optional.Uint
 	KVRowsRead            optional.Uint
 	KVBatchRequestsIssued optional.Uint
 	UsedStreamer          bool

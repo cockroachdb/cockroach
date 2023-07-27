@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -46,7 +45,7 @@ func NormalizeExpression(
 	// Even though we have a job exec context, we shouldn't muck with it.
 	// Make our own copy of the planner instead.
 	if err := withPlanner(
-		ctx, execCtx.ExecCfg(), execCtx.User(), schemaTS, execCtx.SessionData(),
+		ctx, execCtx.ExecCfg(), execCtx.User(), schemaTS, execCtx.SessionData().SessionData,
 		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) (err error) {
 			defer cleanup()
 			norm, withDiff, err = normalizeExpression(ctx, execCtx, descr, schemaTS, target, sc, splitFams)
@@ -107,7 +106,7 @@ func SpansForExpression(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
-	sd *sessiondata.SessionData,
+	sd sessiondatapb.SessionData,
 	descr catalog.TableDescriptor,
 	schemaTS hlc.Timestamp,
 	target jobspb.ChangefeedTargetSpecification,
@@ -166,7 +165,7 @@ func withPlanner(
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	schemaTS hlc.Timestamp,
-	sd *sessiondata.SessionData,
+	sd sessiondatapb.SessionData,
 	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {

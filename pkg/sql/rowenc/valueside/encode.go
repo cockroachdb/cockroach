@@ -48,15 +48,13 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 	case *tree.DDecimal:
 		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Decimal), nil
 	case *tree.DString:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DBytes:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DEncodedKey:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
-	case *tree.DPGLSN:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.LSN)), nil
 	case *tree.DBox2D:
 		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
@@ -104,7 +102,7 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 	case *tree.DTuple:
 		return encodeTuple(t, appendTo, uint32(colID), scratch)
 	case *tree.DCollatedString:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeContentBytes()), nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.Oid)), nil
 	case *tree.DEnum:

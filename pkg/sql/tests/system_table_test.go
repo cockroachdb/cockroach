@@ -45,7 +45,6 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	const keysPerDesc = 2
 
 	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
@@ -115,7 +114,6 @@ func TestInitialKeys(t *testing.T) {
 func TestInitialKeysAndSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "initial_keys"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "initial-keys":
@@ -169,7 +167,6 @@ func TestInitialKeysAndSplits(t *testing.T) {
 func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	type testcase struct {
 		schema string
 		pkg    catalog.TableDescriptor
@@ -194,13 +191,10 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	// Add one for the system.span_count table, which is currently the only
-	// non-system tenant table.
-	const expectedNumberOfSystemTables = bootstrap.NumSystemTablesForSystemTenant + 1
+	const expectedNumberOfSystemTables = bootstrap.NumSystemTablesForSystemTenant
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
-	runTest := func(t *testing.T, name string, test testcase) {
-		t.Helper()
+	runTest := func(name string, test testcase) {
 		privs := *test.pkg.GetPrivileges()
 		desc := test.pkg
 		// Allocate an ID to dynamically allocated system tables.
@@ -253,7 +247,7 @@ func TestSystemTableLiterals(t *testing.T) {
 
 	for name, test := range testcases {
 		t.Run(name, func(t *testing.T) {
-			runTest(t, name, test)
+			runTest(name, test)
 		})
 	}
 }

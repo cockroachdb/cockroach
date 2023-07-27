@@ -707,7 +707,6 @@ func (md *Metadata) DuplicateTable(
 		partialIndexPredicates:        partialIndexPredicates,
 		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
 		checkConstraintsStats:         checkConstraintsStats,
-		notVisibleIndexMap:            tabMeta.notVisibleIndexMap,
 	}
 	md.tables = append(md.tables, newTabMeta)
 	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)

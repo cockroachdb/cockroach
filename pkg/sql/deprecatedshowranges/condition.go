@@ -104,7 +104,7 @@ var ShowRangesDeprecatedBehaviorSetting = settings.RegisterBoolSetting(
 	"if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics."+
 		" NB: the new SHOW RANGES interface has richer WITH options "+
 		"than pre-v23.1 SHOW RANGES.",
-	false,
+	true,
 ).WithPublic()
 
 const envVarName = "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR"

@@ -41,8 +41,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_append"></a><code>array_append(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: tuple[], elem: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -86,8 +84,6 @@
 <tr><td><a name="array_cat"></a><code>array_cat(left: jsonb[], right: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_cat"></a><code>array_cat(left: pg_lsn[], right: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: timetz[], right: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
@@ -137,8 +133,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_position"></a><code>array_position(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: tuple[], elem: tuple) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
@@ -182,8 +176,6 @@
 <tr><td><a name="array_positions"></a><code>array_positions(array: jsonb[], elem: jsonb) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_positions"></a><code>array_positions(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -229,8 +221,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: oid, array: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_prepend"></a><code>array_prepend(elem: pg_lsn, array: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: timetz, array: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: tuple, array: tuple[]) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -275,8 +265,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_remove"></a><code>array_remove(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: tuple[], elem: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
@@ -320,8 +308,6 @@
 <tr><td><a name="array_replace"></a><code>array_replace(array: jsonb[], toreplace: jsonb, replacewith: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: oid[], toreplace: oid, replacewith: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_replace"></a><code>array_replace(array: pg_lsn[], toreplace: pg_lsn, replacewith: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: timetz[], toreplace: timetz, replacewith: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -1319,8 +1305,6 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(database_id: <a href="int.html">int</a>, table_id: <a href="int.html">int</a>) &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(spans: tuple[]) &rarr; tuple{bytes AS start_key, bytes AS end_key, jsonb AS stats}</code></td><td><span class="funcdesc"><p>Returns SpanStats for the provided spans.</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.testing_callback"></a><code>crdb_internal.testing_callback(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>For internal CRDB testing only. The function calls a callback identified by <code>name</code> registered with the server by the test.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.unary_table"></a><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
@@ -1738,29 +1722,6 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <tr><td><a name="st_askml"></a><code>st_askml(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
-Uses 256 as the buffer size in tile coordinate space for geometry clipping.
-Uses 4096 as the tile extent size in tile coordinate space.</p>
-<p>The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
-Uses 256 as the buffer size in tile coordinate space for geometry clipping.</p>
-<p>The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>, buffer: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.</p>
-<p>The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry will be clipped can be transformed.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>, buffer: <a href="int.html">int</a>, clip: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds if required.</p>
-<p>The geometry must be in the coordinate system of the target map.
-The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
-The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry can be transformed, and clipped if required.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. A default of 15 decimal digits is used.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
@@ -1787,8 +1748,6 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="st_bdpolyfromtext"></a><code>st_bdpolyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Polygon from multilinestring WKT with a SRID. If the input is not a multilinestring an error will be thrown.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_boundary"></a><code>st_boundary(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the closure of the combinatorial boundary of this Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -3228,14 +3187,14 @@ Note: the name pattern must contain ASCII letters already for capital letters to
 <tr><td><a name="crdb_internal.is_constraint_active"></a><code>crdb_internal.is_constraint_active(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to determine if a given constraint is currently.
 active for the current transaction.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.job_execution_details"></a><code>crdb_internal.job_execution_details(job_id: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Output a JSONB version of the specified job’s execution details. The execution details are collectedand persisted during the lifetime of the job and provide more observability into the job’s execution</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.lease_holder"></a><code>crdb_internal.lease_holder(key: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to fetch the leaseholder corresponding to a request key</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.list_sql_keys_in_range"></a><code>crdb_internal.list_sql_keys_in_range(range_id: <a href="int.html">int</a>) &rarr; tuple{string AS key, string AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns all SQL K/V pairs within the requested range.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.locality_value"></a><code>crdb_internal.locality_value(key: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the value of the specified locality key.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="crdb_internal.no_constant_folding"></a><code>crdb_internal.no_constant_folding(input: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.node_executable_version"></a><code>crdb_internal.node_executable_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the version of CockroachDB this node is running.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.node_id"></a><code>crdb_internal.node_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the node ID.</p>
@@ -3268,15 +3227,11 @@ active for the current transaction.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.pretty_span"></a><code>crdb_internal.pretty_span(raw_key_start: <a href="bytes.html">bytes</a>, raw_key_end: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pretty_value"></a><code>crdb_internal.pretty_value(raw_value: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.repair_ttl_table_scheduled_job"></a><code>crdb_internal.repair_ttl_table_scheduled_job(oid: oid) &rarr; void</code></td><td><span class="funcdesc"><p>Repairs the scheduled job for a TTL table if it is missing.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.request_job_execution_details"></a><code>crdb_internal.request_job_execution_details(jobID: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request the collection of execution details for a given job ID</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.request_statement_bundle"></a><code>crdb_internal.request_statement_bundle(stmtFingerprint: <a href="string.html">string</a>, samplingProbability: <a href="float.html">float</a>, minExecutionLatency: <a href="interval.html">interval</a>, expiresAfter: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request statement bundle for a given statement fingerprint
 that has execution latency greater than the ‘minExecutionLatency’. If the
@@ -3310,8 +3265,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.set_vmodule"></a><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the equivalent of the <code>--vmodule</code> flag on the gateway node processing this request; it affords control over the logging verbosity of different files. Example syntax: <code>crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')</code>. Reset with: <code>crdb_internal.set_vmodule('')</code>. Raising the verbosity can severely affect performance.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.sstable_metrics"></a><code>crdb_internal.sstable_metrics(node_id: <a href="int.html">int</a>, store_id: <a href="int.html">int</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS node_id, int AS store_id, int AS level, int AS file_num, int AS approximate_span_<a href="bytes.html">bytes</a>, jsonb AS metrics}</code></td><td><span class="funcdesc"><p>Returns statistics for the sstables containing keys in the range start_key and end_key for the provided node id.</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.table_span"></a><code>crdb_internal.table_span(table_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given table.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="crdb_internal.trace_id"></a><code>crdb_internal.trace_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current trace ID or an error if no trace is open.</p>
@@ -3587,8 +3540,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="nameconcatoid"></a><code>nameconcatoid(name: <a href="string.html">string</a>, oid: oid) &rarr; name</code></td><td><span class="funcdesc"><p>Used in the information_schema to produce specific_name columns, which are supposed to be unique per schema. The result is the same as ($1::text || ‘_’ || $2::text)::name except that, if it would not fit in 63 characters, we make it do so by truncating the name input (not the oid).</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
@@ -3602,8 +3553,6 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it. Currently, this always returns NULL, since CockroachDB does not support default values.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (with defaults) necessary to identify a function, in the form it would need to appear in within CREATE FUNCTION.</p>
 </span></td><td>Stable</td></tr>
@@ -3641,8 +3590,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_relation_is_updatable"></a><code>pg_relation_is_updatable(reloid: oid, include_triggers: <a href="bool.html">bool</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the update events the relation supports.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="pg_sequence_last_value"></a><code>pg_sequence_last_value(sequence_oid: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the last value generated by a sequence, or NULL if the sequence has not been used yet.</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_table_is_visible"></a><code>pg_table_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the table with the given OID belongs to one of the schemas on the search path.</p>

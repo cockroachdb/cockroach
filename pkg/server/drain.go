@@ -20,14 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -68,15 +66,6 @@ var (
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
-
-	jobRegistryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
-		"server.shutdown.jobs_wait",
-		"the maximum amount of time a server waits for all currently executing jobs "+
-			"to notice drain request and to perform orderly shutdown",
-		10*time.Second,
-		settings.NonNegativeDurationWithMaximum(10*time.Minute),
-	).WithPublic()
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
@@ -101,7 +90,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// Connect to the target node.
 		client, err := s.dialNode(ctx, roachpb.NodeID(nodeID))
 		if err != nil {
-			return srverrors.ServerError(ctx, err)
+			return serverError(ctx, err)
 		}
 		return delegateDrain(ctx, req, client, stream)
 	}
@@ -403,14 +392,7 @@ func (s *drainServer) drainClients(
 	// issues a BACKUP or some other job-based statement before it
 	// disconnects, and encounters a job error as a result -- that the
 	// registry is now unavailable due to the drain.
-	{
-		_ = timeutil.RunWithTimeout(ctx, "drain-job-registry",
-			jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV),
-			func(ctx context.Context) error {
-				s.sqlServer.jobRegistry.DrainRequested(ctx)
-				return nil
-			})
-	}
+	s.sqlServer.jobRegistry.SetDraining()
 
 	// Inform the auto-stats tasks that the node is draining.
 	s.sqlServer.statsRefresher.SetDraining()

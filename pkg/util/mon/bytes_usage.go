@@ -675,7 +675,9 @@ func (mm *BytesMonitor) Resource() Resource {
 // are used in CockroachDB.
 //
 // A normal BoundAccount is not safe for concurrent use by multiple goroutines,
-// use ConcurrentBoundAccount if thread safety is needed.
+// however if the Mu field is set to a non-nil mutex, some methods such as Grow,
+// Shrink, and Resize calls will lock and unlock that mutex making them safe;
+// such methods are identified in their comments.
 type BoundAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
@@ -684,82 +686,9 @@ type BoundAccount struct {
 	mon      *BytesMonitor
 
 	earmark int64
-}
 
-// ConcurrentBoundAccount is a thread safe wrapper around BoundAccount.
-type ConcurrentBoundAccount struct {
-	syncutil.Mutex
-	wrapped BoundAccount
-}
-
-// Used wraps BoundAccount.Used().
-func (c *ConcurrentBoundAccount) Used() int64 {
-	if c == nil {
-		return 0
-	}
-	c.Lock()
-	defer c.Unlock()
-	return c.wrapped.Used()
-}
-
-// Reserve wraps BoundAccount.Reserve().
-func (c *ConcurrentBoundAccount) Reserve(ctx context.Context, x int64) error {
-	if c == nil {
-		return nil
-	}
-	c.Lock()
-	defer c.Unlock()
-	return c.wrapped.Reserve(ctx, x)
-}
-
-// Close wraps BoundAccount.Close().
-func (c *ConcurrentBoundAccount) Close(ctx context.Context) {
-	if c == nil {
-		return
-	}
-	c.Lock()
-	defer c.Unlock()
-	c.wrapped.Close(ctx)
-}
-
-// Resize wraps BoundAccount.Resize().
-func (c *ConcurrentBoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
-	if c == nil {
-		return nil
-	}
-	c.Lock()
-	defer c.Unlock()
-	return c.wrapped.Resize(ctx, oldSz, newSz)
-}
-
-// ResizeTo wraps BoundAccount.ResizeTo().
-func (c *ConcurrentBoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
-	if c == nil {
-		return nil
-	}
-	c.Lock()
-	defer c.Unlock()
-	return c.wrapped.ResizeTo(ctx, newSz)
-}
-
-// Grow wraps BoundAccount.Grow().
-func (c *ConcurrentBoundAccount) Grow(ctx context.Context, x int64) error {
-	if c == nil {
-		return nil
-	}
-	c.Lock()
-	defer c.Unlock()
-	return c.wrapped.Grow(ctx, x)
-}
-
-// Shrink wraps BoundAccount.Shrink().
-func (c *ConcurrentBoundAccount) Shrink(ctx context.Context, delta int64) {
-	if c == nil || delta == 0 {
-		return
-	}
-	c.Lock()
-	defer c.Unlock()
-	c.wrapped.Shrink(ctx, delta)
+	// Mu, if non-nil, is used in some methods such as Grow and Shrink.
+	Mu *syncutil.Mutex
 }
 
 // NewStandaloneBudget creates a BoundAccount suitable for root monitors.
@@ -768,9 +697,14 @@ func NewStandaloneBudget(capacity int64) *BoundAccount {
 }
 
 // Used returns the number of bytes currently allocated through this account.
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Used() int64 {
 	if b == nil {
 		return 0
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	return b.used
 }
@@ -794,12 +728,6 @@ func (b *BoundAccount) Allocated() int64 {
 // MakeBoundAccount creates a BoundAccount connected to the given monitor.
 func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
-}
-
-// MakeConcurrentBoundAccount creates ConcurrentBoundAccount, which is a thread
-// safe wrapper around BoundAccount.
-func (mm *BytesMonitor) MakeConcurrentBoundAccount() *ConcurrentBoundAccount {
-	return &ConcurrentBoundAccount{wrapped: mm.MakeBoundAccount()}
 }
 
 // TransferAccount creates a new account with the budget
@@ -835,9 +763,15 @@ func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 // reservation by use by future Grow() calls, and configuring the account to
 // consider that amount "earmarked" for this account, meaning that that Shrink()
 // calls will not release it back to the parent monitor.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Reserve(ctx context.Context, x int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	minExtra := b.mon.roundSize(x)
 	if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
@@ -905,9 +839,15 @@ func (b *BoundAccount) Close(ctx context.Context) {
 // If one is interested in specifying the new size of the account as a whole (as
 // opposed to resizing one object among many in the account), ResizeTo() should
 // be used.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	delta := newSz - oldSz
 	switch {
@@ -920,9 +860,15 @@ func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 }
 
 // ResizeTo resizes (grows or shrinks) the account to a specified size.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	if newSz == b.used {
 		// Performance optimization to avoid an unnecessary dispatch.
@@ -932,9 +878,15 @@ func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
 }
 
 // Grow is an accessor for b.mon.GrowAccount.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 	if b == nil {
 		return nil
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	if b.reserved < x {
 		minExtra := b.mon.roundSize(x - b.reserved)
@@ -949,9 +901,15 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 }
 
 // Shrink releases part of the cumulated allocations by the specified size.
+//
+// If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b == nil || delta == 0 {
 		return
+	}
+	if b.Mu != nil {
+		b.Mu.Lock()
+		defer b.Mu.Unlock()
 	}
 	if b.used < delta {
 		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,

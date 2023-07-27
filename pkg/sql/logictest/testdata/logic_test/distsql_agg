@@ -402,7 +402,7 @@ SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum_int(a+b) FILTER (WHERE a < d
 650  650   650  65
 650  650   650  65
 
-query IIRT nosort
+query IIRT
 VALUES (1, 2, 1.0, 'string1'), (4, 3, 2.3, 'string2')
 ----
 1 2 1.0 string1

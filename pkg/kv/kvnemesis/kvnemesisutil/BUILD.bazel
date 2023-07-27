@@ -10,8 +10,8 @@ go_library(
         "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
         "//conditions:default": [":gen-crdb-test-off"],
     }) + [
-        "context.go",
         "seq.go",
+        "context.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil",
     visibility = ["//visibility:public"],

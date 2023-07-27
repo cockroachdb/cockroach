@@ -49,6 +49,11 @@ type deleteRun struct {
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
+	// partialIndexDelValsOffset is the offset of partial index delete
+	// indicators in the source values. It is equal to the sum of the number
+	// of fetched columns and the number of passthrough columns.
+	partialIndexDelValsOffset int
+
 	// rowIdxToRetIdx is the mapping from the columns returned by the deleter
 	// to the columns in the resultRowBuffer. A value of -1 is used to indicate
 	// that the column at that index is not part of the resultRowBuffer
@@ -157,7 +162,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
 	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
-		offset := len(d.run.td.rd.FetchCols) + d.run.numPassthrough
+		offset := d.run.partialIndexDelValsOffset
 		partialIndexDelVals := sourceVals[offset : offset+n]
 
 		err := pm.Init(nil /*partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
@@ -167,7 +172,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 		// Truncate sourceVals so that it no longer includes partial index
 		// predicate values.
-		sourceVals = sourceVals[:offset]
+		sourceVals = sourceVals[:d.run.partialIndexDelValsOffset]
 	}
 
 	// Queue the deletion in the KV batch.

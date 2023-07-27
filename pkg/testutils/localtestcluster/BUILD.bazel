@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "localtestcluster",
-    testonly = 1,
     srcs = ["local_test_cluster.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster",
     visibility = ["//visibility:public"],

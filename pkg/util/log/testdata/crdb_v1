@@ -115,32 +115,3 @@ logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.g
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:" ={\"hello\":123}\nstack trace:\nfoo", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 subtest end
-
-subtest timezone
-
-# Check in the following expected results that the Time field after
-# parsing the log format output is the same as the original timestamp
-# at top.
-
-entries tz=america/new_york
-{"counter": 3, "message": "info"}
-----
-I691231 19:00:12.300000-050000 456 somefile.go:136  3 info
-# after parse:
-logpb.Entry{Severity:1, Time:12300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹info›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-
-entries tz=europe/amsterdam
-{"counter": 3, "message": "info"}
-----
-I700101 01:00:12.300000+010000 456 somefile.go:136  3 info
-# after parse:
-logpb.Entry{Severity:1, Time:12300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹info›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-
-entries tz=utc
-{"counter": 3, "message": "info"}
-----
-I700101 00:00:12.300000+000000 456 somefile.go:136  3 info
-# after parse:
-logpb.Entry{Severity:1, Time:12300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹info›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-
-subtest end

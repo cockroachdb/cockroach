@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -88,9 +89,6 @@ type Cluster struct {
 	CreatedAt time.Time     `json:"created_at"`
 	Lifetime  time.Duration `json:"lifetime"`
 	VMs       vm.List       `json:"vms"`
-	// CostPerHour is an estimate, in dollars, of how much this cluster costs to
-	// run per hour. 0 if the cost estimate is unavailable.
-	CostPerHour float64
 }
 
 // Clouds returns the names of all of the various cloud providers used
@@ -163,6 +161,21 @@ func (c *Cluster) IsLocal() bool {
 	return config.IsLocalClusterName(c.Name)
 }
 
+const vmNameFormat = "user-<clusterid>-<nodeid>"
+
+// namesFromVM determines the user name and the cluster name from a VM.
+func namesFromVM(v vm.VM) (userName string, clusterName string, _ error) {
+	if v.IsLocal() {
+		return config.Local, v.LocalClusterName, nil
+	}
+	name := v.Name
+	parts := strings.Split(name, "-")
+	if len(parts) < 3 {
+		return "", "", fmt.Errorf("expected VM name in the form %s, got %s", vmNameFormat, name)
+	}
+	return parts[0], strings.Join(parts[:len(parts)-1], "-"), nil
+}
+
 // ListCloud returns information about all instances (across all available
 // providers).
 func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
@@ -191,11 +204,7 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	for _, vms := range providerVMs {
 		for _, v := range vms {
 			// Parse cluster/user from VM name, but only for non-local VMs
-			userName, err := v.UserName()
-			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidName)
-			}
-			clusterName, err := v.ClusterName()
+			userName, clusterName, err := namesFromVM(v)
 			if err != nil {
 				v.Errors = append(v.Errors, vm.ErrInvalidName)
 			}
@@ -226,7 +235,6 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			if v.Lifetime < c.Lifetime {
 				c.Lifetime = v.Lifetime
 			}
-			c.CostPerHour += v.CostPerHour
 		}
 	}
 

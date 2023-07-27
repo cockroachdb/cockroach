@@ -42,9 +42,8 @@ type OS struct {
 	*recorder.Recorder
 
 	knobs struct { // testing knobs
-		dryrun    bool
-		silent    bool
-		intercept map[string]string // maps commands to outputs
+		dryrun bool
+		silent bool
 	}
 }
 
@@ -94,18 +93,9 @@ func WithWorkingDir(dir string) func(o *OS) {
 }
 
 // WithDryrun configures OS to run in dryrun mode.
-func WithDryrun() func(o *OS) {
-	return func(o *OS) {
-		o.knobs.dryrun = true
-	}
-}
-
-func WithIntercept(cmd, output string) func(e *OS) {
-	return func(o *OS) {
-		if o.knobs.intercept == nil {
-			o.knobs.intercept = make(map[string]string)
-		}
-		o.knobs.intercept[cmd] = output
+func WithDryrun() func(e *OS) {
+	return func(e *OS) {
+		e.knobs.dryrun = true
 	}
 }
 
@@ -522,27 +512,9 @@ func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
 	return ids[0], ids[1], nil
 }
 
-// UserCacheDir returns the cache directory for the current user if possible.
-func (o *OS) UserCacheDir() (dir string, err error) {
-	command := "echo $HOME"
-	if !o.knobs.silent {
-		o.logger.Print(command)
-	}
-
-	return o.Next(command, func() (dir string, err error) {
-		return os.UserCacheDir()
-	})
-
-}
-
 // Next is a thin interceptor for all os activity, running them through
 // testing knobs first.
 func (o *OS) Next(command string, f func() (output string, err error)) (string, error) {
-	if o.knobs.intercept != nil {
-		if output, ok := o.knobs.intercept[command]; ok {
-			return output, nil
-		}
-	}
 	if o.knobs.dryrun {
 		return "", nil
 	}

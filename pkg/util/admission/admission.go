@@ -17,8 +17,8 @@
 // - Limiting node overload, so that bad things don't happen due to starvation
 //   of resources.
 // - Providing performance isolation between low and high importance
-//   activities, so that overload caused by the former does not impact the
-//   latency of the latter. Additionally, for multi-tenant KV nodes, the
+//   activities, so that overload caused by the latter does not impact the
+//   latency of the former. Additionally, for multi-tenant KV nodes, the
 //   isolation should extend to inter-tenant performance isolation.
 //   Isolation is strictly harder than limiting node overload, and the
 //   abstractions here are likely to be average quality in doing so.
@@ -178,7 +178,7 @@ type granter interface {
 	// is a possibility that that raced with cancellation.
 	//
 	// Do not use this for doing store IO-related token adjustments when work is
-	// done -- that should be done via granterWithStoreReplicatedWorkAdmitted.storeWriteDone.
+	// done -- that should be done via granterWithStoreWriteDone.storeWriteDone.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	returnGrant(count int64)
@@ -195,7 +195,7 @@ type granter interface {
 	//   work turned out to be an underestimate.
 	//
 	// Do not use this for doing store IO-related token adjustments when work is
-	// done -- that should be done via granterWithStoreReplicatedWorkAdmitted.storeWriteDone.
+	// done -- that should be done via granterWithStoreWriteDone.storeWriteDone.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	tookWithoutPermission(count int64)
@@ -258,64 +258,39 @@ type granterWithLockedCalls interface {
 // The interface is used by the entity that periodically looks at load and
 // computes the tokens to grant (ioLoadListener).
 type granterWithIOTokens interface {
-	// setAvailableTokens bounds the available {io,elastic disk bandwidth} tokens
-	// that can be granted to the value provided in the
-	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens bounds
-	// what can be granted to elastic work, and is based on disk bandwidth being a
-	// bottleneck resource. These are not tight bounds when the callee has negative
-	// available tokens, due to the use of granter.tookWithoutPermission, since in
-	// that the case the callee increments that negative value with the value
-	// provided by tokens. This method needs to be called periodically.
-	// {io, elasticDiskBandwidth}TokensCapacity is the ceiling up to which we allow
-	// elastic or disk bandwidth tokens to accumulate. The return value is the
-	// number of used tokens in the interval since the prior call to this method.
-	// Note that tokensUsed can be negative, though that will be rare, since it is
+	// setAvailableTokens bounds the available {io,elastic disk bandwidth}
+	// tokens that can be granted to the value provided in the
+	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens
+	// bounds what can be granted to elastic work, and is based on disk
+	// bandwidth being a bottleneck resource. These are not tight bounds when
+	// the callee has negative available tokens, due to the use of
+	// granter.tookWithoutPermission, since in that the case the callee
+	// increments that negative value with the value provided by tokens. This
+	// method needs to be called periodically. The return value is the number of
+	// used tokens in the interval since the prior call to this method. Note
+	// that tokensUsed can be negative, though that will be rare, since it is
 	// possible for tokens to be returned.
-	setAvailableTokens(
-		ioTokens int64, elasticDiskBandwidthTokens int64,
-		ioTokensCapacity int64, elasticDiskBandwidthTokensCapacity int64,
-	) (tokensUsed int64)
+	setAvailableTokens(ioTokens int64, elasticDiskBandwidthTokens int64) (tokensUsed int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
 	// since the last such call.
 	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
-	// setLinearModels supplies the models to use when storeWriteDone or
-	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
-	// Note that these models are not used for token adjustment at admission
-	// time -- that is handled by StoreWorkQueue and is not in scope of this
-	// granter. This asymmetry is due to the need to use all the functionality
-	// of WorkQueue at admission time. See the long explanatory comment at the
-	// beginning of store_token_estimation.go, regarding token estimation.
-	setLinearModels(l0WriteLM, l0IngestLM, ingestLM tokensLinearModel)
+	// setAdmittedDoneModelsLocked supplies the models to use when
+	// storeWriteDone is called, to adjust token consumption. Note that these
+	// models are not used for token adjustment at admission time -- that is
+	// handled by StoreWorkQueue and is not in scope of this granter. This
+	// asymmetry is due to the need to use all the functionality of WorkQueue at
+	// admission time. See the long explanatory comment at the beginning of
+	// store_token_estimation.go, regarding token estimation.
+	setAdmittedDoneModels(l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel,
+		ingestLM tokensLinearModel)
 }
 
-// granterWithStoreReplicatedWorkAdmitted is used to abstract
-// kvStoreTokenGranter for testing. The interface is used by StoreWorkQueue to
-// pass on sizing information provided when the work is either done (for legacy,
-// above-raft IO admission) or admitted (for below-raft, asynchronous admission
-// control.
-type granterWithStoreReplicatedWorkAdmitted interface {
+// granterWithStoreWriteDone is used to abstract kvStoreTokenGranter for
+// testing. The interface is used by StoreWorkQueue to pass on sizing
+// information provided when the work was completed.
+type granterWithStoreWriteDone interface {
 	granter
-	// storeWriteDone is used by legacy, above-raft IO admission control to
-	// inform granters of when the write was actually done, post-admission. At
-	// admit-time we did not have sizing info for these writes, so by
-	// intercepting these writes at admit time we're able to make any
-	// outstanding token adjustments in the granter. When adjusting tokens, if
-	// we observe the granter was previously exhausted but is now no longer so,
-	// this interface is allowed to admit other waiting requests.
 	storeWriteDone(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
-	// storeReplicatedWorkAdmittedLocked is used by below-raft admission control
-	// to inform granters of work being admitted in order for them to make any
-	// outstanding token adjustments. It's invoked with the coord.mu held.
-	// Unlike storeWriteDone, the token adjustments don't result in further
-	// admission. There are two callsites to get here:
-	// - From (*WorkQueue).granted, invoked in the GrantCoordinator loop. The
-	//   caller itself is looping, so we don't grant further admission. If we
-	//   did, our recursive callstack could be as large as the number of waiting
-	//   requests.
-	// - The fast path in (*WorkQueue).Admit, invoked by the work seeking
-	//   admission that only wants to subtract tokens. Here again there's no
-	//   need for further admission.
-	storeReplicatedWorkAdmittedLocked(originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo) (additionalTokens int64)
 }
 
 // cpuOverloadIndicator is meant to be an instantaneous indicator of cpu

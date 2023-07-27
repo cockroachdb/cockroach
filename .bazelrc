@@ -36,7 +36,6 @@ build --define gotags=bazel,gss
 build --experimental_proto_descriptor_sets_include_source_info
 build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
 build --symlink_prefix=_bazel/
-build:dev --strip=never
 common --experimental_allow_tags_propagation
 test --config=test --experimental_ui_max_stdouterr_bytes=10485760
 build --ui_event_filters=-DEBUG
@@ -50,9 +49,6 @@ test:test --test_env=TZ=
 # If those values are updated, the script should be updated accordingly.
 test:race --test_timeout=1200,6000,18000,72000
 
-# CI uses a custom timeout for enormous targets.
-test:use_ci_timeouts --test_timeout=60,300,900,900 --define=use_ci_timeouts=true
-# CI should always run with `--config=ci`.
 build:ci --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456

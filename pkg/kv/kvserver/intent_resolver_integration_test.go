@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -189,12 +188,10 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 func TestReliableIntentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 66895)
+	skip.WithIssue(t, 66895, "Flaky due to non-deterministic txn cleanup")
 	skip.UnderShort(t) // takes 294s
 	skip.UnderRace(t, "timing-sensitive test")
-	skip.UnderDeadlock(t, "timing-sensitive test")
-	//skip.UnderStress(t, "memory-hungry test")
+	skip.UnderStress(t, "memory-hungry test")
 
 	prefix := roachpb.Key([]byte("key\x00"))
 
@@ -449,18 +446,18 @@ func TestReliableIntentCleanup(t *testing.T) {
 				// meanwhile, returning when heartbeat was aborted.
 				abortedC := abortHeartbeat(t, txnKey)
 				readyC := blockPut(t, txnKey)
-				go func() {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(_ context.Context) {
 					<-abortedC
 					unblockC := <-readyC
 					time.Sleep(100 * time.Millisecond)
 					close(unblockC)
-				}()
+				}))
 				close(abortErrC) // can't error
 
 			case "push":
 				// Push txn with a high-priority write once put is blocked.
 				readyC := blockPut(t, txnKey)
-				go func() {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "push", func(ctx context.Context) {
 					unblockC := <-readyC
 					defer close(unblockC)
 					defer close(abortErrC)
@@ -469,7 +466,6 @@ func TestReliableIntentCleanup(t *testing.T) {
 					pusherProto := roachpb.MakeTransaction(
 						"pusher",
 						nil, // baseKey
-						isolation.Serializable,
 						roachpb.MaxUserPriority,
 						now.ToTimestamp(),
 						srv.Clock().MaxOffset().Nanoseconds(),
@@ -484,8 +480,8 @@ func TestReliableIntentCleanup(t *testing.T) {
 						abortErrC <- err
 						return
 					}
-					time.Sleep(100 * time.Millisecond) // sleep before defers
-				}()
+					time.Sleep(100 * time.Millisecond)
+				}))
 
 			case "":
 				close(abortErrC)
@@ -498,12 +494,12 @@ func TestReliableIntentCleanup(t *testing.T) {
 			// evaluated in Raft.
 			if spec.finalize == "cancelAsync" {
 				readyC := blockPutEval(t, txnKey)
-				go func() {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(_ context.Context) {
 					unblockC := <-readyC
 					defer close(unblockC)
 					cancel()
-					time.Sleep(100 * time.Millisecond) // sleep before defers
-				}()
+					time.Sleep(100 * time.Millisecond)
+				}))
 			}
 
 			// Write numKeys KV pairs in batches of batchSize as a single txn.
@@ -571,20 +567,19 @@ func TestReliableIntentCleanup(t *testing.T) {
 					break
 				} else if spec.abort != "" {
 					require.Error(t, err)
-					if errors.As(err, &retryErr) {
+					if errors.As(err, retryErr) {
 						require.True(t, retryErr.PrevTxnAborted())
 					} else {
 						require.Fail(t, "expected TransactionRetryWithProtoRefreshError, got %v", err)
 					}
 					break
-				} else if !errors.As(err, &retryErr) {
+				} else if !errors.As(err, retryErr) {
 					require.NoError(t, err)
-				} else if attempt >= 7 {
+				} else if attempt >= 3 {
 					require.Fail(t, "too many txn retries", "attempt %v errored: %v", attempt, err)
 				} else {
 					t.Logf("retrying unexpected txn error: %v", err)
-					// Sanity check the retry error is meant for our transaction.
-					require.Equal(t, retryErr.TxnID, txn.ID())
+					require.True(t, txn.IsRetryableErrMeantForTxn(*retryErr))
 				}
 			}
 
@@ -634,11 +629,6 @@ func TestReliableIntentCleanup(t *testing.T) {
 					}
 					finalize := []interface{}{"commit", "rollback", "cancel", "cancelAsync"}
 					testutils.RunValues(t, "finalize", finalize, func(t *testing.T, finalize interface{}) {
-						// TODO(erikgrinaker): cleanup does not always work reliably with
-						// context cancellation, so we skip these for now to deflake the test.
-						if finalize == "cancel" || finalize == "cancelAsync" {
-							skip.WithIssue(t, 105615)
-						}
 						if finalize == "cancelAsync" {
 							// cancelAsync can't run together with abort.
 							testTxn(t, testTxnSpec{

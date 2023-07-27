@@ -855,10 +855,6 @@ file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableNa
 func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	ctx context.Context, txn isql.Txn,
 ) error {
-	if f.username == username.NodeUserName() {
-		// The node user already has all privileges.
-		return nil
-	}
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
 	_, err := txn.ExecEx(ctx, "grant-user-file-payload-table-access", txn.KV(),

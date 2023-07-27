@@ -36,9 +36,7 @@ func TestDecodeCapabilities(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Capabilities are only available in the system tenant's
-			// system.tenants table.
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			DisableDefaultTestTenant: true, // system.tenants only exists for the system tenant
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -69,14 +67,13 @@ func TestDecodeCapabilities(t *testing.T) {
 
 	// Read the row	.
 	k := keys.SystemSQLCodec.IndexPrefix(dummyTableID, keys.TenantsTablePrimaryKeyIndexID)
-	s := tc.Server(0)
-	rows, err := s.DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
 	// Decode and verify.
 	row := rows[0]
-	got, err := tenantcapabilitieswatcher.TestingDecoderFn(s.ClusterSettings())(ctx, roachpb.KeyValue{
+	got, err := tenantcapabilitieswatcher.TestingDecoderFn()(roachpb.KeyValue{
 		Key:   row.Key,
 		Value: *row.Value,
 	})

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
@@ -70,16 +69,11 @@ func TestJSONFormats(t *testing.T) {
 		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "world"),
 	}
 
-	l, err := timeutil.LoadLocation("America/New_York")
-	if err != nil {
-		t.Fatal(err)
-	}
 	formats := []logFormatter{
-		&formatJSONFull{fluentTag: true, tags: tagCompact},
-		&formatJSONFull{fluentTag: true, tags: tagVerbose},
-		&formatJSONFull{tags: tagCompact},
-		&formatJSONFull{},
-		&formatJSONFull{datetimeFormat: "2006-01-02 xx 15:04:05+07", loc: l},
+		formatFluentJSONCompact{},
+		formatFluentJSONFull{},
+		formatJSONCompact{},
+		formatJSONFull{},
 	}
 
 	// We only use the datadriven framework for the ability to rewrite the output.

@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import styles from "../statementsPage/statementsPage.module.scss";
 import { RouteComponentProps } from "react-router-dom";
@@ -53,7 +54,6 @@ import {
   createCombinedStmtsRequest,
   StatementsRequest,
   SqlStatsSortOptions,
-  SqlStatsResponse,
 } from "src/api/statementsApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -73,6 +73,7 @@ import {
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
+import moment from "moment-timezone";
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -83,8 +84,7 @@ import {
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
-import { RequestState } from "../api";
-import moment from "moment-timezone";
+type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
 const cx = classNames.bind(styles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -99,10 +99,14 @@ interface TState {
 
 export interface TransactionsPageStateProps {
   columns: string[];
-  txnsResp: RequestState<SqlStatsResponse>;
+  data: IStatementsResponse;
+  isDataValid: boolean;
+  isReqInFlight: boolean;
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
+  error?: Error | null;
   filters: Filters;
   isTenant?: UIConfigState["isTenant"];
   nodeRegions: { [nodeId: string]: string };
@@ -222,9 +226,9 @@ export class TransactionsPage extends React.Component<
     if (ts !== this.props.timeScale) {
       this.changeTimeScale(ts);
     } else if (
-      !this.props.txnsResp.valid ||
-      !this.props.txnsResp.data ||
-      !this.props.txnsResp.lastUpdated
+      !this.props.isDataValid ||
+      !this.props.data ||
+      !this.props.lastUpdated
     ) {
       this.refreshData();
     }
@@ -381,9 +385,7 @@ export class TransactionsPage extends React.Component<
   };
 
   lastReset = (): Date => {
-    return new Date(
-      Number(this.props.txnsResp?.data?.last_reset.seconds) * 1000,
-    );
+    return new Date(Number(this.props.data?.last_reset.seconds) * 1000);
   };
 
   changeTimeScale = (ts: TimeScale): void => {
@@ -450,6 +452,7 @@ export class TransactionsPage extends React.Component<
 
   renderTransactions(): React.ReactElement {
     const {
+      data,
       nodeRegions,
       isTenant,
       onColumnsChange,
@@ -458,7 +461,6 @@ export class TransactionsPage extends React.Component<
       search,
       hasAdminRole,
     } = this.props;
-    const data = this.props.txnsResp.data;
     const { pagination, filters } = this.state;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
@@ -681,18 +683,18 @@ export class TransactionsPage extends React.Component<
         />
         <div className={cx("table-area")}>
           <Loading
-            loading={this.props.txnsResp.inFlight}
+            loading={this.props.isReqInFlight}
             page={"transactions"}
-            error={this.props.txnsResp?.error}
+            error={this.props?.error}
             render={() => this.renderTransactions()}
             renderError={() =>
               LoadingError({
                 statsType: "transactions",
-                error: this.props.txnsResp.error,
+                error: this.props?.error,
               })
             }
           />
-          {this.props.txnsResp.inFlight && longLoadingMessage}
+          {this.props.isReqInFlight && longLoadingMessage}
         </div>
       </>
     );

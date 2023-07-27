@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -36,11 +35,8 @@ import (
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -56,11 +52,10 @@ type restoreDataProcessor struct {
 	spec    execinfrapb.RestoreDataSpec
 	input   execinfra.RowSource
 
-	// numWorkers is the number of workers this processor should use. This
-	// number is determined by the cluster setting and the amount of memory
-	// available to be used by RESTORE. If the cluster setting or memory
-	// allocation is updated, the job should be PAUSEd and RESUMEd for the new
-	// worker count to take effect.
+	// numWorkers is the number of workers this processor should use. Initialized
+	// at processor creation based on the cluster setting. If the cluster setting
+	// is updated, the job should be PAUSEd and RESUMEd for the new setting to
+	// take effect.
 	numWorkers int
 
 	// phaseGroup manages the phases of the restore:
@@ -77,10 +72,6 @@ type restoreDataProcessor struct {
 	progCh chan backuppb.RestoreProgress
 
 	agg *bulkutil.TracingAggregator
-
-	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
-	// can be used by this processor to open iterators on SSTs.
-	qp *backuputils.MemoryBackedQuotaPool
 }
 
 var (
@@ -91,19 +82,6 @@ var (
 const restoreDataProcName = "restoreDataProcessor"
 
 const maxConcurrentRestoreWorkers = 32
-
-// sstReaderOverheadBytesPerFile and sstReaderEncryptedOverheadBytesPerFile were obtained
-// benchmarking external SST iterators on GCP and AWS and selecting the highest
-// observed memory per file.
-const sstReaderOverheadBytesPerFile = 5 << 20
-const sstReaderEncryptedOverheadBytesPerFile = 8 << 20
-
-// minWorkerMemReservation is the minimum amount of memory reserved per restore
-// data processor worker. It should be greater than
-// sstReaderOverheadBytesPerFile and sstReaderEncryptedOverheadBytesPerFile to
-// ensure that all workers at least can simultaneously process at least one
-// file.
-const minWorkerMemReservation = 15 << 20
 
 func min(a, b int) int {
 	if a < b {
@@ -143,27 +121,6 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
-// restorePerProcessorMemoryLimit is the limit on the memory used by a
-// restoreDataProcessor. The actual limit is the lowest of this setting
-// and the limit determined by restorePerProcessorMemoryLimitSQLFraction
-// and --max-sql-memory.
-var restorePerProcessorMemoryLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
-	"bulkio.restore.per_processor_memory_limit",
-	"limit on the amount of memory that can be used by a restore processor",
-	1<<30, // 1 GiB
-)
-
-// restorePerProcessorMemoryLimitSQLFraction is the maximum percentage of the
-// SQL memory pool that could be used by a restoreDataProcessor.
-var restorePerProcessorMemoryLimitSQLFraction = settings.RegisterFloatSetting(
-	settings.TenantWritable,
-	"bulkio.restore.per_processor_memory_limit_sql_fraction",
-	"limit on the amount of memory that can be used by a restore processor as a fraction of max SQL memory",
-	0.5,
-	settings.NonNegativeFloatWithMaximum(1.0),
-)
-
 func newRestoreDataProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -172,35 +129,18 @@ func newRestoreDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
+	sv := &flowCtx.Cfg.Settings.SV
+	numWorkers := int(numRestoreWorkers.Get(sv))
+
 	rd := &restoreDataProcessor{
-		flowCtx: flowCtx,
-		input:   input,
-		spec:    spec,
-		progCh:  make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		flowCtx:    flowCtx,
+		input:      input,
+		spec:       spec,
+		progCh:     make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		metaCh:     make(chan *execinfrapb.ProducerMetadata, numWorkers),
+		numWorkers: numWorkers,
 	}
 
-	var memMonitor *mon.BytesMonitor
-	var limit int64
-	if spec.MemoryMonitorSSTs {
-		limit = restorePerProcessorMemoryLimit.Get(&flowCtx.EvalCtx.Settings.SV)
-		sqlFraction := restorePerProcessorMemoryLimitSQLFraction.Get(&flowCtx.EvalCtx.Settings.SV)
-		sqlFractionLimit := int64(sqlFraction * float64(flowCtx.Cfg.RootSQLMemoryPoolSize))
-		if sqlFractionLimit < limit {
-			log.Infof(ctx, "using a maximum of %s memory per restore data processor (%f of max SQL memory %s)",
-				humanizeutil.IBytes(sqlFractionLimit), sqlFraction,
-				humanizeutil.IBytes(flowCtx.Cfg.RootSQLMemoryPoolSize))
-			limit = sqlFractionLimit
-		}
-
-		memMonitor = flowCtx.Cfg.BackupMonitor
-		if knobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
-			if knobs.BackupMemMonitor != nil {
-				memMonitor = knobs.BackupMemMonitor
-			}
-		}
-	}
-
-	rd.qp = backuputils.NewMemoryBackedQuotaPool(ctx, memMonitor, "restore-mon", limit)
 	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
@@ -227,23 +167,8 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 		cancel()
 		_ = rd.phaseGroup.Wait()
 	}
-
-	// First we reserve minWorkerMemReservation for each restore worker, and
-	// making sure that we always have enough memory for at least one worker. The
-	// maximum number of workers is based on the cluster setting. If the cluster
-	// setting is updated, the job should be PAUSEd and RESUMEd for the new
-	// setting to take effect.
-	numWorkers, err := reserveRestoreWorkerMemory(ctx, rd.flowCtx.Cfg.Settings, rd.qp)
-	if err != nil {
-		log.Warningf(ctx, "cannot reserve restore worker memory: %v", err)
-		rd.MoveToDraining(err)
-		return
-	}
-	rd.numWorkers = numWorkers
-	rd.metaCh = make(chan *execinfrapb.ProducerMetadata, numWorkers)
-
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
-	log.Infof(ctx, "starting restore data processor with %d workers", rd.numWorkers)
+	log.Infof(ctx, "starting restore data processor")
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
@@ -321,26 +246,14 @@ func inputReader(
 }
 
 type mergedSST struct {
-	entry        execinfrapb.RestoreSpanEntry
-	iter         *storage.ReadAsOfIterator
-	cleanup      func()
-	completeUpTo hlc.Timestamp
+	entry   execinfrapb.RestoreSpanEntry
+	iter    *storage.ReadAsOfIterator
+	cleanup func()
 }
 
-type resumeEntry struct {
-	done bool
-	idx  int
-}
-
-// openSSTs opens all files in entry starting from the resumeIdx and returns a
-// multiplexed SST iterator over the files. If memory monitoring is enabled and
-// opening an additional file would exceed the current memory budget, a partial
-// iterator over only the currently opened files would be returned, along with an
-// updated resume idx, which the caller should use with openSSTs again to get an
-// iterator over the remaining files.
 func (rd *restoreDataProcessor) openSSTs(
-	ctx context.Context, entry execinfrapb.RestoreSpanEntry, resume *resumeEntry,
-) (mergedSST, *resumeEntry, error) {
+	ctx context.Context, entry execinfrapb.RestoreSpanEntry,
+) (mergedSST, error) {
 	// TODO(msbutler): use a a map of external storage factories to avoid reopening the same dir
 	// in a given restore span entry
 	var dirs []cloud.ExternalStorage
@@ -357,12 +270,11 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	// getIter returns a multiplexed iterator covering the currently accumulated
 	// files over the channel.
-	getIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage, iterAllocs []*quotapool.IntAlloc, completeUpTo hlc.Timestamp) (mergedSST, error) {
+	getIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) (mergedSST, error) {
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
 			readAsOfIter.Close()
-			rd.qp.Release(iterAllocs...)
 
 			for _, dir := range dirsToSend {
 				if err := dir.Close(); err != nil {
@@ -372,10 +284,9 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 
 		mSST := mergedSST{
-			entry:        entry,
-			iter:         readAsOfIter,
-			cleanup:      cleanup,
-			completeUpTo: completeUpTo,
+			entry:   entry,
+			iter:    readAsOfIter,
+			cleanup: cleanup,
 		}
 
 		dirs = make([]cloud.ExternalStorage, 0)
@@ -385,71 +296,18 @@ func (rd *restoreDataProcessor) openSSTs(
 	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
-	iterAllocs := make([]*quotapool.IntAlloc, 0, len(entry.Files))
-	var sstOverheadBytesPerFile uint64
-	if rd.spec.Encryption != nil {
-		sstOverheadBytesPerFile = sstReaderEncryptedOverheadBytesPerFile
-	} else {
-		sstOverheadBytesPerFile = sstReaderOverheadBytesPerFile
-	}
-
-	idx := 0
-	if resume != nil {
-		idx = resume.idx
-	}
-
-	for ; idx < len(entry.Files); idx++ {
-		file := entry.Files[idx]
+	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
-
-		alloc, err := rd.qp.TryAcquireMaybeIncreaseCapacity(ctx, sstOverheadBytesPerFile)
-		if errors.Is(err, quotapool.ErrNotEnoughQuota) {
-			// If we failed to allocate more memory, send the iterator
-			// containing the files we have right now.
-			if len(storeFiles) > 0 {
-				iterOpts := storage.IterOptions{
-					RangeKeyMaskingBelow: rd.spec.RestoreTime,
-					KeyTypes:             storage.IterKeyTypePointsAndRanges,
-					LowerBound:           keys.LocalMax,
-					UpperBound:           keys.MaxKey,
-				}
-				iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
-				if err != nil {
-					return mergedSST{}, nil, err
-				}
-
-				log.VInfof(ctx, 2, "sending iterator after %d out of %d files due to insufficient memory", idx, len(entry.Files))
-
-				// TODO(rui): this is a placeholder value to show that a span has been
-				// partially but not completely processed. Eventually this timestamp should
-				// be the actual timestamp that we have processed up to so far.
-				completeUpTo := hlc.Timestamp{Logical: 1}
-				mSST, err := getIter(iter, dirs, iterAllocs, completeUpTo)
-				res := &resumeEntry{
-					idx:  idx,
-					done: false,
-				}
-				return mSST, res, err
-			}
-
-			alloc, err = rd.qp.Acquire(ctx, sstOverheadBytesPerFile)
-			if err != nil {
-				return mergedSST{}, nil, err
-			}
-		} else if err != nil {
-			return mergedSST{}, nil, err
-		}
-
-		iterAllocs = append(iterAllocs, alloc)
 
 		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
-			return mergedSST{}, nil, err
+			return mergedSST{}, err
 		}
 		dirs = append(dirs, dir)
 		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+		// TODO(pbardea): When memory monitoring is added, return the currently
+		// accumulated iterators if we run into memory pressure.
 	}
-
 	iterOpts := storage.IterOptions{
 		RangeKeyMaskingBelow: rd.spec.RestoreTime,
 		KeyTypes:             storage.IterKeyTypePointsAndRanges,
@@ -458,15 +316,9 @@ func (rd *restoreDataProcessor) openSSTs(
 	}
 	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
 	if err != nil {
-		return mergedSST{}, nil, err
+		return mergedSST{}, err
 	}
-
-	mSST, err := getIter(iter, dirs, iterAllocs, rd.spec.RestoreTime)
-	res := &resumeEntry{
-		idx:  idx,
-		done: true,
-	}
-	return mSST, res, err
+	return getIter(iter, dirs)
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(
@@ -483,7 +335,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			fmt.Sprintf("%s-worker-%d-aggregator", restoreDataProcName, worker), rd.EvalCtx.Tracer)
 		defer agg.Close()
 
-		var sstIter mergedSST
 		for {
 			done, err := func() (done bool, _ error) {
 				entry, ok := <-entries
@@ -492,27 +343,22 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 					return done, nil
 				}
 
-				var res *resumeEntry
-				for {
-					sstIter, res, err = rd.openSSTs(ctx, entry, res)
-					if err != nil {
-						return done, err
-					}
-
-					summary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
-					if err != nil {
-						return done, err
-					}
-
-					select {
-					case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs, sstIter.completeUpTo):
-					case <-ctx.Done():
-						return done, ctx.Err()
-					}
-					if res.done {
-						break
-					}
+				sstIter, err := rd.openSSTs(ctx, entry)
+				if err != nil {
+					return done, err
 				}
+
+				summary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
+				if err != nil {
+					return done, err
+				}
+
+				select {
+				case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs):
+				case <-ctx.Done():
+					return done, ctx.Err()
+				}
+
 				return done, nil
 			}()
 			if err != nil {
@@ -553,11 +399,10 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		}
 
 		// disallowShadowingBelow is set to an empty hlc.Timestamp in release builds
-		// i.e. allow all shadowing without AddSSTable having to check for
-		// overlapping keys. This is necessary since RESTORE can sometimes construct
-		// SSTables that overwrite existing keys, in cases when there wasn't
-		// sufficient memory to open an iterator for all files at once for a given
-		// import span.
+		// i.e. allow all shadowing without AddSSTable having to check for overlapping
+		// keys. This is because RESTORE is expected to ingest into an empty keyspace.
+		// If a restore job is resumed, the un-checkpointed spans that are re-ingested
+		// will shadow (equal key, value; different ts) the already ingested keys.
 		//
 		// NB: disallowShadowingBelow used to be unconditionally set to logical=1.
 		// This permissive value would allow shadowing in case the RESTORE has to
@@ -575,6 +420,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		// progress checkpointing so that we do not have a buildup of un-checkpointed
 		// work, at which point we can reassess reverting to logical=1.
 		disallowShadowingBelow := hlc.Timestamp{}
+		if !build.IsRelease() {
+			disallowShadowingBelow = hlc.Timestamp{Logical: 1}
+		}
 
 		var err error
 		batcher, err = bulk.MakeSSTBatcher(ctx,
@@ -584,10 +432,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			disallowShadowingBelow,
 			writeAtBatchTS,
 			false, /* scatterSplitRanges */
-			// TODO(rui): we can change this to the processor's bound account, but
-			// currently there seems to be some accounting errors that will cause
-			// tests to fail.
-			rd.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+			rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
 			rd.flowCtx.Cfg.BulkSenderLimiter,
 		)
 		if err != nil {
@@ -626,16 +471,19 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
 
+		if errors.Is(err, ErrImportingKeyError) {
+			// The keyRewriter returns ErrImportingKeyError iff the key is part of an
+			// in-progress import. Keys from in-progress imports never get restored,
+			// since the key's table gets restored to its pre-import state. Therefore,
+			// elide ingesting this key.
+			continue
+		}
 		if err != nil {
 			return summary, err
 		}
 		if !ok {
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.
-			//
-			// As an example, keys from in-progress imports never get restored,
-			// since the key's table gets restored to its pre-import state. Therefore,
-			// we elide ingesting this key.
 			if verbose {
 				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
 			}
@@ -660,7 +508,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
-			restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx, &entry)
+			restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx)
 		}
 	}
 
@@ -668,16 +516,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 }
 
 func makeProgressUpdate(
-	summary kvpb.BulkOpSummary,
-	entry execinfrapb.RestoreSpanEntry,
-	pkIDs map[uint64]bool,
-	completeUpTo hlc.Timestamp,
+	summary kvpb.BulkOpSummary, entry execinfrapb.RestoreSpanEntry, pkIDs map[uint64]bool,
 ) (progDetails backuppb.RestoreProgress) {
 	progDetails.Summary = countRows(summary, pkIDs)
 	progDetails.ProgressIdx = entry.ProgressIdx
 	progDetails.DataSpan = entry.Span
-	progDetails.CompleteUpTo = completeUpTo
-	return progDetails
+	return
 }
 
 // Next is part of the RowSource interface.
@@ -687,6 +531,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	}
 
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+
 	select {
 	case progDetails, ok := <-rd.progCh:
 		if !ok {
@@ -718,34 +563,8 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 		return
 	}
 	rd.cancelWorkersAndWait()
-
-	rd.qp.Close(rd.Ctx())
 	rd.agg.Close()
 	rd.InternalClose()
-}
-
-func reserveRestoreWorkerMemory(
-	ctx context.Context, settings *cluster.Settings, qmem *backuputils.MemoryBackedQuotaPool,
-) (int, error) {
-	maxRestoreWorkers := int(numRestoreWorkers.Get(&settings.SV))
-	minRestoreWorkers := maxRestoreWorkers / 2
-	if minRestoreWorkers < 1 {
-		minRestoreWorkers = 1
-	}
-
-	numWorkers := 0
-	for worker := 0; worker < maxRestoreWorkers; worker++ {
-		if err := qmem.IncreaseCapacity(ctx, minWorkerMemReservation); err != nil {
-			if worker >= minRestoreWorkers {
-				break // no more memory to run workers
-			}
-			return 0, errors.Wrapf(err, "insufficient memory available to run restore with min %d workers", minRestoreWorkers)
-		}
-
-		numWorkers++
-	}
-
-	return numWorkers, nil
 }
 
 // SSTBatcherExecutor wraps the SSTBatcher methods, allowing a validation only restore to

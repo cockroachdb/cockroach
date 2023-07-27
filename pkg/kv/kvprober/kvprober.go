@@ -20,14 +20,15 @@ package kvprober
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -226,9 +227,9 @@ func errorIsExpectedDuringNormalOperation(err error) bool {
 	// of a decommissioned node. The full set of other errors is not known exactly,
 	// and the errors mostly lack structure. Since they happen rarely, and since
 	// the intended use of kvprober is to page on a sustained error rate, not a
-	// single error, we choose to only filter out errors via the
-	// kvpb.IsDecommissionedStatusErr function.
-	return kvpb.IsDecommissionedStatusErr(err)
+	// single error, we choose to only filter out `was permanently removed from
+	// the cluster at` errors.
+	return strings.Contains(err.Error(), "was permanently removed from the cluster at")
 }
 
 // validateKey returns an error if the key is not valid for use by the kvprober.
@@ -396,7 +397,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	// Slow enough response times are not different than errors from the
 	// perspective of the user.
 	timeout := readTimeout.Get(&p.settings.SV)
-	err = timeutil.RunWithTimeout(ctx, "read probe", timeout, func(ctx context.Context) error {
+	err = contextutil.RunWithTimeout(ctx, "read probe", timeout, func(ctx context.Context) error {
 		// We read a "range-local" key dedicated to probing. See pkg/keys for more.
 		// There is no data at the key, but that is okay. Even tho there is no data
 		// at the key, the prober still executes a read operation on the range.
@@ -460,7 +461,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	// Slow enough response times are not different than errors from the
 	// perspective of the user.
 	timeout := writeTimeout.Get(&p.settings.SV)
-	err = timeutil.RunWithTimeout(ctx, "write probe", timeout, func(ctx context.Context) error {
+	err = contextutil.RunWithTimeout(ctx, "write probe", timeout, func(ctx context.Context) error {
 		f := ops.Write(step.Key)
 		if bypassAdmissionControl.Get(&p.settings.SV) {
 			return txns.Txn(ctx, f)

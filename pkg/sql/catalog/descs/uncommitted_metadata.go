@@ -26,18 +26,15 @@ type uncommittedComments struct {
 }
 
 func makeUncommittedComments() uncommittedComments {
-	return uncommittedComments{}
+	return uncommittedComments{
+		uncommitted: make(map[catalogkeys.CommentKey]string),
+		cachedKeys:  make(map[catalogkeys.CommentKey]struct{}),
+	}
 }
 
 func (uc *uncommittedComments) reset() {
-	*uc = uncommittedComments{}
-}
-
-func (uc *uncommittedComments) lazyInitMaps() {
-	if uc.uncommitted == nil {
-		uc.uncommitted = make(map[catalogkeys.CommentKey]string)
-		uc.cachedKeys = make(map[catalogkeys.CommentKey]struct{})
-	}
+	uc.uncommitted = make(map[catalogkeys.CommentKey]string)
+	uc.cachedKeys = make(map[catalogkeys.CommentKey]struct{})
 }
 
 func (uc *uncommittedComments) getUncommitted(
@@ -53,13 +50,11 @@ func (uc *uncommittedComments) getUncommitted(
 
 // markNoComment lets the cache know that the comment for this key is dropped.
 func (uc *uncommittedComments) markNoComment(key catalogkeys.CommentKey) {
-	uc.lazyInitMaps()
 	delete(uc.uncommitted, key)
 	uc.cachedKeys[key] = struct{}{}
 }
 
 func (uc *uncommittedComments) markTableDeleted(tblID descpb.ID) {
-	// NOTE: lazyInitMaps() not needed, maps can remain nil.
 	var keysToDel []catalogkeys.CommentKey
 	for k := range uc.uncommitted {
 		if k.ObjectID == uint32(tblID) {
@@ -72,7 +67,6 @@ func (uc *uncommittedComments) markTableDeleted(tblID descpb.ID) {
 }
 
 func (uc *uncommittedComments) upsert(key catalogkeys.CommentKey, cmt string) {
-	uc.lazyInitMaps()
 	uc.cachedKeys[key] = struct{}{}
 	uc.uncommitted[key] = cmt
 }
@@ -92,18 +86,15 @@ type uncommittedZoneConfigs struct {
 }
 
 func makeUncommittedZoneConfigs() uncommittedZoneConfigs {
-	return uncommittedZoneConfigs{}
+	return uncommittedZoneConfigs{
+		uncommitted: make(map[descpb.ID]catalog.ZoneConfig),
+		cachedDescs: make(map[descpb.ID]struct{}),
+	}
 }
 
 func (uc *uncommittedZoneConfigs) reset() {
-	*uc = uncommittedZoneConfigs{}
-}
-
-func (uc *uncommittedZoneConfigs) lazyInitMaps() {
-	if uc.uncommitted == nil {
-		uc.uncommitted = make(map[descpb.ID]catalog.ZoneConfig)
-		uc.cachedDescs = make(map[descpb.ID]struct{})
-	}
+	uc.uncommitted = make(map[descpb.ID]catalog.ZoneConfig)
+	uc.cachedDescs = make(map[descpb.ID]struct{})
 }
 
 func (uc *uncommittedZoneConfigs) getUncommitted(
@@ -116,13 +107,11 @@ func (uc *uncommittedZoneConfigs) getUncommitted(
 }
 
 func (uc *uncommittedZoneConfigs) markNoZoneConfig(id descpb.ID) {
-	uc.lazyInitMaps()
 	delete(uc.uncommitted, id)
 	uc.cachedDescs[id] = struct{}{}
 }
 
 func (uc *uncommittedZoneConfigs) upsert(id descpb.ID, zc *zonepb.ZoneConfig) error {
-	uc.lazyInitMaps()
 	uc.cachedDescs[id] = struct{}{}
 	var val roachpb.Value
 	if err := val.SetProto(zc); err != nil {

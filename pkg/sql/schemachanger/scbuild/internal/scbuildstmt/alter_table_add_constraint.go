@@ -77,7 +77,7 @@ func alterTableAddPrimaryKey(
 
 	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
 	// Ensure that there is a default rowid column.
-	oldPrimaryIndex := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
+	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
@@ -176,7 +176,7 @@ func alterTableAddCheck(
 // contain backfilled values for the new column and hence would mistakenly
 // allow the validation query to succeed).
 func getIndexIDForValidationForConstraint(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
-	b.QueryByID(tableID).ForEach(func(
+	b.QueryByID(tableID).ForEachElementStatus(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		if pie, ok := e.(*scpb.PrimaryIndex); ok &&
@@ -303,7 +303,7 @@ func alterTableAddForeignKey(
 		if primaryIndexPartitioningElemInReferencedTable != nil {
 			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
 		}
-		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndexByKind(b, referencedTableID, primaryIndexIDInReferencedTable)
+		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndex(b, referencedTableID, primaryIndexIDInReferencedTable)
 		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
 			fkDef.ToCols = append(
 				fkDef.ToCols,
@@ -443,11 +443,11 @@ func alterTableAddUniqueWithoutIndex(
 			"partitioned unique constraints without an index are not supported",
 		))
 	}
-	if d.Invisibility != 0.0 {
+	if d.NotVisible {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
-			"creating a unique constraint using UNIQUE WITHOUT NOT VISIBLE INDEX is not supported",
+			"creating a unique constraint using UNIQUE WITH NOT VISIBLE INDEX is not supported",
 		))
 	}
 
@@ -556,7 +556,7 @@ func getFullyResolvedColNames(
 
 // areColsUniqueInTable ensures uniqueness on columns is guaranteed on this table.
 func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID) (ret bool) {
-	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if ret {
 			return
 		}
@@ -860,7 +860,7 @@ func maybeRetrieveIndexPartitioningElem(
 }
 
 func getCurrentPrimaryIndexID(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
-	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if pie, ok := e.(*scpb.PrimaryIndex); ok && current == scpb.Status_PUBLIC {
 			ret = pie.IndexID
 		}

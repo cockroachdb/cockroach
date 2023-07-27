@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -348,24 +347,49 @@ func TestMVCCGetWithValueHeader(t *testing.T) {
 // TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey tests a write
 // that comes after a delete on a nonexistent key, with the write holding a
 // timestamp earlier than the delete timestamp. The delete must write a
-// tombstone with its timestamp in order to prevent the write from succeeding.
+// tombstone with its timestamp in order to push the write's timestamp.
 func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	engine := NewDefaultInMemForTesting()
 	defer engine.Close()
 
-	_, err := MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil)
-	require.NoError(t, err)
+	if _, err := MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil); err != nil {
+		t.Fatal(err)
+	}
 
-	err = MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil)
-	require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
-	require.Regexp(t, err, "WriteTooOldError: write for key \"/db1\" at timestamp 0.000000001,0 too old; must write at or above 0.000000003,1")
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil); !testutils.IsError(
+		err, "write for key \"/db1\" at timestamp 0.000000001,0 too old; wrote at 0.000000003,1",
+	) {
+		t.Fatal(err)
+	}
 
-	// The attempted write at ts(1,0) failed, so we should not be able to see it.
-	valueRes, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
-	require.NoError(t, err)
-	require.False(t, valueRes.Value.IsPresent())
+	valueRes, err := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 2},
+		MVCCGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The attempted write at ts(1,0) was performed at ts(3,1), so we should
+	// not see it at ts(2,0).
+	if valueRes.Value != nil {
+		t.Fatalf("value present at TS = %s", valueRes.Value.Timestamp)
+	}
+
+	// Read the latest version which will be the value written with the timestamp pushed.
+	valueRes, err = MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4},
+		MVCCGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valueRes.Value == nil {
+		t.Fatal("value doesn't exist")
+	}
+	if !bytes.Equal(valueRes.Value.RawBytes, value1.RawBytes) {
+		t.Errorf("expected %q; got %q", value1.RawBytes, valueRes.Value.RawBytes)
+	}
+	if expTS := (hlc.Timestamp{WallTime: 3, Logical: 1}); valueRes.Value.Timestamp != expTS {
+		t.Fatalf("timestamp was not pushed: %s, expected %s", valueRes.Value.Timestamp, expTS)
+	}
 }
 
 func TestMVCCInlineWithTxn(t *testing.T) {
@@ -1998,7 +2022,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	})
 
 	// Add an intent at k3@ts3.
-	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, ts3, 1, 1)
+	txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, ts3, 1, 1)
 	addIntent := func(t *testing.T, rw ReadWriter) {
 		require.NoError(t, MVCCPut(ctx, rw, nil, testKey3, ts3, hlc.ClockTimestamp{}, value3, &txn))
 	}
@@ -2271,32 +2295,46 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	txn := *txn1
 	txn.Sequence++
 	err := MVCCInitPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, false, &txn)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A repeat of the command will still succeed.
 	txn.Sequence++
 	err = MVCCInitPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, false, &txn)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A repeat of the command with a different value at a different epoch
 	// will still succeed.
 	txn.Sequence++
 	txn.Epoch = 2
 	err = MVCCInitPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value2, false, &txn)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Commit value3.
 	txnCommit := txn
 	txnCommit.Status = roachpb.COMMITTED
 	txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
-	_, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}),
-		MVCCResolveWriteIntentOptions{})
-	require.NoError(t, err)
+		MVCCResolveWriteIntentOptions{}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Write value4 with an old timestamp without txn...should get an error.
 	err = MVCCInitPut(ctx, engine, nil, testKey1, clock.Now(), hlc.ClockTimestamp{}, value4, false, nil)
-	require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
+	if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
+		if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				e.ActualValue.RawBytes, value2.RawBytes)
+		}
+	} else {
+		t.Fatalf("unexpected error %T", e)
+	}
 }
 
 // TestMVCCReverseScan verifies that MVCCReverseScan scans [start,
@@ -2803,8 +2841,10 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 
 // TestMVCCConditionalPutOldTimestamp tests a case where a conditional
 // put with an older timestamp happens after a put with a newer timestamp.
-// The conditional put fails with WriteTooOld errors, regardless of whether
-// the condition succeeds or not.
+//
+// The conditional put uses the actual value at the timestamp as the
+// basis for comparison first, and then may fail later with a
+// WriteTooOldError if that timestamp isn't recent.
 func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2813,33 +2853,46 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	engine := NewDefaultInMemForTesting()
 	defer engine.Close()
 	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	err = MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, value2, nil)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Check that a write too old error is thrown, regardless of whether the value
-	// matches.
-	for _, expVal := range []roachpb.Value{
-		// Condition does not match.
-		value1,
-		// Condition matches.
-		value2,
-	} {
-		err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, value3, expVal.TagAndDataBytes(), CPutFailIfMissing, nil)
-		require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
+	// Check nothing is written if the value doesn't match.
+	err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, value3, value1.TagAndDataBytes(), CPutFailIfMissing, nil)
+	if err == nil {
+		t.Errorf("unexpected success on conditional put")
+	}
+	if !errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
+		t.Errorf("unexpected error on conditional put: %+v", err)
+	}
 
-		// Either way, no new value is written.
-		ts := hlc.Timestamp{WallTime: 3}
-		valueRes, err := MVCCGet(ctx, engine, testKey1, ts, MVCCGetOptions{})
-		require.NoError(t, err)
-		require.Equal(t, value2.RawBytes, valueRes.Value.RawBytes)
+	// But if value does match the most recently written version, we'll get
+	// a write too old error but still write updated value.
+	err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, value3, value2.TagAndDataBytes(), CPutFailIfMissing, nil)
+	if err == nil {
+		t.Errorf("unexpected success on conditional put")
+	}
+	if !errors.HasType(err, (*kvpb.WriteTooOldError)(nil)) {
+		t.Errorf("unexpected error on conditional put: %+v", err)
+	}
+	// Verify new value was actually written at (3, 1).
+	ts := hlc.Timestamp{WallTime: 3, Logical: 1}
+	valueRes, err := MVCCGet(ctx, engine, testKey1, ts, MVCCGetOptions{})
+	if err != nil || valueRes.Value.Timestamp != ts || !bytes.Equal(value3.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
+			err, valueRes.Value.Timestamp, ts, value3.RawBytes, valueRes.Value.RawBytes)
 	}
 }
 
-// TestMVCCMultiplePutOldTimestamp tests a case where multiple transactional
-// Puts occur to the same key, but with older timestamps than a pre-existing
-// key. The first should generate a WriteTooOldError and fail to write. The
-// second should avoid the WriteTooOldError and write at the higher timestamp.
+// TestMVCCMultiplePutOldTimestamp tests a case where multiple
+// transactional Puts occur to the same key, but with older timestamps
+// than a pre-existing key. The first should generate a
+// WriteTooOldError and write at a higher timestamp. The second should
+// avoid the WriteTooOldError but also write at the higher timestamp.
 func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2849,33 +2902,45 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 	defer engine.Close()
 
 	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, value1, nil)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Verify the first txn Put returns a write too old error and does not
-	// write a new value.
+	// Verify the first txn Put returns a write too old error, but the
+	// intent is written at the advanced timestamp.
 	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 	txn.Sequence++
 	err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn)
-	var wtoErr *kvpb.WriteTooOldError
-	require.ErrorAs(t, err, &wtoErr)
-	expTS := hlc.Timestamp{WallTime: 3, Logical: 1}
-	require.Equal(t, expTS, wtoErr.ActualTimestamp)
-	// Verify no value was written.
+	if !errors.HasType(err, (*kvpb.WriteTooOldError)(nil)) {
+		t.Errorf("expected WriteTooOldError on Put; got %v", err)
+	}
+	// Verify new value was actually written at (3, 1).
 	valueRes, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{Txn: txn})
-	require.NoError(t, err)
-	require.Equal(t, value1.RawBytes, valueRes.Value.RawBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expTS := hlc.Timestamp{WallTime: 3, Logical: 1}
+	if valueRes.Value.Timestamp != expTS || !bytes.Equal(value2.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
+			valueRes.Value.Timestamp, expTS, value2.RawBytes, valueRes.Value.RawBytes)
+	}
 
-	// Put again after advancing the txn's timestamp to the WriteTooOld error's
-	// timestamp and verify no WriteTooOldError.
-	txn.BumpReadTimestamp(wtoErr.ActualTimestamp)
+	// Put again and verify no WriteTooOldError, but timestamp should continue
+	// to be set to (3,1).
 	txn.Sequence++
 	err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value3, txn)
-	require.NoError(t, err)
+	if err != nil {
+		t.Error(err)
+	}
 	// Verify new value was actually written at (3, 1).
 	valueRes, err = MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{Txn: txn})
-	require.NoError(t, err)
-	require.Equal(t, expTS, valueRes.Value.Timestamp)
-	require.Equal(t, value3.RawBytes, valueRes.Value.RawBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valueRes.Value.Timestamp != expTS || !bytes.Equal(value3.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
+			valueRes.Value.Timestamp, expTS, value3.RawBytes, valueRes.Value.RawBytes)
+	}
 }
 
 func TestMVCCPutNegativeTimestampError(t *testing.T) {
@@ -2895,7 +2960,9 @@ func TestMVCCPutNegativeTimestampError(t *testing.T) {
 // TestMVCCPutOldOrigTimestampNewCommitTimestamp tests a case where a
 // transactional Put occurs to the same key, but with an older original
 // timestamp than a pre-existing key. As always, this should result in a
-// WriteTooOld error.
+// WriteTooOld error. However, in this case the transaction has a larger
+// provisional commit timestamp than the pre-existing key. It should write
+// its intent at this timestamp instead of directly above the existing key.
 func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2905,11 +2972,13 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 	defer engine.Close()
 
 	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, value1, nil)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Perform a transactional Put with a transaction whose read timestamp is
-	// below the existing key's timestamp and whose write timestamp is above the
-	// existing key's timestamp.
+	// Perform a transactional Put with a transaction whose original timestamp is
+	// below the existing key's timestamp and whose provisional commit timestamp
+	// is above the existing key's timestamp.
 	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 	txn.WriteTimestamp = hlc.Timestamp{WallTime: 5}
 	txn.Sequence++
@@ -2918,14 +2987,20 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 	// Verify that the Put returned a WriteTooOld with the ActualTime set to the
 	// transactions provisional commit timestamp.
 	expTS := txn.WriteTimestamp
-	var wtoErr *kvpb.WriteTooOldError
-	require.ErrorAs(t, err, &wtoErr)
-	require.Equal(t, expTS, wtoErr.ActualTimestamp)
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) || wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
+	}
 
-	// Verify no value was written.
+	// Verify new value was actually written at the transaction's provisional
+	// commit timestamp.
 	valueRes, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{Txn: txn})
-	require.NoError(t, err)
-	require.Equal(t, value1.RawBytes, valueRes.Value.RawBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valueRes.Value.Timestamp != expTS || !bytes.Equal(value2.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
+			valueRes.Value.Timestamp, expTS, value2.RawBytes, valueRes.Value.RawBytes)
+	}
 }
 
 func TestMVCCAbortTxn(t *testing.T) {
@@ -3020,59 +3095,88 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	// Start with epoch 1.
 	txn := *txn1
 	txn.Sequence++
-	err := MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, &txn)
-	require.NoError(t, err)
+	if err := MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, &txn); err != nil {
+		t.Fatal(err)
+	}
 	// Now write with greater timestamp and epoch 2.
 	txne2 := txn
 	txne2.Sequence++
 	txne2.Epoch = 2
 	txne2.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-	err = MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, hlc.ClockTimestamp{}, value2, &txne2)
-	require.NoError(t, err)
+	if err := MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, hlc.ClockTimestamp{}, value2, &txne2); err != nil {
+		t.Fatal(err)
+	}
 	// Try a write with an earlier timestamp; this is just ignored.
 	txne2.Sequence++
 	txne2.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-	err = MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, hlc.ClockTimestamp{}, value1, &txne2)
-	require.NoError(t, err)
-	// Try a write with an earlier epoch; ignored with error.
-	err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, &txn)
-	require.Error(t, err)
-	require.Regexp(t, "put with epoch 1 came after put with epoch 2 in txn", err)
+	if err := MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, hlc.ClockTimestamp{}, value1, &txne2); err != nil {
+		t.Fatal(err)
+	}
+	// Try a write with an earlier epoch; again ignored.
+	if err := MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, &txn); err == nil {
+		t.Fatal("unexpected success of a write with an earlier epoch")
+	}
 	// Try a write with different value using both later timestamp and epoch.
 	txne2.Sequence++
-	err = MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, hlc.ClockTimestamp{}, value3, &txne2)
-	require.NoError(t, err)
+	if err := MVCCPut(ctx, engine, nil, testKey1, txne2.ReadTimestamp, hlc.ClockTimestamp{}, value3, &txne2); err != nil {
+		t.Fatal(err)
+	}
 	// Resolve the intent.
 	txne2Commit := txne2
 	txne2Commit.Status = roachpb.COMMITTED
 	txne2Commit.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-	_, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(&txne2Commit, roachpb.Span{Key: testKey1}),
-		MVCCResolveWriteIntentOptions{})
-	require.NoError(t, err)
+		MVCCResolveWriteIntentOptions{}); err != nil {
+		t.Fatal(err)
+	}
 
 	expTS := txne2Commit.WriteTimestamp.Next()
 
 	// Now try writing an earlier value without a txn--should get WriteTooOldError.
-	err = MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, hlc.ClockTimestamp{}, value4, nil)
-	var wtoErr *kvpb.WriteTooOldError
-	require.ErrorAs(t, err, &wtoErr)
-	require.Equal(t, expTS, wtoErr.ActualTimestamp)
-	// Verify no value was written.
-	valueRes, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{})
-	require.NoError(t, err)
-	require.Equal(t, txne2Commit.WriteTimestamp, valueRes.Value.Timestamp)
-	require.Equal(t, value3.RawBytes, valueRes.Value.RawBytes)
-
+	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, hlc.ClockTimestamp{}, value4, nil)
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
+		t.Fatal("unexpected success")
+	} else if wtoErr.ActualTimestamp != expTS {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, wtoErr.ActualTimestamp)
+	}
+	// Verify value was actually written at (1, 1).
+	valueRes, err := MVCCGet(ctx, engine, testKey1, expTS, MVCCGetOptions{})
+	if err != nil || valueRes.Value.Timestamp != expTS || !bytes.Equal(value4.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
+			err, valueRes.Value.Timestamp, expTS, value4.RawBytes, valueRes.Value.RawBytes)
+	}
+	// Now write an intent with exactly the same timestamp--ties also get WriteTooOldError.
+	err = MVCCPut(ctx, engine, nil, testKey1, txn2.ReadTimestamp, hlc.ClockTimestamp{}, value5, txn2)
+	intentTS := expTS.Next()
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
+		t.Fatal("unexpected success")
+	} else if wtoErr.ActualTimestamp != intentTS {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", intentTS, wtoErr.ActualTimestamp)
+	}
+	// Verify intent value was actually written at (1, 2).
+	valueRes, err = MVCCGet(ctx, engine, testKey1, intentTS, MVCCGetOptions{Txn: txn2})
+	if err != nil || valueRes.Value.Timestamp != intentTS || !bytes.Equal(value5.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("expected err=nil (got %s), timestamp=%s (got %s), value=%q (got %q)",
+			err, valueRes.Value.Timestamp, intentTS, value5.RawBytes, valueRes.Value.RawBytes)
+	}
 	// Attempt to read older timestamp; should fail.
 	valueRes, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{Logical: 0}, MVCCGetOptions{})
-	require.NoError(t, err)
-	require.False(t, valueRes.Value.IsPresent())
+	if valueRes.Value != nil || err != nil {
+		t.Fatalf("expected value nil, err nil; got %+v, %v", valueRes.Value, err)
+	}
 	// Read at correct timestamp.
 	valueRes, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{})
-	require.NoError(t, err)
-	require.Equal(t, txne2Commit.WriteTimestamp, valueRes.Value.Timestamp)
-	require.Equal(t, value3.RawBytes, valueRes.Value.RawBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expTS := (hlc.Timestamp{WallTime: 1}); valueRes.Value.Timestamp != expTS {
+		t.Fatalf("expected timestamp %+v == %+v", valueRes.Value.Timestamp, expTS)
+	}
+	if !bytes.Equal(value3.RawBytes, valueRes.Value.RawBytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value3.RawBytes, valueRes.Value.RawBytes)
+	}
 }
 
 // TestMVCCGetWithDiffEpochs writes a value first using epoch 1, then
@@ -3144,15 +3248,24 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 	defer engine.Close()
 
 	// Write initial value without a txn at timestamp 1.
-	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil)
-	require.NoError(t, err)
+	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil); err != nil {
+		t.Fatal(err)
+	}
 	// Write another value without a txn at timestamp 3.
-	err = MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, value2, nil)
-	require.NoError(t, err)
+	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, value2, nil); err != nil {
+		t.Fatal(err)
+	}
 	// Now write using txn1, epoch 1.
-	txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 4})
-	err = MVCCPut(ctx, engine, nil, testKey1, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value3, txn1ts)
-	require.NoError(t, err)
+	txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
+	// Bump epoch 1's write timestamp to timestamp 4.
+	txn1ts.WriteTimestamp = hlc.Timestamp{WallTime: 4}
+	// Expected to hit WriteTooOld error but to still lay down intent.
+	err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value3, txn1ts)
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
+		t.Fatalf("unexpectedly not WriteTooOld: %+v", err)
+	} else if expTS, actTS := txn1ts.WriteTimestamp, wtoErr.ActualTimestamp; expTS != actTS {
+		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, actTS)
+	}
 	// Try reading using different epochs & timestamps.
 	testCases := []struct {
 		txn      *roachpb.Transaction
@@ -3685,8 +3798,7 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 }
 
 func createEngWithSeparatedIntents(t *testing.T) Engine {
-	eng, err := Open(context.Background(), InMemory(),
-		cluster.MakeTestingClusterSettings(), MaxSize(1<<20))
+	eng, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), MaxSize(1<<20))
 	require.NoError(t, err)
 	return eng
 }
@@ -3925,7 +4037,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	rng := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
 	eng, err := Open(
-		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
+		context.Background(), InMemory(), cluster.MakeClusterSettings(),
 		func(cfg *engineConfig) error {
 			cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
 			log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
@@ -4872,9 +4984,6 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			assertEq(t, engine, "verification", ms, &expMS)
 		})
 	}
-	// Compact the engine; the ForTesting() config option will assert that all
-	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
 }
 
 // TestMVCCGarbageCollectNonDeleted verifies that the first value for
@@ -4920,10 +5029,6 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 				test.expError, err)
 		}
 	}
-
-	// Compact the engine; the ForTesting() config option will assert that all
-	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
 }
 
 // TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
@@ -4958,9 +5063,6 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	if err := MVCCGarbageCollect(ctx, engine, nil, keys, ts2); err == nil {
 		t.Fatal("expected error garbage collecting an intent")
 	}
-	// Compact the engine; the ForTesting() config option will assert that all
-	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
 }
 
 // TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys verifies that
@@ -5163,9 +5265,6 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 			engine := NewDefaultInMemForTesting()
 			defer engine.Close()
 			runTestCase(t, tc, engine)
-			// Compact the engine; the ForTesting() config option will assert
-			// that all DELSIZED tombstones were appropriately sized.
-			require.NoError(t, engine.Compact())
 		})
 	}
 }
@@ -5716,10 +5815,6 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			expMs, err := ComputeStats(engine, d.rangeStart, d.rangeEnd, tsMax.WallTime)
 			require.NoError(t, err, "failed to compute stats for range")
 			require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
-
-			// Compact the engine; the ForTesting() config option will assert
-			// that all DELSIZED tombstones were appropriately sized.
-			require.NoError(t, engine.Compact())
 		})
 	}
 }
@@ -5974,9 +6069,6 @@ func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
 	require.Errorf(t, err, "expected error '%s' but found none", expectedError)
 	require.True(t, testutils.IsError(err, expectedError),
 		"expected error '%s' found '%s'", expectedError, err)
-	// Compact the engine; the ForTesting() config option will assert that all
-	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
 }
 
 func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
@@ -6043,10 +6135,6 @@ func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
 	expMs, err := ComputeStats(engine, rangeStart, rangeEnd, tsMax.WallTime)
 	require.NoError(t, err, "failed to compute stats for range")
 	require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
-
-	// Compact the engine; the ForTesting() config option will assert that all
-	// DELSIZED tombstones were appropriately sized.
-	require.NoError(t, engine.Compact())
 }
 
 func TestMVCCGarbageCollectClearRangeFailure(t *testing.T) {

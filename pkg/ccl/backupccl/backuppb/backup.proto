@@ -48,7 +48,6 @@ message BackupManifest {
     util.hlc.Timestamp start_time = 7 [(gogoproto.nullable) = false];
     util.hlc.Timestamp end_time = 8 [(gogoproto.nullable) = false];
     string locality_kv = 9 [(gogoproto.customname) = "LocalityKV"];
-    uint64 backing_file_size = 10;
   }
 
   message DescriptorRevision {
@@ -201,10 +200,6 @@ message RestoreProgress {
   roachpb.RowCount summary = 1 [(gogoproto.nullable) = false];
   int64 progressIdx = 2;
   roachpb.Span dataSpan = 3 [(gogoproto.nullable) = false];
-  // CompleteUpTo is the timestamp that the data in DataSpan has been processed
-  // up to so far. The entire span has been processed if this timestamp is equal
-  // to restore end time.
-  util.hlc.Timestamp complete_up_to = 4 [(gogoproto.nullable) = false];
 }
 
 message BackupProcessorPlanningTraceEvent {

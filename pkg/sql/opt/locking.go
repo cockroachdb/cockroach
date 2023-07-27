@@ -13,7 +13,7 @@ package opt
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // Locking represents the row-level locking properties of a relational operator.
-// Each relational operator clause consists of three different row-level locking
+// Each relational operator clause consist of two different row-level locking
 // properties.
 type Locking struct {
 	// The first property is locking strength (see tree.LockingStrength). Locking
@@ -43,25 +43,6 @@ type Locking struct {
 	//   NOWAIT
 	//
 	WaitPolicy tree.LockingWaitPolicy
-
-	// The third property is the durability of the locking. A guaranteed-durable
-	// lock always persists until commit time, while a best-effort lock may
-	// sometimes be lost before commit. We currently only require
-	// guaranteed-durable locks for SELECT FOR UPDATE statements under SNAPSHOT
-	// and READ COMMITTED isolation. Other locking statements, such as UPDATE,
-	// rely on the durability of intents for correctness, rather than the
-	// durability of locks.
-	Durability tree.LockingDurability
-}
-
-// Max returns a new set of locking properties where each property is the max of
-// the respective property in the two inputs.
-func (l Locking) Max(l2 Locking) Locking {
-	return Locking{
-		Strength:   l.Strength.Max(l2.Strength),
-		WaitPolicy: l.WaitPolicy.Max(l2.WaitPolicy),
-		Durability: l.Durability.Max(l2.Durability),
-	}
 }
 
 // IsLocking returns whether the receiver is configured to use a row-level

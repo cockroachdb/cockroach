@@ -191,7 +191,7 @@ func readInputFiles(
 				// readability (e.g. permissions).
 				// If there's only one file, skip that check because it provides no
 				// advantage.
-				raw, _, err := es.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+				raw, err := es.ReadFile(ctx, "")
 				if err != nil {
 					return err
 				}
@@ -230,7 +230,7 @@ func readInputFiles(
 				return err
 			}
 			defer es.Close()
-			raw, _, err := es.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+			raw, err := es.ReadFile(ctx, "")
 			if err != nil {
 				return err
 			}

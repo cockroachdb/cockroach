@@ -39,7 +39,6 @@ func registerProcessLock(r registry.Registry) {
 		// encryption-at-rest to ensure we don't corrupt the encryption-at-rest
 		// data during a concurrent process start.
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
 		Timeout:           2 * runDuration,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()

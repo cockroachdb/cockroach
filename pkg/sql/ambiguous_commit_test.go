@@ -13,11 +13,12 @@ package sql_test
 import (
 	"bytes"
 	"context"
-	"strings"
+	"reflect"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -77,7 +78,8 @@ func TestAmbiguousCommit(t *testing.T) {
 		var processed int32
 		var tableStartKey atomic.Value
 
-		const errMarker = "boom"
+		translateToRPCError := kvpb.NewError(errors.Errorf("%s: RPC error: success=%t", t.Name(), ambiguousSuccess))
+
 		maybeRPCError := func(req *kvpb.ConditionalPutRequest) *kvpb.Error {
 			tsk, ok := tableStartKey.Load().(roachpb.Key)
 			if !ok {
@@ -87,7 +89,7 @@ func TestAmbiguousCommit(t *testing.T) {
 				return nil
 			}
 			if atomic.AddInt32(&processed, 1) == 1 {
-				return kvpb.NewError(errors.Errorf(errMarker))
+				return translateToRPCError
 			}
 			return nil
 		}
@@ -108,7 +110,7 @@ func TestAmbiguousCommit(t *testing.T) {
 							//
 							// For the rest, compare and perhaps inject an
 							// RPC error ourselves.
-							if err == nil && br.Error != nil && strings.Contains(br.Error.GoError().Error(), errMarker) {
+							if err == nil && reflect.DeepEqual(br.Error, translateToRPCError) {
 								// Translate the injected error into an RPC
 								// error to simulate an ambiguous result.
 								return nil, br.Error.GoError()
@@ -170,7 +172,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "t")
-		tableStartKey.Store(tc.TenantOrServer(0).Codec().TablePrefix(tableID))
+		tableStartKey.Store(keys.SystemSQLCodec.TablePrefix(tableID))
 
 		// Wait for new table to split & replication.
 		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().(roachpb.Key)); err != nil {

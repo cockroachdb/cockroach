@@ -15,14 +15,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 type splitQueue struct {
 	baseQueue
-	settings *config.SimulationSettings
+	splitThreshold int64
+	delay          func() time.Duration
 }
 
 // NewSplitQueue returns a new split queue, implementing the range queue
@@ -30,7 +30,8 @@ type splitQueue struct {
 func NewSplitQueue(
 	storeID state.StoreID,
 	stateChanger state.Changer,
-	settings *config.SimulationSettings,
+	delay func() time.Duration,
+	splitThreshold int64,
 	start time.Time,
 ) RangeQueue {
 	return &splitQueue{
@@ -40,7 +41,8 @@ func NewSplitQueue(
 			stateChanger:  stateChanger,
 			next:          start,
 		},
-		settings: settings,
+		delay:          delay,
+		splitThreshold: splitThreshold,
 	}
 }
 
@@ -53,11 +55,11 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 	}
 
 	rng, _ := state.Range(replica.Range())
-	splitThreshold := sq.settings.RangeSizeSplitThreshold
+
 	heap.Push(sq, &replicaItem{
 		rangeID:   roachpb.RangeID(replica.Range()),
 		replicaID: replica.Descriptor().ReplicaID,
-		priority:  float64(rng.Size()) / float64(splitThreshold),
+		priority:  float64(rng.Size()) / float64(sq.splitThreshold),
 	})
 	return true
 }
@@ -98,7 +100,7 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			RangeID:     state.RangeID(rng.Descriptor().RangeID),
 			Leaseholder: sq.storeID,
 			SplitKey:    splitKey,
-			Wait:        sq.settings.RangeSplitDelayFn()(),
+			Wait:        sq.delay(),
 			Author:      sq.storeID,
 		}
 
@@ -125,8 +127,8 @@ func (sq *splitQueue) shouldSplit(tick time.Time, rangeID state.RangeID, s state
 	}
 
 	// Check whether we should split this range based on size.
-	splitThreshold := sq.settings.RangeSizeSplitThreshold
-	overfullBytesThreshold := float64(rng.Size()) / float64(splitThreshold)
+	overfullBytesThreshold := float64(rng.Size()) / float64(sq.splitThreshold)
+
 	return overfullBytesThreshold
 }
 

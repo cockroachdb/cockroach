@@ -10,24 +10,25 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
+new-request r=req1 txn=txn1 ts=10 spans=w@a
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=intent@a
+new-request r=req2 txn=txn2 ts=10 spans=w@a
 ----
 
-new-request r=req3 txn=txn3 ts=10 spans=intent@a
+new-request r=req3 txn=txn3 ts=10 spans=w@a
 ----
 
 scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u strength=exclusive
+acquire r=req1 k=a durability=u
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
 
 scan r=req2
 ----
@@ -39,13 +40,14 @@ start-waiting: true
 
 print
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
+local: num=0
 
 # ---------------------------------------------------------------------------------
 # Read requests do not observe a queue length limit, because they don't wait in the
@@ -55,7 +57,7 @@ num=1
 new-txn txn=txn4 ts=10 epoch=0
 ----
 
-new-request r=req4 txn=txn4 ts=10 spans=none@a max-lock-wait-queue-length=2
+new-request r=req4 txn=txn4 ts=10 spans=r@a max-lock-wait-queue-length=2
 ----
 
 scan r=req4
@@ -64,17 +66,18 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+new: state=waitFor txn=txn1 key="a" held=true guard-access=read
 
 dequeue r=req4
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
+local: num=0
 
 # ---------------------------------------------------------------------------------
 # Write requests with a large enough MaxLockWaitQueueLength do not throw an error.
@@ -83,7 +86,7 @@ num=1
 new-txn txn=txn5 ts=10 epoch=0
 ----
 
-new-request r=req5 txn=txn5 ts=10 spans=intent@a max-lock-wait-queue-length=3
+new-request r=req5 txn=txn5 ts=10 spans=w@a max-lock-wait-queue-length=3
 ----
 
 scan r=req5
@@ -92,17 +95,18 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
 
 dequeue r=req5
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
+local: num=0
 
 # ---------------------------------------------------------------------------------
 # Write requests with a sufficiently low MaxLockWaitQueueLength throw an error.
@@ -111,7 +115,7 @@ num=1
 new-txn txn=txn6 ts=10 epoch=0
 ----
 
-new-request r=req6 txn=txn6 ts=10 spans=intent@a max-lock-wait-queue-length=2
+new-request r=req6 txn=txn6 ts=10 spans=w@a max-lock-wait-queue-length=2
 ----
 
 scan r=req6
@@ -120,23 +124,24 @@ start-waiting: true
 
 guard-state r=req6
 ----
-new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-strength=Intent
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
 
 dequeue r=req6
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
+local: num=0
 
 # ---------------------------------------------------------------------------------
 # Same as previous two cases, but for non-transactional writes.
 # ---------------------------------------------------------------------------------
 
-new-request r=req7 txn=none ts=10 spans=intent@a max-lock-wait-queue-length=3
+new-request r=req7 txn=none ts=10 spans=w@a max-lock-wait-queue-length=3
 ----
 
 scan r=req7
@@ -145,19 +150,20 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
 
 dequeue r=req7
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
+local: num=0
 
-new-request r=req8 txn=none ts=10 spans=intent@a max-lock-wait-queue-length=2
+new-request r=req8 txn=none ts=10 spans=w@a max-lock-wait-queue-length=2
 ----
 
 scan r=req8
@@ -166,81 +172,15 @@ start-waiting: true
 
 guard-state r=req8
 ----
-new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-strength=Intent
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
 
 dequeue r=req8
 ----
-num=1
+global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
-
-# ------------------------------------------------------------------------------
-# Write requests that are already waiting in a lock's wait queue should not
-# throw an error when they rescan if adding one more request to the lock's wait
-# queue puts them above the max-lock-wait-queue threshold. This is because
-# the request has already been accounted for when it's performing a re-scan.
-# ------------------------------------------------------------------------------
-
-new-txn txn=txn6 ts=10 epoch=0
-----
-
-new-request r=req9 txn=txn6 ts=10 spans=exclusive@b
-----
-
-scan r=req9
-----
-start-waiting: false
-
-acquire r=req9 k=b durability=u strength=exclusive
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 2
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
-
-new-txn txn=txn7 ts=10 epoch=0
-----
-
-new-request r=req10 txn=txn7 ts=10 spans=intent@b max-lock-wait-queue-length=1
-----
-
-scan r=req10
-----
-start-waiting: true
-
-guard-state r=req10
-----
-new: state=waitForDistinguished txn=txn6 key="b" held=true guard-strength=Intent
-
-print
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
-   distinguished req: 2
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl seqs: [0]
-   queued writers:
-    active: true req: 10, txn: 00000000-0000-0000-0000-000000000007
-   distinguished req: 10
-
-# Re-scan.
-scan r=req10
-----
-start-waiting: true
-
-guard-state r=req10
-----
-new: state=waitForDistinguished txn=txn6 key="b" held=true guard-strength=Intent
+local: num=0

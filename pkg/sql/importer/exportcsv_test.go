@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -64,16 +64,17 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tc := testcluster.StartTestCluster(t, nodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				ExternalIODir: dir,
+				// Disabled due to underlying tests' use of SCATTER.
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            dir,
+				UseDatabase:              "test",
+				DisableSpanConfigs:       true,
 			},
 		},
 	)
-	s := tc.TenantOrServer(0)
-	tenantSettings := s.ClusterSettings()
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
-	conn := serverutils.OpenDBConn(t, s.SQLAddr(), "defaultdb", false, tc.Stopper())
+	conn := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(conn)
+	db.Exec(t, "CREATE DATABASE test")
 
 	wk := bank.FromRows(rows)
 	l := workloadsql.InsertsDataLoader{BatchSize: 100, Concurrency: 3}
@@ -82,12 +83,13 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	}
 
 	config.TestingSetupZoneConfigHook(tc.Stopper())
-	idgen := descidgen.NewGenerator(tenantSettings, s.Codec(), s.DB())
-	v, err := idgen.PeekNextUniqueDescID(ctx)
+	s := tc.Servers[0]
+	idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
+	v, err := idgen.PeekNextUniqueDescID(context.Background())
+
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	last := config.ObjectID(v)
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
@@ -673,15 +675,6 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	if tc.StartedDefaultTestTenant() {
-		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tc.Server(0).TenantOrServer().ClusterSettings().SV, true)
-		systemSqlDB := serverutils.OpenDBConn(t, tc.Server(0).SQLAddr(), "system", false, tc.Stopper())
-		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
-		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanAdminRelocateRange: "true",
-		}, "")
-	}
 	origDB0 := tc.ServerConn(0)
 
 	sqlutils.CreateTable(t, origDB0, "t",

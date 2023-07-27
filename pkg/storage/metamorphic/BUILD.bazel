@@ -28,7 +28,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//bloom",
-        "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
+        "@com_github_cockroachdb_pebble//objstorage",
         "@com_github_cockroachdb_pebble//vfs",
     ],
 )
@@ -41,13 +41,10 @@ go_test(
         "meta_test.go",
         "parser_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":metamorphic"],
-    shard_count = 8,
+    shard_count = 16,
     deps = [
         "//pkg/settings/cluster",
         "//pkg/testutils",

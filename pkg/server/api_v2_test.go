@@ -23,8 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
-	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -33,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 func TestListSessionsV2(t *testing.T) {
@@ -61,7 +59,7 @@ func TestListSessionsV2(t *testing.T) {
 	}()
 
 	doSessionsRequest := func(client http.Client, limit int, start string) listSessionsResponse {
-		req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"sessions/").String(), nil)
+		req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
 		require.NoError(t, err)
 		query := req.URL.Query()
 		query.Add("exclude_closed_sessions", "true")
@@ -122,7 +120,7 @@ func TestListSessionsV2(t *testing.T) {
 	// A non-admin user cannot see sessions at all.
 	nonAdminClient, err := ts1.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"sessions/").String(), nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
 	require.NoError(t, err)
 	resp, err := nonAdminClient.Do(req)
 	require.NoError(t, err)
@@ -147,7 +145,7 @@ func TestHealthV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"health/").String(), nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"health/", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -175,7 +173,7 @@ func TestRulesV2(t *testing.T) {
 	client, err := ts.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiconstants.APIV2Path+"rules/").String(), nil)
+	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"rules/", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -231,7 +229,7 @@ func TestAuthV2(t *testing.T) {
 			{
 				name:           "cookie auth with correct magic header",
 				cookie:         sessionEncoded,
-				header:         authserver.APIV2UseCookieBasedAuth,
+				header:         apiV2UseCookieBasedAuth,
 				expectedStatus: http.StatusOK,
 			},
 			{
@@ -248,14 +246,14 @@ func TestAuthV2(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiconstants.APIV2Path+"sessions/").String(), nil)
+				req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"sessions/", nil)
 				require.NoError(t, err)
 				if tc.header != "" {
-					req.Header.Set(authserver.APIV2AuthHeader, tc.header)
+					req.Header.Set(apiV2AuthHeader, tc.header)
 				}
 				if tc.cookie != "" {
 					req.AddCookie(&http.Cookie{
-						Name:  authserver.SessionCookieName,
+						Name:  SessionCookieName,
 						Value: tc.cookie,
 					})
 				}

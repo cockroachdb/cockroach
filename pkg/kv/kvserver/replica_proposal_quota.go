@@ -100,7 +100,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// After the proposal quota is enabled all entries applied by this replica
 			// will be appended to the quotaReleaseQueue. The proposalQuotaBaseIndex
 			// and the quotaReleaseQueue together track status.Applied exactly.
-			r.mu.proposalQuotaBaseIndex = kvpb.RaftIndex(status.Applied)
+			r.mu.proposalQuotaBaseIndex = status.Applied
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 			}
@@ -120,8 +120,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
-			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
-			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 			// We unblock all ongoing and subsequent quota acquisition goroutines
@@ -131,7 +129,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.quotaReleaseQueue = nil
 			r.mu.proposalQuota = nil
 			r.mu.lastUpdateTimes = nil
-			r.mu.replicaFlowControlIntegration.onBecameFollower(ctx)
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
@@ -148,12 +145,12 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	now := timeutil.Now()
 	// commitIndex is used to determine whether a newly added replica has fully
 	// caught up.
-	commitIndex := kvpb.RaftIndex(status.Commit)
+	commitIndex := status.Commit
 	// Initialize minIndex to the currently applied index. The below progress
 	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
 	// cannot correspond to values beyond the applied index there's no reason
 	// to consider progress beyond it as meaningful.
-	minIndex := kvpb.RaftIndex(status.Applied)
+	minIndex := status.Applied
 
 	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
@@ -164,12 +161,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// Only consider followers that are active. Inactive ones don't decrease
 		// minIndex - i.e. they don't hold up releasing quota.
 		//
-		// The policy for determining who's active is stricter than the one used
-		// for purposes of quiescing. Failure to consider a dead/stuck node as
-		// such for the purposes of releasing quota can have bad consequences
-		// (writes will stall), whereas for quiescing the downside is lower.
+		// The policy for determining who's active is more strict than the one used
+		// for purposes of quiescing. Failure to consider a dead/stuck node as such
+		// for the purposes of releasing quota can have bad consequences (writes
+		// will stall), whereas for quiescing the downside is lower.
 
-		if !r.mu.lastUpdateTimes.isFollowerActiveSince(rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration) {
+		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
+			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration,
+		) {
 			return
 		}
 		// At this point, we know that either we communicated with this replica
@@ -211,7 +210,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// Only consider followers who are in advance of the quota base
 		// index. This prevents a follower from coming back online and
 		// preventing throughput to the range until it has caught up.
-		if kvpb.RaftIndex(progress.Match) < r.mu.proposalQuotaBaseIndex {
+		if progress.Match < r.mu.proposalQuotaBaseIndex {
 			return
 		}
 		if _, paused := r.mu.pausedFollowers[roachpb.ReplicaID(id)]; paused {
@@ -222,13 +221,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// See #79215.
 			return
 		}
-		if progress.Match > 0 && kvpb.RaftIndex(progress.Match) < minIndex {
-			minIndex = kvpb.RaftIndex(progress.Match)
+		if progress.Match > 0 && progress.Match < minIndex {
+			minIndex = progress.Match
 		}
 		// If this is the most recently added replica, and it has caught up, clear
 		// our state that was tracking it. This is unrelated to managing proposal
 		// quota, but this is a convenient place to do so.
-		if rep.ReplicaID == r.mu.lastReplicaAdded && kvpb.RaftIndex(progress.Match) >= commitIndex {
+		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {
 			r.mu.lastReplicaAdded = 0
 			r.mu.lastReplicaAddedTime = time.Time{}
 		}
@@ -253,17 +252,11 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// correspond to applied entries. It should not be possible for the base
 	// index and the not yet released applied entries to not equal the applied
 	// index.
-	releasableIndex := r.mu.proposalQuotaBaseIndex + kvpb.RaftIndex(len(r.mu.quotaReleaseQueue))
-	if releasableIndex != kvpb.RaftIndex(status.Applied) {
+	releasableIndex := r.mu.proposalQuotaBaseIndex + uint64(len(r.mu.quotaReleaseQueue))
+	if releasableIndex != status.Applied {
 		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
 			" must equal the applied index (%d)",
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
 			status.Applied)
 	}
-
-	// Tick the replicaFlowControlIntegration interface. This is as convenient a
-	// place to do it as any other. Much like the quota pool code above, the
-	// flow control integration layer considers raft progress state for
-	// individual replicas, and whether they've been recently active.
-	r.mu.replicaFlowControlIntegration.onRaftTicked(ctx)
 }

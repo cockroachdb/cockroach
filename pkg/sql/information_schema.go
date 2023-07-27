@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -857,44 +856,14 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-parameters.html
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/parameters-table.html
-var informationSchemaParametersTable = virtualSchemaView{
-	comment: `function parameters
+var informationSchemaParametersTable = virtualSchemaTable{
+	comment: `built-in function parameters (empty - introspection not yet supported)
 https://www.postgresql.org/docs/9.5/infoschema-parameters.html`,
 	schema: vtable.InformationSchemaParameters,
-	resultColumns: colinfo.ResultColumns{
-		{Name: "specific_catalog", Typ: types.String},
-		{Name: "specific_schema", Typ: types.String},
-		{Name: "specific_name", Typ: types.String},
-		{Name: "ordinal_position", Typ: types.Int},
-		{Name: "parameter_mode", Typ: types.String},
-		{Name: "is_result", Typ: types.String},
-		{Name: "as_locator", Typ: types.String},
-		{Name: "parameter_name", Typ: types.String},
-		{Name: "data_type", Typ: types.String},
-		{Name: "character_maximum_length", Typ: types.Int},
-		{Name: "character_octet_length", Typ: types.Int},
-		{Name: "character_set_catalog", Typ: types.String},
-		{Name: "character_set_schema", Typ: types.String},
-		{Name: "character_set_name", Typ: types.String},
-		{Name: "collation_catalog", Typ: types.String},
-		{Name: "collation_schema", Typ: types.String},
-		{Name: "collation_name", Typ: types.String},
-		{Name: "numeric_precision", Typ: types.Int},
-		{Name: "numeric_precision_radix", Typ: types.Int},
-		{Name: "numeric_scale", Typ: types.Int},
-		{Name: "datetime_precision", Typ: types.Int},
-		{Name: "interval_type", Typ: types.String},
-		{Name: "interval_precision", Typ: types.Int},
-		{Name: "udt_catalog", Typ: types.String},
-		{Name: "udt_schema", Typ: types.String},
-		{Name: "udt_name", Typ: types.String},
-		{Name: "scope_catalog", Typ: types.String},
-		{Name: "scope_schema", Typ: types.String},
-		{Name: "scope_name", Typ: types.String},
-		{Name: "maximum_cardinality", Typ: types.Int},
-		{Name: "dtd_identifier", Typ: types.String},
-		{Name: "parameter_default", Typ: types.String},
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
 	},
+	unimplemented: true,
 }
 
 var (
@@ -995,94 +964,14 @@ https://www.postgresql.org/docs/9.5/infoschema-role-table-grants.html`,
 }
 
 // MySQL:    https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/routines-table.html
-var informationSchemaRoutineTable = virtualSchemaView{
-	comment: `built-in functions and user-defined functions
-https://www.postgresql.org/docs/15/infoschema-routines.html`,
+var informationSchemaRoutineTable = virtualSchemaTable{
+	comment: `built-in functions (empty - introspection not yet supported)
+https://www.postgresql.org/docs/9.5/infoschema-routines.html`,
 	schema: vtable.InformationSchemaRoutines,
-	resultColumns: colinfo.ResultColumns{
-		{Name: "specific_catalog", Typ: types.String},
-		{Name: "specific_schema", Typ: types.String},
-		{Name: "specific_name", Typ: types.String},
-		{Name: "routine_catalog", Typ: types.String},
-		{Name: "routine_schema", Typ: types.String},
-		{Name: "routine_name", Typ: types.String},
-		{Name: "routine_type", Typ: types.String},
-		{Name: "module_catalog", Typ: types.String},
-		{Name: "module_schema", Typ: types.String},
-		{Name: "module_name", Typ: types.String},
-		{Name: "udt_catalog", Typ: types.String},
-		{Name: "udt_schema", Typ: types.String},
-		{Name: "udt_name", Typ: types.String},
-		{Name: "data_type", Typ: types.String},
-		{Name: "character_maximum_length", Typ: types.Int},
-		{Name: "character_octet_length", Typ: types.Int},
-		{Name: "character_set_catalog", Typ: types.String},
-		{Name: "character_set_schema", Typ: types.String},
-		{Name: "character_set_name", Typ: types.String},
-		{Name: "collation_catalog", Typ: types.String},
-		{Name: "collation_schema", Typ: types.String},
-		{Name: "collation_name", Typ: types.String},
-		{Name: "numeric_precision", Typ: types.Int},
-		{Name: "numeric_precision_radix", Typ: types.Int},
-		{Name: "numeric_scale", Typ: types.Int},
-		{Name: "datetime_precision", Typ: types.Int},
-		{Name: "interval_type", Typ: types.String},
-		{Name: "interval_precision", Typ: types.Int},
-		{Name: "type_udt_catalog", Typ: types.String},
-		{Name: "type_udt_schema", Typ: types.String},
-		{Name: "type_udt_name", Typ: types.String},
-		{Name: "scope_catalog", Typ: types.String},
-		{Name: "scope_schema", Typ: types.String},
-		{Name: "scope_name", Typ: types.String},
-		{Name: "maximum_cardinality", Typ: types.Int},
-		{Name: "dtd_identifier", Typ: types.String},
-		{Name: "routine_body", Typ: types.String},
-		{Name: "routine_definition", Typ: types.String},
-		{Name: "external_name", Typ: types.String},
-		{Name: "external_language", Typ: types.String},
-		{Name: "parameter_style", Typ: types.String},
-		{Name: "is_deterministic", Typ: types.String},
-		{Name: "sql_data_access", Typ: types.String},
-		{Name: "is_null_call", Typ: types.String},
-		{Name: "sql_path", Typ: types.String},
-		{Name: "schema_level_routine", Typ: types.String},
-		{Name: "max_dynamic_result_sets", Typ: types.Int},
-		{Name: "is_user_defined_cast", Typ: types.String},
-		{Name: "is_implicitly_invocable", Typ: types.String},
-		{Name: "security_type", Typ: types.String},
-		{Name: "to_sql_specific_catalog", Typ: types.String},
-		{Name: "to_sql_specific_schema", Typ: types.String},
-		{Name: "to_sql_specific_name", Typ: types.String},
-		{Name: "as_locator", Typ: types.String},
-		{Name: "created", Typ: types.TimestampTZ},
-		{Name: "last_altered", Typ: types.TimestampTZ},
-		{Name: "new_savepoint_level", Typ: types.String},
-		{Name: "is_udt_dependent", Typ: types.String},
-		{Name: "result_cast_from_data_type", Typ: types.String},
-		{Name: "result_cast_as_locator", Typ: types.String},
-		{Name: "result_cast_char_max_length", Typ: types.Int},
-		{Name: "result_cast_char_octet_length", Typ: types.Int},
-		{Name: "result_cast_char_set_catalog", Typ: types.String},
-		{Name: "result_cast_char_set_schema", Typ: types.String},
-		{Name: "result_cast_char_set_name", Typ: types.String},
-		{Name: "result_cast_collation_catalog", Typ: types.String},
-		{Name: "result_cast_collation_schema", Typ: types.String},
-		{Name: "result_cast_collation_name", Typ: types.String},
-		{Name: "result_cast_numeric_precision", Typ: types.Int},
-		{Name: "result_cast_numeric_precision_radix", Typ: types.Int},
-		{Name: "result_cast_numeric_scale", Typ: types.Int},
-		{Name: "result_cast_datetime_precision", Typ: types.Int},
-		{Name: "result_cast_interval_type", Typ: types.String},
-		{Name: "result_cast_interval_precision", Typ: types.Int},
-		{Name: "result_cast_type_udt_catalog", Typ: types.String},
-		{Name: "result_cast_type_udt_schema", Typ: types.String},
-		{Name: "result_cast_type_udt_name", Typ: types.String},
-		{Name: "result_cast_scope_catalog", Typ: types.String},
-		{Name: "result_cast_scope_schema", Typ: types.String},
-		{Name: "result_cast_scope_name", Typ: types.String},
-		{Name: "result_cast_maximum_cardinality", Typ: types.Int},
-		{Name: "result_cast_dtd_identifier", Typ: types.String},
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
 	},
+	unimplemented: true,
 }
 
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html
@@ -1290,23 +1179,21 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 				appendRow := func(index catalog.Index, colName string, sequence int,
 					direction tree.Datum, isStored, isImplicit bool,
 				) error {
-					idxInvisibility := index.GetInvisibility()
 					return addRow(
-						dbNameStr,                            // table_catalog
-						scNameStr,                            // table_schema
-						tbNameStr,                            // table_name
-						yesOrNoDatum(!index.IsUnique()),      // non_unique
-						scNameStr,                            // index_schema
-						tree.NewDString(index.GetName()),     // index_name
-						tree.NewDInt(tree.DInt(sequence)),    // seq_in_index
-						tree.NewDString(colName),             // column_name
-						tree.DNull,                           // collation
-						tree.DNull,                           // cardinality
-						direction,                            // direction
-						yesOrNoDatum(isStored),               // storing
-						yesOrNoDatum(isImplicit),             // implicit
-						yesOrNoDatum(idxInvisibility == 0.0), // is_visible
-						tree.NewDFloat(tree.DFloat(1-idxInvisibility)), // visibility
+						dbNameStr,                           // table_catalog
+						scNameStr,                           // table_schema
+						tbNameStr,                           // table_name
+						yesOrNoDatum(!index.IsUnique()),     // non_unique
+						scNameStr,                           // index_schema
+						tree.NewDString(index.GetName()),    // index_name
+						tree.NewDInt(tree.DInt(sequence)),   // seq_in_index
+						tree.NewDString(colName),            // column_name
+						tree.DNull,                          // collation
+						tree.DNull,                          // cardinality
+						direction,                           // direction
+						yesOrNoDatum(isStored),              // storing
+						yesOrNoDatum(isImplicit),            // implicit
+						yesOrNoDatum(!index.IsNotVisible()), // is_visible
 					)
 				}
 
@@ -1748,7 +1635,6 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			dbNameStr := tree.NewDString(db.GetName())
 			exPriv := tree.NewDString(privilege.EXECUTE.String())
 			roleNameForBuiltins := []*tree.DString{
-				tree.NewDString(username.AdminRole),
 				tree.NewDString(username.RootUser),
 				tree.NewDString(username.PublicRole),
 			}
@@ -1774,7 +1660,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 
 				_, overloads := builtinsregistry.GetBuiltinProperties(name)
 				for _, o := range overloads {
-					fnSpecificName := tree.NewDString(nameConcatOid(fnNameStr, o.Oid))
+					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fnNameStr, o.Oid))
 					for _, grantee := range roleNameForBuiltins {
 						if err := addRow(
 							tree.DNull, // grantor
@@ -1811,39 +1697,42 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 					if !canSeeDescriptor {
 						return nil
 					}
-					privs, err := fn.GetPrivileges().Show(privilege.Function, true /* showImplicitOwnerPrivs */)
-					if err != nil {
+					privs := fn.GetPrivileges()
+					scNameStr := tree.NewDString(sc.GetName())
+					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fn.GetName(), catid.FuncIDToOID(fn.GetID())))
+					fnName := tree.NewDString(fn.GetName())
+					// EXECUTE is the only privilege kind relevant to functions.
+					if err := addRow(
+						tree.DNull, // grantor
+						tree.NewDString(privs.Owner().Normalized()), // grantee
+						dbNameStr,      // specific_catalog
+						scNameStr,      // specific_schema
+						fnSpecificName, // specific_name
+						dbNameStr,      // routine_catalog
+						scNameStr,      // routine_schema
+						fnName,         // routine_name
+						exPriv,         // privilege_type
+						yesString,      // is_grantable
+					); err != nil {
 						return err
 					}
-					scNameStr := tree.NewDString(sc.GetName())
-
-					fnSpecificName := tree.NewDString(nameConcatOid(fn.GetName(), catid.FuncIDToOID(fn.GetID())))
-					fnName := tree.NewDString(fn.GetName())
-					for _, u := range privs {
-						userNameStr := tree.NewDString(u.User.Normalized())
-						for _, priv := range u.Privileges {
-							// We use this function to check for the grant option so that the
-							// object owner also gets is_grantable=true.
-							isGrantable, err := p.CheckGrantOptionsForUser(
-								ctx, fn.GetPrivileges(), sc, []privilege.Kind{priv.Kind}, u.User,
-							)
-							if err != nil {
-								return err
-							}
-							if err := addRow(
-								tree.DNull,                          // grantor
-								userNameStr,                         // grantee
-								dbNameStr,                           // specific_catalog
-								scNameStr,                           // specific_schema
-								fnSpecificName,                      // specific_name
-								dbNameStr,                           // routine_catalog
-								scNameStr,                           // routine_schema
-								fnName,                              // routine_name
-								tree.NewDString(priv.Kind.String()), // privilege_type
-								yesOrNoDatum(isGrantable),           // is_grantable
-							); err != nil {
-								return err
-							}
+					for _, user := range privs.Users {
+						if !privilege.EXECUTE.IsSetIn(user.Privileges) {
+							continue
+						}
+						if err := addRow(
+							tree.DNull, // grantor
+							tree.NewDString(user.User().Normalized()), // grantee
+							dbNameStr,      // specific_catalog
+							scNameStr,      // specific_schema
+							fnSpecificName, // specific_name
+							dbNameStr,      // routine_catalog
+							scNameStr,      // routine_schema
+							fnName,         // routine_name
+							exPriv,         // privilege_type
+							yesOrNoDatum(privilege.EXECUTE.IsSetIn(user.WithGrantOption)), // is_grantable
+						); err != nil {
+							return err
 						}
 					}
 					return nil
@@ -2955,17 +2844,4 @@ func userCanSeeDescriptor(
 
 func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
 	return desc.Public() || (allowAdding && desc.Adding())
-}
-
-// nameConcatOid is a Go version of the nameconcatoid builtin function. The
-// result is the same as fmt.Sprintf("%s_%d", s, o) except that, if it would not
-// fit in 63 characters, we make it do so by truncating the name input (not the
-// oid).
-func nameConcatOid(s string, o oid.Oid) string {
-	const maxLen = 63
-	oidStr := strconv.Itoa(int(o))
-	if len(s)+1+len(oidStr) <= maxLen {
-		return s + "_" + oidStr
-	}
-	return s[:maxLen-1-len(oidStr)] + "_" + oidStr
 }

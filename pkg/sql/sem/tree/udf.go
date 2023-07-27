@@ -268,8 +268,6 @@ const (
 	FunctionLangSQL FunctionLanguage = "SQL"
 	// FunctionLangPLpgSQL represents the PL/pgSQL procedural language.
 	FunctionLangPLpgSQL FunctionLanguage = "plpgsql"
-	// FunctionLangC represents the C language.
-	FunctionLangC FunctionLanguage = "C"
 )
 
 // Format implements the NodeFormatter interface.
@@ -287,8 +285,6 @@ func AsFunctionLanguage(lang string) (FunctionLanguage, error) {
 		return FunctionLangSQL, nil
 	case "plpgsql":
 		return FunctionLangPLpgSQL, nil
-	case "c":
-		return FunctionLangC, nil
 	}
 	return FunctionLanguage(lang), nil
 }
@@ -299,21 +295,13 @@ type FunctionBodyStr string
 // Format implements the NodeFormatter interface.
 func (node FunctionBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
-	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
-		ctx.WriteString("$funcbody$")
-	} else {
-		ctx.WriteString("$$")
-	}
+	ctx.WriteString("$$")
 	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
 		ctx.WriteString("_")
 	} else {
 		ctx.WriteString(string(node))
 	}
-	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
-		ctx.WriteString("$funcbody$")
-	} else {
-		ctx.WriteString("$$")
-	}
+	ctx.WriteString("$$")
 }
 
 // FuncParams represents a list of FuncParam.

@@ -51,6 +51,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// These tests fail when run within a tenant because it relies on
+// TestingGetTableDescriptor which isn't supported in multi-tenancy.
+// Tracked with #76378.
+var testArgs = base.TestServerArgs{
+	DisableDefaultTestTenant: true,
+}
+
 // TestEncoderEquality tests that the vector encoder and the row based encoder
 // produce the exact same KV batches. Check constraints and partial indexes
 // are left to copy datadriven tests so we don't have to muck with generating
@@ -60,9 +67,8 @@ func TestEncoderEqualityDatums(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 
 	compDec, err := tree.ParseDDecimal("-0")
 	require.NoError(t, err)
@@ -71,6 +77,7 @@ func TestEncoderEqualityDatums(t *testing.T) {
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()
+	sv := &s.ClusterSettings().SV
 	testCases := []struct {
 		cols     string
 		datums   tree.Datums
@@ -79,6 +86,9 @@ func TestEncoderEqualityDatums(t *testing.T) {
 		// NB: Some coverage of things that are a pain to construct in go (like
 		// enum Datums) is left to the copy data driven tests. Also
 		// check constraints and partial index support.
+
+		// TODO: tsvector
+		// TODO: covering secondary indexes?
 
 		{"a INT ARRAY PRIMARY KEY", []tree.Datum{randgen.RandArray(rng, types.MakeArray(types.Int), 2)}, nil},
 		{"i INT PRIMARY KEY, a INT ARRAY", []tree.Datum{tree.NewDInt(1234), randgen.RandArray(rng, types.MakeArray(types.Int), 2)}, nil},
@@ -232,8 +242,8 @@ func TestEncoderEqualityDatums(t *testing.T) {
 			r.Exec(t, s)
 		}
 		desc := desctestutils.TestingGetTableDescriptor(
-			kvdb, codec, "defaultdb", "public", tableName)
-		runComparison(t, desc, []tree.Datums{tc.datums}, tableDef, sv, codec)
+			kvdb, keys.SystemSQLCodec, "defaultdb", "public", tableName)
+		runComparison(t, desc, []tree.Datums{tc.datums}, tableDef, sv)
 	}
 	// Now test these schemas with bunch of rows of rand datums
 	for i, tc := range testCases {
@@ -246,13 +256,13 @@ func TestEncoderEqualityDatums(t *testing.T) {
 			r.Exec(t, s)
 		}
 		desc := desctestutils.TestingGetTableDescriptor(
-			kvdb, codec, "defaultdb", "public", tableName)
+			kvdb, keys.SystemSQLCodec, "defaultdb", "public", tableName)
 		cols := desc.PublicColumns()
 		datums := make([]tree.Datums, 100)
 		for i := 0; i < len(datums); i++ {
 			datums[i] = makeRow(rng, cols)
 		}
-		runComparison(t, desc, datums, tableDef, sv, codec)
+		runComparison(t, desc, datums, tableDef, sv)
 	}
 }
 
@@ -260,10 +270,10 @@ func TestEncoderEqualityRand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	rng, _ := randutil.NewTestRand()
+	sv := &s.ClusterSettings().SV
 	for i := 0; i < 100; i++ {
 		tableName := fmt.Sprintf("t%d", i)
 		ct := randgen.RandCreateTableWithName(rng, tableName, i, false /* isMultiRegion */)
@@ -271,13 +281,13 @@ func TestEncoderEqualityRand(t *testing.T) {
 		r := sqlutils.MakeSQLRunner(db)
 		r.Exec(t, tableDef)
 		desc := desctestutils.TestingGetTableDescriptor(
-			kvdb, codec, "defaultdb", "public", tableName)
+			kvdb, keys.SystemSQLCodec, "defaultdb", "public", tableName)
 		cols := desc.WritableColumns()
 		datums := make([]tree.Datums, 10)
 		for i := 0; i < len(datums); i++ {
 			datums[i] = makeRow(rng, cols)
 		}
-		runComparison(t, desc, datums, tableDef, sv, codec)
+		runComparison(t, desc, datums, tableDef, sv)
 	}
 }
 
@@ -286,9 +296,9 @@ func TestEncoderEqualityString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
+	sv := &s.ClusterSettings().SV
 
 	for i, tc := range []struct {
 		tableDef string
@@ -317,7 +327,7 @@ func TestEncoderEqualityString(t *testing.T) {
 		tableDef := fmt.Sprintf(tc.tableDef, tableName)
 		r.Exec(t, tableDef)
 		desc := desctestutils.TestingGetTableDescriptor(
-			kvdb, codec, "defaultdb", "public", tableName)
+			kvdb, keys.SystemSQLCodec, "defaultdb", "public", tableName)
 		var typs []*types.T
 		cols := desc.PublicColumns()
 		for _, c := range cols {
@@ -339,7 +349,7 @@ func TestEncoderEqualityString(t *testing.T) {
 			}
 			datums = append(datums, ds)
 		}
-		runComparison(t, desc, datums, tableDef, sv, codec)
+		runComparison(t, desc, datums, tableDef, sv)
 	}
 }
 
@@ -347,21 +357,21 @@ func TestErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
-	enc := colenc.MakeEncoder(codec, desc, sv, nil, nil,
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
+	sv := &s.ClusterSettings().SV
+	enc := colenc.MakeEncoder(keys.SystemSQLCodec, desc, sv, nil, nil,
 		nil /*metrics*/, nil /*partialIndexMap*/, func() error { return nil })
 	err := enc.PrepareBatch(ctx, nil, 0, 0)
 	require.Error(t, err)
 	err = enc.PrepareBatch(ctx, nil, 1, 0)
 	require.Error(t, err)
 
-	_, err = buildVecKVs([]tree.Datums{{tree.DNull, tree.DNull}}, desc, desc.PublicColumns(), sv, codec)
+	_, err = buildVecKVs([]tree.Datums{{tree.DNull, tree.DNull}}, desc, desc.PublicColumns(), sv)
 	require.Error(t, err, `null value in column "i" violates not-null constraint`)
 
 }
@@ -370,20 +380,20 @@ func TestColFamDropPKNot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING, FAMILY (s), FAMILY (i))")
 	r.Exec(t, `INSERT INTO t VALUES (123,'asdf')`)
 	r.Exec(t, `ALTER TABLE t DROP COLUMN s`)
+	sv := &s.ClusterSettings().SV
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
 
 	datums := []tree.Datum{tree.NewDInt(321)}
-	kvs1, err1 := buildRowKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv, codec)
+	kvs1, err1 := buildRowKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv)
 	require.NoError(t, err1)
-	kvs2, err2 := buildVecKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv, codec)
+	kvs2, err2 := buildVecKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv)
 	require.NoError(t, err2)
 	checkEqual(t, kvs1, kvs2)
 }
@@ -392,19 +402,19 @@ func TestColFamilies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, c1 INT NOT NULL, c2 INT NOT NULL, FAMILY cf1 (id, c1), FAMILY cf2(c2))")
+	sv := &s.ClusterSettings().SV
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
 
 	row1 := []tree.Datum{tree.NewDInt(2), tree.NewDInt(1), tree.NewDInt(2)}
 	row2 := []tree.Datum{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(1)}
-	kvs1, err1 := buildRowKVs([]tree.Datums{row1, row2}, desc, desc.PublicColumns(), sv, codec)
+	kvs1, err1 := buildRowKVs([]tree.Datums{row1, row2}, desc, desc.PublicColumns(), sv)
 	require.NoError(t, err1)
-	kvs2, err2 := buildVecKVs([]tree.Datums{row1, row2}, desc, desc.PublicColumns(), sv, codec)
+	kvs2, err2 := buildVecKVs([]tree.Datums{row1, row2}, desc, desc.PublicColumns(), sv)
 	require.NoError(t, err2)
 	checkEqual(t, kvs1, kvs2)
 }
@@ -414,14 +424,14 @@ func TestColIDToRowIndexNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
 	r.Exec(t, `ALTER TABLE t DROP COLUMN s`)
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
+	sv := &s.ClusterSettings().SV
 	datums := []tree.Datum{tree.NewDInt(321)}
 
 	var cols []catalog.Column
@@ -431,9 +441,9 @@ func TestColIDToRowIndexNull(t *testing.T) {
 		}
 	}
 
-	kvs1, err1 := buildRowKVs([]tree.Datums{datums}, desc, cols, sv, codec)
+	kvs1, err1 := buildRowKVs([]tree.Datums{datums}, desc, cols, sv)
 	require.NoError(t, err1)
-	kvs2, err2 := buildVecKVs([]tree.Datums{datums}, desc, cols, sv, codec)
+	kvs2, err2 := buildVecKVs([]tree.Datums{datums}, desc, cols, sv)
 	require.NoError(t, err2)
 	checkEqual(t, kvs1, kvs2)
 }
@@ -442,13 +452,13 @@ func TestMissingNotNullCol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING NOT NULL)")
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
+	sv := &s.ClusterSettings().SV
 	datums := []tree.Datum{tree.NewDInt(321)}
 
 	var cols []catalog.Column
@@ -458,7 +468,7 @@ func TestMissingNotNullCol(t *testing.T) {
 		}
 	}
 
-	_, err1 := buildVecKVs([]tree.Datums{datums}, desc, cols, sv, codec)
+	_, err1 := buildVecKVs([]tree.Datums{datums}, desc, cols, sv)
 	require.Error(t, err1, `null value in column "s" violates not-null constraint`)
 }
 
@@ -466,14 +476,13 @@ func TestMemoryQuota(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY,s string)")
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
 	factory := coldataext.NewExtendedColumnFactory(nil /*evalCtx */)
 	numRows := 3
 	cols := desc.PublicColumns()
@@ -484,7 +493,7 @@ func TestMemoryQuota(t *testing.T) {
 	cb := coldata.NewMemBatchWithCapacity(typs, numRows, factory)
 	txn := kvdb.NewTxn(ctx, t.Name())
 	kvb := txn.NewBatch()
-	enc := colenc.MakeEncoder(codec, desc, sv, cb, cols,
+	enc := colenc.MakeEncoder(keys.SystemSQLCodec, desc, &s.ClusterSettings().SV, cb, cols,
 		nil /*metrics*/, nil /*partialIndexMap*/, func() error {
 			if kvb.ApproximateMutationBytes() > 50 {
 				return colenc.ErrOverMemLimit
@@ -516,22 +525,22 @@ func TestCheckRowSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.TenantOrServer().Codec(), &s.TenantOrServer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_err = '2KiB'`)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
 	desc := desctestutils.TestingGetTableDescriptor(
-		kvdb, codec, "defaultdb", "public", "t")
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
+	sv := &s.ClusterSettings().SV
 	rng, _ := randutil.NewTestRand()
 	datums := []tree.Datum{tree.NewDInt(1234), tree.NewDString(randutil.RandString(rng, 3<<10, "asdf"))}
-	_, err1 := buildRowKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv, codec)
+	_, err1 := buildRowKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv)
 	code1 := pgerror.GetPGCodeInternal(err1, pgerror.ComputeDefaultCode)
-	require.Equal(t, pgcode.ProgramLimitExceeded, code1)
-	_, err2 := buildVecKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv, codec)
+	require.Equal(t, code1, pgcode.ProgramLimitExceeded)
+	_, err2 := buildVecKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv)
 	code2 := pgerror.GetPGCodeInternal(err2, pgerror.ComputeDefaultCode)
-	require.Equal(t, pgcode.ProgramLimitExceeded, code2)
+	require.Equal(t, code2, pgcode.ProgramLimitExceeded)
 }
 
 // runComparison compares row and vector output and prints out a test case
@@ -542,11 +551,10 @@ func runComparison(
 	rows []tree.Datums,
 	tableDef string,
 	sv *settings.Values,
-	codec keys.SQLCodec,
 ) {
-	rowKVs, err := buildRowKVs(rows, desc, desc.PublicColumns(), sv, codec)
+	rowKVs, err := buildRowKVs(rows, desc, desc.PublicColumns(), sv)
 	require.NoError(t, err)
-	vecKVs, err := buildVecKVs(rows, desc, desc.PublicColumns(), sv, codec)
+	vecKVs, err := buildVecKVs(rows, desc, desc.PublicColumns(), sv)
 	require.NoError(t, err)
 	if eq := checkEqual(t, rowKVs, vecKVs); !eq {
 		var sb strings.Builder
@@ -598,13 +606,9 @@ func checkEqual(t *testing.T, rowKVs, vecKVs kvs) bool {
 }
 
 func buildRowKVs(
-	datums []tree.Datums,
-	desc catalog.TableDescriptor,
-	cols []catalog.Column,
-	sv *settings.Values,
-	codec keys.SQLCodec,
+	datums []tree.Datums, desc catalog.TableDescriptor, cols []catalog.Column, sv *settings.Values,
 ) (kvs, error) {
-	inserter, err := row.MakeInserter(context.Background(), nil /*txn*/, codec, desc, cols, nil, sv, false, nil)
+	inserter, err := row.MakeInserter(context.Background(), nil /*txn*/, keys.SystemSQLCodec, desc, cols, nil, sv, false, nil)
 	if err != nil {
 		return kvs{}, err
 	}
@@ -622,11 +626,7 @@ func buildRowKVs(
 }
 
 func buildVecKVs(
-	datums []tree.Datums,
-	desc catalog.TableDescriptor,
-	cols []catalog.Column,
-	sv *settings.Values,
-	codec keys.SQLCodec,
+	datums []tree.Datums, desc catalog.TableDescriptor, cols []catalog.Column, sv *settings.Values,
 ) (kvs, error) {
 	p := &capturePutter{}
 	typs := make([]*types.T, len(cols))
@@ -648,7 +648,7 @@ func buildVecKVs(
 	}
 	b.SetLength(len(datums))
 
-	be := colenc.MakeEncoder(codec, desc, sv, b, cols, nil /*metrics*/, nil, /*partialIndexMap*/
+	be := colenc.MakeEncoder(keys.SystemSQLCodec, desc, sv, b, cols, nil /*metrics*/, nil, /*partialIndexMap*/
 		func() error { return nil })
 	rng, _ := randutil.NewTestRand()
 	if b.Length() > 1 && rng.Intn(2) == 0 {

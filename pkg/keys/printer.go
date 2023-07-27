@@ -17,7 +17,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -121,7 +120,6 @@ var (
 		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
 		{name: "RangeGCThreshold", suffix: LocalRangeGCThresholdSuffix},
 		{name: "RangeVersion", suffix: LocalRangeVersionSuffix},
-		{name: "RangeGCHint", suffix: LocalRangeGCHintSuffix},
 	}
 
 	rangeSuffixDict = []struct {
@@ -233,37 +231,26 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 
 const strTable = "/Table/"
 
-// GetTenantKeyParseFn returns a function that parses the relevant prefix of the
-// tenant data into a roachpb.Key, returning the remainder and the key
-// corresponding to the consumed prefix of 'input'. It is expected that the
-// '/Tenant' prefix has already been removed (i.e. the input is assumed to be of
-// the form '/<tenantID>/...'). If the input is of the form
-// '/<tenantID>/Table/<tableID>/...', then passed-in tableKeyParseFn function is
-// invoked on the '/<tableID>/...' part.
-func GetTenantKeyParseFn(
-	tableKeyParseFn func(string) (string, roachpb.Key),
-) func(input string) (remainder string, output roachpb.Key) {
-	return func(input string) (remainder string, output roachpb.Key) {
-		input = mustShiftSlash(input)
-		slashPos := strings.Index(input, "/")
-		if slashPos < 0 {
-			slashPos = len(input)
-		}
-		remainder = input[slashPos:] // `/something/else` -> `/else`
-		tenantIDStr := input[:slashPos]
-		tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
-		if err != nil {
-			panic(&ErrUglifyUnsupported{err})
-		}
-		output = MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID))
-		if strings.HasPrefix(remainder, strTable) {
-			var indexKey roachpb.Key
-			remainder = remainder[len(strTable)-1:]
-			remainder, indexKey = tableKeyParseFn(remainder)
-			output = append(output, indexKey...)
-		}
-		return remainder, output
+func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
+	input = mustShiftSlash(input)
+	slashPos := strings.Index(input, "/")
+	if slashPos < 0 {
+		slashPos = len(input)
 	}
+	remainder = input[slashPos:] // `/something/else` -> `/else`
+	tenantIDStr := input[:slashPos]
+	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+	if err != nil {
+		panic(&ErrUglifyUnsupported{err})
+	}
+	output = MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID))
+	if strings.HasPrefix(remainder, strTable) {
+		var indexKey roachpb.Key
+		remainder = remainder[len(strTable)-1:]
+		remainder, indexKey = tableKeyParse(remainder)
+		output = append(output, indexKey...)
+	}
+	return remainder, output
 }
 
 func tableKeyParse(input string) (remainder string, output roachpb.Key) {
@@ -318,7 +305,7 @@ func raftLogKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key
 	if err != nil {
 		panic(err)
 	}
-	return "", RaftLogKey(rangeID, kvpb.RaftIndex(index))
+	return "", RaftLogKey(rangeID, index)
 }
 
 func raftLogKeyPrint(buf *redact.StringBuilder, key roachpb.Key) {
@@ -841,7 +828,7 @@ func init() {
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse, sfFunc: formatTableKey},
 		}},
 		{Name: "/Tenant", start: TenantTableDataMin, end: TenantTableDataMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: GetTenantKeyParseFn(tableKeyParse), sfFunc: formatTenantKey},
+			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: tenantKeyParse, sfFunc: formatTenantKey},
 		}},
 	}
 }

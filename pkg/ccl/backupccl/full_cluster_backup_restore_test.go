@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -60,8 +58,8 @@ func TestFullClusterBackup(t *testing.T) {
 			// helper function, that is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
 			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Settings:          settings,
+			DisableDefaultTestTenant: true,
+			Settings:                 settings,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					// We compare job progress before and after a restore. Disable
@@ -88,8 +86,8 @@ func TestFullClusterBackup(t *testing.T) {
 	restoredZones := make(chan struct{})
 	for _, server := range tcRestore.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
-			func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.afterPreRestore = func() error {
 					close(restoredZones)
@@ -97,7 +95,8 @@ func TestFullClusterBackup(t *testing.T) {
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	// Pause SQL Stats compaction job to ensure the test is deterministic.
@@ -135,19 +134,10 @@ CREATE TABLE data2.foo (a int);
 	if util.RaceEnabled {
 		numUsers = 10
 	}
-
-	sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-		for i := 0; i < numUsers; i++ {
-			if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", i)); err != nil {
-				return err
-			}
-			if _, err := txn.Exec(fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
+	for i := 0; i < numUsers; i++ {
+		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i))
+	}
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
 	sqlDB.Exec(t, `ALTER TABLE defaultdb.foo CONFIGURE ZONE USING gc.ttlseconds = 45`)
@@ -158,6 +148,7 @@ CREATE TABLE data2.foo (a int);
 	// This job will eventually fail since it will run from a new cluster.
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
 	// Populate system.settings.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
 	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
 	// Populate system.comments.
 	sqlDB.Exec(t, `COMMENT ON TABLE data.bank IS 'table comment string'`)
@@ -373,7 +364,7 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 			// helper function, is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
 			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -496,15 +487,16 @@ func TestClusterRestoreSystemTableOrdering(t *testing.T) {
 	restoredSystemTables := make([]string, 0)
 	for _, server := range tcRestore.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
-			func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 					restoredSystemTables = append(restoredSystemTables, systemTableName)
 					return nil
 				}
 				return r
-			})
+			},
+		}
 	}
 
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
@@ -629,14 +621,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-		for i := 0; i < 1000; i++ {
-			if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", i)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	for i := 0; i < 1000; i++ {
+		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+	}
+
 	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/missing-ssts'`)
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
@@ -713,8 +701,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				alreadyErrored := false
 				for _, server := range tcRestore.Servers {
 					registry := server.JobRegistry().(*jobs.Registry)
-					registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
-						func(raw jobs.Resumer) jobs.Resumer {
+					registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+						jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 							r := raw.(*restoreResumer)
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 								if !alreadyErrored && systemTableName == customRestoreSystemTable {
@@ -724,7 +712,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 								return nil
 							}
 							return r
-						})
+						},
+					}
 				}
 				// The initial restore will return an error, and restart.
 				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM $1`, localFoo)
@@ -745,14 +734,15 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Bugger the backup by injecting a failure while restoring the system data.
 		for _, server := range tcRestore.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
-				func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.duringSystemTableRestoration = func(_ string) error {
 						return errors.New("injected error")
 					}
 					return r
-				})
+				},
+			}
 		}
 
 		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
@@ -788,14 +778,15 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Bugger the backup by injecting a failure while restoring the system data.
 		for _, server := range tcRestore.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
-				func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.afterOfflineTableCreation = func() error {
 						return errors.New("injected error")
 					}
 					return r
-				})
+				},
+			}
 		}
 
 		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
@@ -956,7 +947,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
 					mu.Lock()
 					defer mu.Unlock()
 					if entriesCount == 0 {
@@ -975,7 +966,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	// helper function, is not yet enabled to set up tenants within
 	// clusters by default. Tracking issue
 	// https://github.com/cockroachdb/cockroach/issues/76378
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+	params.ServerArgs.DisableDefaultTestTenant = true
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -1085,13 +1076,13 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
 		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
 	sqlDB.Exec(t, `
 DROP DATABASE defaultdb;
-CREATE DATABASE defaultdb;
+CREATE DATABASE defaultdb; 
 `)
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
@@ -1110,7 +1101,7 @@ func TestRestoreWithDroppedDefaultDB(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
 		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1136,7 +1127,7 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 			// helper function, that is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
 			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

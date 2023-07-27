@@ -27,7 +27,5 @@ if [[ ! -f "$BINARY_PATH" ]]; then
     chmod a+w $BINARY_PATH
 fi
 
-source "$(dirname "${0}")/tools/claim_output_base.sh" || true
-
 cd $THIS_DIR
-$BINARY_PATH "$@"
+exec $BINARY_PATH "$@"

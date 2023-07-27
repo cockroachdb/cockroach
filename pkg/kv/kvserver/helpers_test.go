@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -39,10 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -98,10 +97,6 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	return totalStats, err
 }
 
-func (s *Store) UpdateLivenessMap() {
-	s.updateLivenessMap()
-}
-
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
 func ConsistencyQueueShouldQueue(
@@ -128,20 +123,8 @@ func (s *Store) LogReplicaChangeTest(
 	desc roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
-	logAsync bool,
 ) error {
-	return s.logChange(ctx, txn, changeType, replica, desc, reason, details, logAsync)
-}
-
-// LogSplitTest adds a fake split event to the rangelog.
-func (s *Store) LogSplitTest(
-	ctx context.Context,
-	txn *kv.Txn,
-	updatedDesc, newDesc roachpb.RangeDescriptor,
-	reason string,
-	logAsync bool,
-) error {
-	return s.logSplit(ctx, txn, updatedDesc, newDesc, reason, logAsync)
+	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
 }
 
 // ReplicateQueuePurgatoryLength returns the number of replicas in replicate
@@ -226,58 +209,13 @@ func (s *Store) ReservationCount() int {
 	return int(s.cfg.SnapshotApplyLimit) - s.snapshotApplyQueue.AvailableLen()
 }
 
-// RaftSchedulerPriorityID returns the Raft scheduler's prioritized ranges.
-func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
-	return s.scheduler.PriorityIDs()
-}
-
-// GetStoreMetric retrieves the count of the store metric whose metadata name
-// matches with the given name parameter. If the specified metric cannot be
-// found, the function will return an error.
-func (sm *StoreMetrics) GetStoreMetric(name string) (int64, error) {
-	var c int64
-	var found bool
-	sm.registry.Each(func(n string, v interface{}) {
-		if name == n {
-			switch t := v.(type) {
-			case *metric.Counter:
-				c = t.Count()
-				found = true
-			case *metric.Gauge:
-				c = t.Value()
-				found = true
-			}
-		}
-	})
-	if !found {
-		return -1, errors.Errorf("cannot find metric for %s", name)
-	}
-	return c, nil
-}
-
-// GetStoreMetrics fetches the count of each specified Store metric from the
-// `metricNames` parameter and returns the result as a map. The keys in the map
-// represent the metric metadata names, while the corresponding values indicate
-// the count of each metric. If any of the specified metric cannot be found or
-// is not a counter, the function will return an error.
-//
-// Assumption: 1. The metricNames parameter should consist of string literals
-// that match the metadata names used for metric counters. 2. Each metric name
-// provided in `metricNames` must exist, unique and be a counter type.
-func (sm *StoreMetrics) GetStoreMetrics(metricsNames []string) (map[string]int64, error) {
-	metrics := make(map[string]int64)
-	for _, metricName := range metricsNames {
-		count, err := sm.GetStoreMetric(metricName)
-		if err != nil {
-			return map[string]int64{}, errors.Errorf("cannot find metric for %s", metricName)
-		}
-		metrics[metricName] = count
-	}
-	return metrics, nil
+// RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
+func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
+	return s.scheduler.PriorityID()
 }
 
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
-	liveness.TimeUntilNodeDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilNodeDeadOff)
+	storepool.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, storepool.TestTimeUntilStoreDeadOff)
 	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
@@ -287,7 +225,7 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		func() int {
 			return 1
 		},
-		func(roachpb.NodeID) livenesspb.NodeLivenessStatus {
+		func(roachpb.NodeID, time.Time, time.Duration) livenesspb.NodeLivenessStatus {
 			return livenesspb.NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
@@ -298,7 +236,7 @@ func (r *Replica) Store() *Store {
 	return r.store
 }
 
-func (r *Replica) Breaker() *circuit.Breaker {
+func (r *Replica) Breaker() *circuit2.Breaker {
 	return r.breaker.wrapped
 }
 
@@ -319,36 +257,22 @@ func (r *Replica) RaftUnlock() {
 }
 
 func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportUnreachable(uint64(id))
 		return false /* unquiesceAndWakeLeader */, nil
 	})
 }
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
-func (r *Replica) LastAssignedLeaseIndex() kvpb.LeaseAppliedIndex {
+func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
 }
 
-// Campaign campaigns the replica.
-func (r *Replica) Campaign(ctx context.Context) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.campaignLocked(ctx)
-}
-
-// ForceCampaign force-campaigns the replica.
-func (r *Replica) ForceCampaign(ctx context.Context) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.forceCampaignLocked(ctx)
-}
-
 // LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
 // b.mu to be held in read mode.
-func (b *propBuf) LastAssignedLeaseIndexRLocked() kvpb.LeaseAppliedIndex {
+func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
 	return b.assignedLAI
 }
 
@@ -359,9 +283,9 @@ func (b *propBuf) LastAssignedLeaseIndexRLocked() kvpb.LeaseAppliedIndex {
 func (r *Replica) InitQuotaPool(quota uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var appliedIndex kvpb.RaftIndex
-	err := r.withRaftGroupLocked(func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
-		appliedIndex = kvpb.RaftIndex(r.BasicStatus().Applied)
+	var appliedIndex uint64
+	err := r.withRaftGroupLocked(false, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, err error) {
+		appliedIndex = r.BasicStatus().Applied
 		return false, nil
 	})
 	if err != nil {
@@ -405,7 +329,7 @@ func (r *Replica) IsFollowerActiveSince(
 ) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActiveSince(followerID, timeutil.Now(), threshold)
+	return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, followerID, timeutil.Now(), threshold)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
@@ -433,10 +357,16 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 
 // GetCachedLastTerm returns the cached last term value. May return
 // invalidLastTerm if the cache is not set.
-func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
+func (r *Replica) GetCachedLastTerm() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.lastTermNotDurable
+}
+
+func (r *Replica) IsRaftGroupInitialized() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.internalRaftGroup != nil
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
@@ -538,25 +468,10 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
-func (r *Replica) MaybeUnquiesce() bool {
-	return r.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
-}
-
-// MaybeUnquiesceAndPropose will unquiesce the range and submit a noop proposal.
-// This is useful when unquiescing the leader and wanting to also unquiesce
-// followers, since the leader may otherwise simply quiesce again immediately.
-func (r *Replica) MaybeUnquiesceAndPropose() (bool, error) {
+func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.canUnquiesceRLocked() {
-		return false, nil
-	}
-	return true, r.withRaftGroupLocked(func(r *raft.RawNode) (bool, error) {
-		if err := r.Propose(nil); err != nil {
-			return false, err
-		}
-		return true /* unquiesceAndWakeLeader */, nil
-	})
+	return r.maybeUnquiesceAndWakeLeaderLocked()
 }
 
 func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp hlc.Timestamp) {
@@ -582,7 +497,7 @@ func (r *Replica) TripBreaker() {
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) (*circuit.Breaker, bool) {
+) *circuit.Breaker {
 	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
 
@@ -642,17 +557,4 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
-}
-
-// getMapsDiff returns the difference between the values of corresponding
-// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
-// of keys.
-func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
-	diffMap := make(map[string]int64)
-	for metricName, beforeValue := range beforeMap {
-		if v, ok := afterMap[metricName]; ok {
-			diffMap[metricName] = v - beforeValue
-		}
-	}
-	return diffMap
 }

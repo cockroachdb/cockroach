@@ -16,44 +16,26 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/redact"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
 type IsolationLevel int
 
-var _ redact.SafeValue = IsolationLevel(0)
-
-// SafeValue makes Kind a redact.SafeValue.
-func (k IsolationLevel) SafeValue() {}
-
 // IsolationLevel values
 const (
 	UnspecifiedIsolation IsolationLevel = iota
-	ReadUncommittedIsolation
-	ReadCommittedIsolation
-	RepeatableReadIsolation
-	SnapshotIsolation
 	SerializableIsolation
 )
 
 var isolationLevelNames = [...]string{
-	UnspecifiedIsolation:     "UNSPECIFIED",
-	ReadUncommittedIsolation: "READ UNCOMMITTED",
-	ReadCommittedIsolation:   "READ COMMITTED",
-	RepeatableReadIsolation:  "REPEATABLE READ",
-	SnapshotIsolation:        "SNAPSHOT",
-	SerializableIsolation:    "SERIALIZABLE",
+	UnspecifiedIsolation:  "UNSPECIFIED",
+	SerializableIsolation: "SERIALIZABLE",
 }
 
 // IsolationLevelMap is a map from string isolation level name to isolation
 // level, in the lowercase format that set isolation_level supports.
 var IsolationLevelMap = map[string]IsolationLevel{
-	"read uncommitted": ReadUncommittedIsolation,
-	"read committed":   ReadCommittedIsolation,
-	"repeatable read":  RepeatableReadIsolation,
-	"snapshot":         SnapshotIsolation,
-	"serializable":     SerializableIsolation,
+	"serializable": SerializableIsolation,
 }
 
 func (i IsolationLevel) String() string {

@@ -408,14 +408,14 @@ statement ok
 CREATE TABLE unique_without_index1 (a INT, b INT, CONSTRAINT ab UNIQUE WITHOUT INDEX (a, b))
 
 query TTTTB colnames
-SELECT * FROM [SHOW CONSTRAINTS FROM unique_without_index] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM unique_without_index
 ----
 table_name            constraint_name            constraint_type  details                   validated
 unique_without_index  unique_a                   UNIQUE           UNIQUE WITHOUT INDEX (a)  true
 unique_without_index  unique_without_index_pkey  PRIMARY KEY      PRIMARY KEY (rowid ASC)   true
 
 query TTTTB colnames
-SELECT * FROM [SHOW CONSTRAINTS FROM unique_without_index1] ORDER BY constraint_name
+SHOW CONSTRAINTS FROM unique_without_index1
 ----
 table_name             constraint_name             constraint_type  details                      validated
 unique_without_index1  ab                          UNIQUE           UNIQUE WITHOUT INDEX (a, b)  true
@@ -645,7 +645,7 @@ CREATE TABLE test_serial (
 	b SERIAL
 );
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state
@@ -678,7 +678,7 @@ CREATE TABLE test_serial (
 	b SERIAL
 );
 
-query ITTT colnames,rowsort
+query ITTT colnames
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
   SELECT table_id, name, state

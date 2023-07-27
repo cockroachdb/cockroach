@@ -16,14 +16,12 @@ package serverutils
 import (
 	"context"
 	"net/http"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,32 +37,6 @@ const (
 	SingleTenantSession
 	MultiTenantSession
 )
-
-type TestURL struct {
-	*url.URL
-}
-
-func NewTestURL(path string) TestURL {
-	u, err := url.Parse(path)
-	if err != nil {
-		panic(err)
-	}
-	return TestURL{u}
-}
-
-// WithPath is a helper that allows the user of the `TestURL` to easily
-// append paths to use for testing. Please be aware that your path will
-// automatically be escaped for you, but if it includes any invalid hex
-// escapes (eg: `%s`) it will fail silently and you'll get back a blank
-// URL.
-func (t *TestURL) WithPath(path string) *TestURL {
-	newPath, err := url.JoinPath(t.Path, path)
-	if err != nil {
-		panic(err)
-	}
-	t.Path = newPath
-	return t
-}
 
 // TestTenantInterface defines SQL-only tenant functionality that tests need; it
 // is implemented by server.Test{Tenant,Server}. Tests written against this
@@ -95,9 +67,6 @@ type TestTenantInterface interface {
 	// PGServer returns the tenant's *pgwire.Server as an interface{}.
 	PGServer() interface{}
 
-	// PGPreServer returns the tenant's *pgwire.PreServeConnHandler as an interface{}.
-	PGPreServer() interface{}
-
 	// DiagnosticsReporter returns the tenant's *diagnostics.Reporter as an
 	// interface{}. The DiagnosticsReporter periodically phones home to report
 	// diagnostics and usage.
@@ -111,22 +80,11 @@ type TestTenantInterface interface {
 	// interface{}.
 	TenantStatusServer() interface{}
 
-	// HTTPAuthServer returns the authserver.Server as an interface{}.
-	HTTPAuthServer() interface{}
-
-	// SQLServer returns the *sql.Server as an interface{}.
-	SQLServer() interface{}
-
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
 	// DistSenderI returns the *kvcoord.DistSender as an interface{}.
 	DistSenderI() interface{}
-
-	// InternalExecutor returns a *sql.InternalExecutor as an
-	// interface{} (which also implements insql.InternalExecutor if the
-	// test cannot depend on sql).
-	InternalExecutor() interface{}
 
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
@@ -140,6 +98,10 @@ type TestTenantInterface interface {
 	// ExecutorConfig returns a copy of the tenant's ExecutorConfig.
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
+
+	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
+	// also implements isql.InternalExecutor if the test cannot depend on sql).
+	InternalExecutor() interface{}
 
 	// RangeFeedFactory returns the range feed factory used by the tenant.
 	// The real return type is *rangefeed.Factory.
@@ -189,36 +151,22 @@ type TestTenantInterface interface {
 	AmbientCtx() log.AmbientContext
 
 	// AdminURL returns the URL for the admin UI.
-	AdminURL() *TestURL
-
+	AdminURL() string
 	// GetUnauthenticatedHTTPClient returns an http client configured with the client TLS
 	// config required by the TestServer's configuration.
 	// Discourages implementer from using unauthenticated http connections
 	// with verbose method name.
 	GetUnauthenticatedHTTPClient() (http.Client, error)
-
 	// GetAdminHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	// The user has admin privileges.
 	GetAdminHTTPClient() (http.Client, error)
-
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	GetAuthenticatedHTTPClient(isAdmin bool, sessionType SessionType) (http.Client, error)
-
-	// GetAuthenticatedHTTPClientAndCookie returns an http client which
-	// has been authenticated to access Admin API methods and
-	// the corresponding session cookie.
-	GetAuthenticatedHTTPClientAndCookie(
-		authUser username.SQLUsername, isAdmin bool, session SessionType,
-	) (http.Client, *serverpb.SessionCookie, error)
-
-	// GetAuthSession returns a byte array containing a valid auth
+	// GetEncodedSession returns a byte array containing a valid auth
 	// session.
 	GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error)
-
-	// CreateAuthUser is exported for use in tests.
-	CreateAuthUser(userName username.SQLUsername, isAdmin bool) error
 
 	// DrainClients shuts down client connections.
 	DrainClients(ctx context.Context) error
@@ -226,13 +174,9 @@ type TestTenantInterface interface {
 	// SystemConfigProvider provides access to the system config.
 	SystemConfigProvider() config.SystemConfigProvider
 
-	// MustGetSQLCounter returns the value of a counter metric from the tenant's
+	// MustGetSQLCounter returns the value of a counter metric from the server's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
 	MustGetSQLCounter(name string) int64
-	// MustGetSQLNetworkCounter returns the value of a counter metric from the
-	// tenant's SQL server. Runs in O(# of metrics) time, which is fine for test
-	// code.
-	MustGetSQLNetworkCounter(name string) int64
 
 	// Codec returns this tenant's codec (or keys.SystemSQLCodec if this is the
 	// system tenant).
@@ -244,9 +188,6 @@ type TestTenantInterface interface {
 
 	// Tracer returns a reference to the tenant's Tracer.
 	Tracer() *tracing.Tracer
-
-	// TracerI is the same as Tracer but returns an interface{}.
-	TracerI() interface{}
 
 	// MigrationServer returns the tenant's migration server, which is used in
 	// upgrade testing.

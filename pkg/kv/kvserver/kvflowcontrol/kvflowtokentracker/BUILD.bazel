@@ -8,9 +8,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
-        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/util/admission/admissionpb",
-        "//pkg/util/buildutil",
         "//pkg/util/log",
     ],
 )

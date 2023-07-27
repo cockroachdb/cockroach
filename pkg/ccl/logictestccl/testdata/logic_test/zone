@@ -184,7 +184,7 @@ scan t
 statement
 PREPARE p AS SELECT * FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 
-query T retry,nosort
+query T retry
 EXECUTE p
 ----
 distribution: local
@@ -201,7 +201,7 @@ ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 
-query T retry,nosort
+query T retry
 EXECUTE p
 ----
 distribution: local
@@ -356,7 +356,7 @@ scan t@secondary
 statement ok
 PREPARE p AS SELECT * FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 
-query T retry,nosort
+query T retry
 EXECUTE p
 ----
 distribution: local
@@ -371,7 +371,7 @@ statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE
 USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
 
-query T retry,nosort
+query T retry
 EXECUTE p
 ----
 distribution: local
@@ -614,34 +614,33 @@ ALTER PARTITION "my partition" OF INDEX "my table"@"my index" CONFIGURE ZONE USI
 query TTTTTT
 SELECT target, range_name, database_name, table_name, index_name, partition_name
 FROM crdb_internal.zones
-ORDER BY target
 ----
-DATABASE "my database"                                                             NULL      my database  NULL                          NULL           NULL
+RANGE default                                                                      default   NULL         NULL                          NULL           NULL
 DATABASE system                                                                    NULL      system       NULL                          NULL           NULL
-INDEX "my database".public."my table"@"my index"                                   NULL      my database  my table                      my index       NULL
+RANGE meta                                                                         meta      NULL         NULL                          NULL           NULL
+RANGE system                                                                       system    NULL         NULL                          NULL           NULL
+RANGE liveness                                                                     liveness  NULL         NULL                          NULL           NULL
+TABLE system.public.replication_constraint_stats                                   NULL      system       replication_constraint_stats  NULL           NULL
+TABLE system.public.replication_stats                                              NULL      system       replication_stats             NULL           NULL
+TABLE system.public.statement_statistics                                           NULL      system       statement_statistics          NULL           NULL
+TABLE system.public.transaction_statistics                                         NULL      system       transaction_statistics        NULL           NULL
+TABLE system.public.tenant_usage                                                   NULL      system       tenant_usage                  NULL           NULL
+TABLE system.public.span_stats_tenant_boundaries                                   NULL      system       span_stats_tenant_boundaries  NULL           NULL
+TABLE system.public.statement_activity                                             NULL      system       statement_activity            NULL           NULL
+TABLE system.public.transaction_activity                                           NULL      system       transaction_activity          NULL           NULL
+TABLE test.public.t                                                                NULL      test         t                             NULL           NULL
+INDEX test.public.t@secondary                                                      NULL      test         t                             secondary      NULL
+INDEX test.public.t@tertiary                                                       NULL      test         t                             tertiary       NULL
 INDEX test.public.t36642@secondary                                                 NULL      test         t36642                        secondary      NULL
 INDEX test.public.t36642@tertiary                                                  NULL      test         t36642                        tertiary       NULL
 INDEX test.public.t36644@secondary                                                 NULL      test         t36644                        secondary      NULL
 INDEX test.public.t36644@tertiary                                                  NULL      test         t36644                        tertiary       NULL
-INDEX test.public.t@secondary                                                      NULL      test         t                             secondary      NULL
-INDEX test.public.t@tertiary                                                       NULL      test         t                             tertiary       NULL
-PARTITION "my partition" OF INDEX "my database".public."my table"@"my index"       NULL      my database  my table                      my index       my partition
-PARTITION "my partition" OF INDEX "my database".public."my table"@"my table_pkey"  NULL      my database  my table                      my table_pkey  my partition
 PARTITION x1_idx OF INDEX test.public.t38391@foo                                   NULL      test         t38391                        foo            x1_idx
-RANGE default                                                                      default   NULL         NULL                          NULL           NULL
-RANGE liveness                                                                     liveness  NULL         NULL                          NULL           NULL
-RANGE meta                                                                         meta      NULL         NULL                          NULL           NULL
-RANGE system                                                                       system    NULL         NULL                          NULL           NULL
+DATABASE "my database"                                                             NULL      my database  NULL                          NULL           NULL
 TABLE "my database".public."my table"                                              NULL      my database  my table                      NULL           NULL
-TABLE system.public.replication_constraint_stats                                   NULL      system       replication_constraint_stats  NULL           NULL
-TABLE system.public.replication_stats                                              NULL      system       replication_stats             NULL           NULL
-TABLE system.public.span_stats_tenant_boundaries                                   NULL      system       span_stats_tenant_boundaries  NULL           NULL
-TABLE system.public.statement_activity                                             NULL      system       statement_activity            NULL           NULL
-TABLE system.public.statement_statistics                                           NULL      system       statement_statistics          NULL           NULL
-TABLE system.public.tenant_usage                                                   NULL      system       tenant_usage                  NULL           NULL
-TABLE system.public.transaction_activity                                           NULL      system       transaction_activity          NULL           NULL
-TABLE system.public.transaction_statistics                                         NULL      system       transaction_statistics        NULL           NULL
-TABLE test.public.t                                                                NULL      test         t                             NULL           NULL
+INDEX "my database".public."my table"@"my index"                                   NULL      my database  my table                      my index       NULL
+PARTITION "my partition" OF INDEX "my database".public."my table"@"my table_pkey"  NULL      my database  my table                      my table_pkey  my partition
+PARTITION "my partition" OF INDEX "my database".public."my table"@"my index"       NULL      my database  my table                      my index       my partition
 
 # Test the zone information being displayed in SHOW CREATE
 statement ok
@@ -718,7 +717,7 @@ statement error index "t2" does not exist\nHINT: try specifying the index as <ta
 ALTER PARTITION p1 OF INDEX t2 CONFIGURE ZONE USING num_replicas = 1
 
 query TT
-SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%' ORDER BY 1
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@%'
 ----
 PARTITION p1 OF INDEX "my database".public.t2@t2_pkey  ALTER PARTITION p1 OF INDEX "my database".public.t2@t2_pkey CONFIGURE ZONE USING
                                                        num_replicas = 1
@@ -736,7 +735,7 @@ statement ok
 ALTER PARTITION p3 OF TABLE t2 CONFIGURE ZONE USING num_replicas = 1
 
 query TT
-SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@x2%' ORDER BY 1
+SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE target LIKE '%t2@x2%'
 ----
 PARTITION p1 OF INDEX "my database".public.t2@x2  ALTER PARTITION p1 OF INDEX "my database".public.t2@x2 CONFIGURE ZONE USING
                                                   num_replicas = 1
@@ -930,7 +929,6 @@ ALTER TABLE t38074 CONFIGURE ZONE USING gc.ttlseconds = 70000
 query TTT
 SELECT table_name, index_name, full_config_sql FROM crdb_internal.zones WHERE
 table_name='t38074'
-ORDER BY index_name
 ----
 t38074  NULL  ALTER TABLE test.public.t38074 CONFIGURE ZONE USING
         range_min_bytes = 134217728,

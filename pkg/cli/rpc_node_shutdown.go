@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,12 +63,11 @@ func doDrain(
 		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
-	if err := timeutil.RunWithTimeout(ctx, "get-drain-settings", 5*time.Second, func(ctx context.Context) error {
+	if err := contextutil.RunWithTimeout(ctx, "get-drain-settings", 5*time.Second, func(ctx context.Context) error {
 		shutdownSettings, err := c.Settings(ctx, &serverpb.SettingsRequest{
 			Keys: []string{
 				"server.shutdown.drain_wait",
 				"server.shutdown.connection_wait",
-				"server.shutdown.jobs_wait",
 				"server.shutdown.query_wait",
 				"server.shutdown.lease_transfer_wait",
 			},
@@ -77,7 +76,8 @@ func doDrain(
 		if err != nil {
 			return err
 		}
-		minWait := 0 * time.Second
+		// Add an extra buffer of 10 seconds for the timeout.
+		minWait := 10 * time.Second
 		for k, v := range shutdownSettings.KeyValues {
 			wait, err := time.ParseDuration(v.Value)
 			if err != nil {
@@ -90,7 +90,7 @@ func doDrain(
 			}
 		}
 		if minWait > drainCtx.drainWait {
-			fmt.Fprintf(stderr, "warning: --drain-wait is %s, but the server.shutdown.{drain,query,jobs,connection,lease_transfer}_wait "+
+			fmt.Fprintf(stderr, "warning: --drain-wait is %s, but the server.shutdown.{drain,query,connection,lease_transfer}_wait "+
 				"cluster settings require a value of at least %s; using the larger value\n",
 				drainCtx.drainWait, minWait)
 			drainCtx.drainWait = minWait
@@ -100,11 +100,11 @@ func doDrain(
 		fmt.Fprintf(stderr, "warning: could not check drain related cluster settings: %v\n", err)
 	}
 
-	err = timeutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
+	err = contextutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
 	})
-	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
+	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
 		log.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
 			"custom server.shutdown.{drain,query,connection,lease_transfer}_wait cluster settings")
@@ -233,7 +233,7 @@ func doShutdown(
 
 	// We use a shorter timeout because a shutdown request has nothing
 	// else to do than shut down the node immediately.
-	err = timeutil.RunWithTimeout(ctx, "hard shutdown", 10*time.Second, func(ctx context.Context) error {
+	err = contextutil.RunWithTimeout(ctx, "hard shutdown", 10*time.Second, func(ctx context.Context) error {
 		// Send a drain request with the drain bit unset (no drain).
 		// and the shutdown bit set.
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{NodeId: targetNode, Shutdown: true})
@@ -250,7 +250,7 @@ func doShutdown(
 			}
 		}
 	})
-	if !errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
+	if !errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
 		hardError = true
 	}
 	return hardError, err

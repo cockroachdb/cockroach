@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"golang.org/x/text/language"
 )
 
@@ -244,7 +243,7 @@ type CreateIndex struct {
 	StorageParams    StorageParams
 	Predicate        Expr
 	Concurrently     bool
-	Invisibility     float64
+	NotVisible       bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -296,12 +295,8 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
 	}
-	if invisibility := node.Invisibility; invisibility != 0.0 {
-		if invisibility == 1.0 {
-			ctx.WriteString(" NOT VISIBLE")
-		} else {
-			ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-invisibility))
-		}
+	if node.NotVisible {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 }
 
@@ -333,10 +328,6 @@ func (n *EnumValue) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
-	} else if f.HasFlags(FmtMarkRedactionNode) {
-		ctx.WriteString(string(redact.StartMarker()))
-		lexbase.EncodeSQLString(&ctx.Buffer, string(*n))
-		ctx.WriteString(string(redact.EndMarker()))
 	} else {
 		lexbase.EncodeSQLString(&ctx.Buffer, string(*n))
 	}
@@ -1035,7 +1026,7 @@ type IndexTableDef struct {
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
-	Invisibility     float64
+	NotVisible       bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1071,13 +1062,8 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
 	}
-
-	if invisibility := node.Invisibility; invisibility != 0.0 {
-		if invisibility == 1.0 {
-			ctx.WriteString(" NOT VISIBLE")
-		} else {
-			ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-invisibility))
-		}
+	if node.NotVisible {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 }
 
@@ -1156,18 +1142,8 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
 	}
-
-	if invisibility := node.Invisibility; invisibility != 0.0 {
-		if invisibility == 1.0 {
-			ctx.WriteString(" NOT VISIBLE")
-		} else {
-			ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-invisibility))
-		}
-	}
-	if node.StorageParams != nil {
-		ctx.WriteString(" WITH (")
-		ctx.FormatNode(&node.StorageParams)
-		ctx.WriteString(")")
+	if node.NotVisible {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 }
 

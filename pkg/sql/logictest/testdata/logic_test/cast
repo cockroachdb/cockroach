@@ -53,7 +53,7 @@ EXECUTE insert_c(' ')
 statement ok
 EXECUTE insert_c(' '::STRING)
 
-query T rowsort
+query T
 SELECT concat('"', c, '"') FROM assn_cast
 ----
 ""
@@ -112,7 +112,7 @@ EXECUTE insert_qc('foo')
 statement ok
 EXECUTE insert_qc('foo'::STRING)
 
-query T rowsort
+query T
 SELECT qc FROM assn_cast
 ----
 f
@@ -165,7 +165,10 @@ PREPARE insert_f4 AS INSERT INTO assn_cast(f4) VALUES ($1)
 statement ok
 EXECUTE insert_f4(18754999.99)
 
-query F rowsort
+# TODO(mgartner): Values are not correctly truncated when cast to FLOAT4, either
+# in an assignment or explicit context. The columns should have a value of
+# 1.8755e+07. See #73743.
+query F
 SELECT f4 FROM assn_cast WHERE f4 IS NOT NULL
 ----
 1.8755e+07
@@ -1264,7 +1267,7 @@ WHERE b.v = 'bar' AND a.c = 'foo'
 ----
 1  bar  1  foo
 
-query ITI nosort
+query ITI
 SELECT i, i::"char"::bytea, length(i::"char")
 FROM (VALUES (32), (97), (127), (0), (-1), (-127), (-128)) v(i);
 ----
@@ -1287,7 +1290,7 @@ SELECT ' 1 '::int, ' 1.2 '::float, ' 2.3 '::decimal, ' true '::bool
 ----
 1  1.2  2.3  true
 
-query IOTOOOOOO nosort
+query IOTOOOOOO
 SELECT i, i::oid, i::oid::text,
   i::oid::regproc, i::oid::regprocedure, i::oid::regnamespace, i::oid::regclass, i::oid::regtype, i::oid::regrole
 FROM (VALUES (0), (1)) v(i)
@@ -1374,7 +1377,7 @@ INSERT INTO t59489 (d12_3) VALUES (6e3) RETURNING d12_3
 ----
 6000.000
 
-query R rowsort
+query R
 SELECT d12_3 FROM t59489
 ----
 6000.000
@@ -1522,7 +1525,7 @@ CREATE TABLE IF NOT EXISTS t98373 AS
         FROM
                 generate_series(1, 5) AS g;
 
-query T rowsort
+query T
 SELECT
         regproc(_int2::INT8)::REGPROC AS col865
 FROM
@@ -1533,3 +1536,33 @@ array_agg
 array_agg
 array_agg
 array_agg
+
+statement OK
+SET vectorize = off
+
+statement OK
+SET distsql = always
+
+# The query plan should be disallowed from executing in a distributed fashion
+# even with distsql = always.
+query T
+EXPLAIN SELECT
+        regproc(_int2::INT8)::REGPROC AS col865
+FROM
+        t98373@[0]
+----
+distribution: local
+vectorized: false
+·
+• render
+│
+└── • scan
+      missing stats
+      table: t98373@t98373_pkey
+      spans: FULL SCAN
+
+statement OK
+RESET vectorize
+
+statement OK
+RESET distsql

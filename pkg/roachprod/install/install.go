@@ -139,11 +139,6 @@ sudo apt-get update;
 sudo apt-get install -y \
   zfsutils-linux;
 `,
-
-	"postgresql": `
-sudo apt-get update;
-sudo apt-get install -y postgresql;
-`,
 }
 
 // SortedCmds TODO(peter): document

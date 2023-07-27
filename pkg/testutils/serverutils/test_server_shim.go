@@ -20,90 +20,79 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
+	"math/rand"
 	"net/url"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
-// DefaultTestTenantMessage is a message that is printed when a test is run
-// with the default test tenant. This is useful for debugging test failures.
-const DefaultTestTenantMessage = `
-Test server was configured to route SQL queries to a secondary tenant (virtual cluster).
-If you are only seeing a test failure when this message appears, there may be a problem
-specific to cluster virtualization or multi-tenancy.
+// TenantModeFlagName is the exported name of the tenantMode flag, for use
+// in other packages.
+const TenantModeFlagName = "tenantMode"
 
-To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable just
-the secondary tenant in all runs (or, alternatively, "false" to force-disable), or use
-"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=false" to disable all random test variables altogether.`
+var tenantModeFlag = flag.String(
+	TenantModeFlagName, tenantModeDefault,
+	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
+		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
+		"modes are ignored if the test is already forced to run in one of the two modes.")
 
-var PreventStartTenantError = errors.New("attempting to manually start a server for a secondary tenant while " +
-	"DefaultTestTenant is set to TestTenantProbabilisticOnly")
+const (
+	tenantModeForceTenant   = "forceTenant"
+	tenantModeForceNoTenant = "forceNoTenant"
+	tenantModeDefault       = "default"
+)
 
 // ShouldStartDefaultTestTenant determines whether a default test tenant
 // should be started for test servers or clusters, to serve SQL traffic by
-// default.
-// This can be overridden either via the build tag `metamorphic_disable`
-// or just for test tenants via COCKROACH_TEST_TENANT.
-func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) bool {
-	// Explicit cases for enabling or disabling the default test tenant.
-	if serverArgs.DefaultTestTenant.TestTenantAlwaysEnabled() {
-		return true
-	}
-	if serverArgs.DefaultTestTenant.TestTenantAlwaysDisabled() {
-		if issueNum, label := serverArgs.DefaultTestTenant.IssueRef(); issueNum != 0 {
-			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
-		}
-		return false
-	}
-
+// default. It defaults to 50% probability, but can be overridden by the
+// tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
+// If both the environment variable and the test flag are set, the environment
+// variable wins out.
+func ShouldStartDefaultTestTenant(t testing.TB) bool {
+	var defaultProbabilityOfStartingTestTenant = 0.5
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
-		return false
+		defaultProbabilityOfStartingTestTenant = 0
+	}
+	var probabilityOfStartingDefaultTestTenant float64
+
+	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
+	if !envSet {
+		tenantModeTestString = *tenantModeFlag
 	}
 
-	// Obey the env override if present.
-	if str, present := envutil.EnvString("COCKROACH_TEST_TENANT", 0); present {
-		v, err := strconv.ParseBool(str)
-		if err != nil {
-			panic(err)
-		}
-		return v
+	switch tenantModeTestString {
+	case tenantModeForceTenant:
+		probabilityOfStartingDefaultTestTenant = 1.0
+	case tenantModeForceNoTenant:
+		probabilityOfStartingDefaultTestTenant = 0.0
+	case tenantModeDefault:
+		probabilityOfStartingDefaultTestTenant = defaultProbabilityOfStartingTestTenant
+	default:
+		t.Fatal("invalid setting of tenantMode flag")
 	}
 
-	// Note: we ask the metamorphic framework for a "disable" value, instead
-	// of an "enable" value, because it probabilistically returns its default value
-	// more often than not and that is what we want.
-	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
-	if enabled {
-		t.Log(DefaultTestTenantMessage)
-	}
-	return enabled
+	return rand.Float64() <= probabilityOfStartingDefaultTestTenant
 }
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -145,6 +134,9 @@ type TestServerInterface interface {
 	// insql.InternalDB as an interface{}.
 	InternalDB() interface{}
 
+	// TracerI returns a *tracing.Tracer as an interface{}.
+	TracerI() interface{}
+
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
 	GossipI() interface{}
@@ -155,6 +147,9 @@ type TestServerInterface interface {
 
 	// MigrationServer returns the internal *migrationServer as in interface{}
 	MigrationServer() interface{}
+
+	// SQLServer returns the *sql.Server as an interface{}.
+	SQLServer() interface{}
 
 	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
 	SQLLivenessProvider() interface{}
@@ -183,6 +178,13 @@ type TestServerInterface interface {
 	// with DistSQL at the same time.
 	SetDistSQLSpanResolver(spanResolver interface{})
 
+	// MustGetSQLCounter returns the value of a counter metric from the server's
+	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
+	MustGetSQLCounter(name string) int64
+	// MustGetSQLNetworkCounter returns the value of a counter metric from the
+	// server's SQL server. Runs in O(# of metrics) time, which is fine for test
+	// code.
+	MustGetSQLNetworkCounter(name string) int64
 	// WriteSummaries records summaries of time-series data, which is required for
 	// any tests that query server stats.
 	WriteSummaries() error
@@ -244,16 +246,6 @@ type TestServerInterface interface {
 	// StartSharedProcessTenant() for a tenant simulating a shared-memory server.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
-	// DisableStartTenant prevents manual starting of tenants. If an attempt at
-	// starting a tenant is made, the server will return the specified error.
-	DisableStartTenant(reason error)
-
-	// WaitForTenantReadiness waits until the tenant record is known
-	// to the in-RAM caches. Trying to start a tenant server before
-	// this is called can run into a "missing record" error even
-	// if the tenant record exists in KV.
-	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
-
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
 	//
@@ -277,13 +269,6 @@ type TestServerInterface interface {
 	// the server.
 	SpanConfigKVSubscriber() interface{}
 
-	// KVFlowController returns the embedded kvflowcontrol.Controller for the
-	// server.
-	KVFlowController() interface{}
-
-	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
-	KVFlowHandles() interface{}
-
 	// TestTenants returns the test tenants associated with the server
 	TestTenants() []TestTenantInterface
 
@@ -298,14 +283,6 @@ type TestServerInterface interface {
 	// BinaryVersionOverride returns the value of an override if set using
 	// TestingKnobs.
 	BinaryVersionOverride() roachpb.Version
-
-	// KvProber returns a *kvprober.Prober, which is useful when asserting the
-	//correctness of the prober from integration tests.
-	KvProber() *kvprober.Prober
-
-	// TenantCapabilitiesReader retrieves a reference to the
-	// capabilities reader.
-	TenantCapabilitiesReader() tenantcapabilities.Reader
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -330,17 +307,15 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
-	// Determine if we should probabilistically start a test tenant
-	// for this server.
-	startDefaultSQLServer := ShouldStartDefaultTestTenant(t, params)
-	if !startDefaultSQLServer {
-		// If we're told not to start a test tenant, set the
-		// disable flag explicitly.
-		//
-		// TODO(#76378): review the definition of params.DefaultTestTenant
-		// so we do not need this weird sentinel value.
-		params.DefaultTestTenant = base.InternalNonDefaultDecision
+	if !params.DisableDefaultTestTenant {
+		// Determine if we should probabilistically start a test tenant
+		// for this server.
+		startDefaultSQLServer := ShouldStartDefaultTestTenant(t)
+		if !startDefaultSQLServer {
+			// If we're told not to start a test tenant, set the
+			// disable flag explicitly.
+			params.DisableDefaultTestTenant = true
+		}
 	}
 
 	s, err := NewServer(params)
@@ -351,15 +326,6 @@ func StartServer(
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("%+v", err)
 	}
-
-	if s.StartedDefaultTestTenant() {
-		t.Log(DefaultTestTenantMessage)
-	}
-
-	if !allowAdditionalTenants {
-		s.DisableStartTenant(PreventStartTenantError)
-	}
-
 	goDB := OpenDBConn(
 		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 
@@ -427,18 +393,15 @@ func OpenDBConn(
 }
 
 // StartServerRaw creates and starts a TestServer.
-// Generally StartServer() should be used. However, this function can be used
+// Generally StartServer() should be used. However this function can be used
 // directly when opening a connection to the server is not desired.
-func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface, error) {
+func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 	server, err := NewServer(args)
 	if err != nil {
 		return nil, err
 	}
 	if err := server.Start(context.Background()); err != nil {
 		return nil, err
-	}
-	if server.StartedDefaultTestTenant() {
-		t.Log(DefaultTestTenantMessage)
 	}
 	return server, nil
 }
@@ -453,7 +416,6 @@ func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (TestTenantInterface, *gosql.DB) {
-
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -515,10 +477,7 @@ func GetJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	u := ts.AdminURL().String()
-	fullURL := u + path
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
-	return httputil.GetJSON(httpClient, fullURL, response)
+	return httputil.GetJSON(httpClient, ts.AdminURL()+path, response)
 }
 
 // PostJSONProto uses the supplied client to POST the URL specified by the parameters
@@ -537,45 +496,5 @@ func PostJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	fullURL := ts.AdminURL().WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
-	return httputil.PostJSON(httpClient, fullURL, request, response)
-}
-
-// WaitForTenantCapabilities waits until the given set of capabilities have been cached.
-func WaitForTenantCapabilities(
-	t testing.TB,
-	s TestServerInterface,
-	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilities.ID]string,
-	errPrefix string,
-) {
-	if errPrefix != "" && !strings.HasSuffix(errPrefix, ": ") {
-		errPrefix += ": "
-	}
-	testutils.SucceedsSoon(t, func() error {
-		if tenID.IsSystem() {
-			return nil
-		}
-		if len(targetCaps) == 0 {
-			return nil
-		}
-
-		missingCapabilityError := func(capID tenantcapabilities.ID) error {
-			return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
-		}
-		capabilities, found := s.TenantCapabilitiesReader().GetCapabilities(tenID)
-		if !found {
-			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
-		}
-
-		for capID, expectedValue := range targetCaps {
-			curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
-			if curVal != expectedValue {
-				return missingCapabilityError(capID)
-			}
-		}
-
-		return nil
-	})
+	return httputil.PostJSON(httpClient, ts.AdminURL()+path, request, response)
 }

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 type config struct {
@@ -134,7 +132,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 
 	// Call the final value of logShutdownFn immediately if returning with error.
 	defer func() {
-		if err != nil && logShutdownFn != nil {
+		if err != nil {
 			logShutdownFn()
 		}
 	}()
@@ -249,17 +247,6 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	logging.stderrSink.noColor.Set(config.Sinks.Stderr.NoColor)
 	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
 		return nil, err
-	}
-	if config.Sinks.Stderr.NoColor {
-		// This branch exists for backward compatibility with CockroachDB
-		// v23.1 and previous versions. The same effect can be obtained
-		// using 'format-options: {colors: none}'.
-		switch t := logging.stderrSinkInfoTemplate.formatter.(type) {
-		case *formatCrdbV1:
-			t.colorProfile = nil
-		case *formatCrdbV2:
-			t.colorProfile = nil
-		}
 	}
 	logging.stderrSinkInfoTemplate.applyFilters(config.Sinks.Stderr.Channels)
 
@@ -450,15 +437,9 @@ func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
 	l.criticality = *c.Criticality
 	f, ok := formatters[*c.Format]
 	if !ok {
-		return errors.WithHintf(errors.Newf("unknown format: %q", *c.Format),
-			"Supported formats: %s.", redact.Safe(strings.Join(formatNames, ", ")))
+		return errors.Newf("unknown format: %q", *c.Format)
 	}
-	l.formatter = f()
-	for k, v := range c.FormatOptions {
-		if err := l.formatter.setOption(k, v); err != nil {
-			return err
-		}
-	}
+	l.formatter = f
 	return nil
 }
 

@@ -13,11 +13,9 @@ package state
 import (
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
@@ -42,7 +40,7 @@ func TestRangeSplit(t *testing.T) {
 	n1 := s.AddNode()
 	s1, _ := s.AddStore(n1.NodeID())
 
-	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
 
 	// Set the replica load of the existing replica to 100 write keys, to assert
 	// on the post split 50/50 load distribution.
@@ -129,7 +127,7 @@ func TestValidTransfer(t *testing.T) {
 	s2, _ := s.AddStore(n1.NodeID())
 
 	// Add replicas to store s2 on range r1.
-	s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s2.StoreID())
 
 	// Transferring a lease for range that does't exist shouldn't be possible.
 	require.False(t, s.ValidTransfer(100, s1.StoreID()))
@@ -141,7 +139,7 @@ func TestValidTransfer(t *testing.T) {
 	require.False(t, s.ValidTransfer(r1.RangeID(), s1.StoreID()))
 
 	// Add replicas to store s1 on range r1.
-	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s1.StoreID())
 
 	// Transferring a lease to store s2 (from s2) should not be possible, as s2
 	// already has the lease.
@@ -162,8 +160,8 @@ func TestTransferLease(t *testing.T) {
 	s2, _ := s.AddStore(n1.NodeID())
 
 	// Add replicas to store s1,s2 on range r1.
-	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
-	repl2, _ := s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
+	repl2, _ := s.AddReplica(r1.RangeID(), s2.StoreID())
 
 	// Assert that the initial leaseholder is replica 1, on store 1.
 	require.Equal(t, r1.Leaseholder(), repl1.ReplicaID())
@@ -205,8 +203,8 @@ func TestValidReplicaTarget(t *testing.T) {
 	require.False(t, s.CanRemoveReplica(r1.RangeID(), s1.StoreID()))
 
 	// Add replicas to store s1,s2 on range r1.
-	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
-	s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s1.StoreID())
+	s.AddReplica(r1.RangeID(), s2.StoreID())
 
 	// Ensure the lease is on s1.
 	s.TransferLease(r1.RangeID(), s1.StoreID())
@@ -230,9 +228,9 @@ func TestAddReplica(t *testing.T) {
 	s2, _ := s.AddStore(n1.NodeID())
 
 	// Add two replicas on s1, one on s2.
-	r1repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
-	r2repl1, _ := s.AddReplica(r2.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
-	r2repl2, _ := s.AddReplica(r2.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	r1repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
+	r2repl1, _ := s.AddReplica(r2.RangeID(), s1.StoreID())
+	r2repl2, _ := s.AddReplica(r2.RangeID(), s2.StoreID())
 
 	require.Equal(t, ReplicaID(1), r1repl1.ReplicaID())
 	require.Equal(t, ReplicaID(1), r2repl1.ReplicaID())
@@ -256,9 +254,9 @@ func TestWorkloadApply(t *testing.T) {
 	_, r2, _ := s.SplitRange(1000)
 	_, r3, _ := s.SplitRange(10000)
 
-	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
-	s.AddReplica(r2.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
-	s.AddReplica(r3.RangeID(), s3.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s1.StoreID())
+	s.AddReplica(r2.RangeID(), s2.StoreID())
+	s.AddReplica(r3.RangeID(), s3.StoreID())
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
@@ -272,15 +270,14 @@ func TestWorkloadApply(t *testing.T) {
 
 	// Assert that the leaseholder replica load correctly matches the number of
 	// requests made.
-	require.Equal(t, float64(100), s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).WritesPerSecond)
-	require.Equal(t, float64(1000), s.RangeUsageInfo(r2.RangeID(), s2.StoreID()).WritesPerSecond)
-	require.Equal(t, float64(10000), s.RangeUsageInfo(r3.RangeID(), s3.StoreID()).WritesPerSecond)
+	require.Equal(t, float64(100), s.ReplicaLoad(r1.RangeID(), s1.StoreID()).Load().WritesPerSecond)
+	require.Equal(t, float64(1000), s.ReplicaLoad(r2.RangeID(), s2.StoreID()).Load().WritesPerSecond)
+	require.Equal(t, float64(10000), s.ReplicaLoad(r3.RangeID(), s3.StoreID()).Load().WritesPerSecond)
 
 	expectedLoad := roachpb.StoreCapacity{WritesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
-	descs := s.StoreDescriptors(false, s1.StoreID(), s2.StoreID(), s3.StoreID())
-	sc1 := descs[0].Capacity
-	sc2 := descs[1].Capacity
-	sc3 := descs[2].Capacity
+	sc1 := Capacity(s, s1.StoreID())
+	sc2 := Capacity(s, s2.StoreID())
+	sc3 := Capacity(s, s3.StoreID())
 
 	// Assert that the store load is also updated upon request GetStoreLoad.
 	require.Equal(t, expectedLoad, sc1)
@@ -302,7 +299,7 @@ func TestReplicaLoadQPS(t *testing.T) {
 	qps := 1000
 	s1, _ := s.AddStore(n1.NodeID())
 	_, r1, _ := s.SplitRange(k1)
-	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s1.StoreID())
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
@@ -311,7 +308,7 @@ func TestReplicaLoadQPS(t *testing.T) {
 	}
 
 	s.TickClock(start)
-	testingResetLoad(s, r1.RangeID())
+	s.ReplicaLoad(r1.RangeID(), s1.StoreID()).ResetLoad()
 	for i := 1; i < 100; i++ {
 		applyLoadToStats(int64(k1), qps)
 		s.TickClock(OffsetTick(start, int64(i)))
@@ -319,7 +316,7 @@ func TestReplicaLoadQPS(t *testing.T) {
 
 	// Assert that the rated avg comes out to rate of queries applied per
 	// second.
-	require.Equal(t, float64(qps), s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).QueriesPerSecond)
+	require.Equal(t, float64(qps), s.ReplicaLoad(r1.RangeID(), s1.StoreID()).Load().QueriesPerSecond)
 }
 
 // TestKeyTranslation asserts that key encoding between roachpb keys and
@@ -450,270 +447,4 @@ func TestSplitRangeDeterministic(t *testing.T) {
 		require.Equal(t, lhsA, lhsB, "lhs not equal, failed after %d splits", i)
 		require.Equal(t, rhsA, rhsB, "rhs not equal, failed after %d splits", i)
 	}
-}
-
-func TestSetSpanConfig(t *testing.T) {
-	settings := config.DefaultSimulationSettings()
-
-	setupState := func() State {
-		s := newState(settings)
-		node := s.AddNode()
-		_, ok := s.AddStore(node.NodeID())
-		require.True(t, ok)
-
-		// Setup with the following ranges:
-		// [1,50) [50, 100) [100, 1000)
-		_, _, ok = s.SplitRange(1)
-		require.True(t, ok)
-		_, _, ok = s.SplitRange(50)
-		require.True(t, ok)
-		_, _, ok = s.SplitRange(100)
-		require.True(t, ok)
-		return s
-	}
-
-	keySet := func(keys ...Key) map[Key]struct{} {
-		ret := make(map[Key]struct{}, len(keys))
-		for _, key := range keys {
-			ret[key] = struct{}{}
-		}
-		return ret
-	}
-
-	testCases := []struct {
-		desc                        string
-		end, start                  Key
-		expectedAppliedStartKeys    map[Key]struct{}
-		expectedNonAppliedStartKeys map[Key]struct{}
-	}{
-		{
-			// Matching start and end key over a single range.
-			desc:                        "[1,50)",
-			start:                       1,
-			end:                         50,
-			expectedAppliedStartKeys:    keySet(1),
-			expectedNonAppliedStartKeys: keySet(50, 100),
-		},
-		{
-			// Matching start and end key over multiple ranges.
-			desc:                        "[1,100)",
-			start:                       1,
-			end:                         100,
-			expectedAppliedStartKeys:    keySet(1, 50),
-			expectedNonAppliedStartKeys: keySet(100),
-		},
-		{
-			// Matching start key, overlapping end key over single range.
-			desc:                        "[1,40)",
-			start:                       1,
-			end:                         40,
-			expectedAppliedStartKeys:    keySet(1),
-			expectedNonAppliedStartKeys: keySet(40, 50, 100),
-		},
-		{
-			// Matching start key, overlapping end key over multiple ranges.
-			desc:                        "[1,70)",
-			start:                       1,
-			end:                         70,
-			expectedAppliedStartKeys:    keySet(1, 50),
-			expectedNonAppliedStartKeys: keySet(70, 100),
-		},
-		{
-			// Overlapping start key, matching end key over single range.
-			desc:                        "[20,50)",
-			start:                       20,
-			end:                         50,
-			expectedAppliedStartKeys:    keySet(20),
-			expectedNonAppliedStartKeys: keySet(1, 50, 100),
-		},
-		{
-			// Overlapping start key, matching end key over multiple ranges.
-			desc:                        "[20,100)",
-			start:                       20,
-			end:                         100,
-			expectedAppliedStartKeys:    keySet(20, 50),
-			expectedNonAppliedStartKeys: keySet(1, 100),
-		},
-		{
-			// Overlapping start and end key over single range.
-			desc:                        "[20,40)",
-			start:                       20,
-			end:                         40,
-			expectedAppliedStartKeys:    keySet(20),
-			expectedNonAppliedStartKeys: keySet(1, 40, 50, 100),
-		},
-		{
-			// Overlapping start and end key over multiple ranges.
-			desc:                        "[20,70)",
-			start:                       20,
-			end:                         70,
-			expectedAppliedStartKeys:    keySet(20, 50),
-			expectedNonAppliedStartKeys: keySet(1, 70, 100),
-		},
-	}
-
-	const sentinel = int64(-1)
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			s := setupState()
-			config := roachpb.SpanConfig{
-				RangeMinBytes: sentinel,
-			}
-			span := roachpb.Span{
-				Key:    tc.start.ToRKey().AsRawKey(),
-				EndKey: tc.end.ToRKey().AsRawKey(),
-			}
-			s.SetSpanConfig(span, config)
-			for _, rng := range s.Ranges() {
-				start, _, ok := s.RangeSpan(rng.RangeID())
-				require.True(t, ok)
-				config := rng.SpanConfig()
-
-				// We ignore the range starting with the min key as we have pre-split
-				// the keyspace to start at key=1.
-				if start == MinKey {
-					continue
-				}
-
-				if _, ok := tc.expectedAppliedStartKeys[start]; ok {
-					require.Equal(t, sentinel, config.RangeMinBytes,
-						"sentinel not set, when should be for start key %d", start)
-				} else if _, ok := tc.expectedNonAppliedStartKeys[start]; ok {
-					require.NotEqual(t, sentinel, config.RangeMinBytes,
-						"sentinel set, when it should not be for start key %d", start)
-				} else {
-					t.Fatalf("Start key not found in either expected apply keys or unapplied keys %s", rng)
-				}
-			}
-		})
-	}
-}
-
-func TestSetNodeLiveness(t *testing.T) {
-	t.Run("liveness func", func(t *testing.T) {
-		s := LoadClusterInfo(
-			ClusterInfoWithStoreCount(3, 1),
-			config.DefaultSimulationSettings(),
-		)
-
-		liveFn := s.NodeLivenessFn()
-
-		s.SetNodeLiveness(1, livenesspb.NodeLivenessStatus_LIVE)
-		s.SetNodeLiveness(2, livenesspb.NodeLivenessStatus_DEAD)
-		s.SetNodeLiveness(3, livenesspb.NodeLivenessStatus_DECOMMISSIONED)
-
-		// Liveness status returend should ignore time till store dead or the
-		// timestamp given.
-		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
-	})
-
-	t.Run("node count fn", func(t *testing.T) {
-		s := LoadClusterInfo(
-			ClusterInfoWithStoreCount(10, 1),
-			config.DefaultSimulationSettings(),
-		)
-
-		countFn := s.NodeCountFn()
-
-		// Set node 1-5 as decommissioned and nodes 6-10 as dead. There should be a
-		// node count of 5.
-		for i := 1; i <= 5; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DECOMMISSIONED)
-		}
-		for i := 6; i <= 10; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DEAD)
-		}
-		require.Equal(t, 0, countFn())
-	})
-}
-
-// TestTopology loads cluster configurations and checks that the topology
-// output matches expectations.
-func TestTopology(t *testing.T) {
-	singleRegionTopology := LoadClusterInfo(SingleRegionConfig, config.DefaultSimulationSettings()).Topology()
-	require.Equal(t, `US
-  US_1
-    └── [1 2 3 4 5]
-  US_2
-    └── [6 7 8 9 10]
-  US_3
-    └── [11 12 13 14 15]
-`, singleRegionTopology.String())
-
-	multiRegionTopology := LoadClusterInfo(MultiRegionConfig, config.DefaultSimulationSettings()).Topology()
-	require.Equal(t, `EU
-  EU_1
-  │ └── [25 26 27 28]
-  EU_2
-  │ └── [29 30 31 32]
-  EU_3
-  │ └── [33 34 35 36]
-US_East
-  US_East_1
-  │ └── [1 2 3 4]
-  US_East_2
-  │ └── [5 6 7 8]
-  US_East_3
-  │ └── [9 10 11 12]
-US_West
-  US_West_1
-    └── [13 14 15 16]
-  US_West_2
-    └── [17 18 19 20]
-  US_West_3
-    └── [21 22 23 24]
-`, multiRegionTopology.String())
-
-	complexTopology := LoadClusterInfo(ComplexConfig, config.DefaultSimulationSettings()).Topology()
-	require.Equal(t, `EU
-  EU_1
-  │ └── [19 20 21]
-  EU_2
-  │ └── [22 23 24]
-  EU_3
-  │ └── [25 26 27 28]
-US_East
-  US_East_1
-  │ └── [1]
-  US_East_2
-  │ └── [2 3]
-  US_East_3
-  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
-US_West
-  US_West_1
-    └── [17 18]
-`, complexTopology.String())
-
-}
-
-func TestCapacityOverride(t *testing.T) {
-	settings := config.DefaultSimulationSettings()
-	tick := settings.StartTime
-	s := LoadClusterInfo(ClusterInfoWithStoreCount(1, 1), settings)
-	storeID, rangeID := StoreID(1), RangeID(1)
-	_, ok := s.AddReplica(rangeID, storeID, roachpb.VOTER_FULL)
-	require.True(t, ok)
-
-	override := NewCapacityOverride()
-	override.QueriesPerSecond = 42
-
-	// Overwrite the QPS store capacity field.
-	s.SetCapacityOverride(storeID, override)
-
-	// Record 100 QPS of load, this should not change the store capacity QPS as
-	// we set it above, however it should change the written keys field.
-	s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
-		Key:    1,
-		Writes: 500,
-	}})
-	s.TickClock(tick.Add(5 * time.Second))
-
-	capacity := s.StoreDescriptors(false /* cached */, storeID)[0].Capacity
-	require.Equal(t, 42.0, capacity.QueriesPerSecond)
-	// NB: Writes per second isn't used and is currently returned as the sum of
-	// writes to the store - we expect it to be 500 instead of 100 for that
-	// reason.
-	require.Equal(t, 500.0, capacity.WritesPerSecond)
 }

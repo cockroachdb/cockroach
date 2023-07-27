@@ -15,7 +15,6 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -94,11 +93,6 @@ func (s *CurrentState) Rollback() {
 	}
 	for i := range s.Targets {
 		t := &s.Targets[i]
-		// If the metadata is not populated this element
-		// only usd for tracking.
-		if !t.IsLinkedToSchemaChange() {
-			continue
-		}
 		switch t.TargetStatus {
 		case Status_ABSENT:
 			t.TargetStatus = Status_PUBLIC
@@ -144,16 +138,6 @@ type ElementGetter interface {
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
 	return e.GetElementOneOf().(ElementGetter).Element()
-}
-
-// IsLinkedToSchemaChange return if a Target is linked to a schema change.
-func (t *Target) IsLinkedToSchemaChange() bool {
-	return t.Metadata.IsLinkedToSchemaChange()
-}
-
-// IsLinkedToSchemaChange return if a TargetMetadata is linked to a schema change.
-func (t *TargetMetadata) IsLinkedToSchemaChange() bool {
-	return t.Size() > 0
 }
 
 // MakeTarget constructs a new Target. The passed elem must be one of the oneOf
@@ -224,11 +208,7 @@ func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (Curre
 			stmts[stmt.StatementRank] = stmt.Statement
 		}
 		s.Authorization = cs.Authorization
-		if cs.NameMapping.ID != catid.InvalidDescID {
-			s.NameMappings = append(s.NameMappings, *protoutil.Clone(&cs.NameMapping).(*NameMapping))
-		}
 	}
-	sort.Sort(NameMappings(s.NameMappings))
 	sort.Sort(&stateAndRanks{CurrentState: &s, ranks: targetRanks})
 	var sr stmtsAndRanks
 	for rank, stmt := range stmts {

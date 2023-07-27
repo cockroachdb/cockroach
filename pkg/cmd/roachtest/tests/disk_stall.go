@@ -161,15 +161,7 @@ func runDiskStalledDetection(
 		m.ExpectDeath()
 	}
 	s.Stall(ctx, c.Node(1))
-	// NB: We use a background context in the defer'ed unstall command,
-	// otherwise on test failure our c.Run calls will be ignored. Leaving
-	// the disk stalled will prevent artifact collection, making debugging
-	// difficult.
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		s.Unstall(ctx, c.Node(1))
-	}()
+	defer s.Unstall(ctx, c.Node(1))
 
 	// Wait twice the maximum sync duration and check if our SQL connection to
 	// node 1 is still alive. It should've been terminated.

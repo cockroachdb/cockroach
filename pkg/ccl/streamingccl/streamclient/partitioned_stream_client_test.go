@@ -70,7 +70,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 		base.TestServerArgs{
 			// Need to disable the test tenant until tenant-level restore is
 			// supported. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

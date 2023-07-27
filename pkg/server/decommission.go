@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -36,39 +35,39 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-// DecommissioningNodeMap tracks the set of nodes that we know are
+// decommissioningNodeMap tracks the set of nodes that we know are
 // decommissioning. This map is used to inform whether we need to proactively
 // enqueue some decommissioning node's ranges for rebalancing.
-type DecommissioningNodeMap struct {
+type decommissioningNodeMap struct {
 	syncutil.RWMutex
 	nodes map[roachpb.NodeID]interface{}
 }
 
-// DecommissionRangeCheckResult is the result of evaluating the allocator action
+// decommissionRangeCheckResult is the result of evaluating the allocator action
 // and target for a single range that has an extant replica on a node targeted
 // for decommission.
-type DecommissionRangeCheckResult struct {
-	Desc         roachpb.RangeDescriptor
-	Action       string
-	TracingSpans tracingpb.Recording
-	Err          error
+type decommissionRangeCheckResult struct {
+	desc         roachpb.RangeDescriptor
+	action       string
+	tracingSpans tracingpb.Recording
+	err          error
 }
 
-// DecommissionPreCheckResult is the result of checking the readiness
+// decommissionPreCheckResult is the result of checking the readiness
 // of a node or set of nodes to be decommissioned.
-type DecommissionPreCheckResult struct {
-	RangesChecked  int
-	ReplicasByNode map[roachpb.NodeID][]roachpb.ReplicaIdent
-	ActionCounts   map[string]int
-	RangesNotReady []DecommissionRangeCheckResult
+type decommissionPreCheckResult struct {
+	rangesChecked  int
+	replicasByNode map[roachpb.NodeID][]roachpb.ReplicaIdent
+	actionCounts   map[string]int
+	rangesNotReady []decommissionRangeCheckResult
 }
 
 // makeOnNodeDecommissioningCallback returns a callback that enqueues the
 // decommissioning node's ranges into the `stores`' replicateQueues for
 // rebalancing.
-func (t *DecommissioningNodeMap) makeOnNodeDecommissioningCallback(
+func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 	stores *kvserver.Stores,
-) func(id roachpb.NodeID) {
+) liveness.OnNodeDecommissionCallback {
 	return func(decommissioningNodeID roachpb.NodeID) {
 		ctx := context.Background()
 		t.Lock()
@@ -125,7 +124,7 @@ func (t *DecommissioningNodeMap) makeOnNodeDecommissioningCallback(
 	}
 }
 
-func (t *DecommissioningNodeMap) onNodeDecommissioned(nodeID roachpb.NodeID) {
+func (t *decommissioningNodeMap) onNodeDecommissioned(nodeID roachpb.NodeID) {
 	t.Lock()
 	defer t.Unlock()
 	// NB: We may have already deleted this node, but that's ok.
@@ -139,12 +138,16 @@ func getPingCheckDecommissionFn(
 	return nodeTombStorage, func(ctx context.Context, nodeID roachpb.NodeID, errorCode codes.Code) error {
 		ts, err := nodeTombStorage.IsDecommissioned(ctx, nodeID)
 		if err != nil {
-			return errors.Wrapf(err, "unable to read decommissioned status for n%d", nodeID)
+			// An error here means something very basic is not working. Better to terminate
+			// than to limp along.
+			log.Fatalf(ctx, "unable to read decommissioned status for n%d: %v", nodeID, err)
 		}
 		if !ts.IsZero() {
-			return kvpb.NewDecommissionedStatusErrorf(errorCode,
+			// The node was decommissioned.
+			return grpcstatus.Errorf(errorCode,
 				"n%d was permanently removed from the cluster at %s; it is not allowed to rejoin the cluster",
-				nodeID, ts)
+				nodeID, ts,
+			)
 		}
 		// The common case - target node is not decommissioned.
 		return nil
@@ -165,11 +168,11 @@ func (s *Server) DecommissionPreCheck(
 	strictReadiness bool,
 	collectTraces bool,
 	maxErrors int,
-) (DecommissionPreCheckResult, error) {
+) (decommissionPreCheckResult, error) {
 	// Ensure that if collectTraces is enabled, that a maxErrors >0 is set in
 	// order to avoid unlimited memory usage.
 	if collectTraces && maxErrors <= 0 {
-		return DecommissionPreCheckResult{},
+		return decommissionPreCheckResult{},
 			grpcstatus.Error(codes.InvalidArgument, "MaxErrors must be set to collect traces.")
 	}
 
@@ -177,7 +180,7 @@ func (s *Server) DecommissionPreCheck(
 	decommissionCheckNodeIDs := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
 	replicasByNode := make(map[roachpb.NodeID][]roachpb.ReplicaIdent)
 	actionCounts := make(map[string]int)
-	var rangeErrors []DecommissionRangeCheckResult
+	var rangeErrors []decommissionRangeCheckResult
 	const pageSize = 10000
 
 	for _, nodeID := range nodeIDs {
@@ -210,7 +213,7 @@ func (s *Server) DecommissionPreCheck(
 		err = errors.Errorf("n%d has no initialized store", s.NodeID())
 	}
 	if err != nil {
-		return DecommissionPreCheckResult{}, grpcstatus.Error(codes.NotFound, err.Error())
+		return decommissionPreCheckResult{}, grpcstatus.Error(codes.NotFound, err.Error())
 	}
 
 	// Define our node liveness overrides to simulate that the nodeIDs for which
@@ -274,14 +277,14 @@ func (s *Server) DecommissionPreCheck(
 	})
 
 	if err != nil {
-		return DecommissionPreCheckResult{}, grpcstatus.Errorf(codes.Internal, err.Error())
+		return decommissionPreCheckResult{}, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 
-	return DecommissionPreCheckResult{
-		RangesChecked:  rangesChecked,
-		ReplicasByNode: replicasByNode,
-		ActionCounts:   actionCounts,
-		RangesNotReady: rangeErrors,
+	return decommissionPreCheckResult{
+		rangesChecked:  rangesChecked,
+		replicasByNode: replicasByNode,
+		actionCounts:   actionCounts,
+		rangesNotReady: rangeErrors,
 	}, nil
 }
 
@@ -295,15 +298,15 @@ func evaluateRangeCheckResult(
 	action allocatorimpl.AllocatorAction,
 	recording tracingpb.Recording,
 	rErr error,
-) (passed bool, _ DecommissionRangeCheckResult) {
-	checkResult := DecommissionRangeCheckResult{
-		Desc:   *desc,
-		Action: action.String(),
-		Err:    rErr,
+) (passed bool, _ decommissionRangeCheckResult) {
+	checkResult := decommissionRangeCheckResult{
+		desc:   *desc,
+		action: action.String(),
+		err:    rErr,
 	}
 
 	if collectTraces {
-		checkResult.TracingSpans = recording
+		checkResult.tracingSpans = recording
 	}
 
 	if rErr != nil {
@@ -313,14 +316,14 @@ func evaluateRangeCheckResult(
 	if action == allocatorimpl.AllocatorRangeUnavailable ||
 		action == allocatorimpl.AllocatorNoop ||
 		action == allocatorimpl.AllocatorConsiderRebalance {
-		checkResult.Err = errors.Errorf("range r%d requires unexpected allocation action: %s",
+		checkResult.err = errors.Errorf("range r%d requires unexpected allocation action: %s",
 			desc.RangeID, action,
 		)
 		return false, checkResult
 	}
 
 	if strictReadiness && !(action.Replace() || action.Remove()) {
-		checkResult.Err = errors.Errorf(
+		checkResult.err = errors.Errorf(
 			"range r%d needs repair beyond replacing/removing the decommissioning replica: %s",
 			desc.RangeID, action,
 		)

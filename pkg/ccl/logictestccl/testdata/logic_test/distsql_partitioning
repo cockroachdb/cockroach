@@ -13,7 +13,7 @@ ALTER TABLE t1 PARTITION BY LIST (x) (
 )
 
 query TTTTTTTTT colnames
-SELECT * FROM [SHOW PARTITIONS FROM DATABASE test] ORDER BY partition_name
+SHOW PARTITIONS FROM DATABASE test
 ----
 database_name  table_name  partition_name  parent_partition  column_names  index_name  partition_value  zone_config  full_zone_config
 test           t1          p1              NULL              x             t1@t1_pkey  (1)              NULL         range_min_bytes = 134217728,
@@ -41,7 +41,7 @@ ALTER PARTITION p2 OF TABLE t1 CONFIGURE ZONE USING constraints='[+dc=dc2]';
 ALTER PARTITION p3 OF TABLE t1 CONFIGURE ZONE USING constraints='[+dc=dc3]'
 
 query TTTTTTTTT colnames
-SELECT * FROM [SHOW PARTITIONS FROM DATABASE test] ORDER BY partition_name
+SHOW PARTITIONS FROM DATABASE test
 ----
 database_name  table_name  partition_name  parent_partition  column_names  index_name  partition_value  zone_config                full_zone_config
 test           t1          p1              NULL              x             t1@t1_pkey  (1)              constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
@@ -64,7 +64,7 @@ test           t1          p3              NULL              x             t1@t1
                                                                                                                                    lease_preferences = '[]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM TABLE t1] ORDER BY partition_name
+SHOW PARTITIONS FROM TABLE t1
 ----
 test  t1  p1  NULL  x  t1@t1_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                    range_max_bytes = 536870912,
@@ -86,7 +86,7 @@ test  t1  p3  NULL  x  t1@t1_pkey  (3)  constraints = '[+dc=dc3]'  range_min_byt
                                                                    lease_preferences = '[]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM INDEX t1@t1_pkey] ORDER BY partition_name
+SHOW PARTITIONS FROM INDEX t1@t1_pkey
 ----
 test  t1  p1  NULL  x  t1@t1_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                    range_max_bytes = 536870912,
@@ -121,7 +121,7 @@ ALTER PARTITION p1 OF TABLE t2 CONFIGURE ZONE USING constraints='[+dc=dc1]';
 ALTER PARTITION p2 OF TABLE t2 CONFIGURE ZONE USING constraints='[+dc=dc2]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM DATABASE test] ORDER BY table_name, partition_name
+SHOW PARTITIONS FROM DATABASE test
 ----
 test  t1  p1  NULL  x  t1@t1_pkey  (1)         constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
@@ -155,7 +155,7 @@ test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_
                                                                           lease_preferences = '[]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM TABLE t2] ORDER BY partition_name
+SHOW PARTITIONS FROM TABLE t2
 ----
 test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
@@ -171,7 +171,7 @@ test  t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_
                                                                           lease_preferences = '[]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM INDEX t2@t2_pkey] ORDER BY partition_name
+SHOW PARTITIONS FROM INDEX t2@t2_pkey
 ----
 test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                           range_max_bytes = 536870912,
@@ -208,7 +208,7 @@ ALTER PARTITION p3 OF INDEX t3@sec CONFIGURE ZONE USING constraints='[+dc=dc3]';
 ALTER PARTITION p4 OF INDEX t3@sec CONFIGURE ZONE USING constraints='[+dc=dc4]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM TABLE t3] ORDER BY partition_name
+SHOW PARTITIONS FROM TABLE t3
 ----
 test  t3  p1  NULL  x  t3@t3_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                    range_max_bytes = 536870912,
@@ -236,7 +236,7 @@ test  t3  p4  NULL  y  t3@sec      (4)  constraints = '[+dc=dc4]'  range_min_byt
                                                                    lease_preferences = '[]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM INDEX t3@*] ORDER BY partition_name
+SHOW PARTITIONS FROM INDEX t3@*
 ----
 test  t3  p1  NULL  x  t3@t3_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                    range_max_bytes = 536870912,
@@ -264,7 +264,7 @@ test  t3  p4  NULL  y  t3@sec      (4)  constraints = '[+dc=dc4]'  range_min_byt
                                                                    lease_preferences = '[]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM INDEX t3@sec] ORDER BY partition_name
+SHOW PARTITIONS FROM INDEX t3@sec
 ----
 test  t3  p3  NULL  y  t3@sec  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
                                                                range_max_bytes = 536870912,
@@ -301,7 +301,7 @@ ALTER PARTITION p2 OF TABLE t4 CONFIGURE ZONE USING constraints='[+dc=dc4]';
 ALTER PARTITION p2_a OF TABLE t4 CONFIGURE ZONE USING constraints='[+dc=dc5]'
 
 query TTTTTTTTT
-SELECT * FROM [SHOW PARTITIONS FROM TABLE t4] ORDER BY partition_name
+SHOW PARTITIONS FROM TABLE t4
 ----
 test  t4  p1    NULL  x  t4@t4_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
                                                                      range_max_bytes = 536870912,
@@ -345,13 +345,13 @@ statement ok
 ALTER INDEX partitioning.inheritance@inheritance_pkey PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
 
 statement ok
-ALTER DATABASE partitioning CONFIGURE ZONE USING range_min_bytes=64000, range_max_bytes=75000000
+ALTER DATABASE partitioning CONFIGURE ZONE USING range_min_bytes=64000, range_max_bytes=75000
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
-                                                                                 range_max_bytes = 75000000,
+                                                                                 range_max_bytes = 75000,
                                                                                  gc.ttlseconds = 14400,
                                                                                  num_replicas = 3,
                                                                                  constraints = '[]',
@@ -364,7 +364,7 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
-range_max_bytes = 75000000,
+range_max_bytes = 75000,
 gc.ttlseconds = 80000,
 num_replicas = 3,
 constraints = '[]',
@@ -377,7 +377,7 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
-range_max_bytes = 75000000,
+range_max_bytes = 75000,
 gc.ttlseconds = 80000,
 num_replicas = 5,
 constraints = '[]',
@@ -390,7 +390,7 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 64000,
-range_max_bytes = 75000000,
+range_max_bytes = 75000,
 gc.ttlseconds = 80000,
 num_replicas = 5,
 constraints = '[+dc=dc1]',

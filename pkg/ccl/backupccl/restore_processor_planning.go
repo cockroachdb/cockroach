@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -50,13 +49,6 @@ var replanRestoreFrequency = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-var memoryMonitorSSTs = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.restore.memory_monitor_ssts",
-	"if true, restore will limit number of simultaneously open SSTs based on available memory",
-	false,
-)
-
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
 // streams back progress updates over the given progCh. The first stage is a
 // splitAndScatter processor on every node that is running a compatible version.
@@ -77,9 +69,9 @@ func distRestore(
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	spanFilter spanCoveringFilter,
+	numNodes int,
 	numImportSpans int,
 	useSimpleImportSpans bool,
-	execLocality roachpb.Locality,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	defer close(progCh)
@@ -110,29 +102,23 @@ func distRestore(
 		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
-	memMonSSTs := memoryMonitorSSTs.Get(execCtx.ExecCfg().SV())
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
-		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
-			ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
-			physicalplan.DefaultReplicaChooser, execLocality,
-		)
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
 		if err != nil {
 			return nil, nil, err
 		}
 
-		numNodes := len(sqlInstanceIDs)
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:             int64(jobID),
-			RestoreTime:       restoreTime,
-			Encryption:        fileEncryption,
-			TableRekeys:       dataToRestore.getRekeys(),
-			TenantRekeys:      dataToRestore.getTenantRekeys(),
-			PKIDs:             dataToRestore.getPKIDs(),
-			ValidateOnly:      dataToRestore.isValidateOnly(),
-			MemoryMonitorSSTs: memMonSSTs,
+			JobID:        int64(jobID),
+			RestoreTime:  restoreTime,
+			Encryption:   fileEncryption,
+			TableRekeys:  dataToRestore.getRekeys(),
+			TenantRekeys: dataToRestore.getTenantRekeys(),
+			PKIDs:        dataToRestore.getPKIDs(),
+			ValidateOnly: dataToRestore.isValidateOnly(),
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.

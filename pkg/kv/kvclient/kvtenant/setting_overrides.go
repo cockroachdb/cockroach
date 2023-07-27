@@ -13,7 +13,6 @@ package kvtenant
 import (
 	"context"
 	"io"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -25,7 +24,7 @@ import (
 // runTenantSettingsSubscription listens for tenant setting override changes.
 // It closes the given channel once the initial set of overrides were obtained.
 // Exits when the context is done.
-func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan<- error) {
+func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan struct{}) {
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
@@ -39,16 +38,6 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			c.tryForgetClient(ctx, client)
 			continue
 		}
-
-		// Reset the sentinel checks. We start a new sequence of messages
-		// from the server every time we (re)connect.
-		func() {
-			c.settingsMu.Lock()
-			defer c.settingsMu.Unlock()
-			c.settingsMu.receivedFirstAllTenantOverrides = false
-			c.settingsMu.receivedFirstSpecificOverrides = false
-		}()
-
 		for {
 			e, err := stream.Recv()
 			if err != nil {
@@ -61,29 +50,8 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				break
 			}
 			if e.Error != (errorspb.EncodedError{}) {
-				// Hard logical error.
-				err := errors.DecodeError(ctx, e.Error)
-				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
-				if startupCh != nil && errors.Is(err, &kvpb.MissingRecordError{}) && c.earlyShutdownIfMissingTenantRecord {
-					startupCh <- err
-					close(startupCh)
-					c.tryForgetClient(ctx, client)
-					return
-				}
-				// Other errors, or configuration tells us to continue if the
-				// tenant record in missing: in that case we continue the
-				// loop. We're expecting io.EOF from the server next, which
-				// will lead us to reconnect and retry.
-				//
-				// However, don't hammer the server with retries if there was
-				// an actual error reported: we wait a bit before the retry.
-				select {
-				case <-time.After(1 * time.Second):
-
-				case <-ctx.Done():
-					// Shutdown or cancellation short circuits the wait and retry.
-					return
-				}
+				// Hard logical error. We expect io.EOF next.
+				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", e.Error)
 				continue
 			}
 
@@ -100,7 +68,6 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				log.Infof(ctx, "received initial tenant settings")
 
 				if startupCh != nil {
-					startupCh <- nil
 					close(startupCh)
 					startupCh = nil
 				}
@@ -116,29 +83,18 @@ func (c *connector) processSettingsEvent(
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
 
+	if (!c.settingsMu.receivedFirstAllTenantOverrides || !c.settingsMu.receivedFirstSpecificOverrides) && e.Incremental {
+		return false, errors.Newf("need to receive non-incremental setting events first")
+	}
+
 	var m map[string]settings.EncodedValue
 	switch e.Precedence {
 	case kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES:
-		if !c.settingsMu.receivedFirstAllTenantOverrides && e.Incremental {
-			return false, errors.Newf(
-				"need to receive non-incremental setting event first for precedence %v",
-				e.Precedence,
-			)
-		}
-
 		c.settingsMu.receivedFirstAllTenantOverrides = true
 		m = c.settingsMu.allTenantOverrides
-
 	case kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES:
-		if !c.settingsMu.receivedFirstSpecificOverrides && e.Incremental {
-			return false, errors.Newf(
-				"need to receive non-incremental setting events first for precedence %v",
-				e.Precedence,
-			)
-		}
 		c.settingsMu.receivedFirstSpecificOverrides = true
 		m = c.settingsMu.specificOverrides
-
 	default:
 		return false, errors.Newf("unknown precedence value %d", e.Precedence)
 	}
@@ -159,10 +115,13 @@ func (c *connector) processSettingsEvent(
 		}
 	}
 
-	// Notify watchers if any.
-	close(c.settingsMu.notifyCh)
-	// Define a new notification channel for subsequent watchers.
-	c.settingsMu.notifyCh = make(chan struct{})
+	// Do a non-blocking send on the notification channel (if it is not nil). This
+	// is a buffered channel and if it already contains a message, there's no
+	// point in sending a duplicate notification.
+	select {
+	case c.settingsMu.notifyCh <- struct{}{}:
+	default:
+	}
 
 	// The protocol defines that the server sends one initial
 	// non-incremental message for both precedences.
@@ -170,13 +129,28 @@ func (c *connector) processSettingsEvent(
 	return settingsReady, nil
 }
 
-// Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (c *connector) Overrides() (map[string]settings.EncodedValue, <-chan struct{}) {
+// RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor
+// interface.
+func (c *connector) RegisterOverridesChannel() <-chan struct{} {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
+	if c.settingsMu.notifyCh != nil {
+		panic(errors.AssertionFailedf("multiple calls not supported"))
+	}
+	ch := make(chan struct{}, 1)
+	// Send an initial message on the channel.
+	ch <- struct{}{}
+	c.settingsMu.notifyCh = ch
+	return ch
+}
 
-	res := make(map[string]settings.EncodedValue, len(c.settingsMu.allTenantOverrides)+len(c.settingsMu.specificOverrides))
-
+// Overrides is part of the settingswatcher.OverridesMonitor interface.
+func (c *connector) Overrides() map[string]settings.EncodedValue {
+	// We could be more efficient here, but we expect this function to be called
+	// only when there are changes (which should be rare).
+	res := make(map[string]settings.EncodedValue)
+	c.settingsMu.Lock()
+	defer c.settingsMu.Unlock()
 	// First copy the all-tenant overrides.
 	for name, val := range c.settingsMu.allTenantOverrides {
 		res[name] = val
@@ -186,5 +160,5 @@ func (c *connector) Overrides() (map[string]settings.EncodedValue, <-chan struct
 	for name, val := range c.settingsMu.specificOverrides {
 		res[name] = val
 	}
-	return res, c.settingsMu.notifyCh
+	return res
 }

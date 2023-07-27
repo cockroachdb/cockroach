@@ -69,7 +69,6 @@ type configuration struct {
 
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
-		"acceptance":    d.generateAcceptanceTests,
 		"bazel":         d.generateBazel,
 		"bnf":           d.generateBNF,
 		"cgo":           d.generateCgo,
@@ -230,17 +229,6 @@ func (d *dev) generateLogicTest(cmd *cobra.Command) error {
 	)
 }
 
-func (d *dev) generateAcceptanceTests(cmd *cobra.Command) error {
-	ctx := cmd.Context()
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-	return d.exec.CommandContextInheritingStdStreams(
-		ctx, "bazel", "run", "pkg/cmd/generate-acceptance-tests", "--", fmt.Sprintf("-out-dir=%s", workspace),
-	)
-}
-
 func (d *dev) generateProtobuf(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:go_proto")
 }
@@ -315,7 +303,7 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 		return fmt.Errorf("building JS development prerequisites: %w", err)
 	}
 
-	bazelBin, err := d.getBazelBin(ctx, []string{})
+	bazelBin, err := d.getBazelBin(ctx)
 	if err != nil {
 		return err
 	}

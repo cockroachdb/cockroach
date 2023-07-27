@@ -25,8 +25,6 @@ var (
 	ReadInterval         = readInterval
 	WriteEnabled         = writeEnabled
 	WriteInterval        = writeInterval
-	QuarantineEnabled    = quarantineWriteEnabled
-	QuarantineInterval   = quarantineWriteInterval
 	NumStepsToPlanAtOnce = numStepsToPlanAtOnce
 )
 

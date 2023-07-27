@@ -12,13 +12,14 @@ package concurrency
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -170,9 +170,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 					// immediately without waiting. If the conflict is a lock then
 					// push the lock holder's transaction using a PUSH_TOUCH to
 					// determine whether the lock is abandoned or whether its holder
-					// is still active. If the conflict is a concurrent transaction that
-					// is being sequence through the lock table that has claimed the lock,
-					// raise an error immediately -- we know the request is active.
+					// is still active. If the conflict is a reservation holder,
+					// raise an error immediately, we know the reservation holder is
+					// active.
 					if state.held {
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
@@ -203,10 +203,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 				livenessPush := state.kind == waitForDistinguished
 				deadlockPush := true
 
-				// If the conflict is a claimant transaction that hasn't acquired the
-				// lock yet there's no need to perform a liveness push - the request
-				// must be alive or its context would have been canceled and it would
-				// have exited its lock wait-queues.
+				// If the conflict is a reservation holder and not a held lock then
+				// there's no need to perform a liveness push - the request must be
+				// alive or its context would have been canceled and it would have
+				// exited its lock wait-queues.
 				if !state.held {
 					livenessPush = false
 				}
@@ -214,7 +214,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// For non-transactional requests, there's no need to perform
 				// deadlock detection because a non-transactional request can
 				// not be part of a dependency cycle. Non-transactional requests
-				// cannot hold locks (and by extension, claim them).
+				// cannot hold locks or reservations.
 				if req.Txn == nil {
 					deadlockPush = false
 				}
@@ -310,10 +310,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 				return w.pushLockTxn(ctx, req, state)
 
 			case waitSelf:
-				// Another request from the same transaction has claimed the lock (but
-				// not yet acquired it). This can only happen when the request's
-				// transaction is sending multiple requests concurrently. Proceed with
-				// waiting without pushing anyone.
+				// Another request from the same transaction is the reservation
+				// holder of this lock wait-queue. This can only happen when the
+				// request's transaction is sending multiple requests concurrently.
+				// Proceed with waiting without pushing anyone.
 
 			case waitQueueMaxLengthExceeded:
 				// The request attempted to wait in a lock wait-queue whose length was
@@ -368,14 +368,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// through intent resolution. The request has a dependency on the
 				// entire conflicting transaction.
 				//
-				// However, if the request is conflicting with another request (that has
-				// claimed the lock, but not yet acquired it) then it pushes the
-				// claimant transaction asynchronously while continuing to listen to
-				// state transition in the lockTable. This allows the request to cancel
-				// its push if the conflicting claimant transaction exits the lock
-				// wait-queue without leaving behind a lock. In this case, the request
-				// has a dependency on the conflicting request but not necessarily the
-				// entire conflicting transaction.
+				// However, if the request is conflicting with another request (a
+				// reservation holder) then it pushes the reservation holder
+				// asynchronously while continuing to listen to state transition in
+				// the lockTable. This allows the request to cancel its push if the
+				// conflicting reservation exits the lock wait-queue without leaving
+				// behind a lock. In this case, the request has a dependency on the
+				// conflicting request but not necessarily the entire conflicting
+				// transaction.
 				if timerWaitingState.held {
 					return w.pushLockTxn(ctx, req, timerWaitingState)
 				}
@@ -407,9 +407,8 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// Resolve the conflict without waiting. If the conflict is a lock
 				// then push the lock holder's transaction using a PUSH_TOUCH to
 				// determine whether the lock is abandoned or whether its holder is
-				// still active. If the conflict is a claimant transaction, raise an
-				// error immediately, we know the transaction that has claimed (but not
-				// yet acquired) the lock active.
+				// still active. If the conflict is a reservation holder, raise an
+				// error immediately, we know the reservation holder is active.
 				if timerWaitingState.held {
 					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
 				}
@@ -478,7 +477,8 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// under the lock. For write-write conflicts, try to abort the lock
 		// holder entirely so the write request can revoke and replace the lock
 		// with its own lock.
-		if ws.guardStrength == lock.None {
+		switch ws.guardAccess {
+		case spanset.SpanReadOnly:
 			pushType = kvpb.PUSH_TIMESTAMP
 			beforePushObs = roachpb.ObservedTimestamp{
 				NodeID:    w.nodeDesc.NodeID,
@@ -498,10 +498,11 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 			// not persist this, but still preserve the local timestamp when the
 			// adjusting the intent, accepting that the intent would then no longer
 			// round-trip and would lose the local timestamp if rewritten later.
-			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.Short(), h.Timestamp)
-		} else {
+			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
+
+		case spanset.SpanReadWrite:
 			pushType = kvpb.PUSH_ABORT
-			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.Short())
+			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.ID.Short())
 		}
 
 	case lock.WaitPolicy_Error:
@@ -511,7 +512,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// lock, but we push using a PUSH_TOUCH to immediately return an error
 		// if the lock hold is still active.
 		pushType = kvpb.PUSH_TOUCH
-		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.Short())
+		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.ID.Short())
 
 	default:
 		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
@@ -697,7 +698,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	// the caller of this function cancels the push.
 	h := w.pushHeader(req)
 	pushType := kvpb.PUSH_ABORT
-	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.Short())
+	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.ID.Short())
 
 	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
@@ -706,7 +707,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 
 	// Even if the push succeeded and aborted the other transaction to break a
 	// deadlock, there's nothing for the pusher to clean up. The conflicting
-	// request will quickly exit the lock wait-queue and release its claim
+	// request will quickly exit the lock wait-queue and release its reservation
 	// once it notices that it is aborted and the pusher will be free to proceed
 	// because it was not waiting on any locks. If the pusher's request does end
 	// up hitting a lock which the pushee fails to clean up, it will perform the
@@ -743,15 +744,16 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	// Example:
 	//
 	//  req(1, txn1), req(1, txn2) are both waiting on a lock held by txn3, and
-	//  they respectively hold a claim (but not the lock itself) on key "a" and
-	//  key "b". req(2, txn2) queues up behind the claim on key "a" and req(2,
-	//  txn1) queues up behind the claim on key "b". Now the dependency cycle
-	//  between txn1 and txn2 only involves requests, but some of the requests
-	//  here also depend on a lock. So when both txn1, txn2 are aborted, the
-	//  req(1, txn1), req(1, txn2) are guaranteed to eventually notice through
-	//  self-directed QueryTxn requests and will exit the lockTable, allowing
-	//  req(2, txn1) and req(2, txn2) to claim the lock and now they no longer
-	//  depend on each other.
+	//  they respectively hold a reservation on key "a" and key "b". req(2, txn2)
+	//  queues up behind the reservation on key "a" and req(2, txn1) queues up
+	//  behind the reservation on key "b". Now the dependency cycle between txn1
+	//  and txn2 only involves requests, but some of the requests here also
+	//  depend on a lock. So when both txn1, txn2 are aborted, the req(1, txn1),
+	//  req(1, txn2) are guaranteed to eventually notice through self-directed
+	//  QueryTxn requests and will exit the lockTable, allowing req(2, txn1) and
+	//  req(2, txn2) to get the reservation and now they no longer depend on each
+	//  other.
+	//
 	return nil
 }
 
@@ -1007,7 +1009,7 @@ const tagWaitKey = "wait_key"
 const tagWaitStart = "wait_start"
 
 // tagLockHolderTxn is the tracing span tag indicating the ID of the txn holding
-// the lock (or has claimed the lock) that the request is currently waiting
+// the lock (or a reservation on the lock) that the request is currently waiting
 // on.
 const tagLockHolderTxn = "holder_txn"
 
@@ -1277,40 +1279,30 @@ func newWriteIntentErr(req Request, ws waitingState, reason kvpb.WriteIntentErro
 }
 
 func canPushWithPriority(req Request, s waitingState) bool {
+	var pusher, pushee enginepb.TxnPriority
+	if req.Txn != nil {
+		pusher = req.Txn.Priority
+	} else {
+		pusher = roachpb.MakePriority(req.NonTxnPriority)
+	}
 	if s.txn == nil {
 		// Can't push a non-transactional request.
 		return false
 	}
-	var pushType kvpb.PushTxnType
-	if s.guardStrength == lock.None {
-		pushType = kvpb.PUSH_TIMESTAMP
-	} else {
-		pushType = kvpb.PUSH_ABORT
-	}
-	var pusherIso, pusheeIso isolation.Level
-	var pusherPri, pusheePri enginepb.TxnPriority
-	if req.Txn != nil {
-		pusherIso = req.Txn.IsoLevel
-		pusherPri = req.Txn.Priority
-	} else {
-		pusherIso = isolation.Serializable
-		pusherPri = roachpb.MakePriority(req.NonTxnPriority)
-	}
-	pusheeIso = s.txn.IsoLevel
-	pusheePri = s.txn.Priority
-	return txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri)
+	pushee = s.txn.Priority
+	return txnwait.CanPushWithPriority(pusher, pushee)
 }
 
 func logResolveIntent(ctx context.Context, intent roachpb.LockUpdate) {
 	if !log.ExpensiveLogEnabled(ctx, 2) {
 		return
 	}
-	var obsStr redact.RedactableString
+	var obsStr string
 	if obs := intent.ClockWhilePending; obs != (roachpb.ObservedTimestamp{}) {
-		obsStr = redact.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
+		obsStr = fmt.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
 	}
 	log.VEventf(ctx, 2, "resolving intent %s for txn %s with %s status%s",
-		intent.Key, intent.Txn.Short(), intent.Status, obsStr)
+		intent.Key, intent.Txn.ID.Short(), intent.Status, obsStr)
 }
 
 func minDuration(a, b time.Duration) time.Duration {

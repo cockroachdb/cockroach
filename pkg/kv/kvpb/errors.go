@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
-	"github.com/gogo/protobuf/proto"
 )
 
 // Printer is an interface that lets us use what's common between the
@@ -100,8 +99,8 @@ const (
 	// allow RollbackToSavepoint() to be called after such errors. In particular,
 	// this is useful for SQL which wants to allow rolling back to a savepoint
 	// after ConditionFailedErrors (uniqueness violations) and WriteIntentError
-	// (lock not available errors). With continuing after errors it's important
-	// for the coordinator to track the timestamp at which intents might have been
+	// (lock not available errors). With continuing after errors its important for
+	// the coordinator to track the timestamp at which intents might have been
 	// written.
 	//
 	// Note that all the lower scores also are unambiguous in this sense, so this
@@ -929,11 +928,11 @@ func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key roachpb.Key) *
 
 func (e *WriteTooOldError) SafeFormatError(p errors.Printer) (next error) {
 	if len(e.Key) > 0 {
-		p.Printf("WriteTooOldError: write for key %s at timestamp %s too old; must write at or above %s",
+		p.Printf("WriteTooOldError: write for key %s at timestamp %s too old; wrote at %s",
 			e.Key, e.Timestamp, e.ActualTimestamp)
 		return nil
 	}
-	p.Printf("WriteTooOldError: write at timestamp %s too old; must write at or above %s",
+	p.Printf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
 		e.Timestamp, e.ActualTimestamp)
 	return nil
 }
@@ -1537,25 +1536,6 @@ func NewNotLeaseHolderErrorWithSpeculativeLease(
 	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
-// MissingRecordError is reported when a record is missing.
-type MissingRecordError struct{}
-
-func (e *MissingRecordError) Error() string {
-	return redact.Sprint(e).StripMarkers()
-}
-
-func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("missing record")
-	return nil
-}
-
-func init() {
-	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
-		return &MissingRecordError{}
-	})
-}
-
-var _ errors.SafeFormatter = &MissingRecordError{}
 var _ errors.SafeFormatter = &NotLeaseHolderError{}
 var _ errors.SafeFormatter = &RangeNotFoundError{}
 var _ errors.SafeFormatter = &RangeKeyMismatchError{}

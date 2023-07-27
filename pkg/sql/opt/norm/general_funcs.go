@@ -305,18 +305,6 @@ func (c *CustomFuncs) MakeBoolCol() opt.ColumnID {
 	return c.mem.Metadata().AddColumn("", types.Bool)
 }
 
-// CanRemapCols returns true if it's possible to remap every column in the
-// "from" set to a column in the "to" set using the given FDs.
-func (c *CustomFuncs) CanRemapCols(from, to opt.ColSet, fds *props.FuncDepSet) bool {
-	for col, ok := from.Next(0); ok; col, ok = from.Next(col + 1) {
-		if !fds.ComputeEquivGroup(col).Intersects(to) {
-			// It is not possible to remap this column to one from the "to" set.
-			return false
-		}
-	}
-	return true
-}
-
 // ----------------------------------------------------------------------
 //
 // Outer column functions
@@ -543,14 +531,6 @@ func (c *CustomFuncs) ColsAreStrictKey(cols opt.ColSet, input memo.RelExpr) bool
 	return input.Relational().FuncDeps.ColsAreStrictKey(cols)
 }
 
-// ColsAreLaxKey returns true if the given columns form a lax key for the given
-// input expression. A lax key considers NULL values as distinct from one
-// another, so it is allowed for two rows to have the same set of values if some
-// of the values are NULL.
-func (c *CustomFuncs) ColsAreLaxKey(cols opt.ColSet, input memo.RelExpr) bool {
-	return input.Relational().FuncDeps.ColsAreLaxKey(cols)
-}
-
 // PrimaryKeyCols returns the key columns of the primary key of the table.
 func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	tabMeta := c.mem.Metadata().TableMeta(table)
@@ -585,11 +565,6 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 		memo.BuildSharedProps(e, &p, c.f.evalCtx)
 		return &p
 	}
-}
-
-// FuncDeps retrieves the FuncDepSet for the given expression.
-func (c *CustomFuncs) FuncDeps(expr memo.RelExpr) *props.FuncDepSet {
-	return &expr.Relational().FuncDeps
 }
 
 // ----------------------------------------------------------------------

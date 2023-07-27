@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -58,15 +59,15 @@ type frontier interface{ Frontier() hlc.Timestamp }
 
 type kvEventToRowConsumer struct {
 	frontier
-	encoder      Encoder
-	scratch      bufalloc.ByteAllocator
-	sink         EventSink
-	cursor       hlc.Timestamp
-	knobs        TestingKnobs
-	decoder      cdcevent.Decoder
-	details      ChangefeedConfig
-	evaluator    *cdceval.Evaluator
-	encodingOpts changefeedbase.EncodingOptions
+	encoder        Encoder
+	scratch        bufalloc.ByteAllocator
+	sink           EventSink
+	cursor         hlc.Timestamp
+	knobs          TestingKnobs
+	decoder        cdcevent.Decoder
+	details        ChangefeedConfig
+	evaluator      *cdceval.Evaluator
+	encodingFormat changefeedbase.FormatType
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -256,7 +257,7 @@ func newKVEventToRowConsumer(
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
-		encodingOpts:         encodingOpts,
+		encodingFormat:       encodingOpts.Format,
 		metrics:              metrics,
 		pacer:                pacer,
 	}, nil
@@ -273,7 +274,7 @@ func newEvaluator(
 		return nil, err
 	}
 
-	sd := sql.NewInternalSessionData(ctx, cfg.Settings, "changefeed-evaluator")
+	var sd sessiondatapb.SessionData
 	if spec.Feed.SessionData == nil {
 		// This changefeed was created prior to
 		// clusterversion.V23_1_ChangefeedExpressionProductionReady; thus we must
@@ -293,7 +294,7 @@ func newEvaluator(
 			sc = newExpr
 		}
 	} else {
-		sd.SessionData = *spec.Feed.SessionData
+		sd = *spec.Feed.SessionData
 	}
 
 	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd, spec.Feed.StatementTime, withDiff), nil
@@ -429,10 +430,9 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
-	if c.encodingOpts.Format == changefeedbase.OptFormatParquet {
+	if c.encodingFormat == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
-			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp,
-			c.encodingOpts, alloc,
+			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp, alloc,
 		)
 	}
 	var keyCopy, valueCopy []byte
@@ -479,7 +479,6 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
-	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	sinkWithEncoder, ok := c.sink.(SinkWithEncoder)
@@ -487,7 +486,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 		return errors.AssertionFailedf("Expected a SinkWithEncoder for parquet format, found %T", c.sink)
 	}
 	if err := sinkWithEncoder.EncodeAndEmitRow(
-		ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc,
+		ctx, updatedRow, prevRow, topic, updated, mvcc, alloc,
 	); err != nil {
 		return err
 	}

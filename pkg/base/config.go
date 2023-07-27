@@ -242,33 +242,6 @@ var (
 	defaultRaftReproposalTimeoutTicks = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_REPROPOSAL_TIMEOUT_TICKS", 6)
 
-	// defaultRaftEnableCheckQuorum specifies whether to enable CheckQuorum in
-	// Raft. This makes a leader keep track of when it last heard from followers,
-	// and automatically step down if it hasn't heard from a quorum in the last
-	// election timeout. This is particularly important with asymmetric or partial
-	// network partitions, where a leader can otherwise hold on to leadership via
-	// heartbeats even though many/all replicas are unable to reach the leader.
-	//
-	// In etcd/raft, this also has the effect of fully enabling PreVote, such that
-	// a follower will not grant a PreVote for a candidate if it has heard from an
-	// established leader in the past election timeout. This is particularly
-	// important to prevent nodes rejoining a cluster after a restart or network
-	// partition from stealing away leadership from an established leader
-	// (assuming they have an up-to-date log, which they do with a read-only
-	// workload). With asymmetric or partial network partitions, this can allow an
-	// unreachable node to steal leadership away from the leaseholder, leading to
-	// range unavailability if the leaseholder can no longer reach the leader.
-	//
-	// The asymmetric partition concerns have largely been addressed by RPC
-	// dialback (see rpc.dialback.enabled), but the partial partition concerns
-	// remain.
-	//
-	// etcd/raft does register MsgHeartbeatResp as follower activity, and these
-	// are sent across the low-latency system RPC class, so it shouldn't be
-	// affected by RPC head-of-line blocking for MsgApp traffic.
-	defaultRaftEnableCheckQuorum = envutil.EnvOrDefaultBool(
-		"COCKROACH_RAFT_ENABLE_CHECKQUORUM", true)
-
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
 	// Range's Raft log can grow to before log truncations are triggered while at
 	// least one follower is missing. If all followers are active, the quota pool
@@ -509,11 +482,6 @@ type RaftConfig struct {
 	// means always renew.
 	RangeLeaseRenewalFraction float64
 
-	// RaftEnableCheckQuorum will enable Raft CheckQuorum, which in etcd/raft also
-	// fully enables PreVote. See comment on defaultRaftEnableCheckQuorum for
-	// details.
-	RaftEnableCheckQuorum bool
-
 	// RaftLogTruncationThreshold controls how large a single Range's Raft log
 	// can grow. When a Range's Raft log grows above this size, the Range will
 	// begin performing log truncations.
@@ -618,9 +586,6 @@ func (cfg *RaftConfig) SetDefaults() {
 	// SetDefaults is called multiple times (see NewStore()). So, we leave -1
 	// alone and ask all the users to handle it specially.
 
-	if !cfg.RaftEnableCheckQuorum {
-		cfg.RaftEnableCheckQuorum = defaultRaftEnableCheckQuorum
-	}
 	if cfg.RaftLogTruncationThreshold == 0 {
 		cfg.RaftLogTruncationThreshold = defaultRaftLogTruncationThreshold
 	}

@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -29,7 +28,7 @@ import (
 //     indexes by table. For Order By, the index column ordering and column
 //     directions are the same as how it is in the Order By.
 //  2. Add a single-column index on any Range expression, comparison
-//     expression (=, !=, <, >, <=, >=), IS and IS NOT expression.
+//     expression (=, <, >, <=, >=), and IS expression.
 //  3. Add a single-column index on any column that appears in a JOIN predicate.
 //  4. If there exist multiple columns from the same table in a JOIN predicate,
 //     create a single index on all such columns.
@@ -123,13 +122,8 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	case *memo.EqExpr:
 		ics.addVariableExprIndex(expr.Left, ics.equalCandidates)
 		ics.addVariableExprIndex(expr.Right, ics.equalCandidates)
-	case *memo.NeExpr:
-		ics.addVariableExprIndex(expr.Left, ics.rangeCandidates)
-		ics.addVariableExprIndex(expr.Right, ics.rangeCandidates)
 	case *memo.IsExpr:
 		ics.addVariableExprIndex(expr.Left, ics.equalCandidates)
-	case *memo.IsNotExpr:
-		ics.addVariableExprIndex(expr.Left, ics.rangeCandidates)
 	case *memo.LtExpr:
 		ics.addVariableExprIndex(expr.Left, ics.rangeCandidates)
 		ics.addVariableExprIndex(expr.Right, ics.rangeCandidates)
@@ -144,34 +138,16 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 		ics.addVariableExprIndex(expr.Right, ics.rangeCandidates)
 	case *memo.InnerJoinExpr:
 		ics.addJoinIndexes(expr.On)
-		ics.categorizeIndexCandidates(expr.Left)
-		ics.categorizeIndexCandidates(expr.Right)
-		return
 	case *memo.LeftJoinExpr:
 		ics.addJoinIndexes(expr.On)
-		ics.categorizeIndexCandidates(expr.Left)
-		ics.categorizeIndexCandidates(expr.Right)
-		return
 	case *memo.RightJoinExpr:
 		ics.addJoinIndexes(expr.On)
-		ics.categorizeIndexCandidates(expr.Left)
-		ics.categorizeIndexCandidates(expr.Right)
-		return
 	case *memo.FullJoinExpr:
 		ics.addJoinIndexes(expr.On)
-		ics.categorizeIndexCandidates(expr.Left)
-		ics.categorizeIndexCandidates(expr.Right)
-		return
 	case *memo.SemiJoinExpr:
 		ics.addJoinIndexes(expr.On)
-		ics.categorizeIndexCandidates(expr.Left)
-		ics.categorizeIndexCandidates(expr.Right)
-		return
 	case *memo.AntiJoinExpr:
 		ics.addJoinIndexes(expr.On)
-		ics.categorizeIndexCandidates(expr.Left)
-		ics.categorizeIndexCandidates(expr.Right)
-		return
 	case *memo.UnionExpr:
 		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
 	case *memo.IntersectExpr:
@@ -247,10 +223,7 @@ func (ics indexCandidateSet) addOrderingIndex(ordering opt.Ordering) {
 func (ics *indexCandidateSet) addJoinIndexes(expr memo.FiltersExpr) {
 	outerCols := expr.OuterCols().ToList()
 	for _, col := range outerCols {
-		// TODO (Shivam): Index recommendations should not only allow JSON columns
-		// to be part of inverted indexes since they are also forward indexable.
-		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) &&
-			ics.md.ColumnMeta(col).Type.Family() != types.JsonFamily {
+		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) {
 			ics.addSingleColumnIndex(col, false /* desc */, ics.joinCandidates)
 		} else {
 			ics.addSingleColumnIndex(col, false /* desc */, ics.invertedCandidates)
@@ -336,10 +309,7 @@ func (ics *indexCandidateSet) addVariableExprIndex(
 	switch expr := expr.(type) {
 	case *memo.VariableExpr:
 		col := expr.Col
-		// TODO (Shivam): Index recommendations should not only allow JSON columns
-		// to be part of inverted indexes since they are also forward indexable.
-		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) &&
-			ics.md.ColumnMeta(col).Type.Family() != types.JsonFamily {
+		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) {
 			ics.addSingleColumnIndex(col, false /* desc */, indexCandidates)
 		} else {
 			ics.addSingleColumnIndex(col, false /* desc */, ics.invertedCandidates)
@@ -369,10 +339,7 @@ func (ics *indexCandidateSet) addMultiColumnIndex(
 		index := make([]cat.IndexColumn, 0, len(tableToCols[currTable]))
 		for _, colSlice := range tableToCols[currTable] {
 			indexCol := colSlice[0]
-			// TODO (Shivam): Index recommendations should not only allow JSON columns
-			// to be part of inverted indexes since they are also forward indexable.
-			if indexCol.Column.DatumType().Family() != types.JsonFamily &&
-				colinfo.ColumnTypeIsIndexable(indexCol.Column.DatumType()) {
+			if colinfo.ColumnTypeIsIndexable(indexCol.Column.DatumType()) {
 				index = append(index, indexCol)
 			}
 		}

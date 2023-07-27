@@ -142,12 +142,11 @@ func TestListFailuresFromJSON(t *testing.T) {
 			fileName: "stress-unknown.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
 			expIssues: []issue{{
-				testName:    "(unknown)",
-				title:       "storage: package failed",
-				message:     "make: *** [bin/.submodules-initialized] Error 1",
-				mention:     []string{"@cockroachdb/test-eng"},
-				extraLabels: []string{"T-testeng"},
-				hasProject:  true,
+				testName:   "(unknown)",
+				title:      "storage: package failed",
+				message:    "make: *** [bin/.submodules-initialized] Error 1",
+				mention:    []string{"@cockroachdb/test-eng"},
+				hasProject: true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -215,9 +214,8 @@ TestXXX/sub3 - 0.50s
 Slow passing tests:
 TestXXA - 1.00s
 `,
-					mention:     []string{"@cockroachdb/test-eng"},
-					extraLabels: []string{"T-testeng"},
-					hasProject:  true,
+					mention:    []string{"@cockroachdb/test-eng"},
+					hasProject: true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -239,9 +237,8 @@ Slow passing tests:
 TestXXB - 1.01s
 TestXXA - 1.00s
 `,
-					mention:     []string{"@cockroachdb/test-eng"},
-					extraLabels: []string{"T-testeng"},
-					hasProject:  true,
+					mention:    []string{"@cockroachdb/test-eng"},
+					hasProject: true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -263,9 +260,8 @@ Slow passing tests:
 TestXXB - 1.01s
 TestXXA - 1.00s
 `,
-					mention:     []string{"@cockroachdb/test-eng"},
-					extraLabels: []string{"T-testeng"},
-					hasProject:  true,
+					mention:    []string{"@cockroachdb/test-eng"},
+					hasProject: true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -277,12 +273,11 @@ TestXXA - 1.00s
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv",
 			expIssues: []issue{
 				{
-					testName:    "TestXXX",
-					title:       "kv: TestXXX failed",
-					message:     `panic: induced panic`,
-					mention:     []string{"@cockroachdb/test-eng"},
-					extraLabels: []string{"T-testeng"},
-					hasProject:  true,
+					testName:   "TestXXX",
+					title:      "kv: TestXXX failed",
+					message:    `panic: induced panic`,
+					mention:    []string{"@cockroachdb/test-eng"},
+					hasProject: true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -294,12 +289,11 @@ TestXXA - 1.00s
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv",
 			expIssues: []issue{
 				{
-					testName:    "(unknown)",
-					title:       "kv: package failed",
-					message:     `panic: induced panic`,
-					mention:     []string{"@cockroachdb/test-eng"},
-					extraLabels: []string{"T-testeng"},
-					hasProject:  true,
+					testName:   "(unknown)",
+					title:      "kv: package failed",
+					message:    `panic: induced panic`,
+					mention:    []string{"@cockroachdb/test-eng"},
+					hasProject: true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -446,58 +440,6 @@ func TestListFailuresFromTestXML(t *testing.T) {
 			if err := listFailuresFromTestXML(context.Background(), file, f); err != nil {
 				t.Fatal(err)
 			}
-			if curIssue != len(c.expIssues) {
-				t.Fatalf("expected %d issues, got: %d", len(c.expIssues), curIssue)
-			}
-		})
-	}
-}
-
-func TestPostGeneralFailure(t *testing.T) {
-	testCases := []struct {
-		fileName  string
-		expIssues []issue
-		formatter formatter
-	}{
-		{
-			fileName: "failed-build-output.txt",
-			expIssues: []issue{{
-				title:       "unexpected build failure",
-				mention:     []string{"@cockroachdb/unowned"},
-				extraLabels: []string{"T-testeng"},
-			}},
-			formatter: defaultFormatter,
-		},
-	}
-
-	for _, c := range testCases {
-		t.Run(c.fileName, func(t *testing.T) {
-			b, err := os.ReadFile(datapathutils.TestDataPath(t, c.fileName))
-			if err != nil {
-				t.Fatal(err)
-			}
-			curIssue := 0
-			for _, issue := range c.expIssues {
-				issue.message = string(b)
-			}
-
-			f := func(ctx context.Context, f failure) error {
-				if t.Failed() {
-					return nil
-				}
-				if curIssue >= len(c.expIssues) {
-					t.Errorf("unexpected issue filed. title: %s", f.title)
-				}
-				if exp := c.expIssues[curIssue].title; exp != f.title {
-					t.Errorf("expected title %s, but got %s", exp, f.title)
-				}
-				if exp := c.expIssues[curIssue].message; !strings.Contains(f.testMessage, exp) {
-					t.Errorf("expected message containing %s, but got:\n%s", exp, f.testMessage)
-				}
-				curIssue++
-				return nil
-			}
-			postGeneralFailureImpl(string(b), f)
 			if curIssue != len(c.expIssues) {
 				t.Fatalf("expected %d issues, got: %d", len(c.expIssues), curIssue)
 			}

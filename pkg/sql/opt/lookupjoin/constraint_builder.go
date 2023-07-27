@@ -111,10 +111,6 @@ type ConstraintBuilder struct {
 	// This is used to remap computed column expressions, and is only
 	// initialized if needed.
 	eqColMap opt.ColMap
-
-	// allFilters is a scratch slice that is used to combine all the filters
-	// passed to Build. It is reused in order to reduce allocations.
-	allFilters memo.FiltersExpr
 }
 
 // Init initializes a ConstraintBuilder. Once initialized, a ConstraintBuilder
@@ -136,9 +132,6 @@ func (b *ConstraintBuilder) Init(
 		table:     table,
 		leftCols:  leftCols,
 		rightCols: rightCols,
-		// Reuse the allFilters scratch slice to reduce allocations. Build
-		// truncates this slice, so there is no need to truncate it here.
-		allFilters: b.allFilters,
 	}
 }
 
@@ -154,17 +147,13 @@ func (b *ConstraintBuilder) Build(
 ) (_ Constraint, foundEqualityCols bool) {
 	// Combine the ON and derived FK filters which can contain equality
 	// conditions.
-	if cap(b.allFilters) >= len(onFilters)+len(derivedFkOnFilters)+len(optionalFilters) {
-		b.allFilters = b.allFilters[:0]
-	} else {
-		b.allFilters = make(memo.FiltersExpr, 0, len(onFilters)+len(derivedFkOnFilters)+len(optionalFilters))
-	}
-	b.allFilters = append(b.allFilters, onFilters...)
-	b.allFilters = append(b.allFilters, derivedFkOnFilters...)
+	allFilters := make(memo.FiltersExpr, 0, len(onFilters)+len(derivedFkOnFilters)+len(optionalFilters))
+	allFilters = append(allFilters, onFilters...)
+	allFilters = append(allFilters, derivedFkOnFilters...)
 
 	// Extract the equality columns from the ON and derived FK filters.
 	leftEq, rightEq, eqFilterOrds :=
-		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, b.allFilters)
+		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, allFilters)
 	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from the ON and derived FK filters.
@@ -176,7 +165,7 @@ func (b *ConstraintBuilder) Build(
 	}
 
 	// Add the optional filters.
-	b.allFilters = append(b.allFilters, optionalFilters...)
+	allFilters = append(allFilters, optionalFilters...)
 
 	// Check if the first column in the index either:
 	//
@@ -191,7 +180,7 @@ func (b *ConstraintBuilder) Build(
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
 		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
-			if !HasJoinFilterConstants(b.allFilters, firstIdxCol, b.evalCtx) {
+			if !HasJoinFilterConstants(allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
 				}
@@ -272,7 +261,7 @@ func (b *ConstraintBuilder) Build(
 		idxCol := b.table.IndexColumnID(index, j)
 		idxColIsDesc := index.Column(j).Descending
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			allLookupFilters = append(allLookupFilters, b.allFilters[eqFilterOrds[eqIdx]])
+			allLookupFilters = append(allLookupFilters, allFilters[eqFilterOrds[eqIdx]])
 			addEqualityColumns(leftEq[eqIdx], idxCol)
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
 			foundEqualityCols = true
@@ -313,7 +302,7 @@ func (b *ConstraintBuilder) Build(
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		foundVals, allIdx, ok := FindJoinFilterConstants(b.allFilters, idxCol, b.evalCtx)
+		foundVals, allIdx, ok := FindJoinFilterConstants(allFilters, idxCol, b.evalCtx)
 
 		// If a single constant value was found, project it in the input
 		// and use it as an equality column.
@@ -327,7 +316,7 @@ func (b *ConstraintBuilder) Build(
 				b.f.ConstructConstVal(foundVals[0], idxColType),
 				constColID,
 			))
-			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[allIdx])
 			addEqualityColumns(constColID, idxCol)
 			filterOrdsToExclude.Add(allIdx)
 			continue
@@ -340,7 +329,7 @@ func (b *ConstraintBuilder) Build(
 			// expressions in lookupExpr and clear keyCols.
 			convertToLookupExpr()
 
-			valsFilter := b.allFilters[allIdx]
+			valsFilter := allFilters[allIdx]
 			if !isCanonicalFilter(valsFilter) {
 				// Disable normalization rules when constructing the lookup
 				// expression so that it does not get normalized into a
@@ -350,7 +339,7 @@ func (b *ConstraintBuilder) Build(
 				})
 			}
 			lookupExpr = append(lookupExpr, valsFilter)
-			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[allIdx])
 			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
@@ -358,19 +347,19 @@ func (b *ConstraintBuilder) Build(
 		// If constant equality values were not found, try to find filters that
 		// constrain this index column to a range on input columns.
 		startIdx, endIdx, foundStart, foundEnd := b.findJoinVariableRangeFilters(
-			rightCmp, inequalityFilterOrds, b.allFilters, idxCol, idxColIsDesc,
+			rightCmp, inequalityFilterOrds, allFilters, idxCol, idxColIsDesc,
 		)
 		if foundStart {
 			convertToLookupExpr()
-			lookupExpr = append(lookupExpr, b.allFilters[startIdx])
-			allLookupFilters = append(allLookupFilters, b.allFilters[startIdx])
+			lookupExpr = append(lookupExpr, allFilters[startIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[startIdx])
 			filterOrdsToExclude.Add(startIdx)
 			foundLookupCols = true
 		}
 		if foundEnd {
 			convertToLookupExpr()
-			lookupExpr = append(lookupExpr, b.allFilters[endIdx])
-			allLookupFilters = append(allLookupFilters, b.allFilters[endIdx])
+			lookupExpr = append(lookupExpr, allFilters[endIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[endIdx])
 			filterOrdsToExclude.Add(endIdx)
 			foundLookupCols = true
 		}
@@ -386,13 +375,13 @@ func (b *ConstraintBuilder) Build(
 		// an input column; in this case, it still may be possible to use a constant
 		// to form the other bound.
 		rangeFilter, remaining, filterIdx := b.findJoinConstantRangeFilter(
-			b.allFilters, idxCol, idxColIsDesc, !foundStart, !foundEnd,
+			allFilters, idxCol, idxColIsDesc, !foundStart, !foundEnd,
 		)
 		if rangeFilter != nil {
 			// A constant range filter could be found.
 			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, *rangeFilter)
-			allLookupFilters = append(allLookupFilters, b.allFilters[filterIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[filterIdx])
 			filterOrdsToExclude.Add(filterIdx)
 			if remaining != nil {
 				remainingFilters = make(memo.FiltersExpr, 0, len(onFilters))

@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -61,8 +59,7 @@ func declareKeysEndTxn(
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
-	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	et := req.(*kvpb.EndTxnRequest)
@@ -285,12 +282,13 @@ func EndTxn(
 				// The transaction has already been aborted by other.
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
-				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
+				desc := cArgs.EvalCtx.Desc()
+				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, cArgs.EvalCtx, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -362,7 +360,7 @@ func EndTxn(
 		// NOTE: if the transaction is in the implicit commit state and this EndTxn
 		// request is marking the commit as explicit, this check must succeed. We
 		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
-		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args.Deadline); retry {
+		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args); retry {
 			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
@@ -432,12 +430,13 @@ func EndTxn(
 	// we position the transaction record next to the first write of a transaction.
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve locks for this transaction in the future.
-	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
+	desc := cArgs.EvalCtx.Desc()
+	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
 	if err := updateFinalizedTxn(
-		ctx, readWriter, cArgs.EvalCtx, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -491,31 +490,36 @@ func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) b
 	return !deadline.IsEmpty() && deadline.LessEq(commitTS)
 }
 
-// IsEndTxnTriggeringRetryError returns true if the Transaction cannot be
+// IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be
 // committed and needs to return a TransactionRetryError. It also returns the
 // reason and possibly an extra message to be used for the error.
 func IsEndTxnTriggeringRetryError(
-	txn *roachpb.Transaction, deadline hlc.Timestamp,
+	txn *roachpb.Transaction, args *kvpb.EndTxnRequest,
 ) (retry bool, reason kvpb.TransactionRetryReason, extraMsg redact.RedactableString) {
+	// If we saw any WriteTooOldErrors, we must restart to avoid lost
+	// update anomalies.
 	if txn.WriteTooOld {
-		// If we saw any WriteTooOldErrors, we must restart to avoid lost
-		// update anomalies.
-		return true, kvpb.RETRY_WRITE_TOO_OLD, ""
-	}
-	if !txn.IsoLevel.ToleratesWriteSkew() && txn.WriteTimestamp != txn.ReadTimestamp {
+		retry, reason = true, kvpb.RETRY_WRITE_TOO_OLD
+	} else {
+		readTimestamp := txn.ReadTimestamp
+		isTxnPushed := txn.WriteTimestamp != readTimestamp
+
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
-		return true, kvpb.RETRY_SERIALIZABLE, ""
+		if isTxnPushed {
+			retry, reason = true, kvpb.RETRY_SERIALIZABLE
+		}
 	}
-	if IsEndTxnExceedingDeadline(txn.WriteTimestamp, deadline) {
-		// A transaction must obey its deadline, if set.
-		exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
+
+	// A transaction must obey its deadline, if set.
+	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args.Deadline) {
+		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
 		extraMsg = redact.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
-			exceededBy, txn.WriteTimestamp, deadline)
-		return true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg
+			exceededBy, txn.WriteTimestamp, args.Deadline)
+		retry, reason = true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED
 	}
-	return false, 0, ""
+	return retry, reason, extraMsg
 }
 
 const lockResolutionBatchSize = 500
@@ -530,11 +534,12 @@ const lockResolutionBatchByteSize = 4 << 20 // 4 MB.
 // external and are resolved asynchronously with the external locks.
 func resolveLocalLocks(
 	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
 	readWriter storage.ReadWriter,
-	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
+	evalCtx EvalContext,
 ) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
 	var resolveAllowance int64 = lockResolutionBatchSize
 	var targetBytes int64 = lockResolutionBatchByteSize
@@ -545,22 +550,22 @@ func resolveLocalLocks(
 		resolveAllowance = 0
 		targetBytes = 0
 	}
-	return resolveLocalLocksWithPagination(ctx, readWriter, evalCtx, ms, args, txn, resolveAllowance, targetBytes)
+	return resolveLocalLocksWithPagination(ctx, desc, readWriter, ms, args, txn, evalCtx, resolveAllowance, targetBytes)
 }
 
 // resolveLocalLocksWithPagination is resolveLocalLocks but with a max key and
 // target bytes limit.
 func resolveLocalLocksWithPagination(
 	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
 	readWriter storage.ReadWriter,
-	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
+	evalCtx EvalContext,
 	maxKeys int64,
 	targetBytes int64,
 ) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
-	desc := evalCtx.Desc()
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which locks are local (note that for a split, we want to use the
@@ -695,7 +700,6 @@ func updateStagingTxn(
 func updateFinalizedTxn(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	key []byte,
 	args *kvpb.EndTxnRequest,
@@ -703,7 +707,7 @@ func updateFinalizedTxn(
 	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
 ) error {
-	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
+	if txnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
@@ -1012,29 +1016,13 @@ func splitTrigger(
 			"unable to compute range key stats delta for RHS")
 	}
 
-	// Retrieve MVCC Stats from the current batch instead of using stats from
-	// execution context. Stats in the context could diverge from storage snapshot
-	// of current request when lease extensions are applied. Lease expiration is
-	// a special case that updates stats without obtaining latches and thus can
-	// execute concurrently with splitTrigger. As a result we must not write
-	// absolute stats values for LHS based on this value, always produce a delta
-	// since underlying stats in storage could change. At the same time it is safe
-	// to write absolute RHS side stats since we hold lock for values, and
-	// "unprotected" lease key don't yet exist until this split operation creates
-	// RHS replica.
-	currentStats, err := MakeStateLoader(rec).LoadMVCCStats(ctx, batch)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to fetch original range mvcc stats for split")
-	}
-
 	h := splitStatsHelperInput{
-		AbsPreSplitBothStored: currentStats,
-		DeltaBatchEstimated:   bothDeltaMS,
-		DeltaRangeKey:         rangeKeyDeltaMS,
-		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
+		DeltaBatchEstimated:      bothDeltaMS,
+		DeltaRangeKey:            rangeKeyDeltaMS,
+		AbsPostSplitLeftFn:       makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		AbsPostSplitRightFn:      makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
+		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1284,7 +1272,9 @@ func mergeTrigger(
 
 	// The stats for the merged range are the sum of the LHS and RHS stats
 	// adjusted for range key merges (which is the inverse of the split
-	// adjustment).
+	// adjustment). The RHS's replicated range ID stats are subtracted -- the only
+	// replicated range ID keys we copy from the RHS are the keys in the abort
+	// span, and we've already accounted for those stats above.
 	ms.Add(merge.RightMVCCStats)
 	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(batch, merge.LeftDesc, merge.RightDesc)
 	if err != nil {
@@ -1292,18 +1282,7 @@ func mergeTrigger(
 	}
 	ms.Subtract(msRangeKeyDelta)
 
-	// The RHS's replicated range ID stats are subtracted -- the only replicated
-	// range ID keys we copy from the RHS are the keys in the abort span, and
-	// we've already accounted for those stats above.
-	//
-	// NB: RangeIDLocalMVCCStats is introduced in 23.2 to mitigate a SysBytes race
-	// with lease requests (which ignore latches). For 23.1 compatibility, we fall
-	// back to computing it here when not set. We don't need a version gate since
-	// it's only used at evaluation time and doesn't affect below-Raft state.
-	if merge.RightRangeIDLocalMVCCStats != (enginepb.MVCCStats{}) {
-		ms.Subtract(merge.RightRangeIDLocalMVCCStats)
-	} else {
-		_ = clusterversion.V23_1 // remove this branch when 23.1 support is removed
+	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
 		sysMS, err := storage.ComputeStats(batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
@@ -1423,4 +1402,17 @@ func computeSplitRangeKeyStatsDelta(
 	}
 
 	return ms, nil
+}
+
+// txnAutoGC controls whether Transaction entries are automatically gc'ed upon
+// EndTxn if they only have local locks (which can be resolved synchronously
+// with EndTxn). Certain tests become simpler with this being turned off.
+var txnAutoGC = true
+
+// TestingSetTxnAutoGC is used in tests to temporarily enable/disable
+// txnAutoGC.
+func TestingSetTxnAutoGC(to bool) func() {
+	prev := txnAutoGC
+	txnAutoGC = to
+	return func() { txnAutoGC = prev }
 }

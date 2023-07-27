@@ -74,7 +74,7 @@ var IdleTimeout = settings.RegisterDurationSetting(
 var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"changefeed.frontier_checkpoint_frequency",
-	"controls the frequency with which span level checkpoints will be written; if 0, disabled",
+	"controls the frequency with which span level checkpoints will be written; if 0, disabled.",
 	10*time.Minute,
 	settings.NonNegativeDuration,
 )
@@ -211,15 +211,6 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-// MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
-var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"changefeed.protect_timestamp.max_age",
-	"fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration",
-	4*24*time.Hour,
-	settings.NonNegativeDuration,
-).WithPublic()
-
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
@@ -233,7 +224,7 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.mux_rangefeed.enabled",
 	"if true, changefeed uses multiplexing rangefeed RPC",
-	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", true),
+	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
 )
 
 // EventConsumerWorkers specifies the maximum number of workers to use when
@@ -297,7 +288,7 @@ var SinkIOWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.sink_io_workers",
 	"the number of workers used by changefeeds when sending requests to the sink "+
-		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value",
+		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value.",
 	0,
 ).WithPublic()
 

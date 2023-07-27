@@ -10,42 +10,20 @@
 #
 # Note: EliminateJoinUnderProjectLeft should stay above EliminateProject so that
 # it has a chance to fire before the Project can be removed.
-#
-# It is possible for references to the right input of the join to be replaced by
-# equivalent columns from the left input. This is handled by adding projections
-# that map the left column to the equivalent right column (leftCol AS rightCol).
-#
-# It is ok to call MergeProjections without checking CanMergeProjections because
-# RemapProjectionCols returns projections that only reference columns from the
-# left input, and ProjectRemappedCols only projects columns from the right side
-# of the join.
 [EliminateJoinUnderProjectLeft, Normalize]
 (Project
     $join:(InnerJoin | LeftJoin $left:* $right:*) &
         (JoinDoesNotDuplicateLeftRows $join) &
         (JoinPreservesLeftRows $join)
-    $projections:*
-    $passthrough:* &
-        (CanRemapCols
-            $fromCols:(UnionCols
-                $passthrough
-                (ProjectionOuterCols $projections)
-            )
-            $leftCols:(OutputCols $left)
-            $fds:(FuncDeps $join)
-        ) &
-        (CanUseImprovedJoinElimination $fromCols $leftCols)
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            $rightCols:(OutputCols $right)
+        )
+    $passthrough:* & ^(ColsIntersect $passthrough $rightCols)
 )
 =>
-(Project
-    $left
-    (MergeProjections
-        (RemapProjectionCols $projections $leftCols $fds)
-        (ProjectRemappedCols $passthrough $leftCols $fds)
-        $passthrough
-    )
-    (DifferenceCols $passthrough (OutputCols $right))
-)
+(Project $left $projections $passthrough)
 
 # EliminateJoinUnderProjectRight mirrors EliminateJoinUnderProjectLeft, except
 # that it only matches InnerJoins.
@@ -54,28 +32,15 @@
     $join:(InnerJoin $left:* $right:*) &
         (JoinDoesNotDuplicateRightRows $join) &
         (JoinPreservesRightRows $join)
-    $projections:*
-    $passthrough:* &
-        (CanRemapCols
-            $fromCols:(UnionCols
-                $passthrough
-                (ProjectionOuterCols $projections)
-            )
-            $rightCols:(OutputCols $right)
-            $fds:(FuncDeps $join)
-        ) &
-        (CanUseImprovedJoinElimination $fromCols $rightCols)
+    $projections:* &
+        ^(AreProjectionsCorrelated
+            $projections
+            $leftCols:(OutputCols $left)
+        )
+    $passthrough:* & ^(ColsIntersect $passthrough $leftCols)
 )
 =>
-(Project
-    $right
-    (MergeProjections
-        (RemapProjectionCols $projections $rightCols $fds)
-        (ProjectRemappedCols $passthrough $rightCols $fds)
-        $passthrough
-    )
-    (DifferenceCols $passthrough (OutputCols $left))
-)
+(Project $right $projections $passthrough)
 
 # EliminateProject discards a Project operator which is not adding or removing
 # columns.

@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"strings"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -234,18 +232,11 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 }
 
 func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
-	// Ensure that we always update this function to consider any necessary
-	// updates when a new key kind is introduced. To do this, we assert
-	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
-	// compilation will fail if it's not. Unfortunately, this doesn't protect
-	// against reusing a currently unused RocksDB key kind.
-	const _ = uint(pebble.InternalKeyKindDeleteSized - pebble.InternalKeyKindMax)
-
 	if writeBatch == nil {
 		return "<nil>\n", nil
 	}
 
-	r, err := storage.NewBatchReader(writeBatch.Data)
+	r, err := storage.NewPebbleBatchReader(writeBatch.Data)
 	if err != nil {
 		return "", err
 	}
@@ -254,32 +245,32 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	// the caller all the info we have (in case the writebatch is corrupted).
 	var sb strings.Builder
 	for r.Next() {
-		switch r.KeyKind() {
-		case pebble.InternalKeyKindDelete:
+		switch r.BatchType() {
+		case storage.BatchTypeDeletion:
 			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintEngineKey(engineKey)))
-		case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
+		case storage.BatchTypeValue:
 			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
-		case pebble.InternalKeyKindMerge:
+		case storage.BatchTypeMerge:
 			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
-		case pebble.InternalKeyKindSingleDelete:
+		case storage.BatchTypeSingleDeletion:
 			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintEngineKey(engineKey)))
-		case pebble.InternalKeyKindRangeDelete:
+		case storage.BatchTypeRangeDeletion:
 			engineStartKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
@@ -291,7 +282,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 			sb.WriteString(fmt.Sprintf(
 				"Delete Range: [%s, %s)\n", SprintEngineKey(engineStartKey), SprintEngineKey(engineEndKey),
 			))
-		case pebble.InternalKeyKindRangeKeySet:
+		case storage.BatchTypeRangeKeySet:
 			engineStartKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
@@ -310,7 +301,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 					"Set Range Key: %s\n", SprintEngineRangeKeyValue(span, rangeKey),
 				))
 			}
-		case pebble.InternalKeyKindRangeKeyUnset:
+		case storage.BatchTypeRangeKeyUnset:
 			engineStartKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
@@ -329,7 +320,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 					"Unset Range Key: %s\n", SprintEngineRangeKey(span, rangeKey.Version),
 				))
 			}
-		case pebble.InternalKeyKindRangeKeyDelete:
+		case storage.BatchTypeRangeKeyDelete:
 			engineStartKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
@@ -342,15 +333,8 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 				"Delete Range Keys: %s\n",
 				SprintKeySpan(roachpb.Span{Key: engineStartKey.Key, EndKey: engineEndKey.Key}),
 			))
-		case pebble.InternalKeyKindDeleteSized:
-			engineKey, err := r.EngineKey()
-			if err != nil {
-				return sb.String(), err
-			}
-			v, _ := binary.Uvarint(r.Value())
-			sb.WriteString(fmt.Sprintf("Delete (Sized at %d): %s\n", v, SprintEngineKey(engineKey)))
 		default:
-			sb.WriteString(fmt.Sprintf("unsupported key kind: %d\n", r.KeyKind()))
+			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
 		}
 	}
 	return sb.String(), r.Error()
@@ -369,14 +353,20 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	e.Data = nil
 	cmd := e.Cmd
 
+	var leaseStr string
+	if l := cmd.DeprecatedProposerLease; l != nil {
+		leaseStr = l.String() // use the full lease, if available
+	} else {
+		leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
+	}
+
 	wbStr, err := decodeWriteBatch(cmd.WriteBatch)
 	if err != nil {
 		wbStr = "failed to decode: " + err.Error() + "\nafter:\n" + wbStr
 	}
 	cmd.WriteBatch = nil
 
-	return fmt.Sprintf("%s (ID %s) by lease #%d\n%s\nwrite batch:\n%s",
-		&e.Entry, e.ID, cmd.ProposerLeaseSequence, &cmd, wbStr), nil
+	return fmt.Sprintf("%s (ID %s) by %s\n%s\nwrite batch:\n%s", &e.Entry, e.ID, leaseStr, &cmd, wbStr), nil
 }
 
 func tryTxn(kv storage.MVCCKeyValue) (string, error) {
@@ -417,16 +407,16 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 		msg = &roachpb.Version{}
 
 	case bytes.Equal(suffix, keys.LocalRangeTombstoneSuffix):
-		msg = &kvserverpb.RangeTombstone{}
+		msg = &roachpb.RangeTombstone{}
 
 	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
-		msg = &kvserverpb.RaftTruncatedState{}
+		msg = &roachpb.RaftTruncatedState{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
 		msg = &roachpb.Lease{}
 
 	case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
-		msg = &kvserverpb.RangeAppliedState{}
+		msg = &enginepb.RangeAppliedState{}
 
 	case bytes.Equal(suffix, keys.LocalRangeStatsLegacySuffix):
 		msg = &enginepb.MVCCStats{}
