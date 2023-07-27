@@ -17,6 +17,7 @@ export * from "./docs";
 export * from "./fixLong";
 export * from "./format";
 export * from "./formatDate";
+export * from "./logger";
 export * from "./requestError";
 export * from "./sql/summarize";
 export * from "./query";
