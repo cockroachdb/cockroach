@@ -346,6 +346,7 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 	require.True(t, sessionExists(*session))
 
 	require.NoError(t, tmpTenant.DrainClients(context.Background()))
+	tmpTenant.Stopper().Stop(ctx)
 
 	require.False(t, sessionExists(*session), "expected session %s to be deleted from the sqlliveness table, but it still exists", *session)
 	require.Nil(t, queryOwner(tmpSQLInstance), "expected sql_instance %d to have no owning session_id", tmpSQLInstance)
