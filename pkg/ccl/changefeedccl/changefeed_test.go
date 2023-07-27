@@ -7702,8 +7702,10 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 
 			rnd, _ := randutil.NewPseudoRand()
 
+			maxFailures := int64(200)
+			numFailures := atomic.Int64{}
 			knobs.kafkaInterceptor = func(m *sarama.ProducerMessage, client kafkaClient) error {
-				if client.Config().Producer.Flush.MaxMessages > 1 && rnd.Int()%5 == 0 {
+				if client.Config().Producer.Flush.MaxMessages > 1 && numFailures.Add(1) < maxFailures && rnd.Int()%20 == 0 {
 					return sarama.ErrMessageSizeTooLarge
 				}
 				return nil
