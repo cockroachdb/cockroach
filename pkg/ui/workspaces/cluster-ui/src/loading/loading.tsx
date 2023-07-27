@@ -17,7 +17,7 @@ import {
   Spinner,
   InlineAlertIntent,
 } from "@cockroachlabs/ui-components";
-import { adminUIAccess, isForbiddenRequestError } from "src/util";
+import { adminUIAccess, getLogger, isForbiddenRequestError } from "src/util";
 import styles from "./loading.module.scss";
 import { Anchor } from "../anchor";
 
@@ -68,7 +68,14 @@ export const Loading: React.FC<LoadingProps> = props => {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (errors) {
-    console.error(`Error Loading ${props.page}: ${errors}`);
+    getLogger().error(
+      errors.length === 1
+        ? `Error Loading ${props.page}`
+        : `Multiple errors seen Loading ${props.page}: ${errors}`,
+      /* additional context */ undefined,
+      errors[0],
+    );
+
     // - map Error to InlineAlert props. RestrictedPermissions handled as "info" message;
     // - group errors by intend to show separate alerts per intent.
     const errorAlerts = chain(errors)
