@@ -134,6 +134,8 @@ func getNumVersions(ds *descriptorState) int {
 
 func TestPurgeOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// We're going to block gossip so it doesn't come randomly and clear up the
 	// leases we're artificially setting up.
 	gossipSem := make(chan struct{}, 1)

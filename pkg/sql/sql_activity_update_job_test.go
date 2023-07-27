@@ -45,10 +45,8 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	ctx := context.Background()
 
 	stubTime := timeutil.Now().Truncate(time.Hour)
-	sqlStatsKnobs := &sqlstats.TestingKnobs{
-		StubTimeNow: func() time.Time { return stubTime },
-		AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-	}
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
 
 	// Start the cluster.
 	// Disable the job since it is called manually from a new instance to avoid
@@ -166,10 +164,8 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	stubTime := timeutil.Now().Truncate(time.Hour)
-	sqlStatsKnobs := &sqlstats.TestingKnobs{
-		StubTimeNow: func() time.Time { return stubTime },
-		AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-	}
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
 
 	// Start the cluster.
 	ctx := context.Background()
@@ -307,10 +303,6 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sqlStatsKnobs := &sqlstats.TestingKnobs{
-		AOSTClause: "AS OF SYSTEM TIME '-1us'",
-	}
-
 	// Start the cluster.
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -318,7 +310,7 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 		Insecure: true,
 		Settings: st,
 		Knobs: base.TestingKnobs{
-			SQLStatsKnobs:    sqlStatsKnobs,
+			SQLStatsKnobs:    sqlstats.CreateTestingKnobs(),
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
@@ -368,10 +360,8 @@ func TestTransactionActivityMetadata(t *testing.T) {
 
 	ctx := context.Background()
 	stubTime := timeutil.Now().Truncate(time.Hour)
-	sqlStatsKnobs := &sqlstats.TestingKnobs{
-		StubTimeNow: func() time.Time { return stubTime },
-		AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-	}
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Insecure: true,
 		Knobs: base.TestingKnobs{
@@ -436,10 +426,8 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 
 	ctx := context.Background()
 	stubTime := timeutil.Now().Truncate(time.Hour)
-	sqlStatsKnobs := &sqlstats.TestingKnobs{
-		StubTimeNow: func() time.Time { return stubTime },
-		AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-	}
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Insecure: true,
 		Knobs: base.TestingKnobs{

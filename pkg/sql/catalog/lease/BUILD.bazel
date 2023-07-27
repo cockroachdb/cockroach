@@ -106,7 +106,6 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",

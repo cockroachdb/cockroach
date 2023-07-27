@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -75,17 +74,19 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	injector := newRuntimeKnobsInjector()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = stubTime.Now
-	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).OnStmtStatsFlushFinished = injector.invokePostStmtStatsFlushCallback
-	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).OnTxnStatsFlushFinished = injector.invokePostTxnStatsFlushCallback
+	var params base.TestServerArgs
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.StubTimeNow = stubTime.Now
+	knobs.OnStmtStatsFlushFinished = injector.invokePostStmtStatsFlushCallback
+	knobs.OnTxnStatsFlushFinished = injector.invokePostTxnStatsFlushCallback
+	params.Knobs.SQLStatsKnobs = knobs
 
 	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
 	defer cluster.Stopper().Stop(ctx)
 
-	server := cluster.Server(0 /* idx */)
+	server := cluster.Server(0 /* idx */).ApplicationLayer()
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	appStats := sqlStats.GetApplicationStats("app1", false)

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,11 +41,8 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: params,
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 
 	defer testCluster.Stopper().Stop(ctx)
 

@@ -156,9 +156,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 			Locality:      params.Locality,
 			ExternalIODir: filepath.Join(certsDir, "extern"),
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
-				},
+				SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 			},
 		}
 		if argsFn != nil {

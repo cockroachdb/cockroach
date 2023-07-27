@@ -391,9 +391,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	tenant, sqlDB := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10 /* id */),
 		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
+			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 		},
 	})
 

@@ -178,7 +178,6 @@ go_test(
         "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
