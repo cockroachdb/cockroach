@@ -191,6 +191,7 @@ func (s *TCPServer) ServeWith(
 			serveConn(ctx, rw)
 		})
 		if err != nil {
+			err = errors.CombineErrors(err, rw.Close())
 			return err
 		}
 	}

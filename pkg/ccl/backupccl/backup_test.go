@@ -6943,6 +6943,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 107669)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{

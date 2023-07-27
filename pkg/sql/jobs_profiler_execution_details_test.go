@@ -349,11 +349,12 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 4)
+		require.Len(t, files, 5)
 		require.Regexp(t, "distsql\\..*\\.html", files[0])
 		require.Regexp(t, "goroutines\\..*\\.txt", files[1])
-		require.Regexp(t, "resumer-trace-n[0-9]\\..*\\.txt", files[2])
-		require.Regexp(t, "trace\\..*\\.zip", files[3])
+		require.Regexp(t, "resumer-trace-n[0-9].*\\.binpb", files[2])
+		require.Regexp(t, "resumer-trace-n[0-9].*\\.binpb\\.txt", files[3])
+		require.Regexp(t, "trace\\..*\\.zip", files[4])
 
 		// Resume the job, so it can write another DistSQL diagram and goroutine
 		// snapshot.
@@ -363,15 +364,17 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 8)
+		require.Len(t, files, 10)
 		require.Regexp(t, "distsql\\..*\\.html", files[0])
 		require.Regexp(t, "distsql\\..*\\.html", files[1])
 		require.Regexp(t, "goroutines\\..*\\.txt", files[2])
 		require.Regexp(t, "goroutines\\..*\\.txt", files[3])
-		require.Regexp(t, "resumer-trace-n[0-9]\\..*\\.txt", files[4])
-		require.Regexp(t, "resumer-trace-n[0-9]\\..*\\.txt", files[5])
-		require.Regexp(t, "trace\\..*\\.zip", files[6])
-		require.Regexp(t, "trace\\..*\\.zip", files[7])
+		require.Regexp(t, "resumer-trace-n[0-9].*\\.binpb", files[4])
+		require.Regexp(t, "resumer-trace-n[0-9].*\\.binpb\\.txt", files[5])
+		require.Regexp(t, "resumer-trace-n[0-9].*\\.binpb", files[6])
+		require.Regexp(t, "resumer-trace-n[0-9].*\\.binpb\\.txt", files[7])
+		require.Regexp(t, "trace\\..*\\.zip", files[8])
+		require.Regexp(t, "trace\\..*\\.zip", files[9])
 	})
 }
 
