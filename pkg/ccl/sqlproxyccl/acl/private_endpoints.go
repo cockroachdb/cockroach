@@ -25,10 +25,8 @@ type lookupTenantFunc func(ctx context.Context, tenantID roachpb.TenantID) (*ten
 // PrivateEndpoints represents the controller used to manage ACL rules for
 // private connections. A connection is assumed to be private if it includes
 // the EndpointID field, which gets populated through the PROXY headers. The
-// controller rejects connections if:
-//  1. the cluster does not allow private connections, or
-//  2. none of the allowed_private_endpoints entries match the incoming
-//     connection's endpoint identifier.
+// controller rejects connections if none of the AllowedPrivateEndpoints
+// entries match the incoming connection's endpoint identifier.
 type PrivateEndpoints struct {
 	LookupTenantFn lookupTenantFunc
 }
@@ -37,29 +35,24 @@ var _ AccessController = &PrivateEndpoints{}
 
 // CheckConnection implements the AccessController interface.
 func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionTags) error {
-	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
-	if err != nil {
-		return err
-	}
-
 	// Public connections. This ACL is only responsible for private endpoints.
 	if conn.EndpointID == "" {
 		return nil
 	}
 
-	// Cluster allows private connections, so we'll check allowed endpoints.
-	if tenantObj.AllowPrivateConn() {
-		for _, endpoints := range tenantObj.AllowedPrivateEndpoints {
-			// A matching endpointID was found.
-			if endpoints == conn.EndpointID {
-				return nil
-			}
+	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
+	if err != nil {
+		return err
+	}
+	for _, endpoints := range tenantObj.AllowedPrivateEndpoints {
+		// A matching endpointID was found.
+		if endpoints == conn.EndpointID {
+			return nil
 		}
 	}
 
-	// By default, connections are rejected if the cluster does not allow
-	// private connections, or if no endpoints match the connection's endpoint
-	// ID.
+	// By default, connections are rejected if no endpoints match the
+	// connection's endpoint ID.
 	return errors.Newf(
 		"connection to '%s' denied: cluster does not allow private connections from endpoint '%s'",
 		conn.TenantID.String(),

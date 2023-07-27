@@ -334,15 +334,3 @@ func hasRunningPod(pods []*Pod) bool {
 	}
 	return false
 }
-
-// AllowPrivateConn returns true if the tenant allows private connections to it,
-// or false otherwise.
-func (t *Tenant) AllowPrivateConn() bool {
-	return t.ConnectivityType == ALLOW_ALL || t.ConnectivityType == ALLOW_PRIVATE_ONLY
-}
-
-// AllowPublicConn returns true if the tenant allows public connections to it,
-// or false otherwise.
-func (t *Tenant) AllowPublicConn() bool {
-	return t.ConnectivityType == ALLOW_ALL || t.ConnectivityType == ALLOW_PUBLIC_ONLY
-}
