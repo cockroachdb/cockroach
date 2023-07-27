@@ -49,6 +49,12 @@ func isBreakerOpenError(err error) bool {
 	return errors.Is(err, circuit.ErrBreakerOpen) || errors.Is(err, circuitbreaker.ErrBreakerOpen)
 }
 
+// isTenantShutdownError returns true if err is the result of shutting down the
+// secondary tenant.
+func isTenantShutdownError(err error) bool {
+	return strings.Contains(err.Error(), "tenant-side-limiter pool closed: shutting down")
+}
+
 // IsPermanentBulkJobError returns true if the error results in a permanent
 // failure of a bulk job (IMPORT, BACKUP, RESTORE). This function is an
 // allowlist instead of a blocklist: only known safe errors are confirmed to not
@@ -64,5 +70,6 @@ func IsPermanentBulkJobError(err error) bool {
 		!kvcoord.IsSendError(err) &&
 		!isBreakerOpenError(err) &&
 		!sysutil.IsErrConnectionReset(err) &&
-		!sysutil.IsErrConnectionRefused(err)
+		!sysutil.IsErrConnectionRefused(err) &&
+		!isTenantShutdownError(err)
 }
