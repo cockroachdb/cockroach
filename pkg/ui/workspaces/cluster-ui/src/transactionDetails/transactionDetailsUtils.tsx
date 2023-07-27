@@ -41,7 +41,7 @@ export const getTxnFromSqlStatsTxns = (
   txnFingerprintID: string | null,
   apps: string[] | null,
 ): Transaction | null => {
-  if (!txns?.length || !apps?.length || !txnFingerprintID) {
+  if (!txns?.length || !txnFingerprintID) {
     return null;
   }
 
@@ -49,7 +49,7 @@ export const getTxnFromSqlStatsTxns = (
     txn =>
       txn.stats_data.transaction_fingerprint_id.toString() ===
         txnFingerprintID &&
-      (apps.length ? apps.includes(txn.stats_data.app ?? unset) : true),
+      (apps?.length ? apps.includes(txn.stats_data.app ?? unset) : true),
   );
 };
 
