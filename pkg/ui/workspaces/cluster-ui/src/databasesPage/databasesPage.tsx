@@ -21,13 +21,10 @@ import { Pagination } from "src/pagination";
 import { BooleanSetting } from "src/settings/booleanSetting";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
-  ColumnDescriptor,
   handleSortSettingFromQueryString,
   ISortedTablePagination,
-  SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import * as format from "src/util/format";
 import styles from "./databasesPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
@@ -46,7 +43,10 @@ import {
 import { merge } from "lodash";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "../tableStatistics";
-import { DatabaseNameCell, IndexRecCell } from "./helperComponents";
+import {
+  DatabasesSortedTable,
+  getMemoizedDatabaseColumns,
+} from "./databasesTable";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -136,10 +136,7 @@ interface DatabasesPageState {
   filters?: Filters;
   activeFilters?: number;
   lastDetailsError: Error;
-  columns: ColumnDescriptor<DatabasesPageDataDatabase>[];
 }
-
-class DatabasesSortedTable extends SortedTable<DatabasesPageDataDatabase> {}
 
 // filterBySearchQuery returns true if the search query matches the database name.
 function filterBySearchQuery(
@@ -177,7 +174,6 @@ export class DatabasesPage extends React.Component<
         pageSize: tablePageSize,
       },
       lastDetailsError: null,
-      columns: this.columns(),
     };
 
     const stateFromHistory = this.getStateFromHistory();
@@ -282,13 +278,6 @@ export class DatabasesPage extends React.Component<
     if (this.shouldRefreshDatabaseInformation(prevState, prevProps)) {
       this.updateQueryParams();
       this.refresh();
-    }
-    if (
-      prevProps.indexRecommendationsEnabled !==
-        this.props.indexRecommendationsEnabled ||
-      prevProps.showNodeRegionsColumn !== this.props.showNodeRegionsColumn
-    ) {
-      this.setState({ columns: this.columns() });
     }
   }
 
@@ -509,122 +498,12 @@ export class DatabasesPage extends React.Component<
     return false;
   }
 
-  checkInfoAvailable = (
-    database: DatabasesPageDataDatabase,
-    cell: React.ReactNode,
-  ): React.ReactNode => {
-    if (
-      database.lastError &&
-      database.lastError.name !== "GetDatabaseInfoError"
-    ) {
-      return "(unavailable)";
-    }
-    return cell;
-  };
-
-  private columns(): ColumnDescriptor<DatabasesPageDataDatabase>[] {
-    const columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
-      {
-        title: (
-          <Tooltip placement="bottom" title="The name of the database.">
-            Databases
-          </Tooltip>
-        ),
-        cell: database => <DatabaseNameCell database={database} />,
-        sort: database => database.name,
-        className: cx("databases-table__col-name"),
-        name: "name",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The approximate total disk size across all table replicas in the database."
-          >
-            Size
-          </Tooltip>
-        ),
-        cell: database =>
-          this.checkInfoAvailable(database, format.Bytes(database.sizeInBytes)),
-        sort: database => database.sizeInBytes,
-        className: cx("databases-table__col-size"),
-        name: "size",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The total number of tables in the database."
-          >
-            Tables
-          </Tooltip>
-        ),
-        cell: database =>
-          this.checkInfoAvailable(database, database.tableCount),
-        sort: database => database.tableCount,
-        className: cx("databases-table__col-table-count"),
-        name: "tableCount",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The total number of ranges across all tables in the database."
-          >
-            Range Count
-          </Tooltip>
-        ),
-        cell: database =>
-          this.checkInfoAvailable(database, database.rangeCount),
-        sort: database => database.rangeCount,
-        className: cx("databases-table__col-range-count"),
-        name: "rangeCount",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="Regions/Nodes on which the database tables are located."
-          >
-            {this.props.isTenant ? "Regions" : "Regions/Nodes"}
-          </Tooltip>
-        ),
-        cell: database =>
-          this.checkInfoAvailable(
-            database,
-            database.nodesByRegionString || "None",
-          ),
-        sort: database => database.nodesByRegionString,
-        className: cx("databases-table__col-node-regions"),
-        name: "nodeRegions",
-        hideIfTenant: true,
-        showByDefault: this.props.showNodeRegionsColumn,
-      },
-    ];
-    if (this.props.indexRecommendationsEnabled) {
-      columns.push({
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="Index recommendations will appear if the system detects improper index usage, such as the
-        occurrence of unused indexes. Following index recommendations may help improve query performance."
-          >
-            Index Recommendations
-          </Tooltip>
-        ),
-        cell: database => <IndexRecCell database={database} />,
-        sort: database => database.numIndexRecommendations,
-        className: cx("databases-table__col-idx-rec"),
-        name: "numIndexRecommendations",
-      });
-    }
-    return columns;
-  }
-
   render(): React.ReactElement {
-    const displayColumns = this.state.columns.filter(
-      col => col.showByDefault !== false,
-    );
+    const displayColumns = getMemoizedDatabaseColumns({
+      indexRecommendationsEnabled: this.props.indexRecommendationsEnabled,
+      showNodeRegionsColumn: this.props.showNodeRegionsColumn,
+      isTenant: this.props.isTenant,
+    }).filter(col => col.showByDefault !== false);
 
     const { filters, search, nodeRegions, isTenant } = this.props;
     const { pagination } = this.state;

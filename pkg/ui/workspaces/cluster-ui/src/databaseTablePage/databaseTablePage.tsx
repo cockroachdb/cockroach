@@ -22,7 +22,7 @@ import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { SqlBox } from "src/sql";
-import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
+import { SortSetting } from "src/sortedtable";
 import {
   SummaryCard,
   SummaryCardItem,
@@ -48,16 +48,16 @@ import { RecommendationType } from "../indexDetailsPage";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { UIConfigState } from "../store";
-import { Timestamp, Timezone } from "../timestamp";
+import { Timestamp } from "../timestamp";
 import {
-  ActionCell,
+  DatabaseTableGrantsTable,
   DbTablesBreadcrumbs,
   FormatMVCCInfo,
-  IndexRecCell,
+  getMemoizedTableIndexStatsColumns,
+  grantsColumns,
+  IndexUsageStatsTable,
   LastReset,
-  LastUsed,
-  NameCell,
-} from "./helperComponents";
+} from "./databaseTableComponents";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
@@ -156,7 +156,7 @@ interface IndexRecommendation {
   reason: string;
 }
 
-interface Grant {
+export interface Grant {
   user: string;
   privileges: string[];
 }
@@ -178,15 +178,10 @@ interface DatabaseTablePageState {
   grantSortSetting: SortSetting;
   indexSortSetting: SortSetting;
   tab: string;
-  indexStatsColumns: ColumnDescriptor<IndexStat>[];
 }
 
 const indexTabKey = "overview";
 const grantsTabKey = "grants";
-
-class DatabaseTableGrantsTable extends SortedTable<Grant> {}
-
-class IndexUsageStatsTable extends SortedTable<IndexStat> {}
 
 export class DatabaseTablePage extends React.Component<
   DatabaseTablePageProps,
@@ -223,7 +218,6 @@ export class DatabaseTablePage extends React.Component<
       indexSortSetting: indexSort,
       grantSortSetting: grantSort,
       tab: currentTab,
-      indexStatsColumns: this.indexStatsColumns(),
     };
   }
 
@@ -248,13 +242,8 @@ export class DatabaseTablePage extends React.Component<
     this.refresh();
   }
 
-  componentDidUpdate(prevProp: Readonly<DatabaseTablePageProps>): void {
+  componentDidUpdate(): void {
     this.refresh();
-    if (
-      prevProp.showIndexRecommendations !== this.props.showIndexRecommendations
-    ) {
-      this.setState({ indexStatsColumns: this.indexStatsColumns() });
-    }
   }
 
   private refresh() {
@@ -313,97 +302,6 @@ export class DatabaseTablePage extends React.Component<
     history.location.search = searchParams.toString();
     history.replace(history.location);
   }
-
-  private indexStatsColumns(): ColumnDescriptor<IndexStat>[] {
-    const indexStatsColumns: ColumnDescriptor<IndexStat>[] = [
-      {
-        name: "indexes",
-        title: "Indexes",
-        hideTitleUnderline: true,
-        className: cx("index-stats-table__col-indexes"),
-        cell: indexStat => (
-          <NameCell
-            indexStat={indexStat}
-            tableName={this.props.name}
-            showIndexRecommendations={this.props.showIndexRecommendations}
-          />
-        ),
-        sort: indexStat => indexStat.indexName,
-      },
-      {
-        name: "total reads",
-        title: "Total Reads",
-        hideTitleUnderline: true,
-        cell: indexStat => format.Count(indexStat.totalReads),
-        sort: indexStat => indexStat.totalReads,
-      },
-      {
-        name: "last used",
-        title: (
-          <>
-            Last Used <Timezone />
-          </>
-        ),
-        hideTitleUnderline: true,
-        className: cx("index-stats-table__col-last-used"),
-        cell: indexStat => <LastUsed indexStat={indexStat} />,
-        sort: indexStat => indexStat.lastUsed,
-      },
-    ];
-    if (this.props.showIndexRecommendations) {
-      indexStatsColumns.push({
-        name: "index recommendations",
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
-          >
-            Index Recommendations
-          </Tooltip>
-        ),
-        cell: indexStat => <IndexRecCell indexStat={indexStat} />,
-        sort: indexStat => indexStat.indexRecommendations.length,
-      });
-      const isCockroachCloud = this.context;
-      if (!isCockroachCloud) {
-        indexStatsColumns.push({
-          name: "action",
-          title: "",
-          cell: indexStat => (
-            <ActionCell
-              indexStat={indexStat}
-              databaseName={this.props.databaseName}
-              tableName={this.props.name}
-            />
-          ),
-        });
-      }
-    }
-    return indexStatsColumns;
-  }
-
-  private grantsColumns: ColumnDescriptor<Grant>[] = [
-    {
-      name: "username",
-      title: (
-        <Tooltip placement="bottom" title="The user name.">
-          User Name
-        </Tooltip>
-      ),
-      cell: grant => grant.user,
-      sort: grant => grant.user,
-    },
-    {
-      name: "privilege",
-      title: (
-        <Tooltip placement="bottom" title="The list of grants for the user.">
-          Grants
-        </Tooltip>
-      ),
-      cell: grant => grant.privileges.join(", "),
-      sort: grant => grant.privileges.join(", "),
-    },
-  ];
 
   render(): React.ReactElement {
     const { hasAdminRole } = this.props;
@@ -579,7 +477,13 @@ export class DatabaseTablePage extends React.Component<
                           <IndexUsageStatsTable
                             className="index-stats-table"
                             data={this.props.indexStats.stats}
-                            columns={this.state.indexStatsColumns}
+                            columns={getMemoizedTableIndexStatsColumns({
+                              showIndexRecommendations:
+                                this.props.showIndexRecommendations,
+                              isCockroachCloud: this.context,
+                              dbName: this.props.databaseName,
+                              tableName: this.props.name,
+                            })}
                             sortSetting={this.state.indexSortSetting}
                             onChangeSortSetting={this.changeIndexSortSetting.bind(
                               this,
@@ -607,7 +511,7 @@ export class DatabaseTablePage extends React.Component<
                 render={() => (
                   <DatabaseTableGrantsTable
                     data={this.props.details.grants}
-                    columns={this.grantsColumns}
+                    columns={grantsColumns}
                     sortSetting={this.state.grantSortSetting}
                     onChangeSortSetting={this.changeGrantSortSetting.bind(this)}
                     loading={this.props.details.loading}

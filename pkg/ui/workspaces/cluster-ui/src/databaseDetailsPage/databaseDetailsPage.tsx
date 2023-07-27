@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link, RouteComponentProps } from "react-router-dom";
-import { Tooltip } from "antd";
+import { RouteComponentProps } from "react-router-dom";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import { Dropdown, DropdownOption } from "src/dropdown";
@@ -18,21 +17,13 @@ import { DatabaseIcon } from "src/icon/databaseIcon";
 import { StackIcon } from "src/icon/stackIcon";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Pagination } from "src/pagination";
-import {
-  ColumnDescriptor,
-  ISortedTablePagination,
-  SortedTable,
-  SortSetting,
-} from "src/sortedtable";
-import * as format from "src/util/format";
-import { DATE_FORMAT, EncodeDatabaseTableUri } from "src/util/format";
-import { mvccGarbage, syncHistory, unique } from "../util";
+import { ISortedTablePagination, SortSetting } from "src/sortedtable";
+import { syncHistory, unique } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment-timezone";
-import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { Search } from "../search";
@@ -44,13 +35,11 @@ import {
 } from "src/queryFilter";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
-import { Timestamp, Timezone } from "../timestamp";
 import {
+  DatabaseDetailsSortedTable,
   DbDetailsBreadcrumbs,
-  IndexRecWithIconCell,
-  MVCCInfoCell,
-  TableNameCell,
-} from "./helperComponents";
+  getDatabaseDetailsColumns,
+} from "./databaseDetailsTable";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -168,8 +157,6 @@ interface DatabaseDetailsPageState {
 
 const tablePageSize = 20;
 const disableTableSortSize = tablePageSize * 2;
-
-class DatabaseSortedTable extends SortedTable<DatabaseDetailsPageDataTable> {}
 
 // filterBySearchQuery returns true if the search query matches the database name.
 function filterBySearchQuery(
@@ -502,254 +489,6 @@ export class DatabaseDetailsPage extends React.Component<
     }
   }
 
-  private columns(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
-    switch (this.props.viewMode) {
-      case ViewMode.Tables:
-        return this.columnsForTablesViewMode();
-      case ViewMode.Grants:
-        return this.columnsForGrantsViewMode();
-      default:
-        throw new Error(`Unknown view mode ${this.props.viewMode}`);
-    }
-  }
-
-  checkInfoAvailable = (
-    error: Error,
-    cell: React.ReactNode,
-  ): React.ReactNode => {
-    if (error) {
-      return "(unavailable)";
-    }
-    return cell;
-  };
-
-  private columnsForTablesViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
-    return (
-      [
-        {
-          title: (
-            <Tooltip placement="bottom" title="The name of the table.">
-              Tables
-            </Tooltip>
-          ),
-          cell: table => <TableNameCell table={table} dbDetails={this.props} />,
-          sort: table => table.name,
-          className: cx("database-table__col-name"),
-          name: "name",
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title="The approximate compressed total disk size across all replicas of the table."
-            >
-              Replication Size
-            </Tooltip>
-          ),
-          cell: table =>
-            this.checkInfoAvailable(
-              table.lastError,
-              format.Bytes(table.details.replicationSizeInBytes),
-            ),
-          sort: table => table.details.replicationSizeInBytes,
-          className: cx("database-table__col-size"),
-          name: "replicationSize",
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title="The total number of ranges in the table."
-            >
-              Ranges
-            </Tooltip>
-          ),
-          cell: table =>
-            this.checkInfoAvailable(table.lastError, table.details.rangeCount),
-          sort: table => table.details.rangeCount,
-          className: cx("database-table__col-range-count"),
-          name: "rangeCount",
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title="The number of columns in the table."
-            >
-              Columns
-            </Tooltip>
-          ),
-          cell: table =>
-            this.checkInfoAvailable(table.lastError, table.details.columnCount),
-          sort: table => table.details.columnCount,
-          className: cx("database-table__col-column-count"),
-          name: "columnCount",
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title="The number of indexes in the table."
-            >
-              Indexes
-            </Tooltip>
-          ),
-          cell: table => {
-            return table.details.hasIndexRecommendations &&
-              this.props.showIndexRecommendations
-              ? this.checkInfoAvailable(
-                  table.lastError,
-                  <IndexRecWithIconCell table={table} />,
-                )
-              : this.checkInfoAvailable(
-                  table.lastError,
-                  table.details.indexCount,
-                );
-          },
-          sort: table => table.details.indexCount,
-          className: cx("database-table__col-index-count"),
-          name: "indexCount",
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title="Regions/Nodes on which the table data is stored."
-            >
-              Regions
-            </Tooltip>
-          ),
-          cell: table =>
-            this.checkInfoAvailable(
-              table.lastError,
-              table.details.nodesByRegionString || "None",
-            ),
-          sort: table => table.details.nodesByRegionString,
-          className: cx("database-table__col--regions"),
-          name: "regions",
-          showByDefault: this.props.showNodeRegionsColumn,
-          hideIfTenant: true,
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title={
-                <div className={cx("tooltip__table--title")}>
-                  {"% of total uncompressed logical data that has not been modified (updated or deleted). " +
-                    "A low percentage can cause statements to scan more data ("}
-                  <Anchor href={mvccGarbage} target="_blank">
-                    MVCC values
-                  </Anchor>
-                  {") than required, which can reduce performance."}
-                </div>
-              }
-            >
-              % of Live Data
-            </Tooltip>
-          ),
-          cell: table =>
-            this.checkInfoAvailable(
-              table.lastError,
-              <MVCCInfoCell details={table.details} />,
-            ),
-          sort: table => table.details.livePercentage,
-          className: cx("database-table__col-column-count"),
-          name: "livePercentage",
-        },
-        {
-          title: (
-            <Tooltip
-              placement="bottom"
-              title="The last time table statistics were created or updated."
-            >
-              Table Stats Last Updated <Timezone />
-            </Tooltip>
-          ),
-          cell: table => (
-            <Timestamp
-              time={table.details.statsLastUpdated}
-              format={DATE_FORMAT}
-              fallback={"No table statistics found"}
-            />
-          ),
-          sort: table => table.details.statsLastUpdated,
-          className: cx("database-table__col--table-stats"),
-          name: "tableStatsUpdated",
-        },
-      ] as ColumnDescriptor<DatabaseDetailsPageDataTable>[]
-    ).filter(c => c.showByDefault !== false);
-  }
-
-  private columnsForGrantsViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
-    return [
-      {
-        title: (
-          <Tooltip placement="bottom" title="The name of the table.">
-            Tables
-          </Tooltip>
-        ),
-        cell: table => (
-          <Link
-            to={
-              EncodeDatabaseTableUri(this.props.name, table.name) +
-              `?tab=grants`
-            }
-            className={cx("icon__container")}
-          >
-            <DatabaseIcon className={cx("icon--s")} />
-            {table.name}
-          </Link>
-        ),
-        sort: table => table.name,
-        className: cx("database-table__col-name"),
-        name: "name",
-      },
-      {
-        title: (
-          <Tooltip placement="bottom" title="The number of users of the table.">
-            Users
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(table.lastError, table.details.userCount),
-        sort: table => table.details.userCount,
-        className: cx("database-table__col-user-count"),
-        name: "userCount",
-      },
-      {
-        title: (
-          <Tooltip placement="bottom" title="The list of roles of the table.">
-            Roles
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(
-            table.lastError,
-            table.details.roles.join(", "),
-          ),
-        sort: table => table.details.roles.join(", "),
-        className: cx("database-table__col-roles"),
-        name: "roles",
-      },
-      {
-        title: (
-          <Tooltip placement="bottom" title="The list of grants of the table.">
-            Grants
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(
-            table.lastError,
-            table.details.grants.join(", "),
-          ),
-        sort: table => table.details.grants.join(", "),
-        className: cx("database-table__col-grants"),
-        name: "grants",
-      },
-    ];
-  }
-
   private static viewOptions(): DropdownOption<ViewMode>[] {
     return [
       {
@@ -851,11 +590,11 @@ export class DatabaseDetailsPage extends React.Component<
             page={"databases"}
             error={this.props.lastError}
             render={() => (
-              <DatabaseSortedTable
+              <DatabaseDetailsSortedTable
                 className={cx("database-table")}
                 tableWrapperClassName={cx("sorted-table")}
                 data={tablesToDisplay}
-                columns={this.columns()}
+                columns={getDatabaseDetailsColumns(this.props)}
                 sortSetting={sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
                 pagination={this.state.pagination}
@@ -896,7 +635,6 @@ export class DatabaseDetailsPage extends React.Component<
             />
           )}
         </section>
-
         <Pagination
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
