@@ -1,0 +1,32 @@
+# The returned data now is just dummy data
+# get workload index-recs
+query T nosort
+SELECT workload_index_recs();
+----
+1
+2
+3
+
+# get workload index-recs with time filter
+query T nosort
+SELECT workload_index_recs(now() - '2 weeks'::interval);
+----
+1
+2
+3
+
+# get workload index-recs with budget limit
+query T nosort
+SELECT workload_index_recs('42MB');
+----
+1
+2
+3
+
+# get workload index-recs with time filter and budget limit
+query T nosort
+SELECT workload_index_recs('2023-06-13 10:10:10-05:00', '58GiB');
+----
+1
+2
+3
