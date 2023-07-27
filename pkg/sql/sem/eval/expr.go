@@ -456,6 +456,10 @@ func (e *evaluator) EvalFuncExpr(expr *tree.FuncExpr) (tree.Datum, error) {
 		return tree.DNull, err
 	}
 
+	if fn.Body != "" {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot evaluate function in this context")
+	}
+
 	res, err := fn.Fn.(FnOverload)(e.ctx(), args)
 	if err != nil {
 		return nil, expr.MaybeWrapError(err)

@@ -1955,6 +1955,13 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_prepare(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_prepare")
+}
+
 func TestLogic_union(
 	t *testing.T,
 ) {
