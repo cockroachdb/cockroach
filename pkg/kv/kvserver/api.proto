@@ -89,6 +89,18 @@ message GetTableMetricsResponse{
   repeated storage.enginepb.SSTableMetricsInfo table_metrics = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableMetrics"];
 }
 
+// ScanStorageInternalKeysRequest retrieves metrics about keys within a range belonging
+// to a particular node and store.
+message ScanStorageInternalKeysRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  int64 MegabytesPerSecond = 3;
+}
+
+message ScanStorageInternalKeysResponse {
+  repeated storage.enginepb.StorageInternalKeysMetrics advanced_metrics = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "AdvancedPebbleMetrics"];
+}
+
 message CompactEngineSpanResponse {
 }
 
