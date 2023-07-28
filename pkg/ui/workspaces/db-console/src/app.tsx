@@ -383,7 +383,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     path={`/reports/network/:${nodeIDAttr}`}
                     component={Network}
                   />
-                  <Route exact path="/reports/network" component={Network} />
+                  <Redirect
+                    from={`/reports/network`}
+                    to={`/reports/network/region`}
+                  />
                   <Route exact path="/reports/nodes" component={Nodes} />
                   <Route
                     exact
