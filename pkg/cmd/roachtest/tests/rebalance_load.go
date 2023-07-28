@@ -304,6 +304,11 @@ func makeStoreCPUFn(
 		storesPerNode := numStores / numNodes
 		storeCPUs := make([]float64, numStores)
 		for node, result := range resp.Results {
+			if len(result.Datapoints) == 0 {
+				// If any node has no datapoints, there isn't much point looking at
+				// others because the comparison is useless.
+				return nil, errors.Newf("node %d has no CPU datapoints", node)
+			}
 			// Take the latest CPU data point only.
 			cpu := result.Datapoints[len(result.Datapoints)-1].Value
 			nodeIdx := node * storesPerNode
