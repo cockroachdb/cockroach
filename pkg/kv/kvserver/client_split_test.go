@@ -1392,7 +1392,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 // See https://github.com/cockroachdb/cockroach/issues/1644.
 func runSetupSplitSnapshotRace(
 	t *testing.T,
-	stickyEnginesRegistry server.StickyInMemEnginesRegistry,
+	stickyVFSRegistry server.StickyVFSRegistry,
 	testFn func(*testcluster.TestCluster, roachpb.Key, roachpb.Key),
 ) {
 	const numServers int = 6
@@ -1401,13 +1401,13 @@ func runSetupSplitSnapshotRace(
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEnginesRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableGCQueue: true,
@@ -1542,10 +1542,12 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
-	runSetupSplitSnapshotRace(t, stickyEngineRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
+	runSetupSplitSnapshotRace(t, stickyVFSRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the left range up first so that the split happens before it sees a snapshot.
 		for i := 1; i <= 3; i++ {
 			require.NoError(t, tc.RestartServer(i))
@@ -1579,10 +1581,12 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEngines because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
-	runSetupSplitSnapshotRace(t, stickyEngineRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
+	runSetupSplitSnapshotRace(t, stickyVFSRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
 			require.NoError(t, tc.RestartServer(i))
