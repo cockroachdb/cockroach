@@ -198,8 +198,7 @@ func TestGetPlanStagingState(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, planStores := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, planStores := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -260,8 +259,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -301,8 +299,7 @@ func TestStageBadVersions(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 1)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -330,8 +327,7 @@ func TestStageConflictingPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -370,8 +366,7 @@ func TestForcePlanUpdate(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -412,8 +407,7 @@ func TestNodeDecommissioned(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -445,8 +439,7 @@ func TestRejectDecommissionReachableNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -466,8 +459,7 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -498,8 +490,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 5)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -554,8 +545,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _ := prepTestCluster(t, 5)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, _ := prepTestCluster(t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -651,8 +641,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, pss := prepTestCluster(t, 3)
-	defer reg.CloseAllStickyInMemEngines()
+	tc, _, pss := prepTestCluster(t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm, err := tc.GetAdminClient(ctx, t, 0)
@@ -689,10 +678,10 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 func prepTestCluster(
 	t *testing.T, nodes int,
-) (*testcluster.TestCluster, server.StickyInMemEnginesRegistry, map[int]loqrecovery.PlanStore) {
+) (*testcluster.TestCluster, server.StickyVFSRegistry, map[int]loqrecovery.PlanStore) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
 
-	reg := server.NewStickyInMemEnginesRegistry()
+	reg := server.NewStickyVFSRegistry()
 
 	lReg := listenerutil.NewListenerRegistry()
 
@@ -704,7 +693,7 @@ func prepTestCluster(
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: reg,
+					StickyVFSRegistry: reg,
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,
@@ -712,8 +701,8 @@ func prepTestCluster(
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 		}
@@ -729,8 +718,8 @@ func prepInMemPlanStores(
 ) map[int]loqrecovery.PlanStore {
 	pss := make(map[int]loqrecovery.PlanStore)
 	for id, args := range serverArgs {
-		reg := args.Knobs.Server.(*server.TestingKnobs).StickyEngineRegistry
-		store, err := reg.GetUnderlyingFS(args.StoreSpecs[0])
+		reg := args.Knobs.Server.(*server.TestingKnobs).StickyVFSRegistry
+		store, err := reg.Get(args.StoreSpecs[0])
 		require.NoError(t, err, "can't create loq recovery plan store")
 		pss[id] = loqrecovery.NewPlanStore(".", store)
 	}

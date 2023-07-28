@@ -119,8 +119,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "kv.expiration_leases_only.enabled", func(t *testing.T, expOnly bool) {
-		storeReg := server.NewStickyInMemEnginesRegistry()
-		defer storeReg.CloseAllStickyInMemEngines()
+		storeReg := server.NewStickyVFSRegistry()
 		listenerReg := listenerutil.NewListenerRegistry()
 		defer listenerReg.Close()
 
@@ -138,7 +137,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: storeReg,
+						StickyVFSRegistry: storeReg,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						DisableScanner: true,
@@ -146,8 +145,8 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 				},
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:               true,
-						StickyInMemoryEngineID: "test",
+						InMemory:    true,
+						StickyVFSID: "test",
 					},
 				},
 			},

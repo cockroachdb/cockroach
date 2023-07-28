@@ -2089,8 +2089,6 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -2109,7 +2107,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 				ScanMaxIdleTime:   time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry:      stickyEngineRegistry,
+						StickyVFSRegistry:         server.NewStickyVFSRegistry(),
 						DefaultZoneConfigOverride: &zcfg,
 					},
 				},
