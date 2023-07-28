@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"net/url"
 	"testing"
 	"time"
@@ -25,14 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -457,8 +459,19 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	verifyNodeID(t, sqlConn, "SELECT _", false, "gateway_disabled")
 }
 
+func countStats(t *testing.T, sqlConn *sqlutils.SQLRunner) (numStmtStats int64, numTxnStats int64) {
+	sqlConn.QueryRow(t, `
+		SELECT count(*)
+		FROM system.statement_statistics`).Scan(&numStmtStats)
+
+	sqlConn.QueryRow(t, `
+		SELECT count(*)
+		FROM system.transaction_statistics`).Scan(&numTxnStats)
+
+	return numStmtStats, numTxnStats
+}
+
 func TestSQLStatsPersistedLimitReached(t *testing.T) {
-	skip.WithIssue(t, 97488)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -467,60 +480,50 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	s, conn, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	sqlConn := sqlutils.MakeSQLRunner(conn)
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
-	sqlConn.Exec(t, "set cluster setting sql.stats.persisted_rows.max=8")
-	sqlConn.Exec(t, "set cluster setting sql.metrics.max_mem_stmt_fingerprints=3")
-	sqlConn.Exec(t, "set cluster setting sql.metrics.max_mem_txn_fingerprints=3")
+	// 1. Flush then count to get the initial number of rows.
+	pss.Flush(ctx)
+	stmtStatsCount, txnStatsCount := countStats(t, sqlConn)
 
-	// Cleanup data generated during the test creation.
-	sqlConn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	const additionalStatements = int64(3)
+	sqlConn.Exec(t, "SELECT 1")
+	sqlConn.Exec(t, "SELECT 1, 2")
+	sqlConn.Exec(t, "SELECT 1, 2, 3")
 
-	testCases := []struct {
-		query string
-	}{
-		{query: "SELECT 1"},
-		{query: "SELECT 1, 2"},
-		{query: "SELECT 1, 2, 3"},
-		{query: "SELECT 1, 2, 3, 4"},
-		{query: "SELECT 1, 2, 3, 4, 5"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16"},
-		{query: "SELECT 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17"},
-	}
+	pss.Flush(ctx)
+	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, sqlConn)
 
-	var count int64
-	for _, tc := range testCases {
-		sqlConn.Exec(t, tc.query)
-		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	// 2. After flushing and counting a second time, we should see at least 3 more rows.
+	require.GreaterOrEqual(t, stmtStatsCountFlush2-stmtStatsCount, additionalStatements)
+	require.GreaterOrEqual(t, txnStatsCountFlush2-txnStatsCount, additionalStatements)
 
-		// We can flush data if the size of the table is less than 1.5 the value
-		// sql.stats.persisted_rows.max.
-		// If we flush, we add up to the value of sql.metrics.max_mem_stmt_fingerprints,
-		// so the max value that can exist on the system table will be
-		// sql.stats.persisted_rows.max * 1.5 + sql.metrics.max_mem_stmt_fingerprints:
-		// 8 * 1.5 + 3 = 15.
-		rows := sqlConn.QueryRow(t, `
-		SELECT count(*)
-		FROM system.statement_statistics`)
-		rows.Scan(&count)
-		require.LessOrEqual(t, count, int64(15))
+	// 3. Set sql.stats.persisted_rows.max according to the smallest table.
+	smallest := math.Min(float64(stmtStatsCountFlush2), float64(txnStatsCountFlush2))
+	maxRows := int(math.Floor(smallest / 1.5))
+	sqlConn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.persisted_rows.max=%d", maxRows))
 
-		rows = sqlConn.QueryRow(t, `
-		SELECT count(*)
-		FROM system.transaction_statistics`)
-		rows.Scan(&count)
-		require.LessOrEqual(t, count, int64(15))
-	}
+	// 4. Wait for the cluster setting to be applied.
+	testutils.SucceedsSoon(t, func() error {
+		var appliedSetting int
+		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.persisted_rows.max")
+		row.Scan(&appliedSetting)
+		if appliedSetting != maxRows {
+			return errors.Newf("waiting for sql.stats.persisted_rows.max to be applied")
+		}
+		return nil
+	})
+
+	sqlConn.Exec(t, "SELECT 1, 2, 3, 4")
+	sqlConn.Exec(t, "SELECT 1, 2, 3, 4, 5")
+	sqlConn.Exec(t, "SELECT 1, 2, 3, 4, 6, 7")
+	pss.Flush(ctx)
+	stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, sqlConn)
+
+	// 5. Assert that neither table has grown in length.
+	require.Equal(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
+	require.Equal(t, txnStatsCountFlush3, txnStatsCountFlush2)
+
 }
 
 type stubTime struct {
