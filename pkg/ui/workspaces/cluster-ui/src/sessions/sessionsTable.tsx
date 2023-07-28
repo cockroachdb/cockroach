@@ -16,12 +16,7 @@ import {
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
-import {
-  BytesWithPrecision,
-  Count,
-  DATE_FORMAT,
-  DATE_FORMAT_24_TZ,
-} from "src/util/format";
+import { BytesWithPrecision, Count, DATE_FORMAT } from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 

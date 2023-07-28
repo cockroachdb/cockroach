@@ -26,7 +26,6 @@ import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
 import { IndexStatsState } from "../store/indexStats";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RecommendationType as RecType } from "../indexDetailsPage";
-import { TableIndexStatsResponse } from "../api/indexDetailsApi";
 type IndexUsageStatistic =
   cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
 const { RecommendationType } = cockroach.sql.IndexRecommendation;

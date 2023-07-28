@@ -46,8 +46,8 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
   },
   setTimeScale: () => {},
   refreshSessions: () => {},
-  cancelSession: (req: CancelSessionRequestMessage) => {},
-  cancelQuery: (req: CancelQueryRequestMessage) => {},
+  cancelSession: (_req: CancelSessionRequestMessage) => {},
+  cancelQuery: (_req: CancelQueryRequestMessage) => {},
   refreshNodes: () => {},
   refreshNodesLiveness: () => {},
   uiConfig: {

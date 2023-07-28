@@ -10,7 +10,6 @@
 
 import React from "react";
 import { Anchor } from "src/anchor";
-import moment from "moment-timezone";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
@@ -24,8 +23,6 @@ import {
   writtenToDisk,
 } from "src/util";
 import { Timezone } from "src/timestamp";
-
-export type NodeNames = { [nodeId: string]: string };
 
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {

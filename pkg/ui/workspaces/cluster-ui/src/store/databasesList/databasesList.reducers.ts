@@ -12,8 +12,6 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DatabasesListResponse } from "src/api";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 
-import { SqlExecutionRequest } from "../../api/sqlApi";
-
 export type DatabasesListState = {
   data: DatabasesListResponse;
   // Captures thrown errors.

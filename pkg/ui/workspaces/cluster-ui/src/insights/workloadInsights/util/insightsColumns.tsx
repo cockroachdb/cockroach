@@ -166,19 +166,19 @@ export const insightsTableTitles: InsightsTableTitleType = {
       "username",
     );
   },
-  schemaName: (execType: InsightExecEnum) => {
+  schemaName: (_execType: InsightExecEnum) => {
     return makeToolTip(<p>The name of the contended schema.</p>, "schemaName");
   },
-  databaseName: (execType: InsightExecEnum) => {
+  databaseName: (_execType: InsightExecEnum) => {
     return makeToolTip(
       <p>The name of the contended database.</p>,
       "databaseName",
     );
   },
-  tableName: (execType: InsightExecEnum) => {
+  tableName: (_execType: InsightExecEnum) => {
     return makeToolTip(<p>The name of the contended table.</p>, "tableName");
   },
-  indexName: (execType: InsightExecEnum) => {
+  indexName: (_execType: InsightExecEnum) => {
     return makeToolTip(<p>The name of the contended index.</p>, "indexName");
   },
   applicationName: (execType: InsightExecEnum) => {

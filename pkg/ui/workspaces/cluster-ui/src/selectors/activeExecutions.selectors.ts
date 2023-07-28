@@ -9,12 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import {
-  ActiveExecutions,
-  ActiveTransaction,
-  ExecutionStatus,
-  ExecutionType,
-} from "src/activeExecutions/types";
+import { ActiveExecutions } from "src/activeExecutions/types";
 import { AppState } from "src/store";
 import { selectActiveExecutionsCombiner } from "src/selectors/activeExecutionsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";

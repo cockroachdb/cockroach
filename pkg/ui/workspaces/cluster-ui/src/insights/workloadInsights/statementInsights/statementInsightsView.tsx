@@ -112,7 +112,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   selectedColumnNames,
   dropDownSelect,
   maxSizeApiReached,
-  isTenant,
 }: StatementInsightsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
