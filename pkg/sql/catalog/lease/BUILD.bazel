@@ -48,7 +48,6 @@ go_library(
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/quotapool",
         "//pkg/util/retry",

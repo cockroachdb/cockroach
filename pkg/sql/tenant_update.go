@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -87,8 +87,8 @@ WHERE id = $1`
 			return pgerror.Newf(pgcode.DuplicateObject, "name %q is already taken", info.Name)
 		}
 		return err
-	} else if num != 1 {
-		logcrash.ReportOrPanic(ctx, &settings.SV, "unexpected number of rows affected: %d", num)
+	} else if err := must.Equal(ctx, num, 1, "rows affected for tenant %+v", info); err != nil {
+		return err
 	}
 	return nil
 }

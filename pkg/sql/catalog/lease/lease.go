@@ -42,7 +42,6 @@ import (
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1200,8 +1199,8 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 		}
 		b, err := descbuilder.FromSerializedValue(&ev.Value)
 		if err != nil {
-			logcrash.ReportOrPanic(ctx, &m.storage.settings.SV,
-				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
+			log.Errorf(ctx, "failed to unmarshal descriptor %s %v: %v", ev.Key, ev.Value, err)
+			return
 		}
 		if b == nil {
 			return

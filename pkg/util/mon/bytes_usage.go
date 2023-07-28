@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -588,12 +588,10 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			humanizeutil.IBytes(mm.mu.maxAllocated))
 	}
 
-	if check && mm.mu.curAllocated != 0 {
-		logcrash.ReportOrPanic(
-			ctx, &mm.settings.SV,
-			"%s: unexpected %d leftover bytes",
-			mm.name, mm.mu.curAllocated)
-		mm.releaseBytesLocked(ctx, mm.mu.curAllocated)
+	if check {
+		if err := must.Zero(ctx, mm.mu.curAllocated, "%s: leftover bytes", mm.name); err != nil {
+			mm.releaseBytesLocked(ctx, mm.mu.curAllocated)
+		}
 	}
 
 	mm.releaseBudget(ctx)
@@ -953,10 +951,7 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b == nil || delta == 0 {
 		return
 	}
-	if b.used < delta {
-		logcrash.ReportOrPanic(ctx, &b.mon.settings.SV,
-			"%s: no bytes in account to release, current %d, free %d",
-			b.mon.name, b.used, delta)
+	if err := must.LessOrEqual(ctx, delta, b.used, "%s: no bytes to release", b.mon.name); err != nil {
 		delta = b.used
 	}
 	b.used -= delta
@@ -1033,10 +1028,8 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 // already been locked.
 func (mm *BytesMonitor) releaseBytesLocked(ctx context.Context, sz int64) {
 	mm.mu.AssertHeld()
-	if mm.mu.curAllocated < sz {
-		logcrash.ReportOrPanic(ctx, &mm.settings.SV,
-			"%s: no bytes to release, current %d, free %d",
-			mm.name, mm.mu.curAllocated, sz)
+	if err := must.LessOrEqual(ctx, sz, mm.mu.curAllocated,
+		"%s: no bytes to release", mm.name); err != nil {
 		sz = mm.mu.curAllocated
 	}
 	mm.mu.curAllocated -= sz

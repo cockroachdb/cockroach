@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -217,17 +217,11 @@ func (c *Cache) start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if systemPrivDesc.IsUncommittedVersion() {
-			// This shouldn't ever happen, but if it does somehow, then we can't pre-warm the cache.
-			logcrash.ReportOrPanic(
-				ctx, &c.settings.SV,
-				"cannot warm cache: %s is at an uncommitted version",
-				syntheticprivilege.SystemPrivilegesTableName,
-			)
-			return errors.AssertionFailedf(
-				"%s is at an uncommitted version",
-				syntheticprivilege.SystemPrivilegesTableName,
-			)
+		// This shouldn't ever happen, but if it does somehow, then we can't pre-warm the cache.
+		if err := must.False(ctx, systemPrivDesc.IsUncommittedVersion(),
+			"cannot warm cache: %s is at an uncommitted version",
+			syntheticprivilege.SystemPrivilegesTableName); err != nil {
+			return err
 		}
 		tableVersions = []descpb.DescriptorVersion{systemPrivDesc.GetVersion()}
 

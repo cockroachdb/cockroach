@@ -21,11 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -510,13 +509,7 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 		// ConsumerDone() implementations that just call this unconditionally.
 		// However, calling it with an error in states other than StateRunning is
 		// not permitted.
-		if err != nil {
-			logcrash.ReportOrPanic(
-				pb.Ctx(),
-				&pb.FlowCtx.Cfg.Settings.SV,
-				"MoveToDraining called in state %s with err: %+v",
-				pb.State, err)
-		}
+		_ = must.NoError(pb.Ctx(), err, "MoveToDraining called in state %s with error", pb.State)
 		return
 	}
 
@@ -540,13 +533,7 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 // It deals with optionally draining an input and returning trailing meta. It
 // also moves from StateDraining to StateTrailingMeta when appropriate.
 func (pb *ProcessorBaseNoHelper) DrainHelper() *execinfrapb.ProducerMetadata {
-	if pb.State == StateRunning {
-		logcrash.ReportOrPanic(
-			pb.Ctx(),
-			&pb.FlowCtx.Cfg.Settings.SV,
-			"drain helper called in StateRunning",
-		)
-	}
+	_ = must.NotEqual(context.TODO(), pb.State, StateRunning, "drain helper called in StateRunning")
 
 	// trailingMeta always has priority; it seems like a good idea because it
 	// causes metadata to be sent quickly after it is produced (e.g. the error
@@ -645,14 +632,8 @@ func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.Component
 // This method is to be called when the processor is done producing rows and
 // draining its inputs (if it wants to drain them).
 func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
-	if pb.State == StateTrailingMeta || pb.State == StateExhausted {
-		logcrash.ReportOrPanic(
-			pb.Ctx(),
-			&pb.FlowCtx.Cfg.Settings.SV,
-			"moveToTrailingMeta called in state: %s",
-			pb.State,
-		)
-	}
+	_ = must.NotContains(pb.Ctx(), []procState{StateTrailingMeta, StateExhausted}, pb.State,
+		"moveToTrailingMeta called in invalid state")
 
 	pb.State = StateTrailingMeta
 	if pb.span != nil {
@@ -674,13 +655,7 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 		}
 	}
 
-	if buildutil.CrdbTestBuild && pb.ctx == nil {
-		panic(
-			errors.AssertionFailedf(
-				"unexpected nil ProcessorBase.ctx when draining. Was StartInternal called?",
-			),
-		)
-	}
+	_ = must.False(pb.Ctx(), pb.ctx == nil, "unexpected nil ProcessorBase.ctx when draining")
 
 	// trailingMetaCallback is called after reading the tracing data because it
 	// generally calls InternalClose, indirectly, which switches the context and

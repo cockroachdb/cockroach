@@ -18,7 +18,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
+        "//pkg/util/must",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

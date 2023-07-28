@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -173,17 +173,16 @@ func (b *blockingBuffer) producerBlocked() {
 // NB: always called after producerBlocked
 func (b *blockingBuffer) quotaAcquiredAfterWait() {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.mu.numBlocked > 0 {
 		b.mu.numBlocked--
 	} else {
-		logcrash.ReportOrPanic(context.Background(), b.sv,
-			"quotaAcquiredAfterWait called with 0 blocked consumers")
+		_ = must.Fail(context.TODO(), "quotaAcquiredAfterWait called with 0 blocked consumers")
 	}
 	if b.mu.numBlocked == 0 {
 		// Clear out canFlush since we know that producers no longer blocked.
 		b.mu.canFlush = false
 	}
-	b.mu.Unlock()
 }
 
 // Get implements kvevent.Reader interface.
@@ -212,9 +211,8 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.mu.closed {
-		logcrash.ReportOrPanic(ctx, b.sv, "buffer unexpectedly closed")
-		return errors.New("buffer unexpectedly closed")
+	if err := must.False(ctx, b.mu.closed, "buffer unexpectedly closed"); err != nil {
+		return err
 	}
 
 	b.metrics.BufferEntriesIn.Inc(1)
@@ -330,9 +328,8 @@ func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) erro
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.mu.closed {
-		logcrash.ReportOrPanic(ctx, b.sv, "close called multiple times")
-		return errors.AssertionFailedf("close called multiple times")
+	if err := must.False(ctx, b.mu.closed, "close called multiple times"); err != nil {
+		return err
 	}
 
 	b.mu.closed = true

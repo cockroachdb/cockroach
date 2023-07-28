@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -183,9 +182,6 @@ func (a tenantAuthorizer) authBatch(
 	ctx context.Context, sv *settings.Values, tenID roachpb.TenantID, args *kvpb.BatchRequest,
 ) error {
 	if err := a.capabilitiesAuthorizer.HasCapabilityForBatch(ctx, tenID, args); err != nil {
-		if errors.HasAssertionFailure(err) {
-			logcrash.ReportOrPanic(ctx, sv, "%v", err)
-		}
 		return authError(err.Error())
 	}
 

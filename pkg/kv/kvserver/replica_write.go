@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -153,14 +153,11 @@ func (r *Replica) executeWriteBatch(
 		// likely target of future micro-optimization, this assertion is
 		// meant to protect against future correctness anomalies.
 		defer func() {
-			if br != nil && ba.Txn != nil && br.Txn == nil {
-				pErr = kvpb.NewError(errors.NewAssertionErrorWithWrappedErrf(pErr.GoError(),
-					"assertion failed: transaction updated by "+
-						"timestamp cache, but transaction returned in response; "+
-						"updated timestamp would have been lost (recovered): "+
-						"%s in batch %s", ba.Txn, ba,
-				))
-				logcrash.ReportOrPanic(ctx, &r.store.cfg.Settings.SV, "%v", pErr)
+			if err := must.False(ctx, br != nil && ba.Txn != nil && br.Txn == nil,
+				"transaction updated by timestamp cache, but transaction not returned in response, "+
+					"updated timestamp would have been lost: %s in batch %s with err=%v",
+				ba.Txn, ba, pErr.GoError()); err != nil {
+				pErr = kvpb.NewError(err)
 			}
 		}()
 	}

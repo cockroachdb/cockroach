@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -263,9 +263,9 @@ func (a kvAuth) authenticateLocalRequest(
 	// Sanity check: verify that we do not also have gRPC network credentials
 	// in the context. This would indicate that metadata was improperly propagated.
 	maybeTid, err := tenantIDFromRPCMetadata(ctx)
-	if err != nil || maybeTid.IsSet() {
-		logcrash.ReportOrPanic(ctx, a.sv, "programming error: network credentials in internal adapter request (%v, %v)", maybeTid, err)
-		return nil, authErrorf("programming error")
+	if err := must.False(ctx, err != nil || maybeTid.IsSet(),
+		"network credentials in internal adapter request: %v err=%v", maybeTid, err); err != nil {
+		return nil, err
 	}
 
 	if !clientTenantID.IsSet() {

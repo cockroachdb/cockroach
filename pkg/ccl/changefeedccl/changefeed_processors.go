@@ -33,15 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 )
 
 type changeAggregator struct {
@@ -1289,10 +1288,10 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 		// TODO(dan): This is much more naturally expressed as an assert inside the
 		// job progress update closure, but it currently doesn't pass along the info
 		// we'd need to do it that way.
-		if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(cf.highWaterAtStart) {
-			logcrash.ReportOrPanic(cf.Ctx(), &cf.flowCtx.Cfg.Settings.SV,
-				`got a span level timestamp %s for %s that is less than the initial high-water %s`,
-				redact.Safe(resolved.Timestamp), resolved.Span, redact.Safe(cf.highWaterAtStart))
+		if err := must.False(cf.Ctx(),
+			!resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(cf.highWaterAtStart),
+			`span level timestamp %s for %s is less than the initial high-water %s`,
+			resolved.Timestamp, resolved.Span, cf.highWaterAtStart); err != nil {
 			continue
 		}
 		if err := cf.forwardFrontier(resolved); err != nil {

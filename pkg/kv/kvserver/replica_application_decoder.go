@@ -17,10 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -105,9 +104,9 @@ func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 			// (propBuf.{Insert,ReinsertLocked} ignores proposals that have
 			// v2SeenDuringApplicationSet to make this true).
 			if cmd.proposal.v2SeenDuringApplication {
-				err := errors.AssertionFailedf("ProposalData seen twice during application: %+v", cmd.proposal)
-				logcrash.ReportOrPanic(d.r.AnnotateCtx(cmd.ctx), &d.r.store.ClusterSettings().SV, "%v", err)
-				// If we didn't panic, treat the proposal as non-local. This makes sure
+				ctx := d.r.AnnotateCtx(context.Background()) // cmd.ctx is likely consumed already, i.e. nil
+				_ = must.Fail(ctx, "ProposalData seen twice during application: %+v", cmd.proposal)
+				// If we didn't fatal, treat the proposal as non-local. This makes sure
 				// we don't repropose it under a new lease index.
 				cmd.proposal = nil
 			} else {

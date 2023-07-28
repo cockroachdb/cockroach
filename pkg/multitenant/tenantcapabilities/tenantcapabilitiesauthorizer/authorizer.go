@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -106,9 +106,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 	case authorizerModeV222:
 		return a.authBatchNoCap(ctx, tenID, ba)
 	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
+		return must.Fail(ctx, "unknown authorizer mode: %d", mode)
 	}
 }
 
@@ -252,9 +250,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	case authorizerModeV222:
 		return errFn()
 	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
+		return must.Fail(ctx, "unknown authorizer mode: %d", mode)
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
@@ -282,9 +278,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 	case authorizerModeV222:
 		return errFn()
 	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
+		return must.Fail(ctx, "unknown authorizer mode: %d", mode)
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
@@ -313,9 +307,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	case authorizerModeV222:
 		return errFn()
 	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
+		return must.Fail(ctx, "unknown authorizer mode: %d", mode)
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
@@ -340,8 +332,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	case authorizerModeV222:
 		return false
 	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		_ = must.Fail(ctx, "unknown authorizer mode: %d", mode)
 		return false
 	}
 
@@ -407,9 +398,7 @@ func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachp
 	case authorizerModeV222:
 		return errFn()
 	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
+		return must.Fail(ctx, "unknown authorizer mode: %d", mode)
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(

@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -370,8 +370,8 @@ func CreateTenantRecord(
 				"a tenant with ID %d%s already exists", tenID, extra)
 		}
 		return roachpb.TenantID{}, errors.Wrap(err, "inserting new tenant")
-	} else if num != 1 {
-		logcrash.ReportOrPanic(ctx, &settings.SV, "inserting tenant %+v: unexpected number of rows affected: %d", info, num)
+	} else if err := must.Equal(ctx, num, 1, "rows affected for tenant %+v", info); err != nil {
+		return roachpb.TenantID{}, err
 	}
 
 	for _, so := range info.SettingOverrides {
@@ -416,8 +416,9 @@ func CreateTenantRecord(
 				return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already has usage data", tenID)
 			}
 			return roachpb.TenantID{}, errors.Wrap(err, "inserting tenant usage data")
-		} else if num != 1 {
-			logcrash.ReportOrPanic(ctx, &settings.SV, "inserting usage %+v for %v: unexpected number of rows affected: %d", u, tenID, num)
+		} else if err := must.Equal(ctx, num, 1,
+			"rows affected for usage %+v tenant %v", u, tenID); err != nil {
+			return roachpb.TenantID{}, err
 		}
 	}
 

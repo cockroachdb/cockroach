@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -275,8 +275,7 @@ func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
 	case rangefeedcache.IncrementalUpdate:
 		w.handleIncrementalUpdate(ctx, updates)
 	default:
-		err := errors.AssertionFailedf("unknown update type: %v", u.Type)
-		logcrash.ReportOrPanic(ctx, &w.st.SV, "%w", err)
+		_ = must.Fail(ctx, "unknown update type: %v", u.Type)
 	}
 }
 

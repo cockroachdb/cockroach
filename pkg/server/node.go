@@ -60,9 +60,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
@@ -2113,9 +2113,8 @@ func (n *Node) TenantSettings(
 
 	// Sanity check: this ensures that someone notices if the proto
 	// definition changes but the code below is not adapted.
-	if numPrecedences := len(kvpb.TenantSettingsEvent_Precedence_value); numPrecedences != 3 {
-		err := errors.AssertionFailedf("programming error: expected 3 precedence values, got %d", numPrecedences)
-		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
+	if err := must.Equal(ctx, len(kvpb.TenantSettingsEvent_Precedence_value), 3,
+		"unexpected precedence value length"); err != nil {
 		return err
 	}
 
@@ -2251,8 +2250,7 @@ func (n *Node) notifyClusterVersionChange(
 	defer n.versionUpdateMu.Unlock()
 
 	encodedVersion, err := protoutil.Marshal(&activeVersion)
-	if err != nil {
-		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
+	if err := must.NoError(ctx, err, "failed to marshal version"); err != nil {
 		return
 	}
 	n.versionUpdateMu.encodedVersion = string(encodedVersion)

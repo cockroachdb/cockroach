@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -119,9 +119,7 @@ func (d *decoder) translateEvent(
 		Value: value,
 	})
 	if err != nil {
-		// This should never happen: the rangefeed should only ever deliver valid SQL rows.
-		err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode row %v", ev.Key)
-		logcrash.ReportOrPanic(ctx, &d.st.SV, "%w", err)
+		log.Errorf(ctx, "failed to decode row %v: %v", ev.Key, err)
 		return nil
 	}
 

@@ -29,7 +29,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
+        "//pkg/util/must",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",

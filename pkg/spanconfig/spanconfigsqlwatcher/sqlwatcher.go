@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -208,13 +208,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		}
 		b, err := descbuilder.FromSerializedValue(&value)
 		if err != nil {
-			logcrash.ReportOrPanic(
-				ctx,
-				&s.settings.SV,
-				"%s: failed to unmarshal descriptor %v",
-				ev.Key,
-				value,
-			)
+			log.Errorf(ctx, "failed to unmarshal descriptor %s %v: %v", ev.Key, value, err)
 			return
 		}
 		if b == nil {
@@ -271,12 +265,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		} else {
 			descID, err = decoder.DecodePrimaryKey(ev.Key)
 			if err != nil {
-				logcrash.ReportOrPanic(
-					ctx,
-					&s.settings.SV,
-					"sql watcher zones range feed error: %v",
-					err,
-				)
+				log.Errorf(ctx, "failed to decode primary key %s: %v", ev.Key, err)
 				return
 			}
 		}
@@ -336,12 +325,7 @@ func (s *SQLWatcher) watchForProtectedTimestampUpdates(
 		}
 		target, err := decoder.decode(roachpb.KeyValue{Value: value})
 		if err != nil {
-			logcrash.ReportOrPanic(
-				ctx,
-				&s.settings.SV,
-				"sql watcher protected timestamp range feed error: %v",
-				err,
-			)
+			log.Errorf(ctx, "failed to decode protected timestamp %s %v: %v", ev.Key, value, err)
 			return
 		}
 		if target.Union == nil {
@@ -379,8 +363,7 @@ func (s *SQLWatcher) watchForProtectedTimestampUpdates(
 				onEvent(ctx, rangefeedEvent)
 			}
 		default:
-			logcrash.ReportOrPanic(ctx, &s.settings.SV,
-				"unknown protected timestamp target %v", target)
+			_ = must.Fail(ctx, "unknown protected timestamp target %v", target)
 		}
 	}
 	rf, err := s.rangeFeedFactory.RangeFeed(
