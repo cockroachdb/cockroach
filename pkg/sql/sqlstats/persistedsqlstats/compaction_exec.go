@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -207,10 +208,14 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 func (c *StatsCompactor) executeDeleteStmt(
 	ctx context.Context, delStmt string, qargs []interface{},
 ) (lastRow tree.Datums, rowsDeleted int64, err error) {
+	qosLevel := sessiondatapb.UserLow
 	it, err := c.db.Executor().QueryIteratorEx(ctx,
 		"delete-old-sql-stats",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.InternalExecutorOverride{
+			User:             sessiondata.NodeUserSessionDataOverride.User,
+			QualityOfService: &qosLevel,
+		},
 		delStmt,
 		qargs...,
 	)

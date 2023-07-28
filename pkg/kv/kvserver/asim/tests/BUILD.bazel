@@ -22,6 +22,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_guptarohit_asciigraph//:asciigraph",

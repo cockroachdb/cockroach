@@ -108,7 +108,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//pkg/util/stop",
         "@com_github_gogo_protobuf//proto",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],

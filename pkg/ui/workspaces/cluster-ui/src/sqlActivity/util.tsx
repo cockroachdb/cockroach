@@ -43,7 +43,7 @@ export function filterBySearchQuery(
     );
 }
 
-export function filteredStatementsData(
+export function filterStatementsData(
   filters: Filters,
   search: string,
   statements: AggregateStatistics[],
@@ -92,7 +92,10 @@ export function filteredStatementsData(
     })
     .filter(
       statement =>
-        !appNames?.length || appNames.includes(statement.applicationName),
+        !appNames?.length ||
+        appNames.includes(
+          statement.applicationName ? statement.applicationName : unset,
+        ),
     )
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(

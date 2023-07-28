@@ -80,6 +80,7 @@ go_test(
         "test_test.go",
     ],
     args = ["-test.timeout=55s"],
+    data = glob(["testdata/**"]),
     embed = [":roachtest_lib"],
     deps = [
         "//pkg/cmd/internal/issues",
@@ -93,6 +94,7 @@ go_test(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

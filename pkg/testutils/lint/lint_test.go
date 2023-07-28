@@ -917,6 +917,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!util/timeutil/context.go",
+			":!server/testserver_sqlconn.go",
 			// TODO(jordan): ban these too?
 			":!server/debug/**",
 			":!workload/**",

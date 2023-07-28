@@ -12,9 +12,7 @@ package sql
 
 import (
 	"context"
-	gosql "database/sql"
 	"math"
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -105,20 +103,10 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.admin_audit.enabled = true;`)
 
 	db.Exec(t, `CREATE USER testuser`)
-	pgURL, testuserCleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "TestImportPrivileges-testuser",
-		url.User("testuser"),
-	)
 
-	defer testuserCleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testuser := s.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 
-	defer testuser.Close()
-
-	if _, err = testuser.Exec(`SELECT 1`); err != nil {
+	if _, err := testuser.Exec(`SELECT 1`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,18 +220,8 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.admin_audit.enabled = true;`)
 
 	db.Exec(t, `CREATE USER testuser`)
-	pgURL, testuserCleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "TestImportPrivileges-testuser",
-		url.User("testuser"),
-	)
 
-	defer testuserCleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer testuser.Close()
+	testuser := s.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 
 	db.Exec(t, `GRANT admin TO testuser`)
 

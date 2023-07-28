@@ -109,9 +109,12 @@ func InitTestServerFactory(impl TestServerFactory) {
 	srvFactoryImpl = impl
 }
 
-// StartServer creates and starts a test server, and sets up a gosql DB
-// connection to it. The server should be stopped by calling
+// StartServer creates and starts a test server.
+// The returned server should be stopped by calling
 // server.Stopper().Stop().
+// The second and third return values are equivalent to
+// .ApplicationLayer().SQLConn() and .ApplicationLayer().DB(),
+// respectively.
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
@@ -145,8 +148,7 @@ func StartServer(
 		s.DisableStartTenant(PreventStartTenantError)
 	}
 
-	goDB := OpenDBConn(
-		t, s.ApplicationLayer().AdvSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
 
 	// Now that we have started the server on the bootstrap version, let us run
 	// the migrations up to the overridden BinaryVersion.
@@ -174,6 +176,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 }
 
 // OpenDBConnE is like OpenDBConn, but returns an error.
+// Note: consider using the .SQLConnE() method on the test server instead.
 func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
@@ -201,6 +204,7 @@ func OpenDBConnE(
 }
 
 // OpenDBConn sets up a gosql DB connection to the given server.
+// Note: consider using the .SQLConn() method on the test server instead.
 func OpenDBConn(
 	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) *gosql.DB {
@@ -238,19 +242,12 @@ func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
-
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 
-	stopper := params.Stopper
-	if stopper == nil {
-		stopper = ts.Stopper()
-	}
-
-	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper)
+	goDB := tenant.SQLConn(t, params.UseDatabase)
 	return tenant, goDB
 }
 

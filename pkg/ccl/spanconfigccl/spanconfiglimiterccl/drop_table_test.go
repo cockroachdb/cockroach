@@ -10,15 +10,12 @@ package spanconfiglimiterccl
 
 import (
 	"context"
-	gosql "database/sql"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,18 +52,11 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(username.RootUser))
-	defer cleanupPGUrl()
-
-	tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
-
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.GC.TTLSeconds = 1
 	config.TestingSetupZoneConfigHook(tc.Stopper())
 
-	require.NoError(t, err)
-	defer func() { require.NoError(t, tenantSQLDB.Close()) }()
-
+	tenantSQLDB := tenant.SQLConn(t, "")
 	tenantDB := sqlutils.MakeSQLRunner(tenantSQLDB)
 
 	tenantDB.Exec(t, `CREATE TABLE t(k INT PRIMARY KEY)`)

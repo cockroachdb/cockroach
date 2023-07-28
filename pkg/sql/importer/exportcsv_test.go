@@ -72,7 +72,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tenantSettings := s.ClusterSettings()
 	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
 	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
-	conn := serverutils.OpenDBConn(t, s.SQLAddr(), "defaultdb", false, tc.Stopper())
+	conn := s.SQLConn(t, "defaultdb")
 	db := sqlutils.MakeSQLRunner(conn)
 
 	wk := bank.FromRows(rows)
@@ -473,30 +473,21 @@ func TestExportPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(),
-		"TestExportPrivileges-testuser", url.User("testuser"))
-	defer cleanup()
-	startTestUser := func() *gosql.DB {
-		testuser, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return testuser
-	}
-	testuser := startTestUser()
+	testuser := srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
 	dest := "nodelocal://1/privs_placeholder"
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
-	testuser.Close()
+
+	// The below SELECT GRANT hangs if we leave the user conn open.
+	_ = testuser.Close()
 
 	// Grant SELECT privilege.
 	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
 
-	// The above SELECT GRANT hangs if we leave the user conn open. Thus, we need
-	// to reinitialize it here.
-	testuser = startTestUser()
-	defer testuser.Close()
+	testuser = srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,
@@ -675,7 +666,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 
 	if tc.StartedDefaultTestTenant() {
 		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tc.Server(0).ApplicationLayer().ClusterSettings().SV, true)
-		systemSqlDB := serverutils.OpenDBConn(t, tc.Server(0).SQLAddr(), "system", false, tc.Stopper())
+		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, "system")
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{

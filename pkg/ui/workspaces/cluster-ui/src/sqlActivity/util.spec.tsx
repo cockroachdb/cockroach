@@ -10,15 +10,16 @@
 
 import {
   convertRawStmtsToAggregateStatistics,
-  filteredStatementsData,
+  filterStatementsData,
   getAppsFromStmtsResponse,
 } from "src/sqlActivity/util";
 import { mockStmtStats, Stmt } from "src/api/testUtils";
 import { Filters } from "src/queryFilter/filter";
 import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { unset } from "../util";
 
-describe("filteredStatementsData", () => {
+describe("filterStatementsData", () => {
   function filterAndCheckStmts(
     stmtsRaw: Stmt[],
     filters: Filters,
@@ -27,7 +28,7 @@ describe("filteredStatementsData", () => {
   ) {
     const statements = convertRawStmtsToAggregateStatistics(stmtsRaw);
 
-    const filteredStmts = filteredStatementsData(
+    const filteredStmts = filterStatementsData(
       filters,
       searchString,
       statements,
@@ -70,85 +71,139 @@ describe("filteredStatementsData", () => {
     filterAndCheckStmts(stmtsRaw, {}, "giraffe", expectedIDs);
   });
 
-  it("should filter out statements not matching filter app", () => {
-    const stmtsRaw = [
-      {
-        id: 1,
-        app: "hello world",
-      },
-      {
-        id: 2,
-        app: "giraffe", // Should match.
-      },
-      {
-        id: 3,
-        app: "giraffes are cool", // Should NOT match. App names must match exactly.
-      },
-      {
-        id: 4,
-        app: "elephants cannot jump",
-      },
-      {
-        id: 5,
-        app: "gira",
-      },
-    ].map(stmt =>
+  it.each([
+    {
+      stmts: [
+        {
+          id: 1,
+          app: "hello world",
+        },
+        {
+          id: 2,
+          app: "giraffe", // Should match.
+        },
+        {
+          id: 3,
+          app: "giraffes are cool", // Should NOT match. App names must match exactly.
+        },
+        {
+          id: 4,
+          app: "elephants cannot jump",
+        },
+        {
+          id: 5,
+          app: "gira",
+        },
+      ],
+      appName: "giraffe",
+      expectedIDs: [2],
+    },
+    {
+      stmts: [
+        {
+          id: 1,
+          app: "",
+        },
+        {
+          id: 2,
+          app: "",
+        },
+        {
+          id: 3,
+          app: "hello",
+        },
+        {
+          id: 4,
+          app: "",
+        },
+        {
+          id: 5,
+          app: "",
+        },
+      ],
+      appName: unset,
+      expectedIDs: [1, 2, 4, 5],
+    },
+    {
+      stmts: [
+        {
+          id: 1,
+          app: "hello world",
+        },
+        {
+          id: 2,
+          app: "giraffes", // Should NOT match.
+        },
+        {
+          id: 3,
+          app: "giraffe", // Should match.
+        },
+        {
+          id: 4,
+          app: "elephant", // Should match.
+        },
+        {
+          id: 5,
+          app: "gira", // Should NOT match. Exact matches only.
+        },
+        {
+          id: 6,
+          app: "giraffe", // Should match.
+        },
+        {
+          id: 7,
+          app: "elephants cannot jump", // Should not match.
+        },
+      ],
+      appName: "giraffe, elephant",
+      expectedIDs: [3, 4, 6],
+    },
+    {
+      stmts: [
+        {
+          id: 1,
+          app: "hello world",
+        },
+        {
+          id: 2,
+          app: "giraffes", // Should NOT match.
+        },
+        {
+          id: 3,
+          app: "giraffe", // Should match.
+        },
+        {
+          id: 4,
+          app: "elephant", // Should match.
+        },
+        {
+          id: 5,
+          app: "gira", // Should NOT match. Exact matches only.
+        },
+        {
+          id: 6,
+          app: "giraffe", // Should match.
+        },
+        {
+          id: 7,
+          app: "elephants cannot jump", // Should not match.
+        },
+      ],
+      appName: "aaaaaaaaaaaaaaaaaaaaaaaa",
+      expectedIDs: [],
+    },
+  ])("should filter out statements not matching filter apps", tc => {
+    const stmtsRaw = tc.stmts.map(stmt =>
       mockStmtStats({
         id: Long.fromInt(stmt.id),
         key: { key_data: { app: stmt.app } },
       }),
     );
 
-    const expectedIDs = [2];
     const filters: Filters = {
-      app: "giraffe",
+      app: tc.appName,
     };
-    filterAndCheckStmts(stmtsRaw, filters, null, expectedIDs);
-  });
-
-  it("should filter out statements not matching multiple filter apps", () => {
-    const filters: Filters = {
-      app: "giraffe, elephant",
-    };
-
-    const stmtsRaw = [
-      {
-        id: 1,
-        app: "hello world",
-      },
-      {
-        id: 2,
-        app: "giraffes", // Should NOT match.
-      },
-      {
-        id: 3,
-        app: "giraffe", // Should match.
-      },
-      {
-        id: 4,
-        app: "elephant", // Should match.
-      },
-      {
-        id: 5,
-        app: "gira", // Should NOT match. Exact matches only.
-      },
-      {
-        id: 6,
-        app: "giraffe", // Should match.
-      },
-      {
-        id: 7,
-        app: "elephants cannot jump", // Should not match.
-      },
-    ].map(stmt =>
-      mockStmtStats({
-        id: Long.fromInt(stmt.id),
-        key: { key_data: { app: stmt.app } },
-      }),
-    );
-
-    const expectedIDs = [3, 4, 6];
-    filterAndCheckStmts(stmtsRaw, filters, null, expectedIDs);
+    filterAndCheckStmts(stmtsRaw, filters, null, tc.expectedIDs);
   });
 
   it("should filter out statements not matching sql type", () => {

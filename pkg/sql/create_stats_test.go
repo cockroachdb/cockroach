@@ -12,14 +12,11 @@ package sql_test
 
 import (
 	"context"
-	gosql "database/sql"
-	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,13 +59,6 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 	const numRows = 20
 	r.Exec(t, `INSERT INTO t SELECT k, 2*k, 3*k FROM generate_series(0, $1) AS g(k)`, numRows-1)
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(t,
-		s.AdvSQLAddr(),
-		"TestStatsWithLowTTL",
-		url.User(username.RootUser),
-	)
-	defer cleanupFunc()
-
 	// Start a goroutine that keeps updating rows in the table and issues
 	// GCRequests simulating a 2 second TTL. While this is running, reading at a
 	// timestamp older than 2 seconds will likely error out.
@@ -81,14 +71,9 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		defer wg.Done()
 
 		// Open a separate connection to the database.
-		db2, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			goroutineErr = err
-			return
-		}
-		defer db2.Close()
+		db2 := s.SQLConn(t, "")
 
-		_, err = db2.Exec("USE test")
+		_, err := db2.Exec("USE test")
 		if err != nil {
 			goroutineErr = err
 			return

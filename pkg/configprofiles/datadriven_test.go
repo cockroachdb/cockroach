@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/configprofiles"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -78,8 +77,7 @@ func TestDataDriven(t *testing.T) {
 				// We need to force the connection to the system tenant,
 				// because at least one of the config profiles changes the
 				// default tenant.
-				sysTenantDB := serverutils.OpenDBConn(t, s.SQLAddr(), "cluster:system/defaultdb",
-					true /* insecure */, s.Stopper())
+				sysTenantDB := s.SystemLayer().SQLConn(t, "defaultdb")
 				db = sqlutils.MakeSQLRunner(sysTenantDB)
 				res.WriteString("server started\n")
 
@@ -119,9 +117,8 @@ AND   status = 'succeeded'`).Scan(&numTasksCompleted)
 				if !alreadyStarted {
 					t.Fatalf("%s: must use profile before sql", d.Pos)
 				}
-				sqlAddr := s.(*server.TestServer).SQLAddr()
 				testutils.SucceedsSoon(t, func() error {
-					goDB := serverutils.OpenDBConn(t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper())
+					goDB := s.SystemLayer().SQLConn(t, "cluster:"+d.Input+"/defaultdb")
 					return goDB.Ping()
 				})
 				return "ok"

@@ -65,13 +65,8 @@ type TestCluster struct {
 	// ReusableListeners is populated if (and only if) TestClusterArgs.ReusableListeners is set.
 	ReusableListeners map[int] /* idx */ *listenerutil.ReusableListener
 
-	// Connection to the storage cluster. Typically, the first connection in
-	// Conns, but could be different if we're transparently running in a test
-	// tenant (see the DefaultTestTenant flag of base.TestServerArgs for more
-	// detail).
-	storageConn *gosql.DB
-	stopper     *stop.Stopper
-	mu          struct {
+	stopper *stop.Stopper
+	mu      struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
@@ -110,11 +105,6 @@ func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
 // ServerConn is part of TestClusterInterface.
 func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
-}
-
-// StorageClusterConn is part of TestClusterInterface.
-func (tc *TestCluster) StorageClusterConn() *gosql.DB {
-	return tc.storageConn
 }
 
 // Stopper returns the stopper for this testcluster.
@@ -621,29 +611,14 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 		return err
 	}
 
-	dbConn, err := serverutils.OpenDBConnE(
-		server.ApplicationLayer().AdvSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+	dbConn, err := server.ApplicationLayer().SQLConnE(serverArgs.UseDatabase)
 	if err != nil {
 		return err
-	}
-
-	// For the first server started, populate the storage cluster
-	// connection.
-	var storageDbConn *gosql.DB
-	if idx == 0 {
-		storageDbConn, err = serverutils.OpenDBConnE(
-			server.SystemLayer().AdvSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
-		if err != nil {
-			return err
-		}
 	}
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.Conns = append(tc.Conns, dbConn)
-	if idx == 0 {
-		tc.storageConn = storageDbConn
-	}
 	return nil
 }
 
@@ -1737,8 +1712,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 			return err
 		}
 
-		dbConn, err := serverutils.OpenDBConnE(srv.ApplicationLayer().AdvSQLAddr(),
-			serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
+		dbConn, err := srv.ApplicationLayer().SQLConnE(serverArgs.UseDatabase)
 		if err != nil {
 			return err
 		}
