@@ -75,7 +75,7 @@ export const selectFilters = createSelector(
 
 export const SessionsPageConnected = withRouter(
   connect(
-    (state: AppState, props: RouteComponentProps) => ({
+    (state: AppState, _props: RouteComponentProps) => ({
       sessions: selectSessions(state),
       internalAppNamePrefix: selectAppName(state),
       sessionsError: state.adminUI?.sessions.lastError,
