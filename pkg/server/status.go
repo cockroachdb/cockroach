@@ -2809,8 +2809,9 @@ func (s *systemStatusServer) HotRangesV2(
 		response.ErrorsByNodeID[nodeID] = err.Error()
 	}
 
+	timeout := HotRangesRequestNodeTimeout.Get(&s.st.SV)
 	next, err := s.paginatedIterateNodes(
-		ctx, "hotRanges", size, start, requestedNodes, dialFn,
+		ctx, "hotRanges", size, start, requestedNodes, timeout, dialFn,
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {
@@ -3087,12 +3088,14 @@ func (s *statusServer) iterateNodes(
 // and nodeError on every error result. It returns the next `limit` results
 // after `start`. If `requestedNodes` is specified and non-empty, iteration is
 // only done on that subset of nodes in addition to any nodes already in pagState.
+// If non-zero, nodeFn will run with a timeout specified by nodeFnTimeout.
 func (s *statusServer) paginatedIterateNodes(
 	ctx context.Context,
 	errorCtx string,
 	limit int,
 	pagState paginationState,
 	requestedNodes []roachpb.NodeID,
+	nodeFnTimeout time.Duration,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
 	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
 	responseFn func(nodeID roachpb.NodeID, resp interface{}),
@@ -3154,7 +3157,9 @@ func (s *statusServer) paginatedIterateNodes(
 				Sem:        sem,
 				WaitForSem: true,
 			},
-			func(ctx context.Context) { paginator.queryNode(ctx, nodeID, idx) },
+			func(ctx context.Context) {
+				paginator.queryNode(ctx, nodeID, idx, nodeFnTimeout)
+			},
 		); err != nil {
 			return pagState, err
 		}
@@ -3208,7 +3213,7 @@ func (s *statusServer) listSessionsHelper(
 	var err error
 	var pagState paginationState
 	if pagState, err = s.paginatedIterateNodes(
-		ctx, "session list", limit, start, nil, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		ctx, "session list", limit, start, nil, noTimeout, dialFn, nodeFn, responseFn, errorFn); err != nil {
 		err := serverpb.ListSessionsError{Message: err.Error()}
 		response.Errors = append(response.Errors, err)
 	}
