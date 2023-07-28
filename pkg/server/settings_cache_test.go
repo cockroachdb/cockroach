@@ -64,17 +64,16 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stickyEngineRegistry := NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := NewStickyVFSRegistry()
 
 	serverArgs := base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, StickyInMemoryEngineID: "1"},
+			{InMemory: true, StickyVFSID: "1"},
 		},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				StickyEngineRegistry: stickyEngineRegistry,
+				StickyVFSRegistry: stickyVFSRegistry,
 			},
 		},
 	}

@@ -95,8 +95,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -108,13 +107,13 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:               true,
-						StickyInMemoryEngineID: "1",
+						InMemory:    true,
+						StickyVFSID: "1",
 					},
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: stickyEngineRegistry,
+						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
 			},
@@ -204,8 +203,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -220,7 +218,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: stickyEngineRegistry,
+						StickyVFSRegistry: stickyVFSRegistry,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -236,8 +234,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 				},
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:               true,
-						StickyInMemoryEngineID: "1",
+						InMemory:    true,
+						StickyVFSID: "1",
 					},
 				},
 			},
@@ -350,8 +348,7 @@ func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -361,13 +358,13 @@ func TestRestoreReplicas(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 			},
 		}
@@ -673,8 +670,10 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			name = "differentTerm"
 		}
 		t.Run(name, func(t *testing.T) {
-			stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-			defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+			// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+			// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+			stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+			defer stickyVFSRegistry.CloseAllEngines()
 			lisReg := listenerutil.NewListenerRegistry()
 			defer lisReg.Close()
 
@@ -684,13 +683,13 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				stickyServerArgs[i] = base.TestServerArgs{
 					StoreSpecs: []base.StoreSpec{
 						{
-							InMemory:               true,
-							StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+							InMemory:    true,
+							StickyVFSID: strconv.FormatInt(int64(i), 10),
 						},
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							StickyEngineRegistry: stickyEngineRegistry,
+							StickyVFSRegistry: stickyVFSRegistry,
 						},
 					},
 				}
@@ -1722,8 +1721,10 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -1731,13 +1732,13 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 			},
 		}
@@ -1808,8 +1809,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -1817,13 +1817,13 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable the replica GC queue so that it doesn't accidentally pick up the
@@ -1890,8 +1890,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 
 	raftConfig := base.RaftConfig{
 		// Drop the raft tick interval so the Raft group is ticked more.
@@ -1913,14 +1912,14 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			RaftConfig: raftConfig,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable leader transfers during leaseholder changes so that we
@@ -2213,8 +2212,10 @@ func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -2222,13 +2223,13 @@ func TestProgressWithDownNode(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 			},
 		}
@@ -2298,22 +2299,22 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
-					WallClock:            manualClock,
+					StickyVFSRegistry: stickyVFSRegistry,
+					WallClock:         manualClock,
 				},
 			},
 			RaftConfig: base.RaftConfig{
@@ -2403,8 +2404,10 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 4
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -2412,14 +2415,14 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
-					WallClock:            manualClock,
+					StickyVFSRegistry: stickyVFSRegistry,
+					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// We're gonna want to validate the state of the store before and
@@ -3505,8 +3508,10 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -3514,14 +3519,14 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
-					WallClock:            manualClock,
+					StickyVFSRegistry: stickyVFSRegistry,
+					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Newly-started stores (including the "rogue" one) should not GC
@@ -3852,8 +3857,10 @@ func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 4
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -3861,13 +3868,13 @@ func TestReplicaTooOldGC(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableScanner: true,
@@ -3952,8 +3959,10 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
+	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -3961,13 +3970,13 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 			},
 		}
@@ -4834,8 +4843,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -4884,14 +4892,14 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 			Settings: st,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ContextTestingKnobs:  knobs,
-					StickyEngineRegistry: stickyEngineRegistry,
+					ContextTestingKnobs: knobs,
+					StickyVFSRegistry:   stickyVFSRegistry,
 				},
 			},
 		}
@@ -5230,9 +5238,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		keyA, keyB roachpb.Key,
 		lhsID roachpb.RangeID,
 		lhsPartition *testClusterPartitionedRange,
-		stickyEngineRegistry server.StickyInMemEnginesRegistry,
+		stickyVFSRegistry server.StickyVFSRegistry,
 	) {
-		stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
+		stickyVFSRegistry = server.NewStickyVFSRegistry()
 		lisReg := listenerutil.NewListenerRegistry()
 		const numServers int = 3
 		stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -5240,13 +5248,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			stickyServerArgs[i] = base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:               true,
-						StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+						InMemory:    true,
+						StickyVFSID: strconv.FormatInt(int64(i), 10),
 					},
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: stickyEngineRegistry,
+						StickyVFSRegistry: stickyVFSRegistry,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						// Newly-started stores (including the "rogue" one) should not GC
@@ -5300,7 +5308,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		increment(t, db, keyA, 1)
 		tc.WaitForValues(t, keyA, []int64{6, 7, 7})
-		return tc, db, keyA, keyB, lhsID, lhsPartition, stickyEngineRegistry
+		return tc, db, keyA, keyB, lhsID, lhsPartition, stickyVFSRegistry
 	}
 
 	// In this case we only have the LHS partitioned. The RHS will learn about its
@@ -5309,8 +5317,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// partition the RHS and ensure that the split does not clobber the RHS's hard
 	// state.
 	t.Run("(1) no RHS partition", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyEngineRegistry := setup(t)
-		defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
+		defer stickyVFSRegistry.CloseAllEngines()
 
 		defer tc.Stopper().Stop(ctx)
 		tc.SplitRangeOrFatal(t, keyB)
@@ -5362,8 +5370,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// This case is like the previous case except the store crashes after
 	// laying down a tombstone.
 	t.Run("(2) no RHS partition, with restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyEngineRegistry := setup(t)
-		defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
+		defer stickyVFSRegistry.CloseAllEngines()
 		defer tc.Stopper().Stop(ctx)
 
 		tc.SplitRangeOrFatal(t, keyB)
@@ -5435,8 +5443,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// the split is processed. We partition the RHS's new replica ID before
 	// processing the split to ensure that the RHS doesn't get initialized.
 	t.Run("(3) initial replica RHS partition, no restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyEngineRegistry := setup(t)
-		defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
+		defer stickyVFSRegistry.CloseAllEngines()
 		defer tc.Stopper().Stop(ctx)
 		var rhsPartition *testClusterPartitionedRange
 		partitionReplicaOnSplit(t, tc, keyB, lhsPartition, &rhsPartition)
@@ -5497,8 +5505,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// its higher replica ID the store crashes and forgets. The RHS replica gets
 	// initialized by the split.
 	t.Run("(4) initial replica RHS partition, with restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyEngineRegistry := setup(t)
-		defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
+		defer stickyVFSRegistry.CloseAllEngines()
 		defer tc.Stopper().Stop(ctx)
 		var rhsPartition *testClusterPartitionedRange
 
@@ -5616,9 +5624,7 @@ func TestElectionAfterRestart(t *testing.T) {
 	const electionTimeoutTicks = 30
 	const raftTickInterval = 200 * time.Millisecond
 
-	r := server.NewStickyInMemEnginesRegistry()
-	defer r.CloseAllStickyInMemEngines()
-
+	r := server.NewStickyVFSRegistry()
 	newTCArgs := func(parallel bool, replMode base.TestClusterReplicationMode, onTimeoutCampaign func(roachpb.RangeID)) base.TestClusterArgs {
 		return base.TestClusterArgs{
 			ReplicationMode: replMode,
@@ -5630,7 +5636,7 @@ func TestElectionAfterRestart(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: r,
+						StickyVFSRegistry: r,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						OnRaftTimeoutCampaign: onTimeoutCampaign,

@@ -248,8 +248,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// Test uses sticky registry to have persistent pebble state that could
 	// be analyzed for existence of snapshots and to verify snapshot content
 	// after failures.
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 
 	// The cluster has 3 nodes, one store per node. The test writes a few KVs to a
 	// range, which gets replicated to all 3 stores. Then it manually replaces an
@@ -270,11 +269,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store:  &testKnobs,
-				Server: &server.TestingKnobs{StickyEngineRegistry: stickyEngineRegistry},
+				Server: &server.TestingKnobs{StickyVFSRegistry: stickyVFSRegistry},
 			},
 			StoreSpecs: []base.StoreSpec{{
-				InMemory:               true,
-				StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				InMemory:    true,
+				StickyVFSID: strconv.FormatInt(int64(i), 10),
 			}},
 		}
 	}
@@ -307,8 +306,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		fs, err := stickyEngineRegistry.GetUnderlyingFS(
-			base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(nodeIdx), 10)})
+		fs, err := stickyVFSRegistry.Get(
+			base.StoreSpec{StickyVFSID: strconv.FormatInt(int64(nodeIdx), 10)})
 		require.NoError(t, err)
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
 		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
@@ -388,7 +387,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
-		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
+		fs, err := stickyVFSRegistry.Get(base.StoreSpec{StickyVFSID: strconv.FormatInt(int64(i), 10)})
 		require.NoError(t, err)
 		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(),
 			storage.ForTesting, storage.MustExist, storage.ReadOnly, storage.CacheSize(1<<20))

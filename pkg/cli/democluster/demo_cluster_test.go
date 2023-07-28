@@ -51,7 +51,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEnginesRegistry := server.NewStickyInMemEnginesRegistry()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 
 	testCases := []struct {
 		serverIdx         int
@@ -81,7 +81,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				EnableDemoLoginEndpoint:   true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: stickyEnginesRegistry,
+						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
 			},
@@ -106,7 +106,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				EnableDemoLoginEndpoint:   true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyEngineRegistry: stickyEnginesRegistry,
+						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
 			},
@@ -120,7 +120,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.CacheSize = tc.cacheSize
 			demoCtx.SQLPort = 1234
 			demoCtx.HTTPPort = 4567
-			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", stickyEnginesRegistry)
+			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", stickyVFSRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
@@ -128,7 +128,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			assert.Equal(
 				t,
 				fmt.Sprintf("demo-server%d", tc.serverIdx),
-				actual.StoreSpecs[0].StickyInMemoryEngineID,
+				actual.StoreSpecs[0].StickyVFSID,
 			)
 
 			// We cannot compare these.
@@ -169,13 +169,13 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 
 	// Setup the transient cluster.
 	c := transientCluster{
-		demoCtx:              demoCtx,
-		stopper:              stop.NewStopper(),
-		demoDir:              certsDir,
-		stickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
-		infoLog:              log.Infof,
-		warnLog:              log.Warningf,
-		shoutLog:             log.Ops.Shoutf,
+		demoCtx:           demoCtx,
+		stopper:           stop.NewStopper(),
+		demoDir:           certsDir,
+		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		infoLog:           log.Infof,
+		warnLog:           log.Warningf,
+		shoutLog:          log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.
 	// This also calls the Stop() method on the stopper, and thus
@@ -281,13 +281,13 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 	// Setup the transient cluster.
 	c := transientCluster{
-		demoCtx:              demoCtx,
-		stopper:              stop.NewStopper(),
-		demoDir:              certsDir,
-		stickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
-		infoLog:              log.Infof,
-		warnLog:              log.Warningf,
-		shoutLog:             log.Ops.Shoutf,
+		demoCtx:           demoCtx,
+		stopper:           stop.NewStopper(),
+		demoDir:           certsDir,
+		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		infoLog:           log.Infof,
+		warnLog:           log.Warningf,
+		shoutLog:          log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.
 	// This also calls the Stop() method on the stopper, and thus
