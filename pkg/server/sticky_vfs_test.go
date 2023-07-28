@@ -32,32 +32,32 @@ func TestStickyEngines(t *testing.T) {
 	cacheSize := int64(1 << 20)   /* 1 MiB */
 	storeSize := int64(512 << 20) /* 512 MiB */
 
-	registry := NewStickyInMemEnginesRegistry()
+	registry := NewStickyVFSRegistry(ReuseEngines)
 
 	cfg1 := MakeConfig(ctx, cluster.MakeTestingClusterSettings())
 	cfg1.CacheSize = cacheSize
 	spec1 := base.StoreSpec{
-		StickyInMemoryEngineID: "engine1",
-		Attributes:             attrs,
-		Size:                   base.SizeSpec{InBytes: storeSize},
+		StickyVFSID: "engine1",
+		Attributes:  attrs,
+		Size:        base.SizeSpec{InBytes: storeSize},
 	}
-	engine1, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
+	engine1, err := registry.Open(ctx, &cfg1, spec1)
 	require.NoError(t, err)
 	require.False(t, engine1.Closed())
 
 	cfg2 := MakeConfig(ctx, cluster.MakeTestingClusterSettings())
 	cfg2.CacheSize = cacheSize
 	spec2 := base.StoreSpec{
-		StickyInMemoryEngineID: "engine2",
-		Attributes:             attrs,
-		Size:                   base.SizeSpec{InBytes: storeSize},
+		StickyVFSID: "engine2",
+		Attributes:  attrs,
+		Size:        base.SizeSpec{InBytes: storeSize},
 	}
-	engine2, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg2, spec2)
+	engine2, err := registry.Open(ctx, &cfg2, spec2)
 	require.NoError(t, err)
 	require.False(t, engine2.Closed())
 
 	// Regetting the engine whilst it is not closed will fail.
-	_, err = registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
+	_, err = registry.Open(ctx, &cfg1, spec1)
 	require.EqualError(t, err, "sticky engine engine1 has not been closed")
 
 	// Close the engine, which allows it to be refetched.
@@ -66,20 +66,20 @@ func TestStickyEngines(t *testing.T) {
 	require.False(t, engine1.(*stickyInMemEngine).Engine.Closed())
 
 	// Refetching the engine should give back the same engine.
-	engine1Refetched, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
+	engine1Refetched, err := registry.Open(ctx, &cfg1, spec1)
 	require.NoError(t, err)
 	require.Equal(t, engine1, engine1Refetched)
 	require.False(t, engine1.Closed())
 
 	// Cleaning up everything asserts everything is closed.
-	registry.CloseAllStickyInMemEngines()
+	registry.CloseAllEngines()
 	for _, engine := range []storage.Engine{engine1, engine2} {
 		require.True(t, engine.Closed())
 		require.True(t, engine.(*stickyInMemEngine).Engine.Closed())
 	}
 }
 
-func TestStickyEnginesReplaceEngines(t *testing.T) {
+func TestStickyVFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -88,36 +88,35 @@ func TestStickyEnginesReplaceEngines(t *testing.T) {
 	cacheSize := int64(1 << 20)   /* 1 MiB */
 	storeSize := int64(512 << 20) /* 512 MiB */
 
-	registry := NewStickyInMemEnginesRegistry(ReplaceEngines)
+	registry := NewStickyVFSRegistry()
 
 	cfg1 := MakeConfig(ctx, cluster.MakeTestingClusterSettings())
 	cfg1.CacheSize = cacheSize
 	spec1 := base.StoreSpec{
-		StickyInMemoryEngineID: "engine1",
-		Attributes:             attrs,
-		Size:                   base.SizeSpec{InBytes: storeSize},
+		StickyVFSID: "engine1",
+		Attributes:  attrs,
+		Size:        base.SizeSpec{InBytes: storeSize},
 	}
-	engine1, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
+	engine1, err := registry.Open(ctx, &cfg1, spec1)
 	require.NoError(t, err)
-	fs1, err := registry.GetUnderlyingFS(spec1)
+	fs1, err := registry.Get(spec1)
 	require.NoError(t, err)
 	require.False(t, engine1.Closed())
 	engine1.Close()
 
 	// Refetching the engine should give back a different engine with the same
 	// underlying fs.
-	engine1Refetched, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
+	engine2, err := registry.Open(ctx, &cfg1, spec1)
 	require.NoError(t, err)
-	fs1Refetched, err := registry.GetUnderlyingFS(spec1)
+	fs2, err := registry.Get(spec1)
 	require.NoError(t, err)
-	require.NotEqual(t, engine1, engine1Refetched)
-	require.Equal(t, fs1, fs1Refetched)
+	require.NotEqual(t, engine1, engine2)
+	require.Equal(t, fs1, fs2)
 	require.True(t, engine1.Closed())
-	require.False(t, engine1Refetched.Closed())
+	require.False(t, engine2.Closed())
+	engine2.Close()
 
-	registry.CloseAllStickyInMemEngines()
-	for _, engine := range []storage.Engine{engine1, engine1Refetched} {
+	for _, engine := range []storage.Engine{engine1, engine2} {
 		require.True(t, engine.Closed())
-		require.True(t, engine.(*stickyInMemEngine).Engine.Closed())
 	}
 }

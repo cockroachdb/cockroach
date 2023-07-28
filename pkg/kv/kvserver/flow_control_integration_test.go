@@ -763,8 +763,10 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	// TODO(jackson): It's unclear if this test can be refactor to mit the
+	// ReuseEngines option.
+	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEngines)
+	defer stickyVFSRegistry.CloseAllEngines()
 
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -783,8 +785,8 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 			Settings: st,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			RaftConfig: base.RaftConfig{
@@ -794,7 +796,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
