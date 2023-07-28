@@ -1681,7 +1681,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *CreateViewPrivate:
 		schema := f.Memo.Metadata().Schema(t.Schema)
-		fmt.Fprintf(f.Buffer, " %s.%s", schema.Name(), t.ViewName)
+		fmt.Fprintf(f.Buffer, " %s.%s", schema.Name(), t.Syntax.Name.Table())
 
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.

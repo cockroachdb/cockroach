@@ -607,17 +607,12 @@ define CreateTableAs {
 
 # CreateView implements a CREATE VIEW statement.
 define CreateView {
+    CreateView *tree.CreateView
     Schema cat.Schema
-    ViewName *cat.DataSourceName
-    IfNotExists bool
-    Replace bool
-    Persistence tree.Persistence
-    Materialized bool
     ViewQuery string
     Columns colinfo.ResultColumns
     deps opt.SchemaDeps
     typeDeps opt.SchemaTypeDeps
-    withData bool
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.
