@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scbuildstmt",
@@ -28,6 +28,7 @@ go_library(
         "drop_view.go",
         "helpers.go",
         "process.go",
+        "statement_control.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
@@ -38,6 +39,7 @@ go_library(
         "//pkg/keys",
         "//pkg/security/username",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catenumpb",
@@ -76,5 +78,16 @@ go_library(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "scbuildstmt_test",
+    srcs = ["process_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":scbuildstmt"],
+    deps = [
+        "//pkg/settings",
+        "@com_github_stretchr_testify//require",
     ],
 )
