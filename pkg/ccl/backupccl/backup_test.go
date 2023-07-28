@@ -1006,7 +1006,7 @@ func backupAndRestore(
 ) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
-	storageConn := tc.StorageClusterConn()
+	storageConn := tc.SystemLayer(0).SQLConn(t, "")
 	storageSQLDB := sqlutils.MakeSQLRunner(storageConn)
 	storageSQLDB.Exec(t, "SET DATABASE=defaultdb")
 	{

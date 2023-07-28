@@ -1565,7 +1565,7 @@ func (t *logicTest) newCluster(
 	// behavior.
 	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
 
-		conn := t.cluster.StorageClusterConn()
+		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT, "")
 		clusterSettings := toa.clusterSettings
 		_, ok := clusterSettings[sql.SecondaryTenantZoneConfigsEnabled.Key()]
 		if ok {

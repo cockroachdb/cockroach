@@ -233,12 +233,6 @@ type TestClusterInterface interface {
 	// cluster.
 	StorageLayer(idx int) StorageLayerInterface
 
-	// StorageClusterConn returns a gosql.DB connection to the first server in a
-	// storage cluster. This is useful in environments where it's not clear
-	// whether ServerConn is returning a connection to the storage cluster or a
-	// secondary tenant.
-	StorageClusterConn() *gosql.DB
-
 	// SplitTable splits a range in the table, creates a replica for the right
 	// side of the split on TargetNodeIdx, and moves the lease for the right
 	// side of the split to TargetNodeIdx for each SplitPoint. This forces the
