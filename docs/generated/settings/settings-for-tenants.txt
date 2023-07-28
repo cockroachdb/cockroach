@@ -58,6 +58,7 @@ server.clock.persist_upper_bound_interval	duration	0s	the interval between persi
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	tenant-rw
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged	tenant-rw
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication	tenant-rw
+server.hot_ranges.node.timeout	duration	5m0s	the duration allowed for a single node to return hot range data before the request is cancelled; if set to 0, there is no timeout	tenant-rw
 server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.	tenant-rw
 server.identity_map.configuration	string		system-identity to database-username mappings	tenant-rw
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	tenant-rw
