@@ -370,11 +370,10 @@ func makeFiltersExpr(
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
+	root, err := b.Build(expr)
+	if err != nil {
 		return nil, err
 	}
-
-	root := f.Memo().RootExpr().(opt.ScalarExpr)
 
 	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
 }
