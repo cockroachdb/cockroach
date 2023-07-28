@@ -12,6 +12,7 @@ package server_test
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"io"
 	"testing"
 	"time"
@@ -157,12 +158,22 @@ INSERT INTO t.test VALUES (3);
 	// Open a new SQL connection.
 	sqlDB = sqlutils.MakeSQLRunner(drainCtx.tc.ServerConn(1))
 
-	// Check that the stats were flushed into the statement stats system table.
-	// Verify that the number of statistics for node 1 are non-zero.
-	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
-		[][]string{{"true"}},
-	)
+	if sqlstats.GatewayNodeEnabled.Get(&drainCtx.tc.Servers[0].Cfg.Settings.SV) {
+		// Check that the stats were flushed into the statement stats system table.
+		// Verify that the number of statistics for node 1 are non-zero.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
+			[][]string{{"true"}},
+		)
+	} else {
+		// Check that the stats were flushed into the statement stats system table.
+		// Verify that the number of statistics for node 1 are non-zero.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 0`,
+			[][]string{{"true"}},
+		)
+	}
+
 }
 
 type testDrainContext struct {
