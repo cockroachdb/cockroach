@@ -19,9 +19,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -389,7 +391,7 @@ func TestRPCPaginator(t *testing.T) {
 						// Issue requests in parallel.
 						for idx, nodeID := range nodesToQuery {
 							go func(nodeID roachpb.NodeID, idx int) {
-								paginator.queryNode(ctx, nodeID, idx)
+								paginator.queryNode(ctx, nodeID, idx, noTimeout)
 							}(nodeID, idx)
 						}
 
@@ -411,4 +413,55 @@ func TestRPCPaginator(t *testing.T) {
 		})
 	}
 
+}
+
+func TestRPCPaginatorWithTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	s := server.StatusServer().(*systemStatusServer)
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		select {
+		case <-time.After(time.Second * 10):
+		case <-ctx.Done():
+			break
+		}
+
+		// Return an error that mimics the error returned when a rpc's context is cancelled:
+		return nil, errors.New("some error")
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		// noop
+	}
+
+	var timeoutError error
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		timeoutError = err
+		log.Infof(ctx, "error from node %d: %v", nodeID, err)
+	}
+
+	pagState := paginationState{}
+
+	_, _ = s.paginatedIterateNodes(
+		ctx,
+		"test-paginate-with-timeout",
+		1000,
+		pagState,
+		[]roachpb.NodeID{},
+		time.Second*2,
+		dialFn,
+		nodeFn,
+		responseFn,
+		errorFn,
+	)
+
+	require.ErrorContains(t, timeoutError, "operation \"node fn\" timed out")
 }
