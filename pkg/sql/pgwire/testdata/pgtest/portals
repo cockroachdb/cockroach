@@ -118,7 +118,7 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
-Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Parse {"Query": "SELECT * FROM (VALUES (1), (2)) AS foo"}
 Bind
 Execute {"MaxRows": 1}
 Sync
@@ -180,7 +180,7 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
-Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Parse {"Query": "SELECT * FROM (VALUES (1), (2)) AS foo"}
 Bind
 Execute {"MaxRows": 1}
 Flush
@@ -255,7 +255,7 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
-Parse {"Query": "SELECT * FROM generate_series(1, 4)"}
+Parse {"Query": "SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo"}
 Bind
 Execute {"MaxRows": 1}
 Sync
@@ -314,7 +314,7 @@ ReadyForQuery
 # on the second.
 
 send
-Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Parse {"Query": "SELECT * FROM (VALUES (1), (2)) AS foo"}
 Bind
 Execute {"MaxRows": 1}
 Sync
@@ -359,7 +359,7 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
-Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Parse {"Query": "SELECT * FROM (VALUES (1), (2)) AS foo"}
 Bind
 Execute {"MaxRows": 1}
 Sync
@@ -942,7 +942,7 @@ ReadyForQuery
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
 send
-Parse {"Name": "s10", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Parse {"Name": "s10", "Query": "select n::int4 from (VALUES (0), (1), (2), (3), (4), (5), ($1)) AS v(n)", "ParameterOIDs": [20]}
 Describe {"ObjectType": "S", "Name": "s10"}
 Bind {"PreparedStatement": "s10", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"1"}]}
 Execute {"MaxRows": 1}
@@ -962,7 +962,7 @@ ReadyForQuery
 
 send
 Parse {"Name": "c4", "Query": "COMMIT"}
-Parse {"Name": "s11", "Query": "select n::int4 from generate_series(0,1) n"}
+Parse {"Name": "s11", "Query": "select n::int4 from (VALUES (0), (1)) AS v(n)"}
 Bind {"DestinationPortal": "por", "PreparedStatement": "s11"}
 Bind {"DestinationPortal": "pc4", "PreparedStatement": "c4"}
 Execute {"Portal": "por"}

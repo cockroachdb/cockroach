@@ -1787,6 +1787,22 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`enable_functions_in_portals`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_functions_in_portals`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_functions_in_portals", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableFunctionsInPortals(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().FunctionsInPortalsEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	`experimental_enable_unique_without_index_constraints`: {
@@ -2871,7 +2887,7 @@ func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) 
 }
 
 // We want test coverage for this on and off so make it metamorphic.
-var copyFastPathDefault bool = util.ConstantWithMetamorphicTestBool("copy-fast-path-enabled-default", true)
+var copyFastPathDefault = util.ConstantWithMetamorphicTestBool("copy-fast-path-enabled-default", true)
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 

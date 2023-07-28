@@ -203,6 +203,7 @@ go_test(
         "parse_tuple_test.go",
         "placeholders_test.go",
         "pretty_test.go",
+        "stmt_test.go",
         "table_name_test.go",
         "time_test.go",
         "txn_test.go",
