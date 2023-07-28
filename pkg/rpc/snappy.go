@@ -13,8 +13,8 @@ package rpc
 import (
 	"encoding/binary"
 	"io"
-	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
 	"google.golang.org/grpc/encoding"
@@ -49,7 +49,7 @@ const (
 // NB: The encoding.Compressor implementation needs to be goroutine
 // safe as multiple goroutines may be using the same compressor for
 // different streams on the same connection.
-var snappyWriterPool = sync.Pool{
+var snappyWriterPool = syncutil.Pool{
 	New: func() interface{} {
 		// We use the deprecated snappy.NewWriter constructor instead of the newer
 		// snappy.NewBufferedWriter constructor to avoid internal input buffering.
@@ -65,7 +65,7 @@ var snappyWriterPool = sync.Pool{
 		return &snappyWriter{snappy: snappy.NewWriter(nil)}
 	},
 }
-var snappyReaderPool = sync.Pool{
+var snappyReaderPool = syncutil.Pool{
 	New: func() interface{} {
 		return &snappyReader{snappy: snappy.NewReader(nil)}
 	},

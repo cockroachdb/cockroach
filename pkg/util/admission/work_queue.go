@@ -1304,7 +1304,7 @@ type tenantHeap []*tenantInfo
 
 var _ heap.Interface = (*tenantHeap)(nil)
 
-var tenantInfoPool = sync.Pool{
+var tenantInfoPool = syncutil.Pool{
 	New: func() interface{} {
 		return &tenantInfo{}
 	},
@@ -1412,7 +1412,7 @@ type waitingWork struct {
 	replicated        ReplicatedWorkInfo
 }
 
-var waitingWorkPool = sync.Pool{
+var waitingWorkPool = syncutil.Pool{
 	New: func() interface{} {
 		return &waitingWork{}
 	},

@@ -14,7 +14,6 @@ import (
 	"container/list"
 	"fmt"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -504,7 +503,7 @@ type lockTableGuardImpl struct {
 var _ lockTableGuard = &lockTableGuardImpl{}
 
 // Used to avoid allocations.
-var lockTableGuardImplPool = sync.Pool{
+var lockTableGuardImplPool = syncutil.Pool{
 	New: func() interface{} {
 		g := new(lockTableGuardImpl)
 		g.mu.signal = make(chan struct{}, 1)

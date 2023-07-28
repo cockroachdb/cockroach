@@ -37,10 +37,11 @@
 package tokenizer
 
 import (
-	"sync"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const (
@@ -134,7 +135,7 @@ func (s *Scanner) Next() []byte {
 	return nil // eof
 }
 
-var bufferPool = sync.Pool{New: func() interface{} { return &buffer{} }}
+var bufferPool = syncutil.Pool{New: func() interface{} { return &buffer{} }}
 
 // Release releases scanner resources.
 func (s *Scanner) Release() {

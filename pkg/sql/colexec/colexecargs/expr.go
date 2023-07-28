@@ -12,15 +12,15 @@ package colexecargs
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var exprHelperPool = sync.Pool{
+var exprHelperPool = syncutil.Pool{
 	New: func() interface{} {
 		return &ExprHelper{}
 	},

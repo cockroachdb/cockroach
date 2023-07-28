@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/types",  # keep
         "//pkg/util/encoding",  # keep
         "//pkg/util/json",  # keep
+        "//pkg/util/syncutil",  # keep
         "//pkg/util/timeutil/pgdate",  # keep
         "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//:errors",  # keep

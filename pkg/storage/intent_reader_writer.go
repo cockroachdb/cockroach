@@ -12,11 +12,11 @@ package storage
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -118,7 +118,7 @@ type intentInterleavingReader struct {
 
 var _ Reader = &intentInterleavingReader{}
 
-var intentInterleavingReaderPool = sync.Pool{
+var intentInterleavingReaderPool = syncutil.Pool{
 	New: func() interface{} {
 		return &intentInterleavingReader{}
 	},

@@ -12,8 +12,9 @@ package shuffle
 
 import (
 	"math/rand"
-	"sync"
 	"sync/atomic"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Interface for shuffle. When it is satisfied, a collection can be shuffled by
@@ -28,7 +29,7 @@ type Interface interface {
 }
 
 var seedSource int64
-var randSyncPool = sync.Pool{
+var randSyncPool = syncutil.Pool{
 	New: func() interface{} {
 		return rand.New(rand.NewSource(atomic.AddInt64(&seedSource, 1)))
 	},

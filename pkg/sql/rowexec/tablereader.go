@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -69,7 +69,7 @@ var _ execopnode.OpNode = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
-var trPool = sync.Pool{
+var trPool = syncutil.Pool{
 	New: func() interface{} {
 		return &tableReader{}
 	},

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/biogo/store/llrb"
@@ -44,7 +43,7 @@ type rangeCacheKey roachpb.RKey
 
 var minCacheKey = newRangeCacheKey(roachpb.RKeyMin)
 
-var rangeCacheKeyPool = sync.Pool{
+var rangeCacheKeyPool = syncutil.Pool{
 	New: func() interface{} { return &rangeCacheKey{} },
 }
 

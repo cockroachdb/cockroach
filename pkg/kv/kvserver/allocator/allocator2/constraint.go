@@ -15,9 +15,9 @@ import (
 	"math"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -678,7 +678,7 @@ type rangeAnalyzedConstraints struct {
 	buf analyzeConstraintsBuf
 }
 
-var rangeAnalyzedConstraintsPool = sync.Pool{
+var rangeAnalyzedConstraintsPool = syncutil.Pool{
 	New: func() interface{} {
 		return &rangeAnalyzedConstraints{}
 	},

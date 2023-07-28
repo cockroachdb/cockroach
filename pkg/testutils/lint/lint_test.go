@@ -550,7 +550,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestSyncutil", func(t *testing.T) {
+	t.Run("TestSyncutilMutex", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
@@ -584,6 +584,39 @@ func TestLint(t *testing.T) {
 			}
 		}
 	})
+
+	//t.Run("TestSyncutilPool", func(t *testing.T) {
+	//	t.Parallel()
+	//	cmd, stderr, filter, err := dirCmd(
+	//		pkgDir,
+	//		"git",
+	//		"grep",
+	//		"-nE",
+	//		`\bsync\.Pool`,
+	//		"--",
+	//		"*.go",
+	//		":!util/syncutil/pool_sync.go",
+	//	)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	if err := cmd.Start(); err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	if err := stream.ForEach(filter, func(s string) {
+	//		t.Errorf("\n%s <- forbidden; use 'syncutil.Pool' instead", s)
+	//	}); err != nil {
+	//		t.Error(err)
+	//	}
+	//
+	//	if err := cmd.Wait(); err != nil {
+	//		if out := stderr.String(); len(out) > 0 {
+	//			t.Fatalf("err=%s, stderr=%s", err, out)
+	//		}
+	//	}
+	//})
 
 	t.Run("TestSQLTelemetryDirectCount", func(t *testing.T) {
 		t.Parallel()

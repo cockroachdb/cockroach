@@ -12,13 +12,13 @@ package tenantrate
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/tokenbucket"
 )
@@ -204,7 +204,7 @@ type waitRequest struct {
 
 var _ quotapool.Request = (*waitRequest)(nil)
 
-var waitRequestSyncPool = sync.Pool{
+var waitRequestSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(waitRequest) },
 }
 

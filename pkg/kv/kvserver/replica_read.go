@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -347,7 +347,7 @@ type evalContextWithAccount struct {
 	memAccount *mon.BoundAccount
 }
 
-var evalContextWithAccountPool = sync.Pool{
+var evalContextWithAccountPool = syncutil.Pool{
 	New: func() interface{} {
 		return &evalContextWithAccount{}
 	},

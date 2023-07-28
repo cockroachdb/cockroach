@@ -11,12 +11,11 @@
 package insights
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var insightPool = sync.Pool{
+var insightPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(Insight)
 	},

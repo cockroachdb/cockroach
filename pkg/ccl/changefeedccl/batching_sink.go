@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"hash"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -136,7 +136,7 @@ var _ Sink = (*batchingSink)(nil)
 // therefore escape to the heap) can both be incredibly frequent (every event
 // may be its own batch) and temporary, so to avoid GC thrashing they are both
 // claimed and freed from object pools.
-var eventPool sync.Pool = sync.Pool{
+var eventPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(rowEvent)
 	},
@@ -150,7 +150,7 @@ func freeRowEvent(e *rowEvent) {
 	eventPool.Put(e)
 }
 
-var batchPool sync.Pool = sync.Pool{
+var batchPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(sinkBatch)
 	},

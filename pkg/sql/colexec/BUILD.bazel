@@ -83,6 +83,7 @@ go_library(
         "//pkg/util/json",  # keep
         "//pkg/util/log",
         "//pkg/util/stringarena",
+        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",

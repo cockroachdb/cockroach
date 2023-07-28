@@ -12,7 +12,6 @@ package colfetcher
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -130,7 +129,7 @@ func (s *colBatchScanBase) close() error {
 	return nil
 }
 
-var colBatchScanBasePool = sync.Pool{
+var colBatchScanBasePool = syncutil.Pool{
 	New: func() interface{} {
 		return &colBatchScanBase{}
 	},

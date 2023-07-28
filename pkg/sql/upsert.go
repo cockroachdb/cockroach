@@ -12,15 +12,15 @@ package sql
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var upsertNodePool = sync.Pool{
+var upsertNodePool = syncutil.Pool{
 	New: func() interface{} {
 		return &upsertNode{}
 	},

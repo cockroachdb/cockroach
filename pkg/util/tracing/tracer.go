@@ -17,7 +17,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -361,7 +360,7 @@ type Tracer struct {
 	spanReusePercent uint32
 	// spanPool holds spanAllocHelper's. If reuseSpans is set, spans are
 	// allocated through this pool to reduce dynamic memory allocations.
-	spanPool sync.Pool
+	spanPool syncutil.Pool
 	// spansCreated/spansAllocated counts how many spans have been created and how
 	// many have been allocated (i.e. not reused through the spanPool) since the
 	// last time TestingGetStatsAndReset() was called. These counters are only
@@ -613,7 +612,7 @@ func NewTracer() *Tracer {
 	}
 	t.SetActiveSpansRegistryEnabled(true)
 
-	t.spanPool = sync.Pool{
+	t.spanPool = syncutil.Pool{
 		New: func() interface{} {
 			if t.testing.MaintainAllocationCounters {
 				atomic.AddInt32(&t.spansAllocated, 1)

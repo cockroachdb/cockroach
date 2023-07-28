@@ -46,7 +46,7 @@ type sharedEvent struct {
 	alloc *SharedBudgetAllocation
 }
 
-var sharedEventSyncPool = sync.Pool{
+var sharedEventSyncPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(sharedEvent)
 	},

@@ -12,13 +12,13 @@ package insights
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // concurrentBufferIngester amortizes the locking cost of writing to an
@@ -50,7 +50,7 @@ const bufferSize = 8192
 
 type eventBuffer [bufferSize]event
 
-var eventBufferPool = sync.Pool{
+var eventBufferPool = syncutil.Pool{
 	New: func() interface{} { return new(eventBuffer) },
 }
 

@@ -12,7 +12,6 @@ package colexecargs
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
@@ -124,7 +124,7 @@ func (r *NewColOperatorResult) TestCleanupNoError(t testing.TB) {
 	require.NoError(t, r.ToClose.Close(context.Background()))
 }
 
-var newColOperatorResultPool = sync.Pool{
+var newColOperatorResultPool = syncutil.Pool{
 	New: func() interface{} {
 		return &NewColOperatorResult{}
 	},

@@ -13,7 +13,6 @@ package quotapool
 import (
 	"context"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -137,7 +136,7 @@ type rateRequest struct {
 	want int64
 }
 
-var rateRequestSyncPool = sync.Pool{
+var rateRequestSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(rateRequest) },
 }
 
@@ -165,7 +164,7 @@ func (i *rateRequest) ShouldWait() bool {
 	return true
 }
 
-var rateAllocSyncPool = sync.Pool{
+var rateAllocSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(rateAlloc) },
 }
 

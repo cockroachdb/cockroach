@@ -11,16 +11,17 @@
 package timeutil
 
 import (
-	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var timerPool = sync.Pool{
+var timerPool = syncutil.Pool{
 	New: func() interface{} {
 		return &Timer{}
 	},
 }
-var timeTimerPool sync.Pool
+var timeTimerPool syncutil.Pool
 
 // The Timer type represents a single event. When the Timer expires,
 // the current time will be sent on Timer.C.

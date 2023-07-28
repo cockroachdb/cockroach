@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -27,7 +26,7 @@ import (
 type vmoduleConfig struct {
 	// pcsPool maintains a set of [1]uintptr buffers to be used in V to avoid
 	// allocating every time we compute the caller's PC.
-	pcsPool sync.Pool
+	pcsPool syncutil.Pool
 
 	// V logging level, the value of the --verbosity flag. Updated with
 	// atomics.
@@ -52,7 +51,7 @@ type vmoduleConfig struct {
 }
 
 func init() {
-	logging.vmoduleConfig.pcsPool = sync.Pool{
+	logging.vmoduleConfig.pcsPool = syncutil.Pool{
 		New: func() interface{} {
 			return [1]uintptr{}
 		},

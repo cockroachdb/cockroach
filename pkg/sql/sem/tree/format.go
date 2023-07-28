@@ -14,13 +14,13 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -643,7 +643,7 @@ func SerializeForDisplay(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtParsable)
 }
 
-var fmtCtxPool = sync.Pool{
+var fmtCtxPool = syncutil.Pool{
 	New: func() interface{} {
 		return &FmtCtx{}
 	},

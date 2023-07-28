@@ -16,11 +16,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // EvictionPolicy is the cache eviction policy enum.
@@ -72,7 +72,7 @@ type Entry struct {
 }
 
 // Object pool used for short-lived Entry objects.
-var entryPool = sync.Pool{
+var entryPool = syncutil.Pool{
 	New: func() interface{} { return &Entry{} },
 }
 

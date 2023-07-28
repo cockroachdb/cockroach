@@ -11,9 +11,8 @@
 package allocator2
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type allocatorState struct {
@@ -241,7 +240,7 @@ func (rlt replicasLocalityTiers) isEqual(b mapKey) bool {
 
 var _ mapKey = replicasLocalityTiers{}
 
-var existingReplicaLocalitiesSlicePool = sync.Pool{
+var existingReplicaLocalitiesSlicePool = syncutil.Pool{
 	New: func() interface{} {
 		return &mapEntrySlice[*existingReplicaLocalities]{}
 	},

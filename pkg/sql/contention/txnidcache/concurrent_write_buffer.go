@@ -11,10 +11,9 @@
 package txnidcache
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // blockSize is chosen as 168 since each ResolvedTxnID is 24 byte.
@@ -23,7 +22,7 @@ const blockSize = 168
 
 type block [blockSize]contentionpb.ResolvedTxnID
 
-var blockPool = &sync.Pool{
+var blockPool = syncutil.Pool{
 	New: func() interface{} {
 		return &block{}
 	},

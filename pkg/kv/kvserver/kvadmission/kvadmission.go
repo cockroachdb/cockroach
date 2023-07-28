@@ -15,7 +15,6 @@ package kvadmission
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -587,7 +587,7 @@ func (f *FollowerStoreWriteBytes) Merge(from FollowerStoreWriteBytes) {
 // everywhere.
 type StoreWriteBytes admission.StoreWorkDoneInfo
 
-var storeWriteBytesPool = sync.Pool{
+var storeWriteBytesPool = syncutil.Pool{
 	New: func() interface{} { return &StoreWriteBytes{} },
 }
 

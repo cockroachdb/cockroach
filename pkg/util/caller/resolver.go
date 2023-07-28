@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -53,7 +52,7 @@ func NewCallResolver() *CallResolver {
 	}
 }
 
-var uintptrSlPool = sync.Pool{
+var uintptrSlPool = syncutil.Pool{
 	New: func() interface{} {
 		sl := make([]uintptr, 1)
 		return &sl

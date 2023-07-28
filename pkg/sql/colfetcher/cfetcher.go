@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -46,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -104,7 +104,7 @@ type cTableInfo struct {
 
 var _ execreleasable.Releasable = &cTableInfo{}
 
-var cTableInfoPool = sync.Pool{
+var cTableInfoPool = syncutil.Pool{
 	New: func() interface{} {
 		return &cTableInfo{
 			orderedColIdxMap: &colIdxMap{},
@@ -1381,7 +1381,7 @@ func (cf *cFetcher) getBatchRequestsIssued() int64 {
 	return cf.batchRequestsIssued
 }
 
-var cFetcherPool = sync.Pool{
+var cFetcherPool = syncutil.Pool{
 	New: func() interface{} {
 		return &cFetcher{}
 	},

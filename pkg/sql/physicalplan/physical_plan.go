@@ -17,7 +17,6 @@ package physicalplan
 import (
 	"context"
 	"math"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -164,7 +164,7 @@ type PhysicalPlan struct {
 	Distribution PlanDistribution
 }
 
-var infraPool = sync.Pool{
+var infraPool = syncutil.Pool{
 	New: func() interface{} {
 		return &PhysicalInfrastructure{}
 	},

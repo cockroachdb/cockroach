@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,7 +55,7 @@ var _ execinfra.LocalProcessor = &planNodeToRowSource{}
 var _ execreleasable.Releasable = &planNodeToRowSource{}
 var _ execopnode.OpNode = &planNodeToRowSource{}
 
-var planNodeToRowSourcePool = sync.Pool{
+var planNodeToRowSourcePool = syncutil.Pool{
 	New: func() interface{} {
 		return &planNodeToRowSource{}
 	},

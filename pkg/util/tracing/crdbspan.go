@@ -13,7 +13,6 @@ package tracing
 import (
 	"fmt"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -472,7 +471,7 @@ func (t *Trace) sortChildren() {
 	sortPoolTraces.Put(toSort)
 }
 
-var sortPoolTraces = sync.Pool{
+var sortPoolTraces = syncutil.Pool{
 	New: func() interface{} {
 		return &[]Trace{}
 	},
@@ -527,7 +526,7 @@ func (t *Trace) ToRecording() tracingpb.Recording {
 	return spans
 }
 
-var sortPoolRecordings = sync.Pool{
+var sortPoolRecordings = syncutil.Pool{
 	New: func() interface{} {
 		return &tracingpb.Recording{}
 	},

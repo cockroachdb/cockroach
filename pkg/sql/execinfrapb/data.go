@@ -12,7 +12,6 @@ package execinfrapb
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -211,14 +211,14 @@ var (
 	// TODO(yuzefovich): use this pool in other places apart from metrics
 	// collection.
 	// producerMetadataPool is a pool of producer metadata objects.
-	producerMetadataPool = sync.Pool{
+	producerMetadataPool = syncutil.Pool{
 		New: func() interface{} {
 			return &ProducerMetadata{}
 		},
 	}
 
 	// rpmMetricsPool is a pool of metadata used to propagate metrics.
-	rpmMetricsPool = sync.Pool{
+	rpmMetricsPool = syncutil.Pool{
 		New: func() interface{} {
 			return &RemoteProducerMetadata_Metrics{}
 		},

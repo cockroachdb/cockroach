@@ -30,6 +30,7 @@ go_library(
         "//pkg/util",  # keep
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",  # keep
     ],

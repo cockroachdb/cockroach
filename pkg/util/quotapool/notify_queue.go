@@ -10,7 +10,7 @@
 
 package quotapool
 
-import "sync"
+import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 // bufferSize is the size of the ringBuf buf served from a notifyQueueNodePool.
 //
@@ -99,14 +99,14 @@ func (q *notifyQueue) peek() *notifyee {
 // notifyQueueNodePool constructs notifyQueue objects which internally pool
 // their buffers.
 type notifyQueueNodePool struct {
-	pool sync.Pool
+	pool syncutil.Pool
 }
 
 // newNotifyQueueNodePool returns a new notifyQueueNodePool which can be used
 // to construct notifyQueues which internally pool their buffers.
 func newNotifyQueueNodePool() *notifyQueueNodePool {
 	return &notifyQueueNodePool{
-		pool: sync.Pool{
+		pool: syncutil.Pool{
 			New: func() interface{} { return &node{} },
 		},
 	}

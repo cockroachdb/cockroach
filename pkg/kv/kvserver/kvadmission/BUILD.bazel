@@ -20,6 +20,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",

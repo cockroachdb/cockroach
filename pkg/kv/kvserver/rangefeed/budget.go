@@ -71,7 +71,7 @@ var RangefeedBudgetsEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-var budgetAllocationSyncPool = sync.Pool{
+var budgetAllocationSyncPool = syncutil.Pool{
 	New: func() interface{} {
 		return new(SharedBudgetAllocation)
 	},

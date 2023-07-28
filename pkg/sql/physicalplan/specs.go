@@ -11,13 +11,12 @@
 package physicalplan
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var flowSpecPool = sync.Pool{
+var flowSpecPool = syncutil.Pool{
 	New: func() interface{} {
 		return &execinfrapb.FlowSpec{}
 	},
@@ -46,7 +45,7 @@ func ReleaseFlowSpec(spec *execinfrapb.FlowSpec) {
 	flowSpecPool.Put(spec)
 }
 
-var trSpecPool = sync.Pool{
+var trSpecPool = syncutil.Pool{
 	New: func() interface{} {
 		return &execinfrapb.TableReaderSpec{}
 	},

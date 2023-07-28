@@ -72,7 +72,7 @@ type fdCountingSemaphore struct {
 	acquireMaxRetries int
 }
 
-var fdCountingSemaphorePool = sync.Pool{
+var fdCountingSemaphorePool = syncutil.Pool{
 	New: func() interface{} {
 		return &fdCountingSemaphore{}
 	},
@@ -206,7 +206,7 @@ type vectorizedFlow struct {
 var _ flowinfra.Flow = &vectorizedFlow{}
 var _ execreleasable.Releasable = &vectorizedFlow{}
 
-var vectorizedFlowPool = sync.Pool{
+var vectorizedFlowPool = syncutil.Pool{
 	New: func() interface{} {
 		return &vectorizedFlow{}
 	},
@@ -615,7 +615,7 @@ type vectorizedFlowCreator struct {
 
 var _ execreleasable.Releasable = &vectorizedFlowCreator{}
 
-var vectorizedFlowCreatorPool = sync.Pool{
+var vectorizedFlowCreatorPool = syncutil.Pool{
 	New: func() interface{} {
 		return &vectorizedFlowCreator{
 			streamIDToInputOp: make(map[execinfrapb.StreamID]colexecargs.OpWithMetaInfo),

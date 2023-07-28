@@ -16,14 +16,13 @@
 package raftlog
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
 )
@@ -83,7 +82,7 @@ type Entry struct {
 	ApplyAdmissionControl bool
 }
 
-var entryPool = sync.Pool{
+var entryPool = syncutil.Pool{
 	New: func() interface{} {
 		return &Entry{}
 	},

@@ -14,12 +14,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
@@ -227,7 +227,7 @@ func raftEntryFormatter(data []byte) string {
 	return fmt.Sprintf("[%x] [%d]", cmdID, len(data))
 }
 
-var raftMessageRequestPool = sync.Pool{
+var raftMessageRequestPool = syncutil.Pool{
 	New: func() interface{} {
 		return &kvserverpb.RaftMessageRequest{}
 	},

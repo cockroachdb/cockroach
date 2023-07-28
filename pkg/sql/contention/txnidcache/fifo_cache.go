@@ -11,7 +11,6 @@
 package txnidcache
 
 import (
-	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -20,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var nodePool = &sync.Pool{
+var nodePool = syncutil.Pool{
 	New: func() interface{} {
 		return &blockListNode{}
 	},

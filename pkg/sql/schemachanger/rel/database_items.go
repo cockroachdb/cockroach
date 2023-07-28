@@ -11,8 +11,7 @@
 package rel
 
 import (
-	"sync"
-
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/google/btree"
 )
 
@@ -75,7 +74,7 @@ func lessToCmp(less bool) int {
 	return 1
 }
 
-var valuesItemPool = sync.Pool{
+var valuesItemPool = syncutil.Pool{
 	New: func() interface{} { return new(valuesItem) },
 }
 

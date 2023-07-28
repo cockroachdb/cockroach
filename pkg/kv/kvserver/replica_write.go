@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -827,7 +827,7 @@ func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	return ba.Txn.Epoch == 0 || etArg.Require1PC
 }
 
-var mvccStatsPool = sync.Pool{
+var mvccStatsPool = syncutil.Pool{
 	New: func() interface{} { return new(enginepb.MVCCStats) },
 }
 

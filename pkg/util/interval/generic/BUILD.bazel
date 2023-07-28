@@ -12,7 +12,10 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/interval/generic",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",  # keep
+    ],
 )
 
 # keep

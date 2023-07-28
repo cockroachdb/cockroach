@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/binary"
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -514,7 +514,7 @@ const (
 )
 
 // Pool for allocating pebble MVCC Scanners.
-var pebbleMVCCScannerPool = sync.Pool{
+var pebbleMVCCScannerPool = syncutil.Pool{
 	New: func() interface{} {
 		return &pebbleMVCCScanner{}
 	},

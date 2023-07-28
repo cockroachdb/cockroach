@@ -13,10 +13,10 @@ package lockspanset
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,7 +24,7 @@ type LockSpanSet struct {
 	spans [lock.NumLockStrength][]roachpb.Span
 }
 
-var lockSpanSetPool = sync.Pool{
+var lockSpanSetPool = syncutil.Pool{
 	New: func() interface{} { return new(LockSpanSet) },
 }
 

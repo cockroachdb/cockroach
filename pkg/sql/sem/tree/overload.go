@@ -16,13 +16,13 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -660,7 +660,7 @@ type overloadTypeChecker struct {
 	overloadsIdxArr [16]uint8
 }
 
-var overloadTypeCheckerPool = sync.Pool{
+var overloadTypeCheckerPool = syncutil.Pool{
 	New: func() interface{} {
 		var s overloadTypeChecker
 		s.overloadIdxs = s.overloadsIdxArr[:0]

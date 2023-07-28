@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -331,7 +330,7 @@ func (p *IntPool) Closer(reason string) IntPoolCloser {
 	return IntPoolCloser{p: p, reason: reason}
 }
 
-var intAllocSyncPool = sync.Pool{
+var intAllocSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(IntAlloc) },
 }
 
@@ -346,7 +345,7 @@ func (p *IntPool) putIntAlloc(ia *IntAlloc) {
 	intAllocSyncPool.Put(ia)
 }
 
-var intRequestSyncPool = sync.Pool{
+var intRequestSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(intRequest) },
 }
 
@@ -363,7 +362,7 @@ func (p *IntPool) putIntRequest(r *intRequest) {
 	intRequestSyncPool.Put(r)
 }
 
-var intFuncRequestSyncPool = sync.Pool{
+var intFuncRequestSyncPool = syncutil.Pool{
 	New: func() interface{} { return new(intFuncRequest) },
 }
 

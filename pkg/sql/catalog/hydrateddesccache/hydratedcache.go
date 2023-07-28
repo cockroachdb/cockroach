@@ -15,7 +15,6 @@ package hydrateddesccache
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -485,7 +484,7 @@ func (c cacheKey) Compare(comparable llrb.Comparable) int {
 
 var _ llrb.Comparable = (*cacheKey)(nil)
 
-var cacheKeySyncPool = sync.Pool{
+var cacheKeySyncPool = syncutil.Pool{
 	New: func() interface{} { return new(cacheKey) },
 }
 

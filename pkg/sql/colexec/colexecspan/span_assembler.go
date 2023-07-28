@@ -12,7 +12,6 @@
 package colexecspan
 
 import (
-	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -77,7 +77,7 @@ func NewColSpanAssembler(
 	return sa
 }
 
-var spanAssemblerPool = sync.Pool{
+var spanAssemblerPool = syncutil.Pool{
 	New: func() interface{} {
 		return &spanAssembler{}
 	},
