@@ -37,7 +37,7 @@ func TestCommitTSIntervals(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 
 	var i interceptor
-	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{

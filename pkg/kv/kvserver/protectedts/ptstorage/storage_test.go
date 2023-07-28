@@ -759,7 +759,7 @@ func TestErrorsFromSQL(t *testing.T) {
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 

@@ -35,7 +35,7 @@ func TestMVCCGCCorrectStats(t *testing.T) {
 	ctx := context.Background()
 	var args base.TestServerArgs
 	args.Knobs.Store = &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true}
-	serv, _, _ := serverutils.StartServer(t, args)
+	serv := serverutils.StartServerOnly(t, args)
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 

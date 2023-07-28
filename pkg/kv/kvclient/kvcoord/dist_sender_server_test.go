@@ -1811,7 +1811,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			return nil
 		}
 
-	s, _, _ := serverutils.StartServer(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1883,7 +1883,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 func TestTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -2011,7 +2011,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		}
 
 	var refreshSpansCondenseFilter atomic.Value
-	s, _, _ := serverutils.StartServer(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{
 			Store: &storeKnobs,
 			KVClient: &kvcoord.ClientTestingKnobs{

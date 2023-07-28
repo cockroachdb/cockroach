@@ -46,7 +46,7 @@ func TestHotRangesStats(t *testing.T) {
 	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,

@@ -123,7 +123,7 @@ func TestJWTEnabledCheck(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -149,7 +149,7 @@ func TestJWTSingleKey(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -180,7 +180,7 @@ func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -213,7 +213,7 @@ func TestJWTMultiKey(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -248,7 +248,7 @@ func TestExpiredToken(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -270,7 +270,7 @@ func TestKeyIdMismatch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -301,7 +301,7 @@ func TestIssuerCheck(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -344,7 +344,7 @@ func TestSubjectCheck(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -374,7 +374,7 @@ func TestClaimMissing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -399,7 +399,7 @@ func TestIntegerClaimValue(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	// map the value 1 to a valid user
 	identMapString := issuer2 + "     1    " + username1
@@ -425,7 +425,7 @@ func TestSingleClaim(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -456,7 +456,7 @@ func TestMultipleClaim(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
@@ -489,7 +489,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	// Create a map for issuer2 from username1 to username2 (note not the reverse).
 	identMapString := issuer2 + "    " + username1 + "    " + username2
@@ -524,7 +524,7 @@ func TestSubjectReservedUser(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	// Create a map for issuer2 from username1 to username2 (note not the reverse).
 	identMapString := issuer2 + "    " + username1 + "    root"
@@ -553,7 +553,7 @@ func TestAudienceCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))

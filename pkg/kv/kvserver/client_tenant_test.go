@@ -326,7 +326,7 @@ func TestTenantCtx(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
 		getErr := make(chan error)
 		pushErr := make(chan error)
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{

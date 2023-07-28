@@ -98,7 +98,7 @@ func TestCrashReportingPacket(t *testing.T) {
 	func() {
 		defer expectPanic("after server start")
 		defer logcrash.RecoverAndReportPanic(ctx, &st.SV)
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 		s.Stopper().Stop(ctx)
 		panic(redact.Safe(panicPost))
 	}()
