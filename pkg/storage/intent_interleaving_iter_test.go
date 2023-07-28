@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -210,6 +211,10 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 //   - a single Z is interpreted as LocalMax
 func TestIntentInterleavingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Disable fatal assertions, since we want to capture assertion failures in
+	// error output.
+	must.DisableFatalAssertions(t)
 
 	var eng Engine
 	defer func() {

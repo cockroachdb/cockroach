@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -164,6 +165,10 @@ func TestMVCCHistories(t *testing.T) {
 	// handle the different test output with extended value encoding would be to
 	// duplicate each test file for the two cases.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
+
+	// Disable fatal assertions, since we want to capture assertion failures as
+	// error output.
+	must.DisableFatalAssertions(t)
 
 	ctx := context.Background()
 
