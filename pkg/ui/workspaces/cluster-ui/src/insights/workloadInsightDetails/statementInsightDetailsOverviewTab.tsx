@@ -33,7 +33,6 @@ import {
   StatementDetailsLink,
   TransactionDetailsLink,
 } from "../workloadInsights/util";
-import { TimeScale } from "../../timeScaleDropdown";
 import { getStmtInsightRecommendations } from "../utils";
 import { ContentionStatementDetailsTable } from "./insightDetailsTables";
 import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
