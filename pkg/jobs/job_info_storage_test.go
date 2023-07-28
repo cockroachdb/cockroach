@@ -41,7 +41,7 @@ import (
 func TestJobInfoAccessors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -243,7 +243,7 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(ctx)
 	ief := s.InternalDB().(isql.DB)
 

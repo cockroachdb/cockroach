@@ -80,7 +80,7 @@ func TestConn(t *testing.T) {
 	// server that the client will connect to; we just use it on the side to
 	// execute some metadata queries that pgx sends whenever it opens a
 	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
 	defer s.Stopper().Stop(context.Background())
 
 	// Start a pgwire "server".
@@ -917,7 +917,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 	// We're going to test closing the connection in both the Open and Aborted
 	// state.
 	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
 
@@ -1275,7 +1275,7 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	authBlocked := make(chan struct{})
-	s, _, _ := serverutils.StartServer(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Insecure: true,
 			Knobs: base.TestingKnobs{
@@ -1989,7 +1989,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	testServer := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer testServer.Stopper().Stop(ctx)
 
 	// Users.
@@ -2204,7 +2204,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 func TestConnCloseReleasesReservedMem(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 

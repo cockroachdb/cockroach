@@ -375,7 +375,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	}
 
 	t.Run("root internal exec", func(t *testing.T) {
-		s, _, _ := serverutils.StartServer(t, params)
+		s := serverutils.StartServerOnly(t, params)
 		defer s.Stopper().Stop(context.Background())
 
 		testInternalExecutorAppNameInitialization(
@@ -387,7 +387,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	// We are running the second test with a new server so
 	// as to reset the statement statistics properly.
 	t.Run("session bound exec", func(t *testing.T) {
-		s, _, _ := serverutils.StartServer(t, params)
+		s := serverutils.StartServerOnly(t, params)
 		defer s.Stopper().Stop(context.Background())
 
 		mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
@@ -613,7 +613,7 @@ func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
@@ -631,7 +631,7 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
@@ -654,7 +654,7 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	idb1 := s.InternalDB().(*sql.InternalDB)

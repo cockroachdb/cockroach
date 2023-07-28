@@ -36,7 +36,7 @@ func debugURL(s serverutils.ApplicationLayerInterface) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -59,7 +59,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -82,7 +82,7 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -101,7 +101,7 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -128,7 +128,7 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
@@ -182,7 +182,7 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 

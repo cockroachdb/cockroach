@@ -48,7 +48,7 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestTenantProbabilistic,
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{

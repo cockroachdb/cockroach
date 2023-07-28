@@ -2558,7 +2558,7 @@ func TestStartableJob(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	jr := s.JobRegistry().(*jobs.Registry)
 	var resumeFunc atomic.Value
@@ -2753,7 +2753,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: requestFilter,
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 	jr := s.JobRegistry().(*jobs.Registry)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
@@ -2783,7 +2783,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
@@ -3103,7 +3103,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Knobs: knobs})
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 

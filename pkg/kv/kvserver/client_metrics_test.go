@@ -186,7 +186,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())

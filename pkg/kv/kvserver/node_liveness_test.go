@@ -212,7 +212,7 @@ func TestRedundantNodeLivenessHeartbeatsAvoided(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	s := serv.(*server.TestServer)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
@@ -555,7 +555,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 	g := s.Gossip()
@@ -748,7 +748,7 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manualClock,
@@ -980,7 +980,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -1107,7 +1107,7 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 		<-sem
 		return nil
 	}
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{

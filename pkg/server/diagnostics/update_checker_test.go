@@ -39,7 +39,7 @@ func TestCheckVersion(t *testing.T) {
 		defer r.Close()
 
 		url := r.URL()
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
@@ -66,7 +66,7 @@ func TestCheckVersion(t *testing.T) {
 		// Ensure nil, which happens when an empty env override URL is used, does not
 		// cause a crash.
 		var nilURL *url.URL
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
