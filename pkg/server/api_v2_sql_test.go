@@ -37,7 +37,7 @@ func TestExecSQL(t *testing.T) {
 		SQLAPIClock = timeutil.DefaultTimeSource{}
 	}()
 
-	server, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
 

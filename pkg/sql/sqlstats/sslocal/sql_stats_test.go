@@ -876,7 +876,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 			}
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(

@@ -809,7 +809,7 @@ func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
 	knobs := base.TestingKnobs{
 		JobsTestingKnobs: fastDaemonKnobs(overridePaceSetting(10 * time.Millisecond)),
 	}
-	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{Knobs: knobs})
 	defer ts.Stopper().Stop(context.Background())
 
 	schedules := ScheduledJobDB(ts.InternalDB().(isql.DB))
@@ -845,7 +845,7 @@ func TestSchedulePlanningRespectsTimeout(t *testing.T) {
 	knobs := base.TestingKnobs{
 		JobsTestingKnobs: fastDaemonKnobs(overridePaceSetting(10 * time.Millisecond)),
 	}
-	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{Knobs: knobs})
 	defer ts.Stopper().Stop(context.Background())
 	schedules := ScheduledJobDB(ts.InternalDB().(isql.DB))
 

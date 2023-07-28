@@ -139,7 +139,7 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	// Start server with persisted store so that it gets bootstrapped.
 	{
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{Path: path},
 			},
@@ -152,7 +152,7 @@ func TestBootstrapNewStore(t *testing.T) {
 		{InMemory: true},
 		{InMemory: true},
 	}
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: specs,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -595,7 +595,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		args := base.TestServerArgs{
 			Locality: locality,
 		}
-		s, _, _ := serverutils.StartServer(t, args)
+		s := serverutils.StartServerOnly(t, args)
 		defer s.Stopper().Stop(ctx)
 
 		// Check that the locality is present both on the Node and was also
@@ -669,7 +669,7 @@ func TestNodeBatchRequestPProfLabels(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	observedProfileLabels := make(map[string]string)
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
@@ -732,7 +732,7 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.(*TestServer)
 
@@ -840,7 +840,7 @@ func TestGetTenantWeights(t *testing.T) {
 		{InMemory: true},
 		{InMemory: true},
 	}
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: specs,
 	})
 	defer s.Stopper().Stop(ctx)

@@ -146,6 +146,8 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		}
 
 		args := base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+
 			Insecure:      params.Insecure,
 			SSLCertsDir:   c.certsDir,
 			StoreSpecs:    params.StoreSpecs,
@@ -163,7 +165,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		if params.NoNodelocal {
 			args.ExternalIODir = ""
 		}
-		s, err := serverutils.StartServerRaw(params.T, args)
+		s, err := serverutils.StartServerOnlyE(params.T, args)
 		if err != nil {
 			c.fail(err)
 		}
@@ -187,11 +189,17 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		if c.Insecure() {
 			params.TenantArgs.ForceInsecure = true
 		}
-		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, *params.TenantArgs)
+		c.tenant, err = c.TestServer.StartTenant(context.Background(), *params.TenantArgs)
+		if err != nil {
+			c.fail(err)
+		}
 	}
 
 	if params.SharedProcessTenantArgs != nil {
-		c.tenant, _ = serverutils.StartSharedProcessTenant(c.t, c.TestServer, *params.SharedProcessTenantArgs)
+		c.tenant, _, err = c.TestServer.StartSharedProcessTenant(context.Background(), *params.SharedProcessTenantArgs)
+		if err != nil {
+			c.fail(err)
+		}
 		c.useSystemTenant = params.UseSystemTenant
 	}
 
@@ -232,7 +240,7 @@ func (c *TestCLI) stopServer() {
 func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.stopServer()
 	log.Info(context.Background(), "restarting server")
-	s, err := serverutils.StartServerRaw(params.T, base.TestServerArgs{
+	s, err := serverutils.StartServerOnlyE(params.T, base.TestServerArgs{
 		Insecure:    params.Insecure,
 		SSLCertsDir: c.certsDir,
 		StoreSpecs:  params.StoreSpecs,

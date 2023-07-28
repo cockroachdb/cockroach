@@ -162,7 +162,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 
 	manual := hlc.NewHybridManualClock()
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -271,7 +271,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	}
 	manual := hlc.NewHybridManualClock()
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -453,7 +453,7 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 func testTxnReadWithinUncertaintyInterval(t *testing.T, observedTS bool, readOp string) {
 	ctx := context.Background()
 	manual := hlc.NewHybridManualClock()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -1248,7 +1248,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -2264,7 +2264,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 		return nil
 	}
-	srv, _, _ := serverutils.StartServer(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -2519,7 +2519,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		}
 		return nil
 	}
-	srv, _, _ := serverutils.StartServer(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -2558,7 +2558,7 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
@@ -2693,7 +2693,7 @@ func TestClearRange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			// This makes sure that our writes are visible when we go
 			// straight to the engine to check them.

@@ -19,7 +19,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -74,7 +73,7 @@ type TestCluster struct {
 	serverArgs  []base.TestServerArgs
 	clusterArgs base.TestClusterArgs
 
-	t testing.TB
+	t serverutils.TestFataler
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -234,7 +233,9 @@ func (tc *TestCluster) stopServerLocked(idx int) {
 // StartTestCluster creates and starts up a TestCluster made up of `nodes`
 // in-memory testing servers.
 // The cluster should be stopped using TestCluster.Stopper().Stop().
-func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
+func StartTestCluster(
+	t serverutils.TestFataler, nodes int, args base.TestClusterArgs,
+) *TestCluster {
 	cluster := NewTestCluster(t, nodes, args)
 	cluster.Start(t)
 	return cluster
@@ -242,7 +243,9 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 // NewTestCluster initializes a TestCluster made up of `nodes` in-memory testing
 // servers. It needs to be started separately using the return type.
-func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *TestCluster {
+func NewTestCluster(
+	t serverutils.TestFataler, nodes int, clusterArgs base.TestClusterArgs,
+) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
@@ -360,7 +363,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 // If looking to test initialization/bootstrap behavior, Start should be invoked
 // in a separate thread and with ParallelStart enabled (otherwise it'll block
 // on waiting for init for the first server).
-func (tc *TestCluster) Start(t testing.TB) {
+func (tc *TestCluster) Start(t serverutils.TestFataler) {
 	nodes := len(tc.Servers)
 	var errCh chan error
 	if tc.clusterArgs.ParallelStart {
@@ -529,9 +532,13 @@ func checkServerArgsForCluster(
 }
 
 // AddAndStartServer calls through to AddAndStartServerE.
-func (tc *TestCluster) AddAndStartServer(t *testing.T, serverArgs base.TestServerArgs) {
+func (tc *TestCluster) AddAndStartServer(
+	t serverutils.TestFataler, serverArgs base.TestServerArgs,
+) {
 	t.Helper()
-	require.NoError(t, tc.AddAndStartServerE(serverArgs))
+	if err := tc.AddAndStartServerE(serverArgs); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // AddAndStartServerE creates a server with the specified arguments and appends it to
@@ -639,7 +646,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 // WaitForNStores waits for N store descriptors to be gossiped. Servers other
 // than the first "bootstrap" their stores asynchronously, but we'd like to have
 // control over when stores get initialized before returning the TestCluster.
-func (tc *TestCluster) WaitForNStores(t testing.TB, n int, g *gossip.Gossip) {
+func (tc *TestCluster) WaitForNStores(t serverutils.TestFataler, n int, g *gossip.Gossip) {
 	// Register a gossip callback for the store descriptors.
 	var storesMu syncutil.Mutex
 	stores := map[roachpb.StoreID]struct{}{}
@@ -689,7 +696,9 @@ func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, er
 }
 
 // LookupRangeOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb.RangeDescriptor {
+func (tc *TestCluster) LookupRangeOrFatal(
+	t serverutils.TestFataler, key roachpb.Key,
+) roachpb.RangeDescriptor {
 	t.Helper()
 	desc, err := tc.LookupRange(key)
 	if err != nil {
@@ -727,7 +736,7 @@ func (tc *TestCluster) SplitRange(
 
 // SplitRangeOrFatal is the same as SplitRange but will Fatal the test on error.
 func (tc *TestCluster) SplitRangeOrFatal(
-	t testing.TB, splitKey roachpb.Key,
+	t serverutils.TestFataler, splitKey roachpb.Key,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
 	lhsDesc, rhsDesc, err := tc.Servers[0].SplitRange(splitKey)
 	if err != nil {
@@ -744,7 +753,7 @@ func (tc *TestCluster) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor
 // MergeRangesOrFatal is the same as MergeRanges but will Fatal the test on
 // error.
 func (tc *TestCluster) MergeRangesOrFatal(
-	t testing.TB, leftKey roachpb.Key,
+	t serverutils.TestFataler, leftKey roachpb.Key,
 ) roachpb.RangeDescriptor {
 	mergedDesc, err := tc.MergeRanges(leftKey)
 	if err != nil {
@@ -849,7 +858,7 @@ func (tc *TestCluster) AddNonVoters(
 
 // AddNonVotersOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) AddNonVotersOrFatal(
-	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	t serverutils.TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	desc, err := tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
 	if err != nil {
@@ -899,7 +908,7 @@ func (tc *TestCluster) WaitForVoters(
 // WaitForVotersOrFatal is the same as WaitForVoters but it will Fatal the test
 // on error.
 func (tc *TestCluster) WaitForVotersOrFatal(
-	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	t serverutils.TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) {
 	require.NoError(t, tc.WaitForVoters(startKey, targets...))
 }
@@ -958,7 +967,7 @@ func (tc *TestCluster) waitForNewReplicas(
 
 // AddVotersOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) AddVotersOrFatal(
-	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	t serverutils.TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
 	desc, err := tc.AddVoters(startKey, targets...)
@@ -978,7 +987,7 @@ func (tc *TestCluster) RemoveVoters(
 
 // RemoveVotersOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) RemoveVotersOrFatal(
-	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	t serverutils.TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
 	desc, err := tc.RemoveVoters(startKey, targets...)
@@ -998,7 +1007,7 @@ func (tc *TestCluster) RemoveNonVoters(
 
 // RemoveNonVotersOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) RemoveNonVotersOrFatal(
-	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	t serverutils.TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	desc, err := tc.RemoveNonVoters(startKey, targets...)
 	if err != nil {
@@ -1032,7 +1041,9 @@ func (tc *TestCluster) SwapVoterWithNonVoter(
 
 // SwapVoterWithNonVoterOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) SwapVoterWithNonVoterOrFatal(
-	t testing.TB, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+	t serverutils.TestFataler,
+	startKey roachpb.Key,
+	voterTarget, nonVoterTarget roachpb.ReplicationTarget,
 ) *roachpb.RangeDescriptor {
 	afterDesc, err := tc.SwapVoterWithNonVoter(startKey, voterTarget, nonVoterTarget)
 
@@ -1068,7 +1079,10 @@ func (tc *TestCluster) RebalanceVoter(
 
 // RebalanceVoterOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) RebalanceVoterOrFatal(
-	ctx context.Context, t testing.TB, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+	ctx context.Context,
+	t serverutils.TestFataler,
+	startKey roachpb.Key,
+	src, dest roachpb.ReplicationTarget,
 ) *roachpb.RangeDescriptor {
 	afterDesc, err := tc.RebalanceVoter(ctx, startKey, src, dest)
 	if err != nil {
@@ -1091,7 +1105,7 @@ func (tc *TestCluster) TransferRangeLease(
 
 // TransferRangeLeaseOrFatal is a convenience version of TransferRangeLease
 func (tc *TestCluster) TransferRangeLeaseOrFatal(
-	t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+	t serverutils.TestFataler, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) {
 	if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
 		t.Fatalf(`could not transfer lease for range %s error is %+v`, rangeDesc, err)
@@ -1100,7 +1114,9 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 
 // IncrClockForLeaseUpgrade run up the clock to force a lease renewal (and thus
 // the change in lease types).
-func (tc *TestCluster) IncrClockForLeaseUpgrade(t *testing.T, clock *hlc.HybridManualClock) {
+func (tc *TestCluster) IncrClockForLeaseUpgrade(
+	t serverutils.TestFataler, clock *hlc.HybridManualClock,
+) {
 	clock.Increment(
 		tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().RangeLeaseRenewalDuration().Nanoseconds() +
 			time.Second.Nanoseconds(),
@@ -1111,7 +1127,7 @@ func (tc *TestCluster) IncrClockForLeaseUpgrade(t *testing.T, clock *hlc.HybridM
 // descriptor is upgraded to an epoch-based one, but only if we expect the lease
 // to be upgraded.
 func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
-	ctx context.Context, t *testing.T, desc roachpb.RangeDescriptor,
+	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
 ) {
 	if kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV) {
 		return
@@ -1122,7 +1138,7 @@ func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 // WaitForLeaseUpgrade waits until the lease held for the given range descriptor
 // is upgraded to an epoch-based one.
 func (tc *TestCluster) WaitForLeaseUpgrade(
-	ctx context.Context, t *testing.T, desc roachpb.RangeDescriptor,
+	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
 ) {
 	require.False(t, kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV),
 		"cluster configured to only use expiration leases")
@@ -1139,7 +1155,7 @@ func (tc *TestCluster) WaitForLeaseUpgrade(
 
 // RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
 func (tc *TestCluster) RemoveLeaseHolderOrFatal(
-	t testing.TB,
+	t serverutils.TestFataler,
 	rangeDesc roachpb.RangeDescriptor,
 	src roachpb.ReplicationTarget,
 	dest roachpb.ReplicationTarget,
@@ -1323,7 +1339,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 // ScratchRange returns the start key of a span of keyspace suitable for use as
 // kv scratch space (it doesn't overlap system spans or SQL tables). The range
 // is lazily split off on the first call to ScratchRange.
-func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
+func (tc *TestCluster) ScratchRange(t serverutils.TestFataler) roachpb.Key {
 	scratchKey, err := tc.Servers[0].ScratchRange()
 	if err != nil {
 		t.Fatal(err)
@@ -1334,7 +1350,7 @@ func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
 // ScratchRangeWithExpirationLease returns the start key of a span of keyspace
 // suitable for use as kv scratch space and that has an expiration based lease.
 // The range is lazily split off on the first call to ScratchRangeWithExpirationLease.
-func (tc *TestCluster) ScratchRangeWithExpirationLease(t testing.TB) roachpb.Key {
+func (tc *TestCluster) ScratchRangeWithExpirationLease(t serverutils.TestFataler) roachpb.Key {
 	scratchKey, err := tc.Servers[0].ScratchRangeWithExpirationLease()
 	if err != nil {
 		t.Fatal(err)
@@ -1509,7 +1525,7 @@ func (tc *TestCluster) WaitForZoneConfigPropagation() error {
 
 // WaitForNodeStatuses waits until a NodeStatus is persisted for every node and
 // store in the cluster.
-func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
+func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 	testutils.SucceedsSoon(t, func() error {
 		client, err := tc.GetStatusClient(context.Background(), t, 0)
 		if err != nil {
@@ -1545,7 +1561,7 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 
 // WaitForNodeLiveness waits until a liveness record is persisted for every
 // node in the cluster.
-func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
+func (tc *TestCluster) WaitForNodeLiveness(t serverutils.TestFataler) {
 	testutils.SucceedsSoon(t, func() error {
 		db := tc.Servers[0].DB()
 		for _, s := range tc.Servers {
@@ -1612,7 +1628,7 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 // WaitForValues waits up to the given duration for the integer values
 // at the given key to match the expected slice (across all stores).
 // Fails the test if they do not match.
-func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
+func (tc *TestCluster) WaitForValues(t serverutils.TestFataler, key roachpb.Key, expected []int64) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		actual := tc.ReadIntFromStores(key)
@@ -1624,7 +1640,9 @@ func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []i
 }
 
 // GetFirstStoreFromServer get the first store from the specified server.
-func (tc *TestCluster) GetFirstStoreFromServer(t testing.TB, server int) *kvserver.Store {
+func (tc *TestCluster) GetFirstStoreFromServer(
+	t serverutils.TestFataler, server int,
+) *kvserver.Store {
 	ts := tc.Servers[server]
 	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
@@ -1785,7 +1803,9 @@ func (tc *TestCluster) ServerStopped(idx int) bool {
 
 // GetRaftLeader returns the replica that is the current raft leader for the
 // specified key.
-func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.Replica {
+func (tc *TestCluster) GetRaftLeader(
+	t serverutils.TestFataler, key roachpb.RKey,
+) *kvserver.Replica {
 	t.Helper()
 	var raftLeaderRepl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
@@ -1827,7 +1847,7 @@ func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.R
 
 // GetAdminClient gets the severpb.AdminClient for the specified server.
 func (tc *TestCluster) GetAdminClient(
-	ctx context.Context, t testing.TB, serverIdx int,
+	ctx context.Context, t serverutils.TestFataler, serverIdx int,
 ) (serverpb.AdminClient, error) {
 	srv := tc.Server(serverIdx)
 	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
@@ -1839,7 +1859,7 @@ func (tc *TestCluster) GetAdminClient(
 
 // GetStatusClient gets the severpb.StatusClient for the specified server.
 func (tc *TestCluster) GetStatusClient(
-	ctx context.Context, t testing.TB, serverIdx int,
+	ctx context.Context, t serverutils.TestFataler, serverIdx int,
 ) (serverpb.StatusClient, error) {
 	srv := tc.Server(serverIdx)
 	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
@@ -1851,7 +1871,7 @@ func (tc *TestCluster) GetStatusClient(
 
 // SplitTable implements TestClusterInterface.
 func (tc *TestCluster) SplitTable(
-	t *testing.T, desc catalog.TableDescriptor, sps []serverutils.SplitPoint,
+	t serverutils.TestFataler, desc catalog.TableDescriptor, sps []serverutils.SplitPoint,
 ) {
 	if tc.ReplicationMode() != base.ReplicationManual {
 		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
@@ -1904,7 +1924,7 @@ func (tc *TestCluster) SplitTable(
 
 // WaitForTenantCapabilities implements TestClusterInterface.
 func (tc *TestCluster) WaitForTenantCapabilities(
-	t *testing.T, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
+	t serverutils.TestFataler, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
 ) {
 	for i, ts := range tc.Servers {
 		serverutils.WaitForTenantCapabilities(t, ts, tenID, targetCaps, fmt.Sprintf("server %d", i))
@@ -1923,7 +1943,7 @@ var TestClusterFactory serverutils.TestClusterFactory = testClusterFactoryImpl{}
 
 // NewTestCluster is part of the TestClusterFactory interface.
 func (testClusterFactoryImpl) NewTestCluster(
-	t testing.TB, numNodes int, args base.TestClusterArgs,
+	t serverutils.TestFataler, numNodes int, args base.TestClusterArgs,
 ) serverutils.TestClusterInterface {
 	return NewTestCluster(t, numNodes, args)
 }
