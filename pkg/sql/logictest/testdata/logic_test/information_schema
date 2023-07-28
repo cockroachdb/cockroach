@@ -5290,6 +5290,7 @@ enable_create_stats_using_extremes                         off
 enable_drop_enum_value                                     on
 enable_durable_locking_for_serializable                    off
 enable_experimental_alter_column_type_general              off
+enable_functions_in_portals                                off
 enable_implicit_fk_locking_for_serializable                off
 enable_implicit_select_for_update                          on
 enable_implicit_transaction_for_batch_statements           on

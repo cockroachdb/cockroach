@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -3329,6 +3329,10 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
+}
+
+func (m *sessionDataMutator) SetEnableFunctionsInPortals(val bool) {
+	m.data.FunctionsInPortalsEnabled = val
 }
 
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {

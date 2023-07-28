@@ -234,7 +234,7 @@ message LocalOnlySessionData {
   bool cost_scans_with_default_col_size = 61;
   // DefaultTxnQualityOfService indicates the default QoSLevel/WorkPriority of
   // newly created transactions.
-  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype)="QoSLevel"];
+  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype) = "QoSLevel"];
   // OptSplitScanLimit indicates the maximum number of UNION ALL statements a
   // Scan may be split into during query optimization to avoid a sort.
   int32 opt_split_scan_limit = 63;
@@ -423,6 +423,10 @@ message LocalOnlySessionData {
   // require locking for correctness, so by default we use best-effor locks for
   // better performance.) Weaker isolation levels always use durable locking.
   bool durable_locking_for_serializable = 109;
+
+  // FunctionsInPortalsEnabled is true if statements containing function calls
+  // are allowed in pausable portals.
+  bool functions_in_portals_enabled = 110;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

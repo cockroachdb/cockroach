@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"time"
 	"unsafe"
 
@@ -194,6 +195,7 @@ type PreparedPortal struct {
 // accountForCopy() doesn't need to be called on the prepared statement.
 func (ex *connExecutor) makePreparedPortal(
 	ctx context.Context,
+	sessionData *sessiondata.SessionData,
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
@@ -208,7 +210,7 @@ func (ex *connExecutor) makePreparedPortal(
 
 	if ex.sessionData().MultipleActivePortalsEnabled && ex.executorType != executorTypeInternal {
 		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
-		if tree.IsAllowedToPause(stmt.AST) {
+		if tree.IsAllowedToPause(stmt.AST, sessionData.FunctionsInPortalsEnabled) {
 			portal.pauseInfo = &portalPauseInfo{}
 			portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
 			portal.portalPausablity = PausablePortal

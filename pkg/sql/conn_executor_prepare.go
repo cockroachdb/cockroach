@@ -512,7 +512,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	// Create the new PreparedPortal.
-	if err := ex.addPortal(ctx, portalName, ps, qargs, columnFormatCodes); err != nil {
+	if err := ex.addPortal(ctx, ex.planner.ExtendedEvalContext().SessionData(), portalName, ps, qargs, columnFormatCodes); err != nil {
 		return retErr(err)
 	}
 
@@ -530,6 +530,7 @@ func (ex *connExecutor) execBind(
 // for anonymous portals).
 func (ex *connExecutor) addPortal(
 	ctx context.Context,
+	sessionData *sessiondata.SessionData,
 	portalName string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
@@ -542,7 +543,7 @@ func (ex *connExecutor) addPortal(
 		panic(errors.AssertionFailedf("portal already exists as cursor: %q", portalName))
 	}
 
-	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, outFormats)
+	portal, err := ex.makePreparedPortal(ctx, sessionData, portalName, stmt, qargs, outFormats)
 	if err != nil {
 		return err
 	}
