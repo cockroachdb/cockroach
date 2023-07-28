@@ -6,7 +6,7 @@ FOR counter IN 1..5 LOOP
 END LOOP;
 END
 ----
-expected parse error: at or near "counter": syntax error: unimplemented: this syntax
+at or near "counter": syntax error: unimplemented: this syntax
 
 
 parse
@@ -18,7 +18,7 @@ FOR counter IN 1..5 LOOP
 END LOOP for_loop;
 END
 ----
-expected parse error: at or near "counter": syntax error: unimplemented: this syntax
+at or near "counter": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -28,7 +28,7 @@ FOR counter IN 1..5 LOOP
 END LOOP;
 END
 ----
-expected parse error: at or near "counter": syntax error: unimplemented: this syntax
+at or near "counter": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -39,4 +39,4 @@ LOOP
 END LOOP;
 RETURN;
 ----
-expected parse error: at or near "yr": syntax error: unimplemented: this syntax
+at or near "yr": syntax error: unimplemented: this syntax

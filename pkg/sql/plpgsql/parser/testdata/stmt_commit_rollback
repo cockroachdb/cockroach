@@ -6,7 +6,7 @@ IF x THEN
 END IF;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -16,7 +16,7 @@ IF x THEN
 END IF;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -28,7 +28,7 @@ ELSIF y THEN
 END IF;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax
 
 
 parse
@@ -38,4 +38,4 @@ BEGIN
   COMMIT;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax
