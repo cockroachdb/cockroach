@@ -400,24 +400,6 @@ func SendReport(
 	}
 }
 
-// ReportOrPanic either reports an error to sentry, if run from a release
-// binary, or panics, if triggered in tests. This is intended to be used for
-// failing assertions which are recoverable but serious enough to report and to
-// cause tests to fail.
-//
-// Like SendCrashReport, the format string should not contain any sensitive
-// data, and unsafe reportables will be redacted before reporting.
-func ReportOrPanic(
-	ctx context.Context, sv *settings.Values, format string, reportables ...interface{},
-) {
-	err := errors.Newf(format, reportables...)
-	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
-		panic(err)
-	}
-	log.Errorf(ctx, "%v", err)
-	sendCrashReport(ctx, sv, err, ReportTypeError)
-}
-
 // Sentry max tag value length.
 // From: https://github.com/getsentry/sentry-docs/pull/1304/files
 const maxTagLen = 200
