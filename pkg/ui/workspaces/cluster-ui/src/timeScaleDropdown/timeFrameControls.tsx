@@ -38,7 +38,6 @@ export const TimeFrameControls = ({
     onArrowClick(direction);
 
   const left = disabledArrows.includes(ArrowDirection.LEFT);
-  const center = disabledArrows.includes(ArrowDirection.CENTER);
   const right = disabledArrows.includes(ArrowDirection.RIGHT);
   const delay = 0.3;
 
@@ -84,8 +83,7 @@ export const TimeFrameControls = ({
       >
         <Button
           onClick={handleChangeArrow(ArrowDirection.CENTER)}
-          disabled={center}
-          className={cx("_action", center ? "disabled" : "active", "btn__now")}
+          className={cx("_action", "active", "btn__now")}
         >
           Now
         </Button>
