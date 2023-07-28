@@ -288,11 +288,7 @@ func (cb *cascadeBuilder) planCascade(
 			if !ok {
 				return nil, errors.AssertionFailedf("placeholder value for %s not provided", placeholder.Idx)
 			}
-			err := bld.Build(texpr)
-			if err != nil {
-				return nil, err
-			}
-			return factory.Memo().RootExpr().(opt.ScalarExpr), nil
+			return bld.Build(texpr)
 		}
 		if err := factory.AssignPlaceholders(preparedMemo, buildPlaceholderAsScalar); err != nil {
 			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")

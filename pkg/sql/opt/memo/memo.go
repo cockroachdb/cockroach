@@ -313,12 +313,6 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	}
 }
 
-// SetScalarRoot stores the root memo expression when it is a scalar expression.
-// Used only for testing.
-func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
-	m.rootExpr = scalar
-}
-
 // HasPlaceholders returns true if the memo contains at least one placeholder
 // operator.
 func (m *Memo) HasPlaceholders() bool {
