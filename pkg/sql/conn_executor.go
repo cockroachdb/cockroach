@@ -430,6 +430,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		DB: NewInternalDB(
 			s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor,
 		),
+		ClusterID:      s.cfg.NodeInfo.LogicalClusterID,
 		SQLIDContainer: cfg.NodeInfo.NodeID,
 		JobRegistry:    s.cfg.JobRegistry,
 		Knobs:          cfg.SQLStatsTestingKnobs,

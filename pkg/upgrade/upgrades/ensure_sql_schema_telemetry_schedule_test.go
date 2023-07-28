@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
@@ -90,14 +91,14 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 
 		// Check that the schedule exists and that jobs can be created.
 		tdb.Exec(t, qJob)
-		exp := schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@weekly")
+		exp := scheduledjobs.MaybeRewriteCronExpr(clusterID, "@weekly")
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
 
 		// Check that the schedule can have its recurrence altered.
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '* * * * *'`,
 			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"* * * * *", "1"}})
-		exp = schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@daily")
+		exp = scheduledjobs.MaybeRewriteCronExpr(clusterID, "@daily")
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '@daily'`,
 			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
