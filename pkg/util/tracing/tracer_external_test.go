@@ -109,7 +109,7 @@ func TestTraceForTenantWithLocalKVServer(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	server.RedactServerTracesForSecondaryTenants.Override(ctx, &st.SV, false)
 	args := base.TestServerArgs{Settings: st}
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	// Create our own test tenant with a known name.

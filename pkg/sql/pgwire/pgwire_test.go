@@ -72,7 +72,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	tt := srv.ApplicationLayer()
@@ -144,7 +144,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -1550,7 +1550,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer ccl.TestingEnableEnterprise()()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 
 	// Setup pgwire client.
@@ -1649,7 +1649,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 		Insecure:   true,
 		SocketFile: socketFile,
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.
@@ -1729,7 +1729,7 @@ func TestSessionParameters(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{Insecure: true}
-	srv, _, _ := serverutils.StartServer(t, params)
+	srv := serverutils.StartServerOnly(t, params)
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -1846,7 +1846,7 @@ func TestCancelRequest(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		ctx := context.Background()
 		params := base.TestServerArgs{Insecure: insecure}
-		srv, _, _ := serverutils.StartServer(t, params)
+		srv := serverutils.StartServerOnly(t, params)
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()
 
@@ -1884,7 +1884,7 @@ func TestUnsupportedGSSEnc(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		ctx := context.Background()
 		params := base.TestServerArgs{Insecure: insecure}
-		srv, _, _ := serverutils.StartServer(t, params)
+		srv := serverutils.StartServerOnly(t, params)
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()
 

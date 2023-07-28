@@ -35,7 +35,7 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 	// We'll create a server just so that we can extract its distsql ServerConfig,
 	// so we can use it for a manually-built DistSQL Server below. Otherwise, too
 	// much work to create that ServerConfig by hand.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	cfg := s.DistSQLServer().(*ServerImpl).ServerConfig
 

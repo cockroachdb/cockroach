@@ -41,7 +41,7 @@ func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -266,7 +266,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	workerCount := 20
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
 	defer s.Stopper().Stop(context.Background())
@@ -304,7 +304,7 @@ func TestServerQueryTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -543,7 +543,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 	sizeOfSlab := int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{})) + (int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{})) * samplesPerSlab)
 	budget := 3 * sizeOfSlab * int64(sourceCount) * int64(workerCount)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax:    workerCount,
 		TimeSeriesQueryMemoryBudget: budget,
 	})
@@ -614,7 +614,7 @@ func TestServerDump(t *testing.T) {
 
 	expTotalMsgCount := seriesCount * sourceCount * (endSlab - startSlab)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -709,7 +709,7 @@ func TestServerDump(t *testing.T) {
 	s.Stopper().Stop(ctx)
 
 	// Start a new server, into which to write the raw dump.
-	s, _, _ = serverutils.StartServer(t, base.TestServerArgs{
+	s = serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -754,7 +754,7 @@ func TestServerDump(t *testing.T) {
 func BenchmarkServerQuery(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 

@@ -40,7 +40,7 @@ func TestStatusGetFiles(t *testing.T) {
 
 	storeSpec := base.StoreSpec{Path: tempDir}
 
-	tsI, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	tsI := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			storeSpec,
 		},

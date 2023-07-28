@@ -46,7 +46,7 @@ func TestTraceDumperZipCreation(t *testing.T) {
 	}
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	filename := "foo"
