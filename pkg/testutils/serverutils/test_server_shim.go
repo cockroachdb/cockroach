@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -109,15 +110,9 @@ func InitTestServerFactory(impl TestServerFactory) {
 	srvFactoryImpl = impl
 }
 
-// StartServer creates and starts a test server.
-// The returned server should be stopped by calling
-// server.Stopper().Stop().
-// The second and third return values are equivalent to
-// .ApplicationLayer().SQLConn() and .ApplicationLayer().DB(),
-// respectively.
-func StartServer(
-	t testing.TB, params base.TestServerArgs,
-) (TestServerInterface, *gosql.DB, *kv.DB) {
+// StartServerOnlyE is like StartServerOnly() but it lets
+// the test decide what to do with the error.
+func StartServerOnlyE(t testing.TB, params base.TestServerArgs) (TestServerInterface, error) {
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
 	// Determine if we should probabilistically start a test tenant
 	// for this server.
@@ -133,11 +128,14 @@ func StartServer(
 
 	s, err := NewServer(params)
 	if err != nil {
-		t.Fatalf("%+v", err)
+		return nil, err
 	}
 
-	if err := s.Start(context.Background()); err != nil {
-		t.Fatalf("%+v", err)
+	ctx := context.Background()
+
+	if err := s.Start(ctx); err != nil {
+		s.Stopper().Stop(ctx)
+		return nil, err
 	}
 
 	if s.StartedDefaultTestTenant() {
@@ -148,17 +146,48 @@ func StartServer(
 		s.DisableStartTenant(PreventStartTenantError)
 	}
 
-	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
-
 	// Now that we have started the server on the bootstrap version, let us run
 	// the migrations up to the overridden BinaryVersion.
 	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
-		if _, err := goDB.Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-			t.Fatal(err)
+		for _, layer := range []ApplicationLayerInterface{s.SystemLayer(), s.ApplicationLayer()} {
+			ie := layer.InternalExecutor().(isql.Executor)
+			if _, err := ie.Exec(ctx, "set-version", nil, /* kv.Txn */
+				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+				s.Stopper().Stop(ctx)
+				return nil, err
+			}
 		}
 	}
 
-	return s, goDB, s.DB()
+	return s, nil
+}
+
+// StartServerOnly creates and starts a test server.
+// The returned server should be stopped by calling
+// server.Stopper().Stop().
+func StartServerOnly(t testing.TB, params base.TestServerArgs) TestServerInterface {
+	s, err := StartServerOnlyE(t, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// StartServer creates and starts a test server.
+// The returned server should be stopped by calling
+// server.Stopper().Stop().
+//
+// The second and third return values are equivalent to
+// .ApplicationLayer().SQLConn() and .ApplicationLayer().DB(),
+// respectively. If your test does not need them, consider
+// using StartServerOnly() instead.
+func StartServer(
+	t testing.TB, params base.TestServerArgs,
+) (TestServerInterface, *gosql.DB, *kv.DB) {
+	s := StartServerOnly(t, params)
+	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
+	kvDB := s.ApplicationLayer().DB()
+	return s, goDB, kvDB
 }
 
 // NewServer creates a test server.
@@ -213,23 +242,6 @@ func OpenDBConn(
 		t.Fatal(err)
 	}
 	return conn
-}
-
-// StartServerRaw creates and starts a TestServer.
-// Generally StartServer() should be used. However, this function can be used
-// directly when opening a connection to the server is not desired.
-func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface, error) {
-	server, err := NewServer(args)
-	if err != nil {
-		return nil, err
-	}
-	if err := server.Start(context.Background()); err != nil {
-		return nil, err
-	}
-	if server.StartedDefaultTestTenant() {
-		t.Log(DefaultTestTenantMessage)
-	}
-	return server, nil
 }
 
 // StartTenant starts a tenant SQL server connecting to the supplied test

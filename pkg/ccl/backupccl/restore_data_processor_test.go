@@ -240,6 +240,8 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	}}
 
 	args := base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107812),
+
 		Knobs:         knobs,
 		ExternalIODir: dir,
 		Settings:      cs,
