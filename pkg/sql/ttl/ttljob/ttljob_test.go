@@ -130,13 +130,7 @@ func newRowLevelTTLTestJobTestHelper(
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = tenantServer
 	} else {
-		db := serverutils.OpenDBConn(
-			t,
-			ts.AdvSQLAddr(),
-			"",    /* useDatabase */
-			false, /* insecure */
-			ts.Stopper(),
-		)
+		db := ts.SystemLayer().SQLConn(t, "")
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = ts
 	}

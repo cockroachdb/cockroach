@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -69,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -485,6 +487,34 @@ func (ts *TestServer) TsDB() *ts.DB {
 	return nil
 }
 
+// SQLConn is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SQLConn(test testing.TB, dbName string) *gosql.DB {
+	return ts.SQLConnForUser(test, username.RootUser, dbName)
+}
+
+// SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SQLConnForUser(test testing.TB, userName, dbName string) *gosql.DB {
+	db, err := ts.SQLConnForUserE(userName, dbName)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return db
+}
+
+// SQLConnE is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SQLConnE(dbName string) (*gosql.DB, error) {
+	return ts.SQLConnForUserE(username.RootUser, dbName)
+}
+
+// SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
+	return openTestSQLConn(userName, dbName, ts.Stopper(),
+		ts.Server.loopbackPgL,
+		ts.cfg.SQLAdvertiseAddr,
+		ts.cfg.Insecure,
+	)
+}
+
 // DB returns the client.DB instance used by the TestServer.
 func (ts *TestServer) DB() *kv.DB {
 	if ts != nil {
@@ -678,6 +708,8 @@ type TestTenant struct {
 	*httpTestServer
 	drain *drainServer
 
+	pgL *netutil.LoopbackListener
+
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
 	pgPreServer *pgwire.PreServeConnHandler
@@ -718,6 +750,34 @@ func (t *TestTenant) HTTPAddr() string {
 // RPCAddr is part of the serverutils.ApplicationLayerInterface.
 func (t *TestTenant) RPCAddr() string {
 	return t.Cfg.Addr
+}
+
+// SQLConn is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SQLConn(test testing.TB, dbName string) *gosql.DB {
+	return t.SQLConnForUser(test, username.RootUser, dbName)
+}
+
+// SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SQLConnForUser(test testing.TB, userName, dbName string) *gosql.DB {
+	db, err := t.SQLConnForUserE(userName, dbName)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return db
+}
+
+// SQLConnE is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SQLConnE(dbName string) (*gosql.DB, error) {
+	return t.SQLConnForUserE(username.RootUser, dbName)
+}
+
+// SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
+	return openTestSQLConn(userName, dbName, t.Stopper(),
+		t.pgL,
+		t.Cfg.SQLAdvertiseAddr,
+		t.Cfg.Insecure,
+	)
 }
 
 // DB is part of the serverutils.ApplicationLayerInterface.
@@ -1025,12 +1085,12 @@ func (ts *TestServer) StartSharedProcessTenant(
 		Cfg:            sqlServer.cfg,
 		SQLCfg:         sqlServerWrapper.sqlCfg,
 		pgPreServer:    sqlServerWrapper.pgPreServer,
+		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
 	}
 
-	sqlDB, err := serverutils.OpenDBConnE(
-		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper)
+	sqlDB, err := ts.SQLConnE("cluster:" + string(args.TenantName) + "/" + args.UseDatabase)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1395,6 +1455,7 @@ func (ts *TestServer) StartTenant(
 		pgPreServer:    sw.pgPreServer,
 		httpTestServer: hts,
 		drain:          sw.drainServer,
+		pgL:            sw.loopbackPgL,
 	}, err
 }
 

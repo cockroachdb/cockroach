@@ -14,8 +14,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,6 +104,16 @@ func TestShouldPost(t *testing.T) {
 		require.Equal(t, c.expectedPost, doPost)
 		require.Equal(t, c.expectedReason, skipReason)
 	}
+}
+
+func TestGenerateHelpCommand(t *testing.T) {
+	start := time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC)
+	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)
+
+	r := &issues.Renderer{}
+	generateHelpCommand("foo-cluster", start, end)(r)
+
+	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command.txt"))
 }
 
 func TestCreatePostRequest(t *testing.T) {
@@ -200,10 +213,12 @@ func TestCreatePostRequest(t *testing.T) {
 			}
 
 			if c.loadTeamsFailed {
-				// Assert that if TEAMS.yaml cannot be loaded then function panics.
-				assert.Panics(t, func() { github.createPostRequest(ti, c.failure, "message") })
+				// Assert that if TEAMS.yaml cannot be loaded then function errors.
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req := github.createPostRequest(ti, c.failure, "message")
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				if c.expectedParams != nil {
 					require.Equal(t, c.expectedParams, req.ExtraParams)

@@ -75,7 +75,7 @@ import { commonStyles } from "../common";
 import { Loading, Timestamp } from "src";
 import LoadingError from "../sqlActivity/errorComponent";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
-import { filteredStatementsData } from "../sqlActivity/util";
+import { filterStatementsData } from "../sqlActivity/util";
 
 const cx = classNames.bind(styles);
 const stmtCx = classNames.bind(statementsStyles);
@@ -438,12 +438,7 @@ export class IndexDetailsPage extends React.Component<
           criteria.includes(statement.applicationName),
       );
     }
-    return filteredStatementsData(
-      filters,
-      search,
-      filteredStatements,
-      isTenant,
-    );
+    return filterStatementsData(filters, search, filteredStatements, isTenant);
   };
 
   render(): React.ReactElement {

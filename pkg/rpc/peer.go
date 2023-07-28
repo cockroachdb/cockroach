@@ -846,26 +846,21 @@ func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 
 	log.VEventf(ctx, 1, "deleting peer")
 
-	// Lock order: map, then peer. But here we can do better and
-	// not hold both mutexes at the same time.
+	// Lock order: map, then peer. We need to lock both because we want
+	// to atomically release the metrics while removing from the map[1][2].
 	//
-	// Release metrics in the same critical section as p.deleted=true
-	// to make sure the metrics are not updated after release, since that
-	// causes the aggregate metrics to drift.
-	//
-	// We delete from the map first, then mark the peer as deleted. The converse
-	// works too, but it makes for flakier tests because it's possible to see the
-	// metrics change but the peer still being in the map.
-
+	// [1]: see https://github.com/cockroachdb/cockroach/issues/105335
+	// [2]: Releasing in one critical section with p.deleted=true ensures
+	//      that the metrics are not updated after release, which would
+	//      otherwise cause the aggregate metrics to drift away from zero
+	//      permanently.
 	p.peers.mu.Lock()
+	defer p.peers.mu.Unlock()
 	delete(p.peers.mu.m, p.k)
-	p.peers.mu.Unlock()
-
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.mu.deleted = true
 	p.peerMetrics.release()
-	p.mu.Unlock()
-
 }
 
 func launchConnStateWatcher(

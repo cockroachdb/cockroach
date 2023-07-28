@@ -81,7 +81,7 @@ import {
   StatementDiagnosticsResponse,
 } from "../api";
 import {
-  filteredStatementsData,
+  filterStatementsData,
   convertRawStmtsToAggregateStatisticsMemoized,
   getAppsFromStmtsResponseMemoized,
 } from "../sqlActivity/util";
@@ -529,7 +529,7 @@ export class StatementsPage extends React.Component<
       databases,
       hasAdminRole,
     } = this.props;
-    const data = filteredStatementsData(filters, search, statements, isTenant);
+    const data = filterStatementsData(filters, search, statements, isTenant);
 
     const apps = getAppsFromStmtsResponseMemoized(
       this.props.statementsResponse?.data,

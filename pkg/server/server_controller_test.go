@@ -74,8 +74,7 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	sqlAddr := s.AdvSQLAddr()
-	db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:nonexistent", false, s.Stopper())
+	db, err := s.SystemLayer().SQLConnE("cluster:nonexistent")
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
 	require.NoError(t, err)
