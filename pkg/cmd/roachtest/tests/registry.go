@@ -150,4 +150,5 @@ func RegisterTests(r registry.Registry) {
 	registerVersion(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
+	registerHistogramBuckets(r)
 }
