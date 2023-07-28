@@ -56,7 +56,7 @@ type pebbleBatch struct {
 	// scratch space for wrappedIntentWriter.
 	scratch []byte
 
-	iterStatsReporter                iterStatsReporter
+	iterStatsReporter                *Pebble
 	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
 	mayWriteSizedDeletes             bool
@@ -82,7 +82,7 @@ func newPebbleBatch(
 	batch *pebble.Batch,
 	writeOnly bool,
 	settings *cluster.Settings,
-	iterStatsReporter iterStatsReporter,
+	iterStatsReporter *Pebble,
 	batchStatsReporter batchStatsReporter,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
