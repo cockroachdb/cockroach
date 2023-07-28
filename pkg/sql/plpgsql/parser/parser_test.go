@@ -11,8 +11,6 @@
 package parser_test
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
@@ -31,11 +29,7 @@ func TestParseDataDriver(t *testing.T) {
 				// Check parse.
 				fn, err := parser.Parse(d.Input)
 				if err != nil {
-					if strings.Contains(err.Error(), "unimplemented") {
-						return fmt.Sprintf("expected parse error: %v", err)
-					}
-
-					d.Fatalf(t, "unexpected parse error: %v", err)
+					return err.Error()
 				}
 				// TODO(chengxiong): add pretty print round trip test.
 				return fn.String()
