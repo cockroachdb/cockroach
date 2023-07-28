@@ -101,6 +101,9 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 	return func(ctx context.Context, f failure) error {
 		fmter, req := reqFromFailure(ctx, f)
 		if stress := os.Getenv("COCKROACH_NIGHTLY_STRESS"); stress != "" {
+			if req.ExtraParams == nil {
+				req.ExtraParams = make(map[string]string)
+			}
 			req.ExtraParams["stress"] = "true"
 		}
 		return issues.Post(ctx, log.Default(), fmter, req)
