@@ -588,12 +588,13 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	VectorizeClusterSettingName,
 	"default vectorize mode",
 	"on",
-	map[int64]string{
-		int64(sessiondatapb.VectorizeUnset):              "on",
-		int64(sessiondatapb.VectorizeOn):                 "on",
-		int64(sessiondatapb.VectorizeExperimentalAlways): "experimental_always",
-		int64(sessiondatapb.VectorizeOff):                "off",
-	},
+	func() map[int64]string {
+		m := make(map[int64]string, len(sessiondatapb.VectorizeExecMode_name))
+		for k := range sessiondatapb.VectorizeExecMode_name {
+			m[int64(k)] = sessiondatapb.VectorizeExecMode(k).String()
+		}
+		return m
+	}(),
 ).WithPublic()
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
