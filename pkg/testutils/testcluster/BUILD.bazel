@@ -26,6 +26,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/util/allstacks",
         "//pkg/util/hlc",
         "//pkg/util/log",

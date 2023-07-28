@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -243,6 +244,9 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
+	if SkipTestClusterTests {
+		skip.IgnoreLint(t, "SkipTestClusterTests is set")
+	}
 
 	if err := checkServerArgsForCluster(
 		clusterArgs.ServerArgs, clusterArgs.ReplicationMode, disallowJoinAddr,
@@ -350,6 +354,10 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 	return tc
 }
 
+// SkipTestClusterTests results in all tests trying to start a TestCluster being
+// skipped.
+var SkipTestClusterTests = true
+
 // Start is the companion method to NewTestCluster, and is responsible for
 // actually starting up the cluster. Start waits for each server to be fully up
 // and running.
@@ -358,6 +366,9 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 // in a separate thread and with ParallelStart enabled (otherwise it'll block
 // on waiting for init for the first server).
 func (tc *TestCluster) Start(t testing.TB) {
+	if SkipTestClusterTests {
+		t.Fatalf("SkipTestClusterTests is set")
+	}
 	nodes := len(tc.Servers)
 	var errCh chan error
 	if tc.clusterArgs.ParallelStart {
