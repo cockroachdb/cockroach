@@ -2263,7 +2263,6 @@ func TestLint(t *testing.T) {
 			":!server/application_api/insights_test.go",
 			":!server/application_api/jobs_test.go",
 			":!server/application_api/query_plan_test.go",
-			":!server/application_api/schema_inspection_test.go",
 			":!server/application_api/security_test.go",
 			":!server/application_api/zcfg_test.go",
 			":!server/grpc_gateway_test.go",
