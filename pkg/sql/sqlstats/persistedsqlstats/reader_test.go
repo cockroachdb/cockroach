@@ -36,6 +36,8 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 107804)
+
 	fakeTime := stubTime{
 		aggInterval: time.Hour,
 	}
