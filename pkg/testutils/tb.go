@@ -10,12 +10,29 @@
 
 package testutils
 
-// TB is a slimmed down version of testing.TB for use in helper functions
+// TestFataler is a slimmed down version of testing.TB for use in helper functions
 // by testing contexts which do not come from the stdlib testing package.
-type TB interface {
+type TestFataler interface {
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
-	FailNow()
 	Helper()
+}
+
+// TestErrorer is like Fataler but it only needs a Error method.
+type TestErrorer interface {
+	Error(args ...interface{})
+	Errorf(format string, args ...interface{})
+	Helper()
+}
+
+// TestFatalerLogger is like Fataler but it also needs a Log method.
+type TestFatalerLogger interface {
+	TestFataler
+	Logf(format string, args ...interface{})
+}
+
+// TestNamedFatalerLogger is like Fataler but it also needs a Name method.
+type TestNamedFatalerLogger interface {
+	TestFatalerLogger
+	Name() string
 }
