@@ -623,6 +623,13 @@ func TestExecBuild_udf(
 	runExecBuildLogicTest(t, "udf")
 }
 
+func TestExecBuild_udf_prepare(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "udf_prepare")
+}
+
 func TestExecBuild_union(
 	t *testing.T,
 ) {

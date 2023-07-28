@@ -1,8 +1,61 @@
 statement ok
-CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
 
 statement ok
-PREPARE p AS SELECT $1::INT
+PREPARE p1 AS SELECT $1::INT
 
-statement error pgcode 0A000 cannot evaluate function in this context
-EXECUTE p(f())
+query I
+EXECUTE p1(one())
+----
+1
+
+query I
+EXECUTE p1(10 + one() + 10)
+----
+21
+
+statement ok
+CREATE TABLE ab (
+  a INT,
+  b INT
+);
+INSERT INTO ab VALUES (1, 10), (2, 20)
+
+statement ok
+PREPARE p2 AS SELECT * FROM ab WHERE a >= $1
+
+query II rowsort
+EXECUTE p2(one())
+----
+1  10
+2  20
+
+query II
+EXECUTE p2(one() + 1)
+----
+2  20
+
+statement error pgcode 42601 variable sub-expressions are not allowed in EXECUTE parameter
+EXECUTE p2(one() + a)
+
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY);
+CREATE TABLE child (id INT PRIMARY KEY, p_id INT NOT NULL REFERENCES parent(id) ON DELETE CASCADE);
+INSERT INTO parent VALUES (1), (3);
+INSERT INTO child VALUES (10, 1), (30, 3);
+
+statement ok
+PREPARE del AS DELETE FROM parent WHERE id = $1
+
+statement ok
+EXECUTE del(one())
+
+query I
+SELECT * FROM parent
+----
+3
+
+query II
+SELECT * FROM child
+----
+30  3

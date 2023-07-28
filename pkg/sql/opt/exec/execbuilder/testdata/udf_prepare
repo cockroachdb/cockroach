@@ -1,0 +1,27 @@
+# LogicTest: local
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+
+statement ok
+PREPARE p AS SELECT $1::INT
+
+query T
+EXPLAIN ANALYZE EXECUTE p(f())
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• values
+  nodes: <hidden>
+  regions: <hidden>
+  actual row count: 1
+  size: 1 column, 1 row

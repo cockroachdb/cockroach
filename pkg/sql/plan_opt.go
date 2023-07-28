@@ -501,7 +501,21 @@ func (opc *optPlanningCtx) reuseMemo(
 	// new memo that is copied from the prepared memo, but with placeholders
 	// assigned. Stable operators can be constant-folded at this time.
 	f.FoldingControl().AllowStableFolds()
-	if err := f.AssignPlaceholders(cachedMemo); err != nil {
+	semaCtx := opc.p.SemaCtx()
+	evalCtx := opc.p.EvalContext()
+	buildPlaceholderAsScalar := func(placeholder *tree.Placeholder) (opt.ScalarExpr, error) {
+		bld := optbuilder.NewScalar(ctx, semaCtx, evalCtx, f)
+		texpr, ok := evalCtx.Placeholders.Value(placeholder.Idx)
+		if !ok {
+			return nil, errors.AssertionFailedf("placeholder value for %s not provided", placeholder.Idx)
+		}
+		err := bld.Build(texpr)
+		if err != nil {
+			return nil, err
+		}
+		return f.Memo().RootExpr().(opt.ScalarExpr), nil
+	}
+	if err := f.AssignPlaceholders(cachedMemo, buildPlaceholderAsScalar); err != nil {
 		return nil, err
 	}
 	if _, err := opc.optimizer.Optimize(); err != nil {

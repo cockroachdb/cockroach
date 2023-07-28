@@ -888,3 +888,17 @@ select nameconcatoid(repeat('a', 62), 2), length(nameconcatoid(repeat('a', 62), 
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2  63
 
 subtest end
+
+# Built-ins defined with a SQL Body can be used as prepared statement arguments.
+statement ok
+PREPARE p_sql_body AS SELECT '[' || $1::TEXT || ']'
+
+query T
+EXECUTE p_sql_body(nameconcatoid('name', 12345))
+----
+[name_12345]
+
+query T
+EXECUTE p_sql_body('(' || nameconcatoid('name', 12345) || ')')
+----
+[(name_12345)]

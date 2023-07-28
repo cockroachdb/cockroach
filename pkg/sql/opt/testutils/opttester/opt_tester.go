@@ -1261,7 +1261,7 @@ func (ot *OptTester) AssignPlaceholders(
 	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	o.Factory().FoldingControl().AllowStableFolds()
-	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
+	if err := o.Factory().AssignPlaceholders(prepMemo, nil /* buildPlaceholderAsScalar */); err != nil {
 		return nil, err
 	}
 	return o.Optimize()

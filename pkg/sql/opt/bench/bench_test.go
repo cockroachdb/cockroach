@@ -865,7 +865,7 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 		if phase == AssignPlaceholdersNoNorm {
 			h.optimizer.DisableOptimizations()
 		}
-		err := h.optimizer.Factory().AssignPlaceholders(h.prepMemo)
+		err := h.optimizer.Factory().AssignPlaceholders(h.prepMemo, nil /* buildPlaceholderAsScalar */)
 		if err != nil {
 			tb.Fatalf("%v", err)
 		}

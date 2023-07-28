@@ -332,7 +332,18 @@ func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
 // assigned values. This can trigger additional normalization rules that can
 // substantially rewrite the tree. Once all placeholders are assigned, the
 // exploration phase can begin.
-func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
+//
+// If the buildPlaceholderAsScalar function is provided, it is used if the typed
+// placeholder expression could not be evaluated. If successful, it replaces the
+// placeholder with the returned scalar expression instead of a constant value.
+// This is necessary for expressions that contain references to UDFs or builtin
+// functions defined with SQL bodies, which cannot be evaluated like other typed
+// expressions, and must be built into scalar expressions by the optimizer and
+// evaluated as a tree.RoutineExpr.
+func (f *Factory) AssignPlaceholders(
+	from *memo.Memo,
+	buildPlaceholderAsScalar func(placeholder *tree.Placeholder) (opt.ScalarExpr, error),
+) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -352,10 +363,30 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	var replaceFn ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
-			d, err := eval.Expr(f.ctx, f.evalCtx, e.(*memo.PlaceholderExpr).Value)
+			// First, try to evaluate the typed placeholder expression.
+			d, err := eval.Expr(f.ctx, f.evalCtx, placeholder.Value)
 			if err != nil {
-				panic(err)
+				if buildPlaceholderAsScalar == nil {
+					panic(err)
+				}
+				// If the placeholder expression could not be evaluated, attempt
+				// to build it as a scalar expression.
+				p, ok := placeholder.Value.(*tree.Placeholder)
+				if !ok {
+					// If the inner value is not a tree.Placeholder, return the
+					// original error.
+					panic(err)
+				}
+				scalar, err := buildPlaceholderAsScalar(p)
+				if err != nil {
+					panic(err)
+				}
+				// Replace the placeholder expression with the built scalar
+				// expression.
+				return scalar
 			}
+			// If the placeholder expression was evaluated, replace it with a
+			// constant value expression.
 			return f.ConstructConstVal(d, placeholder.DataType())
 		}
 		// A recursive CTE may have the stats change on its Initial expression

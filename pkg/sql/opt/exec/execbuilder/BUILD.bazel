@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/opt/exec/explain",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/ordering",
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",

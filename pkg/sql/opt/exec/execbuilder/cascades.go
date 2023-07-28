@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -281,7 +282,19 @@ func (cb *cascadeBuilder) planCascade(
 		// time.
 		preparedMemo := o.DetachMemo(ctx)
 		factory.FoldingControl().AllowStableFolds()
-		if err := factory.AssignPlaceholders(preparedMemo); err != nil {
+		buildPlaceholderAsScalar := func(placeholder *tree.Placeholder) (opt.ScalarExpr, error) {
+			bld := optbuilder.NewScalar(ctx, semaCtx, evalCtx, factory)
+			texpr, ok := evalCtx.Placeholders.Value(placeholder.Idx)
+			if !ok {
+				return nil, errors.AssertionFailedf("placeholder value for %s not provided", placeholder.Idx)
+			}
+			err := bld.Build(texpr)
+			if err != nil {
+				return nil, err
+			}
+			return factory.Memo().RootExpr().(opt.ScalarExpr), nil
+		}
+		if err := factory.AssignPlaceholders(preparedMemo, buildPlaceholderAsScalar); err != nil {
 			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")
 		}
 	}
