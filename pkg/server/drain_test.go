@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -156,12 +157,22 @@ INSERT INTO t.test VALUES (3);
 	// Open a new SQL connection.
 	sqlDB = sqlutils.MakeSQLRunner(drainCtx.tc.ServerConn(1))
 
-	// Check that the stats were flushed into the statement stats system table.
-	// Verify that the number of statistics for node 1 are non-zero.
-	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
-		[][]string{{"true"}},
-	)
+	if sqlstats.GatewayNodeEnabled.Get(&drainCtx.tc.Servers[0].ClusterSettings().SV) {
+		// Check that the stats were flushed into the statement stats system table.
+		// Verify that the number of statistics for node 1 are non-zero.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 1`,
+			[][]string{{"true"}},
+		)
+	} else {
+		// Check that the stats were flushed into the statement stats system table.
+		// Verify that the number of statistics for node 1 are non-zero.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*) > 0 FROM system.statement_statistics WHERE node_id = 0 AND statistics -> 'statistics' ->> 'nodes' = '[1]'`,
+			[][]string{{"true"}},
+		)
+	}
+
 }
 
 type testDrainContext struct {
