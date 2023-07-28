@@ -14,13 +14,11 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 // SetClusterSetting executes set cluster settings statement, and then ensures that
 // all nodes in the test cluster see that setting update.
-func SetClusterSetting(t testutils.TB, c TestClusterInterface, name string, value interface{}) {
+func SetClusterSetting(t TestFataler, c TestClusterInterface, name string, value interface{}) {
 	t.Helper()
 	strVal := func() string {
 		switch v := value.(type) {

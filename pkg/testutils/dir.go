@@ -12,7 +12,6 @@ package testutils
 
 import (
 	"os"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
@@ -20,7 +19,7 @@ import (
 
 // TempDir creates a directory and a function to clean it up at the end of the
 // test.
-func TempDir(t testing.TB) (string, func()) {
+func TempDir(t TestNamedFatalerLogger) (string, func()) {
 	tmpDir := ""
 	if bazel.BuiltWithBazel() {
 		// Bazel sets up private temp directories for each test.

@@ -17,7 +17,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"net/http"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -105,14 +104,14 @@ type ApplicationLayerInterface interface {
 	// For the second argument use catalogkeys.DefaultDatabaseName or
 	// catconstants.SystemDatabaseName when in doubt. An empty
 	// string results in DefaultDatabaseName being used.
-	SQLConn(t testing.TB, dbName string) *gosql.DB
+	SQLConn(t TestFataler, dbName string) *gosql.DB
 
 	// SQLConnE is like SQLConn but it allows the test to check the error.
 	SQLConnE(dbName string) (*gosql.DB, error)
 
 	// SQLConnForUser is like SQLConn but allows the test to specify a
 	// username.
-	SQLConnForUser(t testing.TB, userName, dbName string) *gosql.DB
+	SQLConnForUser(t TestFataler, userName, dbName string) *gosql.DB
 
 	// SQLConnForUserE is like SQLConnForUser but it allows the test to
 	// check the error.
