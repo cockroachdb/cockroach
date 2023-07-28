@@ -24,15 +24,20 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -1131,4 +1136,442 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+// TestCombinedStatementUsesCorrectSourceTable tests that requests read from
+// the expected crdb_internal table given the table states. We have a lot of
+// different tables that requests could potentially read from (in-memory, cached,
+// system tables etc.), so we should sanity check that we are using the expected ones.
+// given some simple table states.
+func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Disable flushing sql stats so we can manually set the table states
+	// without worrying about unexpected stats appearing.
+	settings := cluster.MakeTestingClusterSettings()
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	defaultMockInsertedAggTs := time.Unix(1696906800, 0)
+	statsKnobs.StubTimeNow = func() time.Time { return defaultMockInsertedAggTs }
+	persistedsqlstats.SQLStatsFlushEnabled.Override(ctx, &settings.SV, false)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: statsKnobs,
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	conn := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, ""))
+	conn.Exec(t, "SET application_name = $1", server.CrdbInternalStmtStatsCombined)
+	conn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'")
+	// Clear the in-memory stats so we only have the above app name.
+	// Then populate it with 1 query.
+	conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	conn.Exec(t, "SELECT 1")
+
+	type testCase struct {
+		name               string
+		tableSetupFn       func() error
+		expectedStmtsTable string
+		expectedTxnsTable  string
+		reqs               []serverpb.CombinedStatementsStatsRequest
+		isEmpty            bool
+	}
+
+	ie := srv.InternalExecutor().(*sql.InternalExecutor)
+
+	defaultMockOneEach := func() error {
+		startTs := defaultMockInsertedAggTs
+		stmt := sqlstatsutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stmt.ID = 1
+		stmt.AggregatedTs = startTs
+		stmt.Key.App = server.CrdbInternalStmtStatsPersisted
+		stmt.Key.TransactionFingerprintID = 1
+		require.NoError(t, insertMockedIntoSystemStmtStats(ctx, ie, &stmt, 1 /* nodeId */, nil))
+
+		stmt.Key.App = server.CrdbInternalStmtStatsCached
+		require.NoError(t, insertMockedIntoSystemStmtActivity(ctx, ie, &stmt, nil))
+
+		txn := sqlstatsutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+		txn.StatementFingerprintIDs = []appstatspb.StmtFingerprintID{1}
+		txn.TransactionFingerprintID = 1
+		txn.AggregatedTs = startTs
+		txn.App = server.CrdbInternalTxnStatsPersisted
+		require.NoError(t, insertMockedIntoSystemTxnStats(ctx, ie, &txn, 1, nil))
+		txn.App = server.CrdbInternalTxnStatsCached
+		require.NoError(t, insertMockedIntoSystemTxnActivity(ctx, ie, &txn, nil))
+
+		return nil
+	}
+	testCases := []testCase{
+		{
+			name:         "activity and persisted tables empty",
+			tableSetupFn: func() error { return nil },
+			// We should attempt to read from the in-memory tables, since
+			// they are the last resort.
+			expectedStmtsTable: server.CrdbInternalStmtStatsCombined,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCombined,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{FetchMode: createTxnFetchMode(0)},
+			},
+		},
+		{
+			name:               "all tables have data in selected range",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCached,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCached,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix()},
+				{
+					Start: defaultMockInsertedAggTs.Unix(),
+					End:   defaultMockInsertedAggTs.Unix(),
+				},
+			},
+		},
+		{
+			name:         "all tables have data but no start range is provided",
+			tableSetupFn: defaultMockOneEach,
+			// When no date range is provided, we should default to reading from
+			// persisted or in-memory (whichever has data first). In this case the
+			// persisted table has data.
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsPersisted,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{},
+				{End: defaultMockInsertedAggTs.Unix()},
+			},
+		},
+		{
+			name:         "all tables have data but not in the selected range",
+			tableSetupFn: defaultMockOneEach,
+			// When no date range is provided, we should default to reading from
+			// persisted or in-memory (whichever has data first). In this case the
+			// persisted table has data.
+			expectedStmtsTable: server.CrdbInternalStmtStatsCombined,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCombined,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Add(time.Hour).Unix()},
+				{End: defaultMockInsertedAggTs.Truncate(time.Hour * 2).Unix()},
+			},
+			isEmpty: true,
+		},
+		{
+			name:               "activity table has data in range with specified sort",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCached,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCached,
+			// These sort options do exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(0)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(1)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(2)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(3)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(4)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(5)},
+			},
+		},
+		{
+			name:               "activity table has data in range, but selected sort is not on it",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  "",
+			// These sort options do not exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(6)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(7)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(8)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(9)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(10)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(11)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(12)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(13)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(14)},
+			},
+		},
+	}
+
+	client := srv.ApplicationLayer().GetStatusClient(t)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, tc.tableSetupFn())
+
+			defer func() {
+				// Reset tables.
+				conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				conn.Exec(t, "SELECT crdb_internal.reset_activity_tables()")
+				conn.Exec(t, "SELECT 1")
+			}()
+
+			for _, r := range tc.reqs {
+				resp, err := client.CombinedStatementStats(ctx, &r)
+				require.NoError(t, err)
+
+				require.Equal(t, tc.expectedStmtsTable, resp.StmtsSourceTable, "req: %v", r)
+				require.Equal(t, tc.expectedTxnsTable, resp.TxnsSourceTable, "req: %v", r)
+
+				if tc.isEmpty {
+					continue
+				}
+
+				require.NotZero(t, len(resp.Statements), "req: %v", r)
+				// Verify we used the correct queries to return data.
+				require.Equal(t, tc.expectedStmtsTable, resp.Statements[0].Key.KeyData.App, "req: %v", resp.Statements[0].Key)
+				if tc.expectedTxnsTable == server.CrdbInternalTxnStatsCombined {
+					// For the combined query, we're using in-mem data and we set the
+					// app name there to the in-memory stmts table.
+					require.Equal(t, server.CrdbInternalStmtStatsCombined, resp.Transactions[0].StatsData.App)
+				} else if tc.expectedTxnsTable != "" {
+					require.NotZero(t, len(resp.Transactions))
+					require.Equal(t, tc.expectedTxnsTable, resp.Transactions[0].StatsData.App)
+				}
+			}
+
+		})
+	}
+}
+
+func insertMockedIntoSystemStmtStats(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	stmtStats *appstatspb.CollectedStatementStatistics,
+	nodeID base.SQLInstanceID,
+	aggInterval *time.Duration,
+) error {
+	if stmtStats == nil {
+		return nil
+	}
+
+	aggIntervalVal := time.Hour
+	if aggInterval != nil {
+		aggIntervalVal = *aggInterval
+	}
+
+	stmtFingerprint := sqlstatsutil.EncodeUint64ToBytes(uint64(stmtStats.ID))
+	txnFingerprint := sqlstatsutil.EncodeUint64ToBytes(uint64(stmtStats.Key.TransactionFingerprintID))
+	planHash := sqlstatsutil.EncodeUint64ToBytes(stmtStats.Key.PlanHash)
+
+	metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stmtStats)
+	if err != nil {
+		return err
+	}
+
+	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stmtStats.Stats)
+	if err != nil {
+		return err
+	}
+	statistics := tree.NewDJSON(statisticsJSON)
+
+	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stmtStats.Stats.SensitiveInfo.MostRecentPlanDescription))
+
+	metadata := tree.NewDJSON(metadataJSON)
+
+	_, err = ie.ExecEx(ctx, "insert-mock-stmt-stats", nil, sessiondata.NodeUserSessionDataOverride,
+		`UPSERT INTO system.statement_statistics
+VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		stmtStats.AggregatedTs, // aggregated_ts
+		stmtFingerprint,        // fingerprint_id
+		txnFingerprint,         // transaction_fingerprint_id
+		planHash,               // plan_hash
+		stmtStats.Key.App,      // app_name
+		nodeID,                 // node_id
+		aggIntervalVal,         // agg_interval
+		metadata,               // metadata
+		statistics,             // statistics
+		plan,                   // plan
+	)
+
+	return err
+}
+
+func insertMockedIntoSystemTxnStats(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	stats *appstatspb.CollectedTransactionStatistics,
+	nodeID base.SQLInstanceID,
+	aggInterval *time.Duration,
+) error {
+	if stats == nil {
+		return nil
+	}
+
+	aggIntervalVal := time.Hour
+	if aggInterval != nil {
+		aggIntervalVal = *aggInterval
+	}
+
+	txnFingerprint := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
+
+	statisticsJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(stats)
+	if err != nil {
+		return err
+	}
+	statistics := tree.NewDJSON(statisticsJSON)
+
+	metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(stats)
+	if err != nil {
+		return err
+	}
+	metadata := tree.NewDJSON(metadataJSON)
+	aggregatedTs := stats.AggregatedTs
+
+	_, err = ie.ExecEx(ctx, "insert-mock-txn-stats", nil, sessiondata.NodeUserSessionDataOverride,
+		` UPSERT INTO system.transaction_statistics
+VALUES ($1 ,$2, $3, $4, $5, $6, $7)`,
+		aggregatedTs,   // aggregated_ts
+		txnFingerprint, // fingerprint_id
+		stats.App,      // app_name
+		nodeID,         // node_id
+		aggIntervalVal, // agg_interval
+		metadata,       // metadata
+		statistics,     // statistics
+	)
+
+	return err
+}
+
+func insertMockedIntoSystemStmtActivity(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	stmtStats *appstatspb.CollectedStatementStatistics,
+	aggInterval *time.Duration,
+) error {
+	if stmtStats == nil {
+		return nil
+	}
+
+	aggIntervalVal := time.Hour
+	if aggInterval != nil {
+		aggIntervalVal = *aggInterval
+	}
+
+	stmtFingerprint := sqlstatsutil.EncodeUint64ToBytes(uint64(stmtStats.ID))
+	txnFingerprint := sqlstatsutil.EncodeUint64ToBytes(uint64(stmtStats.Key.TransactionFingerprintID))
+	planHash := sqlstatsutil.EncodeUint64ToBytes(stmtStats.Key.PlanHash)
+
+	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stmtStats.Stats)
+	if err != nil {
+		return err
+	}
+	statistics := tree.NewDJSON(statisticsJSON)
+
+	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stmtStats.Stats.SensitiveInfo.MostRecentPlanDescription))
+
+	metadataJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(
+		&appstatspb.AggregatedStatementMetadata{
+			Query:          stmtStats.Key.Query,
+			FormattedQuery: "",
+			QuerySummary:   "",
+			StmtType:       "",
+			AppNames:       []string{stmtStats.Key.App},
+			Databases:      []string{stmtStats.Key.Database},
+			ImplicitTxn:    false,
+			DistSQLCount:   0,
+			FailedCount:    0,
+			FullScanCount:  0,
+			VecCount:       0,
+			TotalCount:     0,
+		})
+	if err != nil {
+		return err
+	}
+	metadata := tree.NewDJSON(metadataJSON)
+
+	_, err = ie.ExecEx(ctx, "insert-mock-stmt-activity", nil, sessiondata.NodeUserSessionDataOverride,
+		`UPSERT INTO system.statement_activity
+VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		stmtStats.AggregatedTs, // aggregated_ts
+		stmtFingerprint,        // fingerprint_id
+		txnFingerprint,         // transaction_fingerprint_id
+		planHash,               // plan_hash
+		stmtStats.Key.App,      // app_name
+		aggIntervalVal,         // agg_interval
+		metadata,               // metadata
+		statistics,             // statistics
+		plan,                   // plan
+		// TODO allow these values to be mocked. No need ffor them for now.
+		[]string{}, // index_recommendations
+		0,          // execution_count
+		0,          // execution_total_seconds
+		0,          // execution_total_cluster_seconds
+		0,          // contention_time_avg_seconds
+		0,          // cpu_sql_avg_nanos
+		0,          //  service_latency_avg_seconds
+		0,          // service_latency_p99_seconds
+	)
+
+	return err
+}
+
+func insertMockedIntoSystemTxnActivity(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	stats *appstatspb.CollectedTransactionStatistics,
+	aggInterval *time.Duration,
+) error {
+	if stats == nil {
+		return nil
+	}
+
+	aggIntervalVal := time.Hour
+	if aggInterval != nil {
+		aggIntervalVal = *aggInterval
+	}
+
+	txnFingerprint := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
+
+	statisticsJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(stats)
+	if err != nil {
+		return err
+	}
+	statistics := tree.NewDJSON(statisticsJSON)
+
+	metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(stats)
+	if err != nil {
+		return err
+	}
+	metadata := tree.NewDJSON(metadataJSON)
+	aggregatedTs := stats.AggregatedTs
+
+	_, err = ie.ExecEx(ctx, "insert-mock-txn-activity", nil, sessiondata.NodeUserSessionDataOverride,
+		` UPSERT INTO system.transaction_activity
+VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+		aggregatedTs,   // aggregated_ts
+		txnFingerprint, // fingerprint_id
+		stats.App,      // app_name
+		aggIntervalVal, // agg_interval
+		metadata,       // metadata
+		statistics,     // statistics
+		// TODO (xinhaoz) allow mocking of these fields. Not necessary at the moment.
+		"", // query
+		0,  // execution_count
+		0,  // execution_total_seconds
+		0,  // execution_total_cluster_seconds
+		0,  // contention_time_avg_seconds
+		0,  // cpu_sql_avg_nanos
+		0,  // service_latency_avg_seconds
+		0,  // service_latency_p99_seconds
+	)
+
+	return err
+}
+
+func createStmtFetchMode(
+	sort serverpb.StatsSortOptions,
+) *serverpb.CombinedStatementsStatsRequest_FetchMode {
+	return &serverpb.CombinedStatementsStatsRequest_FetchMode{
+		StatsType: serverpb.CombinedStatementsStatsRequest_StmtStatsOnly,
+		Sort:      sort,
+	}
+}
+func createTxnFetchMode(
+	sort serverpb.StatsSortOptions,
+) *serverpb.CombinedStatementsStatsRequest_FetchMode {
+	return &serverpb.CombinedStatementsStatsRequest_FetchMode{
+		StatsType: serverpb.CombinedStatementsStatsRequest_TxnStatsOnly,
+		Sort:      sort,
+	}
 }
