@@ -67,8 +67,7 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Fails with nil pointer dereference. Tracked with #76378 and #106818.
-				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106818),
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					SpanConfig: scKnobs,
 				},
@@ -79,15 +78,10 @@ func TestDataDriven(t *testing.T) {
 		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
-		var tenant *spanconfigtestcluster.Tenant
-		if strings.Contains(path, "tenant") {
-			tenantID := roachpb.MustMakeTenantID(10)
-			tenant = spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-			spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
-			spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)
-		} else {
-			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
-		}
+		tenantID := roachpb.MustMakeTenantID(10)
+		tenant := spanConfigTestCluster.InitializeTenant(ctx, tenantID)
+		spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
+		spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)
 
 		// TODO(irfansharif): Expose this through the test harness once we integrate
 		// it into the schema changer.
@@ -119,7 +113,8 @@ func TestDataDriven(t *testing.T) {
 					var dbName, tbName string
 					d.ScanArgs(t, "database", &dbName)
 					d.ScanArgs(t, "table", &tbName)
-					objID = tenant.LookupTableByName(ctx, dbName, tbName).GetID()
+					tbl := tenant.LookupTableByName(ctx, dbName, tbName)
+					objID = tbl.GetID()
 				default:
 					d.Fatalf(t, "insufficient/improper args (%v) provided to split", d.CmdArgs)
 				}

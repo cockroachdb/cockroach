@@ -23,6 +23,7 @@ import { selectID } from "../../selectors";
 import {
   ListJobProfilerExecutionDetailsRequest,
   createInitialState,
+  getExecutionDetailFile,
 } from "src/api";
 import {
   initialState,
@@ -39,15 +40,17 @@ const mapStateToProps = (
   const jobID = selectID(state, props);
   return {
     jobRequest: state.adminUI?.job?.cachedData[jobID] ?? emptyState,
-    jobProfilerResponse: state.adminUI?.executionDetails ?? initialState,
-    jobProfilerLastUpdated: state.adminUI?.executionDetails?.lastUpdated,
-    jobProfilerDataIsValid: state.adminUI?.executionDetails?.valid,
+    jobProfilerExecutionDetailFilesResponse:
+      state.adminUI?.executionDetailFiles ?? initialState,
+    jobProfilerLastUpdated: state.adminUI?.executionDetailFiles?.lastUpdated,
+    jobProfilerDataIsValid: state.adminUI?.executionDetailFiles?.valid,
+    onDownloadExecutionFileClicked: getExecutionDetailFile,
   };
 };
 
 const mapDispatchToProps = (dispatch: Dispatch): JobDetailsDispatchProps => ({
   refreshJob: (req: JobRequest) => jobActions.refresh(req),
-  refreshExecutionDetails: (req: ListJobProfilerExecutionDetailsRequest) =>
+  refreshExecutionDetailFiles: (req: ListJobProfilerExecutionDetailsRequest) =>
     dispatch(jobProfilerActions.refresh(req)),
 });
 

@@ -17,7 +17,7 @@ import {
   ListJobProfilerExecutionDetailsResponse,
 } from "src/api";
 
-export type JobProfilerState =
+export type JobProfilerExecutionDetailFilesState =
   RequestState<ListJobProfilerExecutionDetailsResponse>;
 
 export const initialState =

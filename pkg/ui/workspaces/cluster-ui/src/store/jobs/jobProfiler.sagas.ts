@@ -13,7 +13,7 @@ import { actions } from "./jobProfiler.reducer";
 import { call, put, all, takeEvery } from "redux-saga/effects";
 import {
   ListJobProfilerExecutionDetailsRequest,
-  getExecutionDetails,
+  listExecutionDetailFiles,
 } from "src/api";
 
 export function* refreshJobProfilerSaga(
@@ -26,7 +26,7 @@ export function* requestJobProfilerSaga(
   action: PayloadAction<ListJobProfilerExecutionDetailsRequest>,
 ): any {
   try {
-    const result = yield call(getExecutionDetails, action.payload);
+    const result = yield call(listExecutionDetailFiles, action.payload);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));
