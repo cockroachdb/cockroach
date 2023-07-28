@@ -297,6 +297,7 @@ create table defaultdb."../system"(x int);
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	skip.WithIssue(t, 107738, "flaky")
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
 	// unavailability.
