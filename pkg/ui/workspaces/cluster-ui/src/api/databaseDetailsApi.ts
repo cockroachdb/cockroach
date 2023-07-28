@@ -93,11 +93,7 @@ const getDatabaseId: DatabaseDetailsQuery<DatabaseIdRow> = {
       resp.idResp.error = txn_result.error;
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseIdRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
     return new Promise<boolean>(() => false);
   },
 };
@@ -135,11 +131,7 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
       }
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseGrantsRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
     return new Promise<boolean>(() => false);
   },
 };
@@ -284,11 +276,7 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
       resp.idResp.error = txn_result.error;
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseZoneConfigRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
     return new Promise<boolean>(() => false);
   },
 };
@@ -341,11 +329,7 @@ const getDatabaseSpanStats: DatabaseDetailsQuery<DatabaseSpanStatsRow> = {
       );
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<DatabaseSpanStatsRow>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
     return new Promise<boolean>(() => false);
   },
 };
@@ -390,11 +374,7 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
         resp.stats.replicaData.error = txn_result.error;
       }
     },
-    handleMaxSizeError: (
-      dbName: string,
-      response: SqlTxnResult<DatabaseReplicasRegionsRow>,
-      dbDetail: DatabaseDetailsResponse,
-    ) => {
+    handleMaxSizeError: (_dbName, _response, _dbDetail) => {
       return new Promise<boolean>(() => false);
     },
   };
@@ -444,11 +424,7 @@ const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
       resp.stats.indexStats.error = txn_result.error;
     }
   },
-  handleMaxSizeError: (
-    dbName: string,
-    response: SqlTxnResult<IndexUsageStatistic>,
-    dbDetail: DatabaseDetailsResponse,
-  ) => {
+  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
     return new Promise<boolean>(() => false);
   },
 };

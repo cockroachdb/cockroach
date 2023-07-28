@@ -11,7 +11,7 @@
 import React from "react";
 import classNames from "classnames/bind";
 import styles from "./sqlActivity.module.scss";
-import moment, { Moment } from "moment-timezone";
+import moment from "moment-timezone";
 
 const cx = classNames.bind(styles);
 
@@ -50,7 +50,7 @@ export function mergeErrors(errs: Error | Error[]): Error {
   };
 
   errors.forEach(
-    (x, i, arr) => (
+    (x, i) => (
       (mergedError.name += ` ${i}: ${x.name};`),
       (mergedError.message += ` ${i}: ${x.message};`)
     ),

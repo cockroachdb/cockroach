@@ -86,7 +86,7 @@ const customStyles = {
     ...provided,
     maxHeight: "310px",
   }),
-  option: (provided: any, state: any) => ({
+  option: (provided: any, _state: any) => ({
     ...provided,
     backgroundColor: "white",
     color: "#475872",

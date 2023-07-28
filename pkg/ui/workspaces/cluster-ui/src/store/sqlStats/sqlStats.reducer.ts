@@ -50,10 +50,10 @@ const sqlStatsSlice = createSlice({
       state.inFlight = false;
       state.valid = false;
     },
-    refresh: (state, action: PayloadAction<StatementsRequest>) => {
+    refresh: (state, _action: PayloadAction<StatementsRequest>) => {
       state.inFlight = true;
     },
-    request: (state, action: PayloadAction<StatementsRequest>) => {
+    request: (state, _action: PayloadAction<StatementsRequest>) => {
       state.inFlight = true;
     },
     updateTimeScale: (_, _action: PayloadAction<UpdateTimeScalePayload>) => {},

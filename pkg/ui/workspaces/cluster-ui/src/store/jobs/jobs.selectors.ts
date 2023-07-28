@@ -10,7 +10,6 @@
 
 import { createSelector } from "reselect";
 import { localStorageSelector } from "../utils/selectors";
-import { adminUISelector } from "../utils/selectors";
 
 export const selectSortSetting = createSelector(
   localStorageSelector,

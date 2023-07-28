@@ -210,8 +210,8 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
   columns: null,
   internalAppNamePrefix: "$ internal",
   refreshSessions: () => {},
-  cancelSession: (req: CancelSessionRequestMessage) => {},
-  cancelQuery: (req: CancelQueryRequestMessage) => {},
+  cancelSession: (_req: CancelSessionRequestMessage) => {},
+  cancelQuery: (_req: CancelQueryRequestMessage) => {},
   onSortingChange: () => {},
 };
 
@@ -239,7 +239,7 @@ export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
   columns: null,
   internalAppNamePrefix: "$ internal",
   refreshSessions: () => {},
-  cancelSession: (req: CancelSessionRequestMessage) => {},
-  cancelQuery: (req: CancelQueryRequestMessage) => {},
+  cancelSession: (_req: CancelSessionRequestMessage) => {},
+  cancelQuery: (_req: CancelQueryRequestMessage) => {},
   onSortingChange: () => {},
 };

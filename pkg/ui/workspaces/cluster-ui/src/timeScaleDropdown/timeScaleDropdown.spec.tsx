@@ -26,7 +26,7 @@ import RangeSelect from "./rangeSelect";
 import { timeFormat as customMenuTimeFormat } from "../dateRangeMenu";
 import { assert } from "chai";
 import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
-import { getAllByText, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -285,8 +285,6 @@ describe("TimeScaleDropdown functions", function () {
 
   describe("formatRangeSelectSelected", () => {
     it("formatRangeSelectSelected must return title Past 10 Minutes", () => {
-      const _ = makeTimeScaleDropdown(state);
-
       const title = formatRangeSelectSelected(
         currentWindow,
         state.currentScale,
