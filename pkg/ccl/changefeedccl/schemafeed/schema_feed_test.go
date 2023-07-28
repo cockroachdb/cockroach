@@ -164,8 +164,9 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Lay down an intent on system.descriptors table.
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -176,7 +177,7 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 	highPriorityAfter.Override(ctx, &s.ClusterSettings().SV, priorityAfter)
 	var responseFiles []kvpb.ExportResponse_File
 	testutils.SucceedsWithin(t, func() error {
-		span := roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)}
+		span := roachpb.Span{Key: s.Codec().TablePrefix(keys.DescriptorTableID)}
 		span.EndKey = span.Key.PrefixEnd()
 		resp, err := sendExportRequestWithPriorityOverride(ctx, s.ClusterSettings(),
 			kvDB.NonTransactionalSender(), span, hlc.Timestamp{}, s.Clock().Now())

@@ -75,10 +75,8 @@ import (
 func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{})
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if s.RPCContext().StorageClusterID.Get() == uuid.Nil {
@@ -88,10 +86,9 @@ func TestSelfBootstrap(t *testing.T) {
 
 func TestPanicRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	defer log.ScopeWithoutShowLogs(t).Close(t)
 
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{})
-	require.NoError(t, err)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -131,16 +128,13 @@ func TestHealthCheck(t *testing.T) {
 
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DefaultZoneConfigOverride: &cfg,
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer s.Stopper().Stop(context.Background())
 
 	ctx := context.Background()
@@ -421,14 +415,11 @@ func TestListenerFileCreation(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer s.Stopper().Stop(context.Background())
 
 	files, err := filepath.Glob(filepath.Join(dir, "cockroach.*"))
