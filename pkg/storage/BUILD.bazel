@@ -76,6 +76,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/mon",
+        "//pkg/util/must",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
