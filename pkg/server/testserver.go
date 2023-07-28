@@ -587,8 +587,12 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	// Since we're creating a tenant, it doesn't make sense to pass through the
 	// Server testing knobs, since the bulk of them only apply to the system
 	// tenant. Any remaining knobs which are required by the tenant should be
-	// setup in StartTenant below.
+	// passed through here.
 	params.TestingKnobs.Server = &TestingKnobs{}
+
+	if ts.params.Knobs.Server != nil {
+		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
 
 	// Temporarily disable the error that is returned if a tenant should not be started manually,
 	// so that we can start the default test tenant internally here.
