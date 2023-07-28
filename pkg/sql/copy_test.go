@@ -17,8 +17,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,8 +42,7 @@ func TestCopyLogging(t *testing.T) {
 		{`SET CLUSTER SETTING sql.log.admin_audit.enabled = true`},
 	} {
 		t.Run(strings[0], func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
-			s, db, _ := serverutils.StartServer(t, params)
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(context.Background())
 
 			_, err := db.Exec(`CREATE TABLE t (i INT PRIMARY KEY);`)
@@ -70,7 +69,7 @@ func TestCopyLogging(t *testing.T) {
 
 			// We have to start a new connection every time to exercise all possible paths.
 			t.Run("success during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, params.UseDatabase)
+				db := s.SQLConn(t, "")
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -102,7 +101,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error in statement", func(t *testing.T) {
-				db := s.SQLConn(t, params.UseDatabase)
+				db := s.SQLConn(t, "")
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -114,7 +113,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, params.UseDatabase)
+				db := s.SQLConn(t, "")
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -130,7 +129,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error in statement during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, params.UseDatabase)
+				db := s.SQLConn(t, "")
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -142,7 +141,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error during insert phase of COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, params.UseDatabase)
+				db := s.SQLConn(t, "")
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -171,7 +170,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error during copy during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, params.UseDatabase)
+				db := s.SQLConn(t, "")
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{

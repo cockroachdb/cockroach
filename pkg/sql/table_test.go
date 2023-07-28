@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -428,8 +428,7 @@ func TestCanCloneTableWithUDT(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE test;
@@ -527,8 +526,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		},
 	}
 
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
 	CREATE DATABASE test;
@@ -594,8 +592,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 		},
 	}
 
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
 	CREATE DATABASE test;
@@ -649,7 +646,7 @@ func TestJobsCache(t *testing.T) {
 		}
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &ExecutorTestingKnobs{
 		RunAfterSCJobsCacheLookup: runAfterSCJobsCacheLookup,
 	}

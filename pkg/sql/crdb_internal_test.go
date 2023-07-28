@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -85,7 +84,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -168,7 +167,8 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 func TestGossipAlertsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+
+	params, _ := createTestServerParams()
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -213,7 +213,7 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -434,7 +434,7 @@ func TestInvalidObjects(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,

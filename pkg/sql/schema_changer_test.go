@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -90,7 +89,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -218,7 +217,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -437,7 +436,7 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	var mu syncutil.Mutex
 	shouldError := true
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeQueryBackfill: func() error {
@@ -519,7 +518,7 @@ func TestUniqueViolationsAreCaught(t *testing.T) {
 
 	readyToMerge := make(chan struct{})
 	startMerge := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -575,7 +574,7 @@ func TestRaceWithBackfill(t *testing.T) {
 		maxValue = 200
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	initBackfillNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -755,7 +754,7 @@ func TestDropWhileBackfill(t *testing.T) {
 		maxValue = 200
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	notifyBackfill := func() {
 		mu.Lock()
 		defer mu.Unlock()
@@ -887,7 +886,7 @@ func TestBackfillErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
@@ -999,7 +998,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	var backfillNotification, commandsDone chan struct{}
 	var dontAbortBackfill uint32
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const maxValue = 100
 	backfillCount := int64(0)
 	retriedBackfill := int64(0)
@@ -1279,7 +1278,7 @@ func dropIndexSchemaChange(
 func TestDropColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1345,7 +1344,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	currChunk := 0
 	seenSpan := roachpb.Span{}
@@ -1438,7 +1437,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var upTableVersion func()
 	const maxValue = 2000
 	currChunk := 0
@@ -1593,7 +1592,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	// currently implemented. Previously this test disabled the async schema
 	// changer so that we don't retry the cleanup of the failed schema change
 	// until a certain point in the test.
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const chunkSize = 200
 	var enableAsyncSchemaChanges uint32
 	var attempts int32
@@ -1716,7 +1715,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const chunkSize = 200
 	attempts := 0
 	// attempt 1: write two chunks of the column.
@@ -1825,7 +1824,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	// correctly when run sequentially, which is not as interesting. The previous
 	// comments are kept around to describe the intended results of the test, but
 	// they don't reflect what's happening now.
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get
 	// processed asynchronously.
@@ -2083,7 +2082,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -2192,7 +2191,7 @@ CREATE TABLE t.test (
 func TestAddColumnDuringColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
@@ -2267,7 +2266,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	waitUntilRevert := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const chunkSize = 200
 	attempts := 0
 	// DROP UNIQUE COLUMN is executed in two steps: drop index and drop column.
@@ -2373,7 +2372,7 @@ ALTER TABLE t.test DROP column v`)
 func TestDropIndexNoRevert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	server, sqlDB, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -2410,7 +2409,7 @@ INSERT INTO t VALUES (1, 1, 1), (2, 2, 1);
 func TestOldRevertedDropIndexesAreIgnored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	var (
 		server serverutils.TestServerInterface
@@ -2469,7 +2468,7 @@ func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	ctx := context.Background()
 	swapNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePrimaryKeySwap: func() {
@@ -2582,7 +2581,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 			<-continueNotification
 		}
 	}
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -2682,7 +2681,7 @@ func TestSchemaChangeWhileExecutingPrimaryKeyChange(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
@@ -2757,7 +2756,7 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	var mu syncutil.Mutex
 	backfillNotification := make(chan struct{})
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	initBackfillNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -3022,7 +3021,7 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	waitBeforeContinuing := make(chan struct{})
 
 	var doOnce sync.Once
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
@@ -3253,7 +3252,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	ctx := context.Background()
 	var db *gosql.DB
 	shouldCancel := true
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -3338,7 +3337,7 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 	var shouldAttemptCancel syncutil.AtomicBool
 	shouldAttemptCancel.Set(true)
 	hasAttemptedCancel := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		GCJob: &sql.GCJobTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -3392,7 +3391,7 @@ func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{},
 		// Decrease the adopt loop interval so that retries happen quickly.
@@ -3437,7 +3436,7 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 	backfillCompleteNotification := make(chan bool)
 	continueSchemaChangeNotification := make(chan bool)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -3537,7 +3536,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 	backfillCompleteNotification := make(chan bool)
 	continueSchemaChangeNotification := make(chan bool)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -3785,7 +3784,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	// a chunk boundary.
 	const maxValue = 3*chunkSize - 1
 	ctx, cancel := context.WithCancel(context.Background())
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -3870,7 +3869,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 func TestSchemaChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -3977,7 +3976,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -4098,7 +4097,7 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 	const numNodes = 3
 	const chunkSize = 200
 	const maxValue = 5000
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -4176,7 +4175,7 @@ func TestTruncateInternals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const maxValue = 2000
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	// Disable schema changes.
 	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
@@ -4270,7 +4269,7 @@ func TestTruncateCompletion(t *testing.T) {
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -4395,7 +4394,7 @@ func TestTruncateCompletion(t *testing.T) {
 func TestSchemaChangeErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -4447,7 +4446,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		return nil
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -4500,7 +4499,7 @@ func TestAddComputedColumn(t *testing.T) {
 
 	var db *gosql.DB
 	done := false
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -4538,7 +4537,7 @@ func TestNoBackfillForVirtualColumn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sawBackfill := false
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -4571,7 +4570,7 @@ func TestNoBackfillForVirtualColumn(t *testing.T) {
 func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	codec := s.ApplicationLayer().Codec()
@@ -4709,7 +4708,7 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	var sqlDB *sqlutils.SQLRunner
 	var db *gosql.DB
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	doCancel := false
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
@@ -4896,7 +4895,7 @@ func TestSchemaChangeRetryError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numNodes = 3
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
@@ -4961,7 +4960,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 	notifyBackfill := make(chan struct{})
 	cancelSessionDone := make(chan struct{})
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -5040,7 +5039,7 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const maxValue = 100
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	seenNodeUnavailable := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -5097,7 +5096,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 	notifyBackfill := make(chan struct{})
 	tableRenameDone := make(chan struct{})
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -5163,7 +5162,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 func TestIndexBackfillValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *kv.DB
@@ -5231,7 +5230,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestInvertedIndexBackfillValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *kv.DB
@@ -5302,7 +5301,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 func TestMultipleIndexBackfills(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	const maxValue = 1000
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -5416,7 +5415,7 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 func TestTableValidityWhileAddingFK(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
 	continuePublishWriteNotification := make(chan struct{})
@@ -5500,7 +5499,7 @@ SET use_declarative_schema_changer = off;
 func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
 	continuePublishWriteNotification := make(chan struct{})
@@ -5582,7 +5581,7 @@ SET use_declarative_schema_changer = off;
 func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
 	continuePublishWriteNotification := make(chan struct{})
@@ -5678,7 +5677,7 @@ SET use_declarative_schema_changer = off;
 func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
 	continuePublishWriteNotification := make(chan struct{})
@@ -5778,7 +5777,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 	const numNodes = 1
 	var maxValue = 2000
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: 100,
@@ -5911,7 +5910,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var runBeforeConstraintValidation func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -5959,7 +5958,7 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var runBeforeConstraintValidation func() error
 	errorReturned := false
 	params.Knobs = base.TestingKnobs{
@@ -6023,7 +6022,7 @@ func TestMultipleRevert(t *testing.T) {
 	ranCancelCommand := false
 	shouldRetryAfterReversingMutations := true
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var db *gosql.DB
 	params.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -6148,7 +6147,7 @@ SELECT usage_count
 	t.Run("error-before-backfill", func(t *testing.T) {
 		onFailOrCancelStarted := false
 		injectedError := false
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
@@ -6175,7 +6174,7 @@ SELECT usage_count
 	t.Run("error-before-reversing-mutations", func(t *testing.T) {
 		onFailOrCancelStarted := false
 		injectedError := false
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
@@ -6212,7 +6211,7 @@ func TestDropTableWhileSchemaChangeReverting(t *testing.T) {
 	beforeOnFailOrCancelNotification := make(chan struct{})
 	// Closed when we're ready to continue with the schema change (rollback).
 	continueNotification := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
@@ -6312,7 +6311,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 	t.Run("error-before-backfill", func(t *testing.T) {
 		onFailOrCancelStarted := false
 		injectedError := false
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
@@ -6341,7 +6340,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 	t.Run("error-before-reversing-mutations", func(t *testing.T) {
 		onFailOrCancelStarted := false
 		injectedError := false
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
@@ -6375,7 +6374,7 @@ func TestPartialIndexBackfill(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -6414,7 +6413,7 @@ func TestAddingTableResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		// Don't run the schema change to take the table out of the adding state.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -6449,7 +6448,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	ctx := context.Background()
 
 	canProceed := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	jobCancellationsToFail := struct {
 		syncutil.Mutex
 		jobs map[jobspb.JobID]struct{}
@@ -6546,7 +6545,7 @@ func TestCancelMultipleQueued(t *testing.T) {
 	ctx := context.Background()
 
 	canProceed := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -6653,7 +6652,7 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	beforeBackfillNotification := make(chan struct{})
 	// Closed when we're ready to continue with the schema change.
 	continueNotification := make(chan struct{})
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -6758,7 +6757,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 	t.Run("failed due to injected error", func(t *testing.T) {
 		var injectedError bool
 		var s serverutils.TestServerInterface
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -6843,7 +6842,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		}
 
 		var s serverutils.TestServerInterface
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -6911,7 +6910,7 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 	delayNotify := make(chan struct{})
 	routineResults := make(chan error)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var s serverutils.TestServerInterface
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -7085,7 +7084,7 @@ func TestShardColumnConstraintSkipValidation(t *testing.T) {
 	ctx := context.Background()
 
 	constraintsToValidate := make(chan []catalog.Constraint, 1)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeConstraintValidation: func(constraints []catalog.Constraint) error {
@@ -7141,7 +7140,7 @@ func TestHashShardedIndexRangePreSplit(t *testing.T) {
 
 	var runBeforePreSplitting func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error
 	var runAfterPreSplitting func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeHashShardedIndexRangePreSplit: func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
@@ -7390,7 +7389,7 @@ ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 
 			knobs := &sql.SchemaChangerTestingKnobs{}
 
-			params, _ := tests.CreateTestServerParams()
+			params, _ := createTestServerParams()
 			params.Knobs.SQLSchemaChanger = knobs
 			s, sqlDB, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
@@ -7506,7 +7505,7 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
+			params, _ := createTestServerParams()
 			childJobStartNotification := make(chan struct{})
 			waitBeforeContinuing := make(chan struct{})
 			var doOnce sync.Once
@@ -7580,7 +7579,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 			count       int32 // accessed atomically
 			shouldCount int32 // accessed atomically
 		)
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -7609,7 +7608,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 			jobID       jobspb.JobID
 		)
 
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -7700,7 +7699,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			count       int32 // accessed atomically
 			shouldCount int32 // accessed atomically
 		)
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -7732,7 +7731,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			kvDB  *kv.DB
 		)
 
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -7968,7 +7967,7 @@ func TestColumnBackfillProcessingDoesNotHoldLockOnJobsTable(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	chCh := make(chan chan error)
 	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -8025,7 +8024,7 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)

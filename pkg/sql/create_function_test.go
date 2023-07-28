@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -154,7 +153,7 @@ func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -171,7 +170,7 @@ func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
 	})
 
 	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -196,7 +195,7 @@ func TestVersionGatingUDFInColumnDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -215,7 +214,7 @@ func TestVersionGatingUDFInColumnDefault(t *testing.T) {
 	})
 
 	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
-		params, _ := tests.CreateTestServerParams()
+		params, _ := createTestServerParams()
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -223,7 +222,7 @@ func runCommentOnTests(t *testing.T, testFunc func(db *gosql.DB)) {
 		`SET use_declarative_schema_changer = 'off'`,
 	} {
 		func() {
-			params, _ := tests.CreateTestServerParams()
+			params, _ := createTestServerParams()
 			s, db, _ := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(context.Background())
 			_, err := db.Exec(setupQuery)

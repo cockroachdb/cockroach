@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -91,7 +90,7 @@ func waitForConfigChange(t testing.TB, s serverutils.TestServerInterface) *confi
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
@@ -325,7 +324,7 @@ func TestGetZoneConfig(t *testing.T) {
 func TestCascadingZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	defaultZoneConfig := zonepb.DefaultZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
@@ -648,7 +647,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(b, params)
 	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.

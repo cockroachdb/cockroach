@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -66,7 +65,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	skip.UnderStressRace(t, "TODO(ssd) test times outs under race")
 	skip.UnderRace(t, "TODO(ssd) test times outs under race")
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	writesPopulated := false
 	var writesFn func() error
@@ -183,7 +182,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	const (
 		rowCount  = 2000
@@ -291,7 +290,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		maxValue = 200
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	initMergeNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -487,7 +486,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	var initialRows = 10000
 	rowIdx := 0
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -556,7 +555,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		additionalRowsForMerge = 10
 	)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Ensure that the temp index has work to do.
@@ -743,7 +742,7 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	rowIdx := 0
 	mergeSerializeCh := make(chan struct{}, 1)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
@@ -849,7 +848,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	// Wait for the beginning of the Merge step of the schema change.
 	// Write data to the temp index and split it at the hazardous
 	// points.
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
