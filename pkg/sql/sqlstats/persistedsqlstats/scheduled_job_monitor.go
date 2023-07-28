@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +61,7 @@ var longIntervalWarningThreshold = time.Hour * 24
 // periodically every scanInterval (subject to jittering).
 type jobMonitor struct {
 	st           *cluster.Settings
+	clusterID    func() uuid.UUID
 	db           isql.DB
 	scanInterval time.Duration
 	jitterFn     func(time.Duration) time.Duration
@@ -171,7 +173,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 				if !jobs.HasScheduledJobNotFoundError(err) && !errors.Is(err, errScheduleNotFound) {
 					return err
 				}
-				sj, err = CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, j.st)
+				sj, err = CreateSQLStatsCompactionScheduleIfNotYetExist(ctx, txn, j.st, j.clusterID())
 				if err != nil {
 					return err
 				}
