@@ -76,7 +76,6 @@ export const StatementInsightDetails: React.FC<
   isTenant,
   timeScale,
   hasAdminRole,
-  setTimeScale,
   refreshUserSQLRoles,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({

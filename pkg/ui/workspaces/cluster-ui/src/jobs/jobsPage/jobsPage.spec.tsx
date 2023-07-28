@@ -13,13 +13,12 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { JobsPage, JobsPageProps } from "./jobsPage";
 import { formatDuration } from "../util/duration";
 import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
-import { prettyDOM, prettyFormat, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
 
 import Job = cockroach.server.serverpb.IJobResponse;
-import { CoordinatedUniversalTime, TimezoneContext } from "src/contexts";
 
 const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
   const history = H.createHashHistory();
