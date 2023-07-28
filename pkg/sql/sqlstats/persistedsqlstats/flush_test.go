@@ -117,11 +117,15 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
+		sqlInstanceId := base.SQLInstanceID(0)
+		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
+			sqlInstanceId = firstServer.SQLInstanceID()
+		}
 		// For each test case, we verify that it's being properly inserted exactly
 		// once and it is exactly executed tc.count number of times.
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, sqlInstanceId, 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count)
 		}
 	}
 
@@ -144,11 +148,16 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
+		sqlInstanceId := base.SQLInstanceID(0)
+		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
+			sqlInstanceId = firstServer.SQLInstanceID()
+		}
+
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, sqlInstanceId, 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 			// The execution count is doubled here because we execute all of the
 			// statements here in the same aggregation interval.
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count+tc.count-1 /* expectedCount */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count+tc.count-1 /* expectedCount */)
 		}
 	}
 
@@ -170,10 +179,15 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
+		sqlInstanceId := base.SQLInstanceID(0)
+		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
+			sqlInstanceId = firstServer.SQLInstanceID()
+		}
+
 		for _, tc := range testQueries {
 			// We expect exactly 2 entries since we are in a different aggregation window.
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, sqlInstanceId, 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count)
 		}
 	}
 
@@ -193,13 +207,23 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		// Ensure that we encode the correct node_id for the new entry and did not
-		// accidentally tamper the entries written by another server.
-		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, firstSQLConn, tc.stmtNoConst, secondServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), secondServer.SQLInstanceID(), tc.count)
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
+			// Ensure that we encode the correct node_id for the new entry and did not
+			// accidentally tamper the entries written by another server.
+			for _, tc := range testQueries {
+				verifyNumOfInsertedEntries(t, firstSQLConn, tc.stmtNoConst, secondServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+				verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), secondServer.SQLInstanceID(), tc.count)
+				verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+				verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+			}
+		} else {
+			sqlInstanceId := base.SQLInstanceID(0)
+			// Ensure that we encode the correct node_id for the new entry and did not
+			// accidentally tamper the entries written by another server.
+			for _, tc := range testQueries {
+				verifyNumOfInsertedEntries(t, firstSQLConn, tc.stmtNoConst, sqlInstanceId, 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+				verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), sqlInstanceId, tc.count*2 /*num of servers*/)
+			}
 		}
 	}
 }
