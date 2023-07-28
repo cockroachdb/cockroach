@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -666,4 +667,71 @@ LIMIT $%d`, whereClause, len(args)), args...)
 	}
 
 	return statements, nil
+}
+
+// Keep this around for statement details function.
+func activityTablesHaveFullData(
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	settings *cluster.Settings,
+	testingKnobs *sqlstats.TestingKnobs,
+	reqStartTime *time.Time,
+	limit int64,
+	order serverpb.StatsSortOptions,
+) (result bool, err error) {
+
+	if !StatsActivityUIEnabled.Get(&settings.SV) {
+		return false, nil
+	}
+
+	if (limit > 0 && !isLimitOnActivityTable(limit)) || !isSortOptionOnActivityTable(order) {
+		return false, nil
+	}
+
+	if reqStartTime == nil {
+		return false, nil
+	}
+
+	// Used to verify the table contained data.
+	zeroDate := time.Time{}
+
+	const queryWithPlaceholders = `
+SELECT 
+    COALESCE(min(aggregated_ts), '%s')
+FROM crdb_internal.statement_activity 
+%s
+`
+
+	// Format string "2006-01-02 15:04:05.00" is a golang-specific string
+	it, err := ie.QueryIteratorEx(
+		ctx,
+		"console-combined-stmts-activity-min-ts",
+		nil,
+		sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(queryWithPlaceholders, zeroDate.Format("2006-01-02 15:04:05.00"), testingKnobs.GetAOSTClause()))
+
+	if err != nil {
+		return false, err
+	}
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, errors.New("expected one row but got none on activityTablesHaveFullData")
+	}
+
+	var row tree.Datums
+	if row = it.Cur(); row == nil {
+		return false, errors.New("unexpected null row on activityTablesHaveFullData")
+	}
+
+	defer func() {
+		err = closeIterator(it, err)
+	}()
+
+	minAggregatedTs := tree.MustBeDTimestampTZ(row[0]).Time
+
+	hasData := !minAggregatedTs.IsZero() && (reqStartTime.After(minAggregatedTs) || reqStartTime.Equal(minAggregatedTs))
+	return hasData, nil
 }
