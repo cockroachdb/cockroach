@@ -31,7 +31,7 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 new-request r=req2 txn=txn3 ts=10,1 spans=exclusive@b
 ----
@@ -40,15 +40,15 @@ acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 acquire r=req2 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 new-request r=req3 txn=txn4 ts=10,1 spans=exclusive@c
 ----
@@ -57,11 +57,11 @@ acquire r=req3 k=c durability=u strength=exclusive
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Snapshot, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Snapshot, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # A non-locking read from a RC transaction should not wait.
 new-request r=req4 txn=txn1 ts=10,1 spans=none@a,d
@@ -153,7 +153,7 @@ acquire r=req8 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # Snapshot txn.
 new-request r=req9 txn=txn5 ts=10,1 spans=exclusive@b
@@ -163,9 +163,9 @@ acquire r=req9 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Snapshot, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Snapshot, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # Non-locking read from a serializable transaction.
 new-request r=req10 txn=txn2 ts=10,1 spans=none@a

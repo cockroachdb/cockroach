@@ -105,17 +105,17 @@ debug-lock-table
 ----
 num=6
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kHigh2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow2"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kNormal2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # -------------------------------------------------------------
 # Push (timestamp) the low priority txn using:
@@ -177,17 +177,17 @@ debug-lock-table
 ----
 num=6
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kHigh2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow2"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kNormal2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # -------------------------------------------------------------
 # Push (abort) the low priority txn using:
@@ -255,15 +255,15 @@ debug-lock-table
 ----
 num=5
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kHigh2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kNormal2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # -------------------------------------------------------------
 # Push (timestamp) the normal priority txn using:
@@ -325,15 +325,15 @@ debug-lock-table
 ----
 num=5
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kHigh2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kNormal2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
 
 # -------------------------------------------------------------
 # Push (abort) the normal priority txn using:
@@ -401,13 +401,13 @@ debug-lock-table
 ----
 num=4
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kHigh2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
 
 # -------------------------------------------------------------
 # Push (timestamp) the high priority txn using:
@@ -473,13 +473,13 @@ debug-lock-table
 ----
 num=4
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kHigh2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
 
 # -------------------------------------------------------------
 # Push (abort) the high priority txn using:
@@ -549,11 +549,11 @@ debug-lock-table
 ----
 num=3
  lock: "kHigh1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: committed]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: committed]
  lock: "kLow1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "kNormal1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
 
 # -------------------------------------------------------------
 # Scan across keyspace to clear out all aborted locks.

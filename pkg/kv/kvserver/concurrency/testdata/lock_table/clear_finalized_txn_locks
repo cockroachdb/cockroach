@@ -115,7 +115,7 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
@@ -137,7 +137,7 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
@@ -164,7 +164,7 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
@@ -197,7 +197,7 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
     active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
@@ -323,7 +323,7 @@ num=3
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
@@ -337,7 +337,7 @@ num=3
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
@@ -837,67 +837,67 @@ acquire r=req13 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 acquire r=req13 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 acquire r=req13 k=c durability=u strength=exclusive
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 acquire r=req13 k=d durability=u strength=exclusive
 ----
 num=4
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 acquire r=req13 k=e durability=u strength=exclusive
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 acquire r=req13 k=f durability=u strength=exclusive
 ----
 num=6
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 pushed-txn-updated txn=txn6 status=aborted
 ----
@@ -924,13 +924,13 @@ num=6
    queued writers:
     active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
 
 scan r=req15
 ----
@@ -950,9 +950,9 @@ num=4
    queued writers:
     active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
 
 print
 ----
@@ -964,9 +964,9 @@ num=4
    queued writers:
     active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl seqs: [0] [holder finalized: aborted]
+  holder: txn: 00000000-0000-0000-0000-000000000006 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)] [holder finalized: aborted]
 
 scan r=req16
 ----
