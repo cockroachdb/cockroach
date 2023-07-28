@@ -37,7 +37,7 @@ import (
 // shutdowns does not properly close the resulting *gosql.DB objects.
 //
 // TODO(#107747): re-enable this.
-const useLoopbackListener = false
+const useLoopbackListener = true
 
 // openTestSQLConn is a test helper that supports the SQLConn* methods
 // of serverutils.ApplicationLayerInterface.
