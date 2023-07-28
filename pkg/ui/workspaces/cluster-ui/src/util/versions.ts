@@ -60,11 +60,10 @@ export function parseStringToVersion(
   const matches = inputString.match(regex);
 
   if (matches) {
-    const [, majorVersion, minorVersion, patchVersion, buildNumber] = matches;
+    const [, majorVersion, minorVersion, patchVersion] = matches;
     const parsedMajorVersion = parseInt(majorVersion);
     const parsedMinorVersion = parseInt(minorVersion) || 0;
     const parsedPatchVersion = parseInt(patchVersion) || 0;
-    const parsedBuildNumber = parseInt(buildNumber) || 0;
 
     return [parsedMajorVersion, parsedMinorVersion, parsedPatchVersion];
   } else {

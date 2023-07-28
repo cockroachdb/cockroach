@@ -13,7 +13,7 @@ import React, { useContext } from "react";
 import { FormatWithTimezone } from "../util";
 import { CoordinatedUniversalTime, TimezoneContext } from "../contexts";
 
-export function Timezone(props: any) {
+export function Timezone() {
   const timezone = useContext(TimezoneContext);
   return (
     <>
