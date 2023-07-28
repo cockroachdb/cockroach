@@ -55,16 +55,6 @@ const HotRangesPage = () => {
     }
   }, [dispatch, isValid]);
 
-  useEffect(() => {
-    dispatch(
-      refreshHotRanges(
-        new HotRangesRequest({
-          page_size: 1000,
-        }),
-      ),
-    );
-  }, [dispatch]);
-
   const [filteredHotRanges, setFilteredHotRanges] =
     useState<HotRange[]>(hotRanges);
 
