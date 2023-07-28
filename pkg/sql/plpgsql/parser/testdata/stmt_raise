@@ -4,7 +4,7 @@ BEGIN
   RAISE;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax
 
 parse
 DECLARE

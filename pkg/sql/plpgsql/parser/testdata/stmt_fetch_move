@@ -4,7 +4,7 @@ BEGIN
 MOVE NEXT FROM emp_cur;
 END
 ----
-expected parse error: at or near "move": syntax error: unimplemented: this syntax
+at or near "move": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -12,7 +12,7 @@ BEGIN
 MOVE PRIOR FROM var;
 END
 ----
-expected parse error: at or near "move": syntax error: unimplemented: this syntax
+at or near "move": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -20,7 +20,7 @@ BEGIN
 FETCH NEXT FROM emp_cur INTO x,y;
 END
 ----
-expected parse error: at or near "fetch": syntax error: unimplemented: this syntax
+at or near "fetch": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -28,7 +28,7 @@ BEGIN
 FETCH emp_cur INTO x,y;
 END
 ----
-expected parse error: at or near "fetch": syntax error: unimplemented: this syntax
+at or near "fetch": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -36,4 +36,4 @@ BEGIN
 FETCH ABSOLUTE 2 FROM emp_cur INTO x,y;
 END
 ----
-expected parse error: at or near "fetch": syntax error: unimplemented: this syntax
+at or near "fetch": syntax error: unimplemented: this syntax

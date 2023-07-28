@@ -7,7 +7,7 @@ WHILE x > 0 LOOP
 END LOOP;
 END
 ----
-expected parse error: at or near "while": syntax error: unimplemented: this syntax
+at or near "while": syntax error: unimplemented: this syntax
 
 
 
@@ -21,4 +21,4 @@ WHILE x > 0 LOOP
 END LOOP labeled;
 END
 ----
-expected parse error: at or near "while": syntax error: unimplemented: this syntax
+at or near "while": syntax error: unimplemented: this syntax

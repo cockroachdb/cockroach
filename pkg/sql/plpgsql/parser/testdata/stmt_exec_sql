@@ -1,14 +1,14 @@
 parse
 DECLARE
 BEGIN
-  IMPORT TABLE employees
-  FROM PGDUMP 's3://{BUCKET NAME}/{employees-full.sql}?AWS_ACCESS_KEY_ID={ACCESS KEY}&AWS_SECRET_ACCESS_KEY={SECRET ACCESS KEY}'
-  WITH skip_foreign_keys WITH ignore_unsupported_statements;
+  IMPORT TABLE foo
+  FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'
+  WITH max_row_size='524288';
 END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
+IMPORT TABLE foo FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (max_row_size = '524288');
 END
 
 parse
@@ -19,7 +19,7 @@ END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
+INSERT INTO t1 VALUES (1, 2);
 END
 
 parse
@@ -30,7 +30,7 @@ END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query WITH INTO
+INSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
 END
 
 parse
@@ -41,27 +41,93 @@ END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query WITH INTO STRICT
+INSERT INTO t1 VALUES (1, 2) RETURNING x INTO STRICT y;
 END
 
 parse
 DECLARE
 BEGIN
-  MERGE INTO whatever;
+  INSERT INTO t1 VALUES (1,2) INTO y;
+END
+----
+at or near ";": syntax error: INTO used with a command that cannot return data
+
+parse
+DECLARE
+BEGIN
+  IMPORT INTO foo (k, v) CSV DATA ($1, $2);
 END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
+IMPORT INTO foo(k, v) CSV DATA ($1, $2);
 END
 
 parse
 DECLARE
 BEGIN
-  IMPORT xxxx INTO whatever;
+  SELECT x, y FROM xy;
 END
 ----
 DECLARE
 BEGIN
-EXECUTE bare sql query
+SELECT x, y FROM xy;
+END
+
+parse
+DECLARE
+BEGIN
+  SELECT x, y INTO a, b FROM xy;
+END
+----
+DECLARE
+BEGIN
+SELECT x, y FROM xy INTO a, b;
+END
+
+parse
+DECLARE
+BEGIN
+  SELECT x, y FROM xy INTO a, b;
+END
+----
+DECLARE
+BEGIN
+SELECT x, y FROM xy INTO a, b;
+END
+
+parse
+DECLARE
+BEGIN
+  SET testing_optimizer_disable_rule_probability = 0;
+END
+----
+DECLARE
+BEGIN
+SET testing_optimizer_disable_rule_probability = 0;
+END
+
+parse
+DECLARE
+  i INT;
+BEGIN
+  SET testing_optimizer_disable_rule_probability = 0;
+  INSERT INTO xy VALUES (1, 2);
+  SELECT 1 + 1;
+  SELECT 100 INTO i;
+  SELECT max(x) INTO i FROM xy;
+  INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
+  RETURN i;
+END
+----
+DECLARE
+i INT8;
+BEGIN
+SET testing_optimizer_disable_rule_probability = 0;
+INSERT INTO xy VALUES (1, 2);
+SELECT 1 + 1;
+SELECT 100 INTO i;
+SELECT max(x) FROM xy INTO i;
+INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
+RETURN i;
 END
