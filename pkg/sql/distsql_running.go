@@ -1584,7 +1584,8 @@ var (
 	ErrStmtNotSupportedForPausablePortal = unimplemented.NewWithIssue(
 		98911,
 		"the statement for a pausable portal must be a read-only SELECT query"+
-			" with no sub-queries or post-queries",
+			" with no sub-queries, post-queries, or function calls (please set "+
+			"session variable enable_functions_in_portals to true to enable functions)",
 	)
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.

@@ -123,20 +123,46 @@ type canModifySchema interface {
 	modifiesSchema() bool
 }
 
+type checkPausableVisitor struct {
+	isNotPausable bool
+}
+
+// VisitPre implements the Visitor interface.
+func (v *checkPausableVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch expr.(type) {
+	case *FuncExpr:
+		v.isNotPausable = true
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost implements the Visitor interface.
+func (v *checkPausableVisitor) VisitPost(expr Expr) Expr {
+	return expr
+}
+
 // IsAllowedToPause returns true if the stmt cannot either modify the schema or
 // write data.
 // This function is to gate the queries allowed for pausable portals.
 // TODO(janexing): We should be more accurate about the stmt selection here.
 // Now we only allow SELECT, but is it too strict? And how to filter out
 // SELECT with data writes / schema changes?
-func IsAllowedToPause(stmt Statement) bool {
+func IsAllowedToPause(stmt Statement, functionsInPortalsEnabled bool) bool {
 	if stmt != nil && !CanModifySchema(stmt) && !CanWriteData(stmt) {
+		if !functionsInPortalsEnabled {
+			v := checkPausableVisitor{}
+			walkStmt(&v, stmt)
+			if v.isNotPausable {
+				return false
+			}
+		}
 		switch t := stmt.(type) {
 		case *Select:
 			if t.With != nil {
 				ctes := t.With.CTEList
 				for _, cte := range ctes {
-					if !IsAllowedToPause(cte.Stmt) {
+					if !IsAllowedToPause(cte.Stmt, functionsInPortalsEnabled) {
 						return false
 					}
 				}

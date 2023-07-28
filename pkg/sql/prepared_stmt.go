@@ -194,6 +194,7 @@ type PreparedPortal struct {
 // accountForCopy() doesn't need to be called on the prepared statement.
 func (ex *connExecutor) makePreparedPortal(
 	ctx context.Context,
+	evalCtx *extendedEvalContext,
 	name string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
@@ -208,7 +209,7 @@ func (ex *connExecutor) makePreparedPortal(
 
 	if ex.sessionData().MultipleActivePortalsEnabled && ex.executorType != executorTypeInternal {
 		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
-		if tree.IsAllowedToPause(stmt.AST) {
+		if tree.IsAllowedToPause(stmt.AST, evalCtx.SessionData().FunctionsInPortalsEnabled) {
 			portal.pauseInfo = &portalPauseInfo{}
 			portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
 			portal.portalPausablity = PausablePortal
