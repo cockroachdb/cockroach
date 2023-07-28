@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -488,12 +487,14 @@ func (ts *TestServer) TsDB() *ts.DB {
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLConn(test testing.TB, dbName string) *gosql.DB {
+func (ts *TestServer) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
 	return ts.SQLConnForUser(test, username.RootUser, dbName)
 }
 
 // SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLConnForUser(test testing.TB, userName, dbName string) *gosql.DB {
+func (ts *TestServer) SQLConnForUser(
+	test serverutils.TestFataler, userName, dbName string,
+) *gosql.DB {
 	db, err := ts.SQLConnForUserE(userName, dbName)
 	if err != nil {
 		test.Fatal(err)
@@ -753,12 +754,14 @@ func (t *TestTenant) RPCAddr() string {
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLConn(test testing.TB, dbName string) *gosql.DB {
+func (t *TestTenant) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
 	return t.SQLConnForUser(test, username.RootUser, dbName)
 }
 
 // SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLConnForUser(test testing.TB, userName, dbName string) *gosql.DB {
+func (t *TestTenant) SQLConnForUser(
+	test serverutils.TestFataler, userName, dbName string,
+) *gosql.DB {
 	db, err := t.SQLConnForUserE(userName, dbName)
 	if err != nil {
 		test.Fatal(err)
