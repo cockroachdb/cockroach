@@ -1,0 +1,6 @@
+echo
+----
+message with ‹argument›: 0 not in [1 2 3]
+message with ‹argument›: 1 not in []
+message with ‹argument›: 1 not in []
+message with ‹argument›: ‹baz› not in [‹foo› ‹bar›]

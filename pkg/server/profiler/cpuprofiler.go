@@ -61,15 +61,6 @@ var cpuProfileDuration = settings.RegisterDurationSetting(
 	10*time.Second, settings.PositiveDuration,
 )
 
-var cpuProfileEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"server.cpu_profile.enabled",
-	"a bool which indicates whether cpu profiles should be taken by the cpu profiler. "+
-		"in order to have the profiler function, server.cpu_profile.cpu_usage_combined_threshold "+
-		"must also be set to a realistic value",
-	false,
-)
-
 const cpuProfFileNamePrefix = "cpuprof"
 
 // CPUProfiler is used to take CPU profiles.
@@ -116,9 +107,6 @@ func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int
 			logcrash.ReportPanic(ctx, &cp.st.SV, p, 1)
 		}
 	}()
-	if !cpuProfileEnabled.Get(&cp.st.SV) {
-		return
-	}
 	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 

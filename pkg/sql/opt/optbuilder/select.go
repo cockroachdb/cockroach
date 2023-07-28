@@ -697,16 +697,22 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
-		if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		if b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+			b.evalCtx.SessionData().DurableLockingForSerializable {
 			// Under weaker isolation levels we use fully-durable locks for SELECT FOR
-			// UPDATE statements, SELECT FOR SHARE statements, and all other locked
-			// scans (e.g. FK checks), regardless of locking strength and wait
-			// policy. Unlike mutation statements, SELECT FOR UPDATE statements do not
-			// lay down intents, so we cannot rely on the durability of intents to
+			// UPDATE statements, SELECT FOR SHARE statements, and constraint checks
+			// (e.g. FK checks), regardless of locking strength and wait policy.
+			// Unlike mutation statements, SELECT FOR UPDATE statements do not lay
+			// down intents, so we cannot rely on the durability of intents to
 			// guarantee exclusion until commit as we do for mutation statements. And
 			// unlike serializable isolation, weaker isolation levels do not perform
 			// read refreshing, so we cannot rely on read refreshing to guarantee
 			// exclusion.
+			//
+			// Under serializable isolation we only use fully-durable locks if
+			// enable_durable_locking_for_serializable is set. (Serializable isolation
+			// does not require locking for correctness, so by default we use
+			// best-effort locks for better performance.)
 			private.Locking.Durability = tree.LockDurabilityGuaranteed
 		}
 		if private.Locking.WaitPolicy == tree.LockWaitSkipLocked && tab.FamilyCount() > 1 {

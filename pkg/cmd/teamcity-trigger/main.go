@@ -126,6 +126,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 	// Queue stress builds. One per configuration per test target.
 	for _, testTarget := range strings.Split(string(targets), "\n") {
 		testTarget = strings.TrimSpace(testTarget)
+		if testTarget == "" {
+			continue
+		}
 		// By default, run each package for up to 100 iterations.
 		maxRuns := 100
 		maxTime := getMaxTime(testTarget)

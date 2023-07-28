@@ -61,6 +61,7 @@ disallow_full_table_scans                                  off
 distsql                                                    off
 enable_auto_rehoming                                       off
 enable_create_stats_using_extremes                         off
+enable_durable_locking_for_serializable                    off
 enable_experimental_alter_column_type_general              off
 enable_implicit_fk_locking_for_serializable                off
 enable_implicit_select_for_update                          on

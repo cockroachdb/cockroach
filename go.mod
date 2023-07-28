@@ -17,9 +17,9 @@ require (
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0
 	golang.org/x/crypto v0.9.0
-	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
+	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
-	golang.org/x/mod v0.9.0 // indirect
+	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/net v0.10.0
 	golang.org/x/oauth2 v0.5.0
 	golang.org/x/sync v0.1.0

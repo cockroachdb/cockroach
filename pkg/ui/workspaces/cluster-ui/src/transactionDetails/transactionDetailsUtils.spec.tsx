@@ -18,28 +18,68 @@ import { shuffle } from "lodash";
 import Long from "long";
 
 describe("getTxnFromSqlStatsTxns", () => {
-  //TODO
-  it("should return the first txn with the fingerprint ID and app name specified", () => {
-    const app = "cockroach";
-    const txns = [
-      { id: 1, app: "hello_world" },
-      { id: 2, app },
-      { id: 3, app: "cockrooch" },
-      { id: 3, app },
-      { id: 4, app: "my_app" },
-    ].map(txn =>
-      mockTxnStats({
-        stats_data: {
-          transaction_fingerprint_id: Long.fromInt(txn.id),
-          app: txn.app,
-        },
-      }),
-    );
+  it.each([
+    [
+      [
+        { id: 1, app: "hello_world" },
+        { id: 2, app: "cockroach" },
+        { id: 3, app: "" },
+        { id: 3, app: "cockroach" },
+        { id: 3, app: "cockroach" },
+        { id: 3, app: "my_app" },
+        { id: 4, app: "my_app" },
+      ],
+      "3", // fingerprint id
+      ["cockroach", "my_app"], // app name
+      3, // Expected idx.
+    ],
+    [
+      [
+        { id: 1, app: "hello_world" },
+        { id: 2, app: "cockroach_app" },
+        { id: 3, app: "" },
+        { id: 3, app: "cockroach" },
+        { id: 3, app: "my_app" },
+        { id: 4, app: "my_app" },
+      ],
+      "3", // fingerprint id
+      ["cockroach", "my_app"], // app name
+      3, // Expected idx.
+    ],
+    [
+      [
+        { id: 1, app: "hello_world" },
+        { id: 2, app: "cockroach" },
+        { id: 2, app: "cockrooch" },
+        { id: 3, app: "cockroach" },
+        { id: 4, app: "my_app" },
+      ],
+      "2", // fingerprint id
+      null, // app names
+      1, // Expected idx.
+    ],
+  ])(
+    "should return the first txn with the fingerprint ID and app name specified",
+    (
+      txnsToMock,
+      fingerprintID: string,
+      apps: string[] | null,
+      expectedIdx: number,
+    ) => {
+      const txns = txnsToMock.map((txn: { id: number; app: string }) =>
+        mockTxnStats({
+          stats_data: {
+            transaction_fingerprint_id: Long.fromInt(txn.id),
+            app: txn.app,
+          },
+        }),
+      );
 
-    const expectedTxn = txns[3];
-    const txn = getTxnFromSqlStatsTxns(txns, "3", [app]);
-    expect(txn).toEqual(expectedTxn);
-  });
+      const expectedTxn = txns[expectedIdx];
+      const txn = getTxnFromSqlStatsTxns(txns, fingerprintID, apps);
+      expect(txn).toEqual(expectedTxn);
+    },
+  );
 
   it("should return null if no txn can be found", () => {
     const txns = [1, 2, 3, 4, 5, 6].map(txn =>
@@ -60,7 +100,6 @@ describe("getTxnFromSqlStatsTxns", () => {
     [null, "123", null],
     [null, null, ["app"]],
     [[mockTxnStats()], null, null],
-    [[mockTxnStats()], "123", null],
     [[mockTxnStats()], "123", []],
     [[mockTxnStats()], null, ["app"]],
     [[mockTxnStats()], "", ["app"]],
