@@ -38,7 +38,7 @@ func TestBackendDialTLSInsecure(t *testing.T) {
 	ctx := context.Background()
 	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
 
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	sql := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
 	defer sql.Stopper().Stop(ctx)
 
 	conn, err := BackendDial(context.Background(), startupMsg, sql.ApplicationLayer().AdvSQLAddr(), &tls.Config{})
@@ -89,7 +89,7 @@ func TestBackendDialTLS(t *testing.T) {
 
 	ctx := context.Background()
 
-	storageServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	storageServer := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Insecure:          false,
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})

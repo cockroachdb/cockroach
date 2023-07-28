@@ -191,7 +191,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -207,7 +207,7 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -225,7 +225,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -249,7 +249,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 func TestAdminAPITableSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -277,7 +277,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 		{name: "upper", dbName: "TEST", tblName: `"TBL"`, pkName: "TBL_pkey"}, // Regression test for issue #14056
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
 				// Disable the default test tenant for now as this tests fails
 				// with it enabled. Tracked with #81590.
 				DefaultTestTenant: base.TODOTestTenantDisabled,

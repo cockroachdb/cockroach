@@ -49,7 +49,7 @@ func TestCreateDeclarativeSchemaChangeJobs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	t.Run("all-targets-reached-their-target-status", func(t *testing.T) {

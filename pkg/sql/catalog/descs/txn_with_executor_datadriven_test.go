@@ -47,7 +47,7 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t, ""), func(t *testing.T, path string) {
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			stmts, err := parser.Parse(d.Input)
