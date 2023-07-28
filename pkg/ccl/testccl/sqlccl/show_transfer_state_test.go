@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,7 +31,9 @@ func TestShowTransferState(t *testing.T) {
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
-	tenant, tenantDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))
+	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	})
 	defer tenant.Stopper().Stop(ctx)
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
