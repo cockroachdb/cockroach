@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1932,15 +1931,16 @@ func TestConnectionMigration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start first SQL pod.
-	tenant1, tenantDB1 := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(tenantID))
+	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 	tenant1.(*server.TestTenant).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer tenant1.Stopper().Stop(ctx)
 	defer tenantDB1.Close()
 
 	// Start second SQL pod.
-	params2 := tests.CreateTestTenantParams(tenantID)
-	params2.DisableCreateTenant = true
-	tenant2, tenantDB2 := serverutils.StartTenant(t, s, params2)
+	tenant2, tenantDB2 := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID:            tenantID,
+		DisableCreateTenant: true,
+	})
 	tenant2.(*server.TestTenant).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer tenant2.Stopper().Stop(ctx)
 	defer tenantDB2.Close()
@@ -2985,10 +2985,11 @@ func startTestTenantPodsWithStopper(
 
 	var tenants []serverutils.ApplicationLayerInterface
 	for i := 0; i < count; i++ {
-		params := tests.CreateTestTenantParams(tenantID)
-		params.TestingKnobs = knobs
-		params.Stopper = stopper
-		tenant, tenantDB := serverutils.StartTenant(t, ts, params)
+		tenant, tenantDB := serverutils.StartTenant(t, ts, base.TestTenantArgs{
+			TenantID:     tenantID,
+			TestingKnobs: knobs,
+			Stopper:      stopper,
+		})
 		tenant.(*server.TestTenant).PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 		// Create a test user. We only need to do it once.
