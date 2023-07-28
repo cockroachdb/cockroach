@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -197,7 +196,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 	ctx := context.Background()
 	var numRequests int
 	first := true
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 				for _, ru := range request.Requests {
@@ -220,11 +219,9 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 			},
 		}},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlServer := s.SQLServer().(*sql.Server)
-	if len(s.TestTenants()) != 0 {
-		sqlServer = s.TestTenants()[0].PGServer().(*pgwire.Server).SQLServer
-	}
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
