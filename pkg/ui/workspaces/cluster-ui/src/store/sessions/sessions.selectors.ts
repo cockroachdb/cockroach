@@ -33,6 +33,6 @@ export const selectSession = createSelector(
 );
 
 export const selectSessionDetailsUiConfig = createSelector(
-  (state: AppState) => state.adminUI?.uiConfig.pages.sessionDetails,
+  (state: AppState) => state.adminUI?.uiConfig?.pages.sessionDetails,
   statementDetailsUiConfig => statementDetailsUiConfig,
 );
