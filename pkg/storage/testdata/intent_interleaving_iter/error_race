@@ -22,13 +22,13 @@ prev
 seek-lt k=e
 prev
 ----
-seek-ge "a"/0,0: output: err: missing provisional value for i.intentKey="b": i.iter exhausted
+seek-ge "a"/0,0: output: err: missing provisional value for i.intentKey "b"; i.iter exhausted
 next: output: err: intentIter at intent, but iter not at provisional value
 seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 next: output: err: intent has no provisional value
-seek-ge "d"/0,0: output: err: missing provisional value for i.intentKey="d": i.iter exhausted
+seek-ge "d"/0,0: output: err: missing provisional value for i.intentKey "d"; i.iter exhausted
 next-key: output: err: intentIter at intent, but iter not at provisional value
-seek-ge "d"/0,0: output: err: missing provisional value for i.intentKey="d": i.iter exhausted
+seek-ge "d"/0,0: output: err: missing provisional value for i.intentKey "d"; i.iter exhausted
 prev: output: err: iter not at provisional value, cmp: -1
 seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
 prev: output: err: reverse iteration discovered intent without provisional value
@@ -62,8 +62,8 @@ prev
 seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
 next: output: value k=a ts=10.000000000,0 v=a10
 next: output: meta k=b ts=20.000000000,0 txn=4
-next: output: err: i.intentCmp=1 does not match 0 for intentKey="b" iterKey="b"/20.000000000,0
-next: output: err: missing provisional value for i.intentKey="b": i.intentCmp=-1 is not 0
+next: output: err: i.intentKey.Compare != i.intentCmp at "b": 0 != 1
+next: output: err: missing provisional value for i.intentKey "b"; i.intentCmp != 0: expected zero value, got -1
 next: output: err: intentIter at intent, but iter not at provisional value
 seek-lt "d"/0,0: output: value k=c ts=30.000000000,0 v=c30
 prev: output: meta k=c ts=30.000000000,0 txn=4

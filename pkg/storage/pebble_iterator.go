@@ -12,13 +12,14 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -419,10 +420,8 @@ func (p *pebbleIterator) Valid() (bool, error) {
 		return false, nil
 	}
 
-	if util.RaceEnabled {
-		if err := p.assertMVCCInvariants(); err != nil {
-			return false, err
-		}
+	if err := must.Expensive(p.assertMVCCInvariants); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -972,38 +971,27 @@ func (p *pebbleIterator) destroy() {
 	}
 }
 
-// assertMVCCInvariants asserts internal MVCC iterator invariants, returning an
-// AssertionFailedf on any failures. It must be called on a valid iterator after
-// a complete state transition.
+// assertMVCCInvariants asserts internal MVCC iterator invariants. It must be
+// called on a valid iterator after a complete state transition.
 func (p *pebbleIterator) assertMVCCInvariants() error {
 	// Assert general MVCCIterator API invariants.
 	if err := assertMVCCIteratorInvariants(p); err != nil {
 		return err
 	}
 
-	// The underlying iterator must be valid, with !mvccDone.
-	if !p.iter.Valid() {
-		errMsg := p.iter.Error().Error()
-		return errors.AssertionFailedf("underlying iter is invalid, with err=%s", errMsg)
-	}
-	if p.mvccDone {
-		return errors.AssertionFailedf("valid iter with mvccDone set")
-	}
+	// nolint:errcheck
+	return must.Handle(context.Background(), func(ctx context.Context) {
+		// The underlying iterator must be valid, with !mvccDone.
+		must.True(ctx, p.iter.Valid(), "underlying iter is invalid, err=%s", p.iter.Error())
+		must.False(ctx, p.mvccDone, "valid iter with mvccDone=true")
 
-	// The position must match the underlying iter.
-	if key, iterKey := p.UnsafeKey(), p.iter.Key(); !bytes.Equal(EncodeMVCCKey(key), iterKey) {
-		return errors.AssertionFailedf("UnsafeKey %s does not match iterator key %x", key, iterKey)
-	}
+		// The position must match the underlying iter.
+		must.EqualBytes(ctx, EncodeMVCCKey(p.UnsafeKey()), p.iter.Key(), "UnsafeKey != iter key")
 
-	// The iterator must be marked as in use.
-	if !p.inuse {
-		return errors.AssertionFailedf("valid iter with inuse=false")
-	}
+		// The iterator must be marked as in use.
+		must.True(ctx, p.inuse, "valid iter with inuse=false")
 
-	// Prefix must be exposed.
-	if p.prefix != p.IsPrefix() {
-		return errors.AssertionFailedf("IsPrefix() does not match prefix=%v", p.prefix)
-	}
-
-	return nil
+		// Prefix must be exposed.
+		must.Equal(ctx, p.IsPrefix(), p.prefix, "IsPrefix != prefix")
+	})
 }

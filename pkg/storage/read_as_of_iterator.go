@@ -11,10 +11,11 @@
 package storage
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 )
 
 // ReadAsOfIterator wraps a SimpleMVCCIterator and only surfaces the latest
@@ -71,8 +72,8 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 
 // Valid implements the simpleMVCCIterator.
 func (f *ReadAsOfIterator) Valid() (bool, error) {
-	if util.RaceEnabled && f.valid {
-		if err := f.assertInvariants(); err != nil {
+	if f.valid {
+		if err := must.Expensive(f.assertInvariants); err != nil {
 			return false, err
 		}
 	}
@@ -217,33 +218,25 @@ func (f *ReadAsOfIterator) assertInvariants() error {
 		return err
 	}
 
-	// asOf must be set.
-	if f.asOf.IsEmpty() {
-		return errors.AssertionFailedf("f.asOf is empty")
-	}
+	// nolint:errcheck
+	return must.Handle(context.Background(), func(ctx context.Context) {
+		// asOf must be set.
+		must.NotZero(ctx, f.asOf, "f.asOf is empty")
 
-	// The underlying iterator must be valid.
-	if ok, err := f.iter.Valid(); !ok || err != nil {
-		errMsg := err.Error()
-		return errors.AssertionFailedf("invalid underlying iter with err=%s", errMsg)
-	}
+		// The underlying iterator must be valid.
+		ok, err := f.iter.Valid()
+		must.NoError(ctx, err, "underlying iter errored")
+		must.True(ctx, ok, "underlying iter is invalid")
 
-	// Keys can't be intents or inline values, and must have timestamps at or
-	// below the readAsOf timestamp.
-	key := f.UnsafeKey()
-	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("emitted key %s has no timestamp", key)
-	}
-	if f.asOf.Less(key.Timestamp) {
-		return errors.AssertionFailedf("emitted key %s above asOf timestamp %s", key, f.asOf)
-	}
+		// Keys can't be intents or inline values, and must have timestamps at or
+		// below the readAsOf timestamp.
+		key := f.UnsafeKey()
+		must.NotZero(ctx, key.Timestamp, "emitted key %s has no timestamp", key)
+		must.True(ctx, key.Timestamp.LessEq(f.asOf), "emitted key %s above asOf %s", key, f.asOf)
 
-	// Tombstones should not be emitted.
-	if _, isTombstone, err := f.MVCCValueLenAndIsTombstone(); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid value")
-	} else if isTombstone {
-		return errors.AssertionFailedf("emitted tombstone for key %s", key)
-	}
-
-	return nil
+		// Tombstones should not be emitted.
+		_, isTombstone, err := f.MVCCValueLenAndIsTombstone()
+		must.NoError(ctx, err, "invalid value")
+		must.False(ctx, isTombstone, "emitted tombstone for key %s", key)
+	})
 }

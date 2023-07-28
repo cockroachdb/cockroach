@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -696,8 +698,8 @@ func (i *intentInterleavingIter) tryDecodeLockKey(
 }
 
 func (i *intentInterleavingIter) Valid() (bool, error) {
-	if util.RaceEnabled && i.valid {
-		if err := i.assertInvariants(); err != nil {
+	if i.valid {
+		if err := must.Expensive(i.assertInvariants); err != nil {
 			return false, err
 		}
 	}
@@ -1326,133 +1328,104 @@ func (i *intentInterleavingIter) IsPrefix() bool {
 	return i.prefix
 }
 
-// assertInvariants asserts internal iterator invariants, returning an
-// AssertionFailedf for any violations. It must be called on a valid iterator
-// after a complete state transition.
+// assertInvariants asserts internal iterator invariants. It must be called on
+// a valid iterator after a complete state transition.
 func (i *intentInterleavingIter) assertInvariants() error {
 	// Assert general MVCCIterator invariants.
 	if err := assertMVCCIteratorInvariants(i); err != nil {
 		return err
 	}
 
-	// The underlying iterator must not have errored.
-	iterValid, err := i.iter.Valid()
-	if err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "valid iter but i.iter errored")
-	}
-	intentValid := i.intentKey != nil
+	// nolint:errcheck
+	return must.Handle(context.Background(), func(ctx context.Context) {
+		// The underlying iterator must not have errored.
+		iterValid, err := i.iter.Valid()
+		must.NoError(ctx, err, "valid iter but i.iter errored")
+		intentValid := i.intentKey != nil
 
-	// At least one of the iterators must be valid. The iterator's validity state
-	// should match i.iterValid.
-	if !iterValid && !intentValid {
-		return errors.AssertionFailedf("i.valid=%t but both iterators are invalid", i.valid)
-	}
-	if iterValid != i.iterValid {
-		return errors.AssertionFailedf("i.iterValid=%t but i.iter.Valid=%t", i.iterValid, iterValid)
-	}
+		// At least one of the iterators must be valid. The iterator's validity state
+		// should match i.iterValid.
+		must.True(ctx, iterValid || intentValid, "i.valid=%t but both iterators are invalid", i.valid)
+		must.Equal(ctx, iterValid, i.iterValid, "i.iter.Valid() != i.iterValid")
 
-	// i.dir must be either 1 or -1.
-	if i.dir != 1 && i.dir != -1 {
-		return errors.AssertionFailedf("i.dir=%v is not valid", i.dir)
-	}
+		// i.dir must be either 1 or -1.
+		must.Contains(ctx, []int{1, -1}, i.dir, "invalid i.dir")
 
-	// For valid iterators, the stored key must match the iterator key.
-	if iterValid {
-		if key := i.iter.UnsafeKey(); !i.iterKey.Equal(key) {
-			return errors.AssertionFailedf("i.iterKey=%q does not match i.iter.UnsafeKey=%q",
-				i.iterKey, key)
+		// For valid iterators, the stored key must match the iterator key.
+		if iterValid {
+			key := i.iter.UnsafeKey()
+			must.EqualBytes(ctx, key.Key, i.iterKey.Key, "i.iter.UnsafeKey != i.iterKey")
+			must.Equal(ctx, key.Timestamp, i.iterKey.Timestamp, "i.iter.UnsafeKey != i.iterKey")
 		}
-	}
-	if intentValid {
-		intentKey := i.intentKey.Clone()
-		if engineKey, err := i.intentIter.UnsafeEngineKey(); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err, "valid i.intentIter errored")
-		} else if !engineKey.IsLockTableKey() {
-			return errors.AssertionFailedf("i.intentIter on non-locktable key %s", engineKey)
-		} else if key, err := keys.DecodeLockTableSingleKey(engineKey.Key); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode lock table key %s",
-				engineKey)
-		} else if !intentKey.Equal(key) {
-			return errors.AssertionFailedf("i.intentKey %q != i.intentIter.UnsafeEngineKey() %q",
-				intentKey, key)
-		}
-		// If i.intentKey is set (i.e. intentValid is true), then intentIterState
-		// must be valid. The inverse is not always true.
-		if i.intentIterState != pebble.IterValid {
-			return errors.AssertionFailedf("i.intentKey=%q, but i.intentIterState=%v is not IterValid",
-				i.intentKey, i.intentIterState)
-		}
-		// If i.intentKey is set, then i.intentKeyAsNoTimestampMVCCKey must either
-		// be nil or equal to it with a \x00 byte appended.
-		if i.intentKeyAsNoTimestampMVCCKey != nil &&
-			!bytes.Equal(i.intentKeyAsNoTimestampMVCCKey, append(i.intentKey.Clone(), 0)) {
-			return errors.AssertionFailedf(
-				"i.intentKeyAsNoTimestampMVCCKey=%q differs from i.intentKey=%q",
-				i.intentKeyAsNoTimestampMVCCKey, i.intentKey)
-		}
-	}
 
-	// Check intentCmp depending on the iterator validity. We already know that
-	// one of the iterators must be valid.
-	if iterValid && intentValid {
-		if cmp := i.intentKey.Compare(i.iterKey.Key); i.intentCmp != cmp {
-			return errors.AssertionFailedf("i.intentCmp=%v does not match %v for intentKey=%q iterKey=%q",
-				i.intentCmp, cmp, i.intentKey, i.iterKey)
-		}
-	} else if iterValid {
-		if i.intentCmp != i.dir {
-			return errors.AssertionFailedf("i.intentCmp=%v != i.dir=%v for invalid i.intentIter",
-				i.intentCmp, i.dir)
-		}
-	} else if intentValid {
-		if i.intentCmp != -i.dir {
-			return errors.AssertionFailedf("i.intentCmp=%v == i.dir=%v for invalid i.iter",
-				i.intentCmp, i.dir)
-		}
-	}
+		if intentValid {
+			intentKey := i.intentKey.Clone()
+			engineKey, err := i.intentIter.UnsafeEngineKey()
+			must.NoError(ctx, err, "i.intentIter UnsafeEngineKey failed")
+			must.True(ctx, engineKey.IsLockTableKey(), "i.intentIter outside locktable at %s", engineKey)
+			ltKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+			must.NoError(ctx, err, "failed to decode lock table key %s", engineKey)
+			must.EqualBytes(ctx, ltKey, intentKey, "intentIter.UnsafeEngineKey != i.intentKey")
 
-	// When on an intent in the forward direction, we must be on a provisional
-	// value and any range key must cover it.
-	if i.dir > 0 && i.isCurAtIntentIterForward() {
-		if !iterValid {
-			return errors.AssertionFailedf(
-				"missing provisional value for i.intentKey=%q: i.iter exhausted", i.intentKey)
-		} else if i.intentCmp != 0 {
-			return errors.AssertionFailedf(
-				"missing provisional value for i.intentKey=%q: i.intentCmp=%v is not 0",
-				i.intentKey, i.intentCmp)
-		} else if hasPoint, hasRange := i.iter.HasPointAndRange(); !hasPoint {
-			return errors.AssertionFailedf(
-				"missing provisional value for i.intentKey=%q: i.iter on bare range key",
-				i.intentKey)
-		} else if hasRange {
-			if bounds := i.iter.RangeBounds(); !bounds.ContainsKey(i.intentKey) {
-				return errors.AssertionFailedf("i.intentKey=%q not covered by i.iter range key %q",
-					bounds, i.intentKey)
+			// If i.intentKey is set (i.e. intentValid is true), then intentIterState
+			// must be valid. The inverse is not always true.
+			must.Equal(ctx, i.intentIterState, pebble.IterValid, "invalid iter state at %s", intentKey)
+
+			// If i.intentKey is set, then i.intentKeyAsNoTimestampMVCCKey must either
+			// be nil or equal to it with a \x00 byte appended.
+			if i.intentKeyAsNoTimestampMVCCKey != nil {
+				must.EqualBytes(ctx, i.intentKeyAsNoTimestampMVCCKey, append(intentKey, 0),
+					"i.intentKeyAsNoTimestampMVCCKey != i.intentKey")
 			}
 		}
-	}
 
-	// Check i.iterBareRangeAtIntent, which is only valid for i.intentCmp == 0.
-	if i.intentCmp == 0 {
-		if i.dir > 0 && i.iterBareRangeAtIntent {
-			return errors.AssertionFailedf("i.dir=%v can't have i.iterBareRangeAtIntent=%v",
-				i.dir, i.iterBareRangeAtIntent)
+		// Check intentCmp depending on the iterator validity. We already know that
+		// one of the iterators must be valid.
+		if iterValid && intentValid {
+			must.Equal(ctx, i.intentKey.Compare(i.iterKey.Key), i.intentCmp,
+				"i.intentKey.Compare != i.intentCmp at %s", i.intentKey)
+		} else if iterValid {
+			must.Equal(ctx, i.intentCmp, i.dir,
+				"i.intentCmp != i.dir for invalid i.intentIter at %s", i.iterKey)
+		} else if intentValid {
+			must.Equal(ctx, i.intentCmp, -i.dir,
+				"i.intentCmp != -i.dir for invalid i.iter at %s", i.intentKey)
 		}
-		if i.dir < 0 && i.iterBareRangeAtIntent {
-			if hasPoint, hasRange := i.iter.HasPointAndRange(); hasPoint || !hasRange {
-				return errors.AssertionFailedf("i.iterBareRangeAtIntent=%v but hasPoint=%t hasRange=%t",
+
+		// When on an intent in the forward direction, we must be on a provisional
+		// value and any range key must cover it.
+		if i.dir > 0 && i.isCurAtIntentIterForward() {
+			must.True(ctx, iterValid,
+				"missing provisional value for i.intentKey %s; i.iter exhausted", i.intentKey)
+			must.Zero(ctx, i.intentCmp,
+				"missing provisional value for i.intentKey %s; i.intentCmp != 0", i.intentKey)
+
+			hasPoint, hasRange := i.iter.HasPointAndRange()
+			must.True(ctx, hasPoint,
+				"missing provisional value for i.intentKey %s: i.iter on bare range key", i.intentKey)
+			if hasRange {
+				bounds := i.iter.RangeBounds()
+				must.True(ctx, bounds.ContainsKey(i.intentKey),
+					"i.intentKey %s not covered by i.iter range key %s", i.intentKey, bounds)
+			}
+		}
+
+		// Check i.iterBareRangeAtIntent, which is only valid for i.intentCmp == 0.
+		if i.intentCmp == 0 {
+			must.False(ctx, i.dir > 0 && i.iterBareRangeAtIntent,
+				"i.dir=%v can't have i.iterBareRangeAtIntent=%v", i.dir, i.iterBareRangeAtIntent)
+
+			if i.dir < 0 && i.iterBareRangeAtIntent {
+				hasPoint, hasRange := i.iter.HasPointAndRange()
+				must.True(ctx, hasRange && !hasPoint,
+					"i.iterBareRangeAtIntent=%v but hasPoint=%t hasRange=%t",
 					i.iterBareRangeAtIntent, hasPoint, hasRange)
-			}
-			// We've already asserted key equality for i.intentCmp == 0.
-			if !i.iterKey.Timestamp.IsEmpty() {
-				return errors.AssertionFailedf("i.iterBareRangeAtIntent=%v but i.iterKey has timestamp %s",
-					i.iterBareRangeAtIntent, i.iterKey.Timestamp)
+				// We've already asserted key equality for i.intentCmp == 0.
+				must.Zero(ctx, i.iterKey.Timestamp,
+					"i.iterBareRangeAtIntent=%v but i.iterKey has timestamp", i.iterBareRangeAtIntent)
 			}
 		}
-	}
-
-	return nil
+	})
 }
 
 // unsafeMVCCIterator is used in RaceEnabled test builds to randomly inject
