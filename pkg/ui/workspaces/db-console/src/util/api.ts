@@ -25,8 +25,6 @@ export type LocationsResponseMessage =
   protos.cockroach.server.serverpb.LocationsResponse;
 
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
-export type NodesResponseMessage =
-  protos.cockroach.server.serverpb.NodesResponse;
 export type NodesResponseExternalMessage =
   protos.cockroach.server.serverpb.NodesResponseExternal;
 
@@ -62,8 +60,6 @@ export type ClusterResponseMessage =
 
 export type TableStatsRequestMessage =
   protos.cockroach.server.serverpb.TableStatsRequest;
-export type TableStatsResponseMessage =
-  protos.cockroach.server.serverpb.TableStatsResponse;
 
 export type IndexStatsRequestMessage =
   protos.cockroach.server.serverpb.TableIndexStatsRequest;
@@ -202,11 +198,6 @@ export type KeyVisualizerSamplesRequestMessage =
   protos.cockroach.server.serverpb.KeyVisSamplesRequest;
 export type KeyVisualizerSamplesResponseMessage =
   protos.cockroach.server.serverpb.KeyVisSamplesResponse;
-
-export type ListTracingSnapshotsRequestMessage =
-  protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
-export type ListTracingSnapshotsResponseMessage =
-  protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
 
 export type ListTenantsRequestMessage =
   protos.cockroach.server.serverpb.ListTenantsRequest;
@@ -496,26 +487,6 @@ export function getCluster(
   return timeoutFetch(
     serverpb.ClusterResponse,
     `${API_PREFIX}/cluster`,
-    null,
-    timeout,
-  );
-}
-
-// getTableStats gets detailed stats about the current table
-export function getTableStats(
-  req: TableStatsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<TableStatsResponseMessage> {
-  const promiseErr = IsValidateUriName(req.database, req.table);
-  if (promiseErr) {
-    return promiseErr;
-  }
-
-  return timeoutFetch(
-    serverpb.TableStatsResponse,
-    `${API_PREFIX}/databases/${EncodeUriName(
-      req.database,
-    )}/tables/${EncodeUriName(req.table)}/stats`,
     null,
     timeout,
   );

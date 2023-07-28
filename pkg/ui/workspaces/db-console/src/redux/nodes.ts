@@ -71,7 +71,10 @@ const partialNodeStatusesSelector = createSelector(
   nodeStatusesSelector,
   (nodeStatuses: INodeStatus[]) => {
     return nodeStatuses?.map((ns: INodeStatus) => {
-      const { metrics, store_statuses, updated_at, activity, ...rest } = ns;
+      // We need to extract the fields that constantly change below, so
+      // suppress the eslint rule.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { metrics, updated_at, activity, store_statuses, ...rest } = ns;
       return {
         ...rest,
         store_statuses: store_statuses?.map(ss => ({ desc: ss.desc })),
