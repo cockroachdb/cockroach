@@ -134,16 +134,16 @@ SELECT x FROM test WHERE y = 1/z
 # Set a cluster setting to make it show up below. Which one is set
 # does not matter.
 statement ok
-SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 
 statement ok
-RESET CLUSTER SETTING debug.panic_on_failed_assertions
+RESET CLUSTER SETTING sql.stats.automatic_collection.enabled
 
 statement ok
 SHOW application_name
 
 statement ok
-SHOW CLUSTER SETTING debug.panic_on_failed_assertions
+SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled
 
 statement ok
 SET application_name = '';
@@ -156,23 +156,23 @@ SELECT key,flags
   FROM test.crdb_internal.node_statement_statistics
  WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
-key                                                               flags
+key                                                                     flags
 INSERT INTO test VALUES (_, _, __more1_10__), (__more1_10__)            ·
-SELECT (_, _, __more1_10__) FROM test WHERE _                        ·
-SELECT key FROM test.crdb_internal.node_statement_statistics      ·
-SELECT sin(_)                                                     ·
-SELECT sqrt(_)                                                    !
+SELECT (_, _, __more1_10__) FROM test WHERE _                           ·
+SELECT key FROM test.crdb_internal.node_statement_statistics            ·
+SELECT sin(_)                                                           ·
+SELECT sqrt(_)                                                          !
 SELECT x FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS t (x)    ·
-SELECT x FROM test WHERE y = (_ / z)                              !+
-SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
-SELECT x FROM test WHERE y IN (_, _, __more1_10__)                   +
-SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)               ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
-SET application_name = '_'                                        ·
-SET distsql = "on"                                                ·
-SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
-SHOW application_name                                             ·
+SELECT x FROM test WHERE y = (_ / z)                                    !+
+SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                       ·
+SELECT x FROM test WHERE y IN (_, _, __more1_10__)                      +
+SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)                  ·
+SET CLUSTER SETTING "sql.stats.automatic_collection.enabled" = DEFAULT  ·
+SET CLUSTER SETTING "sql.stats.automatic_collection.enabled" = _        ·
+SET application_name = '_'                                              ·
+SET distsql = "on"                                                      ·
+SHOW CLUSTER SETTING "sql.stats.automatic_collection.enabled"           ·
+SHOW application_name                                                   ·
 
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).

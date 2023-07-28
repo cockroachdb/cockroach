@@ -39,7 +39,6 @@
 --   cluster.organization =   (organization name)
 --   cluster.preserve_downgrade_option =   (disable (automatic or manual) cluster version upgrade from the specified version until reset)
 --   cluster.secret = ba65c0ef-be37-4798-ae73-e6a98b9087c4  (cluster specific secret)
---   debug.panic_on_failed_assertions = false  (panic when an assertion fails rather than reporting)
 --   diagnostics.forced_sql_stat_reset.interval = 2h0m0s  (interval after which SQL statement statistics are refreshed even if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.)
 --   diagnostics.reporting.enabled = true  (enable reporting diagnostic metrics to cockroach labs)
 --   diagnostics.reporting.interval = 1h0m0s  (interval at which diagnostics data should be reported)

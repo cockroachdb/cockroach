@@ -174,6 +174,7 @@ var retiredSettings = map[string]struct{}{
 	"jobs.trace.force_dump_mode":                               {},
 	"timeseries.storage.30m_resolution_ttl":                    {},
 	"server.cpu_profile.enabled":                               {},
+	"debug.panic_on_failed_assertions":                         {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

@@ -68,14 +68,6 @@ var (
 		true,
 	)
 
-	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
-	PanicOnAssertions = settings.RegisterBoolSetting(
-		settings.TenantWritable,
-		"debug.panic_on_failed_assertions",
-		"panic when an assertion fails rather than reporting",
-		false,
-	)
-
 	// startTime records when the process started so that crash reports can
 	// include the server's uptime as an extra tag.
 	startTime = timeutil.Now()
@@ -146,7 +138,7 @@ func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
 		ReportPanic(ctx, sv, r, depthForRecoverAndReportPanic)
-		if !build.IsRelease() || PanicOnAssertions.Get(sv) {
+		if !build.IsRelease() {
 			panic(r)
 		}
 	}
