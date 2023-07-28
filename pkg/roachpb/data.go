@@ -32,13 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2464,11 +2464,9 @@ var _ sort.Interface = SequencedWriteBySeq{}
 // Find searches for the index of the SequencedWrite with the provided
 // sequence number. Returns -1 if no corresponding write is found.
 func (s SequencedWriteBySeq) Find(seq enginepb.TxnSeq) int {
-	if util.RaceEnabled {
-		if !sort.IsSorted(s) {
-			panic("SequencedWriteBySeq must be sorted")
-		}
-	}
+	_ = must.Expensive(func() error {
+		return must.True(context.TODO(), sort.IsSorted(s), "SequencedWriteBySeq not sorted")
+	})
 	if i := sort.Search(len(s), func(i int) bool {
 		return s[i].Sequence >= seq
 	}); i < len(s) && s[i].Sequence == seq {

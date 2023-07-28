@@ -82,9 +82,12 @@ interface TransactionLinkTargetProps {
 export const TransactionLinkTarget = (
   props: TransactionLinkTargetProps,
 ): string => {
-  const searchParams = propsToQueryString({
-    [appNamesAttr]: [props.application],
-  });
+  let searchParams = "";
+  if (props.application != null) {
+    searchParams = propsToQueryString({
+      [appNamesAttr]: [props.application],
+    });
+  }
 
   return `/transaction/${props.transactionFingerprintId}?${searchParams}`;
 };

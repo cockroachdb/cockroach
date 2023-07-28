@@ -1,0 +1,3 @@
+echo
+----
+message with ‹argument›: length 3 != 2

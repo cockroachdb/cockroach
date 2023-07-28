@@ -1,0 +1,8 @@
+echo
+----
+message with ‹argument›: 1 >= 1
+message with ‹argument›: 1 >= 0
+message with ‹argument›: 3.14 >= 3.14
+message with ‹argument›: 3.14 >= 2.717
+message with ‹argument›: ‹b› >= ‹b›
+message with ‹argument›: ‹b› >= ‹a›

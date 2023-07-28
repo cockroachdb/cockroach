@@ -386,6 +386,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().ImplicitFKLockingForSerializable = false
 	notStale()
 
+	// Stale enable_durable_locking_for_serializable.
+	evalCtx.SessionData().DurableLockingForSerializable = true
+	stale()
+	evalCtx.SessionData().DurableLockingForSerializable = false
+	notStale()
+
 	// Stale txn isolation level.
 	evalCtx.TxnIsoLevel = isolation.ReadCommitted
 	stale()
