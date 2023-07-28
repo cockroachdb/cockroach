@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -109,15 +110,10 @@ func InitTestServerFactory(impl TestServerFactory) {
 	srvFactoryImpl = impl
 }
 
-// StartServer creates and starts a test server.
+// StartServerOnly creates and starts a test server.
 // The returned server should be stopped by calling
 // server.Stopper().Stop().
-// The second and third return values are equivalent to
-// .ApplicationLayer().SQLConn() and .ApplicationLayer().DB(),
-// respectively.
-func StartServer(
-	t testing.TB, params base.TestServerArgs,
-) (TestServerInterface, *gosql.DB, *kv.DB) {
+func StartServerOnly(t testing.TB, params base.TestServerArgs) TestServerInterface {
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
 	// Determine if we should probabilistically start a test tenant
 	// for this server.
@@ -136,7 +132,9 @@ func StartServer(
 		t.Fatalf("%+v", err)
 	}
 
-	if err := s.Start(context.Background()); err != nil {
+	ctx := context.Background()
+
+	if err := s.Start(ctx); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
@@ -148,17 +146,36 @@ func StartServer(
 		s.DisableStartTenant(PreventStartTenantError)
 	}
 
-	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
-
 	// Now that we have started the server on the bootstrap version, let us run
 	// the migrations up to the overridden BinaryVersion.
 	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
-		if _, err := goDB.Exec(`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-			t.Fatal(err)
+		for _, layer := range []ApplicationLayerInterface{s.SystemLayer(), s.ApplicationLayer()} {
+			ie := layer.InternalExecutor().(isql.Executor)
+			if _, err := ie.Exec(ctx, "set-version", nil, /* kv.Txn */
+				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
-	return s, goDB, s.DB()
+	return s
+}
+
+// StartServer creates and starts a test server.
+// The returned server should be stopped by calling
+// server.Stopper().Stop().
+//
+// The second and third return values are equivalent to
+// .ApplicationLayer().SQLConn() and .ApplicationLayer().DB(),
+// respectively. If your test does not need them, consider
+// using StartServerOnly() instead.
+func StartServer(
+	t testing.TB, params base.TestServerArgs,
+) (TestServerInterface, *gosql.DB, *kv.DB) {
+	s := StartServerOnly(t, params)
+	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
+	kvDB := s.ApplicationLayer().DB()
+	return s, goDB, kvDB
 }
 
 // NewServer creates a test server.
