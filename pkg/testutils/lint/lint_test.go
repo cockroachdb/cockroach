@@ -2230,7 +2230,6 @@ func TestLint(t *testing.T) {
 			":!ccl/changefeedccl/helpers_test.go",
 			":!ccl/changefeedccl/parquet_test.go",
 			":!ccl/changefeedccl/scheduled_changefeed_test.go",
-			":!ccl/changefeedccl/schemafeed/table_event_filter_datadriven_test.go",
 			":!ccl/importerccl/ccl_test.go",
 			":!ccl/kvccl/kvfollowerreadsccl/boundedstaleness_test.go",
 			":!ccl/kvccl/kvfollowerreadsccl/followerreads_test.go",
