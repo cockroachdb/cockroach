@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -4519,7 +4520,14 @@ func TestMergeQueue(t *testing.T) {
 
 					clearRange(t, lhsStartKey, rhsEndKey)
 					setSplitObjective(secondSplitObjective)
-					verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+					if !grunning.Supported() {
+						// CPU isn't a supported split objective when grunning isn't
+						// supported. Switching the dimension will have no effect, as the
+						// objective gets overridden in such cases to always be QPS.
+						verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
+					} else {
+						verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+					}
 				})
 			}
 		}
