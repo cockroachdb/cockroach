@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -119,7 +118,7 @@ func TestJobsExecutionDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
 	defer cancel()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -163,7 +162,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
 	defer cancel()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -312,7 +311,7 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
 	defer cancel()
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)

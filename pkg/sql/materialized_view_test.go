@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -37,7 +36,7 @@ func TestMaterializedViewClearedAfterRefresh(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -104,7 +103,7 @@ func TestMaterializedViewRefreshVisibility(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	waitForCommit, waitToProceed, refreshDone := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	params.Knobs = base.TestingKnobs{
@@ -152,7 +151,7 @@ func TestMaterializedViewCleansUpOnRefreshFailure(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 
 	// Protects shouldError
 	var mu syncutil.Mutex
@@ -218,7 +217,7 @@ func TestDropMaterializedView(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlRaw, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

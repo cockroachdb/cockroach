@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,7 +32,7 @@ func TestValidSetShowZones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -236,7 +235,7 @@ func TestZoneInheritField(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -283,7 +282,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

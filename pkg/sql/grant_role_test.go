@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,7 +29,7 @@ import (
 func TestNoOpGrantRole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)

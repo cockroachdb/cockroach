@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -56,8 +55,7 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, kvDB := serverutils.StartServer(t, params)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	defer tree.TestingEnableFamilyIndexHint()()
@@ -454,8 +452,7 @@ func TestChangefeedStreamsResults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, kvDB := serverutils.StartServer(t, params)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
