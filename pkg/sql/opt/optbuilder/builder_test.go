@@ -112,14 +112,14 @@ func TestBuilder(t *testing.T) {
 				// of the build process.
 				o.DisableOptimizations()
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-				err = b.Build(expr)
+				scalar, err := b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
 				f := memo.MakeExprFmtCtx(
 					ctx, tester.Flags.ExprFormat, false /* redactableValues */, o.Memo(), catalog,
 				)
-				f.FormatExpr(o.Memo().RootExpr())
+				f.FormatExpr(scalar)
 				return f.Buffer.String()
 
 			default:

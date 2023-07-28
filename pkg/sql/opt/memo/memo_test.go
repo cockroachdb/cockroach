@@ -97,10 +97,11 @@ func TestCompositeSensitive(t *testing.T) {
 		}
 
 		b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
-		if err := b.Build(expr); err != nil {
+		scalar, err := b.Build(expr)
+		if err != nil {
 			d.Fatalf(t, "error building: %v", err)
 		}
-		return fmt.Sprintf("%v", memo.CanBeCompositeSensitive(md, f.Memo().RootExpr()))
+		return fmt.Sprintf("%v", memo.CanBeCompositeSensitive(md, scalar))
 	})
 }
 
