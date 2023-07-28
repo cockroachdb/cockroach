@@ -464,3 +464,40 @@ t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 statement ok
 DROP TABLE t1_96731, t2_96731;
+
+
+# In #107576 we had a bug where we were not correctly resolving foreign key
+# references by filtering down to the target table for DROP INDEX. As a side effect
+# we could end up cleaning foreign key references in other unrelated tables. In
+# the example below fk_drop_other has foreign key back references which are not
+# relevant.
+subtest drop_index_fk_check
+
+statement ok
+CREATE TABLE fk_drop_target
+ ( k int primary key,
+   j int);
+CREATE TABLE fk_drop_ref_src(
+  k int,
+  j int primary key);
+CREATE UNIQUE INDEX target_j
+     ON fk_drop_target(j);
+ CREATE TABLE fk_ref_dst(
+  k int primary key,
+  j int,
+  m int,
+   CONSTRAINT "j_fk" FOREIGN KEY (j) REFERENCES
+       fk_drop_target(k),
+   CONSTRAINT m_fk   FOREIGN KEY (m) REFERENCES
+        fk_drop_ref_src(j)
+ );
+
+statement ok
+DROP INDEX fk_drop_target@target_j CASCADE;
+
+query T rowsort
+SELECT constraint_name from [SHOW CONSTRAINTS FROM fk_ref_dst];
+----
+fk_ref_dst_pkey
+j_fk
+m_fk

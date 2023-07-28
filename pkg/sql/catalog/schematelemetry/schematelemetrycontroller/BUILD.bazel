@@ -1,5 +1,5 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
@@ -41,20 +41,5 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
         "@com_github_robfig_cron_v3//:cron",
-    ],
-)
-
-go_test(
-    name = "schematelemetrycontroller_test",
-    srcs = ["rewrite_cron_expr_test.go"],
-    args = ["-test.timeout=295s"],
-    data = glob(["testdata/**"]),
-    embed = [":schematelemetrycontroller"],
-    deps = [
-        "//pkg/testutils/datapathutils",
-        "//pkg/util/uuid",
-        "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_robfig_cron_v3//:cron",
-        "@com_github_stretchr_testify//require",
     ],
 )

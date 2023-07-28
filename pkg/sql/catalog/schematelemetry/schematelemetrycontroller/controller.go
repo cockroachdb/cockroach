@@ -12,9 +12,6 @@ package schematelemetrycontroller
 
 import (
 	"context"
-	"fmt"
-	"hash/fnv"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -39,19 +36,13 @@ import (
 // SchemaTelemetryScheduleName is the name of the schema telemetry schedule.
 const SchemaTelemetryScheduleName = "sql-schema-telemetry"
 
-const (
-	cronWeekly = "@weekly"
-	cronDaily  = "@daily"
-	cronHourly = "@hourly"
-)
-
 // SchemaTelemetryRecurrence is the cron-tab string specifying the recurrence
 // for schema telemetry job.
 var SchemaTelemetryRecurrence = settings.RegisterValidatedStringSetting(
 	settings.TenantReadOnly,
 	"sql.schema.telemetry.recurrence",
 	"cron-tab recurrence for SQL schema telemetry job",
-	cronWeekly, /* defaultValue */
+	"@weekly", /* defaultValue */
 	func(_ *settings.Values, s string) error {
 		if _, err := cron.ParseStandard(s); err != nil {
 			return errors.Wrap(err, "invalid cron expression")
@@ -166,7 +157,7 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 				}
 			}
 			// Update schedule with new recurrence, if different.
-			cronExpr := MaybeRewriteCronExpr(
+			cronExpr := scheduledjobs.MaybeRewriteCronExpr(
 				clusterID, SchemaTelemetryRecurrence.Get(&st.SV),
 			)
 			if sj.ScheduleExpr() == cronExpr {
@@ -183,34 +174,6 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 			return
 		}
 	}
-}
-
-// MaybeRewriteCronExpr is used to rewrite the interval-oriented cron exprs
-// into an equivalent frequency interval but with an offset derived from the
-// uuid. For a given pair of inputs, the output of this function will always
-// be the same. If the input cronExpr is not a special form as denoted by
-// the keys of cronExprRewrites, it will be returned unmodified. This rewrite
-// occurs in order to uniformly distribute the production of telemetry logs
-// over the intended time interval to avoid bursts.
-func MaybeRewriteCronExpr(id uuid.UUID, cronExpr string) string {
-	if f, ok := cronExprRewrites[cronExpr]; ok {
-		hash := fnv.New64a() // arbitrary hash function
-		_, _ = hash.Write(id.GetBytes())
-		return f(rand.New(rand.NewSource(int64(hash.Sum64()))))
-	}
-	return cronExpr
-}
-
-var cronExprRewrites = map[string]func(r *rand.Rand) string{
-	cronWeekly: func(r *rand.Rand) string {
-		return fmt.Sprintf("%d %d * * %d", r.Intn(60), r.Intn(23), r.Intn(7))
-	},
-	cronDaily: func(r *rand.Rand) string {
-		return fmt.Sprintf("%d %d * * *", r.Intn(60), r.Intn(23))
-	},
-	cronHourly: func(r *rand.Rand) string {
-		return fmt.Sprintf("%d * * * *", r.Intn(60))
-	},
 }
 
 // CreateSchemaTelemetryJob is part of the eval.SchemaTelemetryController
