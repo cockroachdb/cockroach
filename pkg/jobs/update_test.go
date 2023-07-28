@@ -58,7 +58,7 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(ctx)
 	ief := s.InternalDB().(isql.DB)
 
@@ -201,7 +201,7 @@ func TestUpdateDoesNotReadPayloadFromJobsTable(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(ctx)
 	ief := s.InternalDB().(isql.DB)
 	nullOutPayloadAndProgressInSystemJobs := func() {

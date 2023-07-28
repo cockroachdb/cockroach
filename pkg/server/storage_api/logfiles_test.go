@@ -50,7 +50,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	// there's just one.
 	defer s.SetupSingleFileLogging()()
 
-	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(context.Background())
 
 	// Log an error of each main type which we expect to be able to retrieve.
@@ -205,7 +205,7 @@ func TestStatusLocalLogsTenantFilter(t *testing.T) {
 	// there's just one.
 	defer s.SetupSingleFileLogging()()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 
 	ts := srv.(*server.TestServer)
@@ -338,7 +338,7 @@ func TestStatusLogRedaction(t *testing.T) {
 			// Apply the redactable log boolean for this test.
 			defer log.TestingSetRedactable(redactableLogs)()
 
-			ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 			defer ts.Stopper().Stop(context.Background())
 
 			// Log something.

@@ -527,7 +527,7 @@ func (ts *TestServer) MustGetMetricRule(name string) metric.Rule {
 // Within a unit test.
 func UnitTestMetricRule() {
 	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 	rule = s.MustGetMetricRule("rule_name")
 	require.NotNil(rule)

@@ -195,7 +195,7 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	// Until this can be put in main_test.go.
 	defer ccl.TestingEnableEnterprise()()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
@@ -212,7 +212,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	// Until this can be put in main_test.go.
 	defer ccl.TestingEnableEnterprise()()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
@@ -231,7 +231,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	// Until this can be put in main_test.go.
 	defer ccl.TestingEnableEnterprise()()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
@@ -256,7 +256,7 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 	// Until this can be put in main_test.go.
 	defer ccl.TestingEnableEnterprise()()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
@@ -286,7 +286,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 		{name: "upper", dbName: "TEST", tblName: `"TBL"`, pkName: "TBL_pkey"}, // Regression test for issue #14056
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(context.Background())
 			ts := s.ApplicationLayer()
 

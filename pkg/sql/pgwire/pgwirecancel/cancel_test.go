@@ -174,7 +174,7 @@ func TestCancelCopyTo(t *testing.T) {
 	ctx := context.Background()
 	skip.UnderStress(t, "flaky")
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(

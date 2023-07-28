@@ -35,7 +35,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	testStartTs := timeutil.Now()

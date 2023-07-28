@@ -337,7 +337,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	ief := s.InternalDB().(isql.DB)
 	defer s.Stopper().Stop(ctx)
 	r := s.JobRegistry().(*Registry)
@@ -1196,7 +1196,7 @@ func TestRunWithoutLoop(t *testing.T) {
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	intervalBaseSetting.Override(ctx, &settings.SV, 1e6)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Settings: settings,
 	})
 
@@ -1418,7 +1418,7 @@ func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 func TestJobRecordMissingUsername(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 

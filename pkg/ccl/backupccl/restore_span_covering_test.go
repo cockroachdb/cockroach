@@ -585,7 +585,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 func TestFileSpanStartKeyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -698,7 +698,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 func TestCheckpointFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)

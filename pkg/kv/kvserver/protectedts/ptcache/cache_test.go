@@ -77,7 +77,7 @@ func (idb *internalDBWithLastCommit) Txn(
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
@@ -150,7 +150,7 @@ func TestRefresh(t *testing.T) {
 	ptsKnobs := &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
 	}
-	s, _, _ := serverutils.StartServer(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			// Disable span configs to avoid measuring protected timestamp lookups
 			// performed by the AUTO SPAN CONFIG RECONCILIATION job.
@@ -270,7 +270,7 @@ func TestStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	setup := func() (serverutils.TestServerInterface, *ptcache.Cache) {
-		s, _, _ := serverutils.StartServer(t,
+		s := serverutils.StartServerOnly(t,
 			base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					ProtectedTS: &protectedts.TestingKnobs{
@@ -308,7 +308,7 @@ func TestStart(t *testing.T) {
 func TestQueryRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	db := s.InternalDB().(isql.DB)
 	storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
@@ -367,7 +367,7 @@ func TestQueryRecord(t *testing.T) {
 
 func TestIterate(t *testing.T) {
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
@@ -434,7 +434,7 @@ func (recs *records) sorted() []*ptpb.Record {
 
 func TestGetProtectionTimestamps(t *testing.T) {
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
@@ -537,7 +537,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 
 func TestSettingChangedLeadsToFetch(t *testing.T) {
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{

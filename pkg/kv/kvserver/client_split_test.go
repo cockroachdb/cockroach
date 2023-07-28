@@ -90,7 +90,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -122,7 +122,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -264,7 +264,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -333,7 +333,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -543,7 +543,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -602,7 +602,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:              true,
@@ -764,7 +764,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:              true,
@@ -970,7 +970,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableSplitQueue: true,
@@ -1253,7 +1253,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				}
 
 			ctx := context.Background()
-			serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zoneConfig,
@@ -1905,7 +1905,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -1966,7 +1966,7 @@ func TestStoreSplitGCHint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -2237,7 +2237,7 @@ func TestLeaderAfterSplit(t *testing.T) {
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	serv := serverutils.StartServerOnly(b, base.TestServerArgs{})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
@@ -2341,7 +2341,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	overrideCapacityFraction := 0.5
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -2435,7 +2435,7 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -2467,7 +2467,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -2591,7 +2591,7 @@ func TestUnsplittableRange(t *testing.T) {
 	}
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
 
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:       true,
@@ -2695,7 +2695,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 				return nil
 			}
 		ctx := context.Background()
-		serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue: true,
@@ -2952,7 +2952,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -3083,7 +3083,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 		return nil
 	}
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableSplitQueue:     true,
@@ -3179,7 +3179,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 			return nil
 		}
 	ctx := context.Background()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				// Disable async tasks in the intent resolver. All tasks will be synchronous.
@@ -3262,7 +3262,7 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -3509,7 +3509,7 @@ func TestSplitBlocksReadsToRHS(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,

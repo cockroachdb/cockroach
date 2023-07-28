@@ -123,7 +123,7 @@ func TestInvertedFilterer(t *testing.T) {
 	}
 	// Setup test environment.
 	ctx := context.Background()
-	server, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 	testConfig := DefaultProcessorTestConfig()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, testConfig.FlowCtx.Cfg.Settings)

@@ -134,7 +134,7 @@ func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
 	// Start a server with a custom temp storage limit.
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Settings:          st,
 		TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(st, specialSize),
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -335,7 +335,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -379,7 +379,7 @@ func TestServerControllerBadHTTPCookies(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	client, err := s.GetUnauthenticatedHTTPClient()
@@ -562,7 +562,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
@@ -583,7 +583,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Need a new server because the HTTP Client is memoized.
-	s2, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s2 := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s2.Stopper().Stop(ctx)
 
 	clientMT, err := s2.GetAuthenticatedHTTPClient(false, serverutils.MultiTenantSession)

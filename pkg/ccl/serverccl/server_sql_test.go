@@ -102,7 +102,7 @@ func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
 	defer ccl.TestingDisableEnterprise()()
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Note: we can't use `TestTenantAlwaysEnabled` here because
 		// (currently) that requires the enterprise license to be set at
 		// the storage layer, which we just disabled above (because we
@@ -125,7 +125,7 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -150,7 +150,7 @@ func TestTenantHTTP(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// This test is specific to secondary tenants; no need to run it
 		// using the system tenant.
 		DefaultTestTenant: base.TestTenantAlwaysEnabled,
@@ -319,7 +319,7 @@ func TestNonExistentTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -382,7 +382,7 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 	ctx := context.Background()
 
 	clusterSettings := cluster.MakeTestingClusterSettings()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Settings:          clusterSettings,
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})

@@ -534,7 +534,7 @@ func TestZipRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop(context.Background())
 
 	dir, cleanupFn := testutils.TempDir(t)

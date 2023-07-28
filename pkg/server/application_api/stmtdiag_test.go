@@ -82,7 +82,7 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	// all tests.
 	defer ccl.TestingEnableEnterprise()()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
