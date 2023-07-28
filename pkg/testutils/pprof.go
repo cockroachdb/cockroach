@@ -14,12 +14,11 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
-	"testing"
 )
 
 // WriteProfile serialized the pprof profile with the given name to a file at
 // the given path.
-func WriteProfile(t testing.TB, name string, path string) {
+func WriteProfile(t TestFataler, name string, path string) {
 	f, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +44,7 @@ func WriteProfile(t testing.TB, name string, path string) {
 // The resulting profiles are then diffed via:
 //
 //	go tool pprof -base mem.before mem.after
-func AllocProfileDiff(t testing.TB, beforePath, afterPath string, fn func()) {
+func AllocProfileDiff(t TestFatalerLogger, beforePath, afterPath string, fn func()) {
 	// Use "allocs" instead of "heap" to match what -memprofile does. Also run
 	// runtime.GC immediately before grabbing the profile because the allocs
 	// profile is materialized on gc, so this makes sure we have the latest data.

@@ -13,7 +13,6 @@ package testutils
 import (
 	"context"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -35,7 +34,7 @@ import (
 //		},
 //	}
 func TestingRequestFilterRetryTxnWithPrefix(
-	t testing.TB, prefix string, maxCount int,
+	t TestErrorer, prefix string, maxCount int,
 ) (func(ctx context.Context, r *kvpb.BatchRequest) *kvpb.Error, func()) {
 	txnTracker := struct {
 		syncutil.Mutex

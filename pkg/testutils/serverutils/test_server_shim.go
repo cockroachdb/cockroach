@@ -23,7 +23,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -63,7 +62,7 @@ var PreventStartTenantError = errors.New("attempting to manually start a server 
 // default.
 // This can be overridden either via the build tag `metamorphic_disable`
 // or just for test tenants via COCKROACH_TEST_TENANT.
-func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) bool {
+func ShouldStartDefaultTestTenant(t TestLogger, serverArgs base.TestServerArgs) bool {
 	// Explicit cases for enabling or disabling the default test tenant.
 	if serverArgs.DefaultTestTenant.TestTenantAlwaysEnabled() {
 		return true
@@ -110,9 +109,30 @@ func InitTestServerFactory(impl TestServerFactory) {
 	srvFactoryImpl = impl
 }
 
+// TestLogger is the minimal interface of testing.T that is used by
+// StartServerOnlyE.
+type TestLogger interface {
+	Helper()
+	Log(args ...interface{})
+	Logf(format string, args ...interface{})
+}
+
+// TestFataler is the minimal interface of testing.T that is used by
+// StartServer.
+type TestFataler interface {
+	TestLogger
+	Fatal(args ...interface{})
+	Fatalf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+	FailNow()
+}
+
 // StartServerOnlyE is like StartServerOnly() but it lets
 // the test decide what to do with the error.
-func StartServerOnlyE(t testing.TB, params base.TestServerArgs) (TestServerInterface, error) {
+//
+// The first argument is optional. If non-nil; it is used for logging
+// server configuration messages.
+func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInterface, error) {
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
 	// Determine if we should probabilistically start a test tenant
 	// for this server.
@@ -138,7 +158,7 @@ func StartServerOnlyE(t testing.TB, params base.TestServerArgs) (TestServerInter
 		return nil, err
 	}
 
-	if s.StartedDefaultTestTenant() {
+	if s.StartedDefaultTestTenant() && t != nil {
 		t.Log(DefaultTestTenantMessage)
 	}
 
@@ -165,7 +185,7 @@ func StartServerOnlyE(t testing.TB, params base.TestServerArgs) (TestServerInter
 // StartServerOnly creates and starts a test server.
 // The returned server should be stopped by calling
 // server.Stopper().Stop().
-func StartServerOnly(t testing.TB, params base.TestServerArgs) TestServerInterface {
+func StartServerOnly(t TestFataler, params base.TestServerArgs) TestServerInterface {
 	s, err := StartServerOnlyE(t, params)
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +202,7 @@ func StartServerOnly(t testing.TB, params base.TestServerArgs) TestServerInterfa
 // respectively. If your test does not need them, consider
 // using StartServerOnly() instead.
 func StartServer(
-	t testing.TB, params base.TestServerArgs,
+	t TestFataler, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
 	s := StartServerOnly(t, params)
 	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
@@ -235,7 +255,7 @@ func OpenDBConnE(
 // OpenDBConn sets up a gosql DB connection to the given server.
 // Note: consider using the .SQLConn() method on the test server instead.
 func OpenDBConn(
-	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
+	t TestFataler, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) *gosql.DB {
 	conn, err := OpenDBConnE(sqlAddr, useDatabase, insecure, stopper)
 	if err != nil {
@@ -252,7 +272,7 @@ func OpenDBConn(
 // (otherwise, having more than one test in a package which uses StartTenant
 // without log.Scope() will cause a a "clusterID already set" panic).
 func StartTenant(
-	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
+	t TestFataler, ts TestServerInterface, params base.TestTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
@@ -264,7 +284,7 @@ func StartTenant(
 }
 
 func StartSharedProcessTenant(
-	t testing.TB, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
+	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
 	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
@@ -340,7 +360,7 @@ func PostJSONProtoWithAdminOption(
 
 // WaitForTenantCapabilities waits until the given set of capabilities have been cached.
 func WaitForTenantCapabilities(
-	t testing.TB,
+	t TestFataler,
 	s TestServerInterface,
 	tenID roachpb.TenantID,
 	targetCaps map[tenantcapabilities.ID]string,
