@@ -41,7 +41,7 @@ func InitRangeTestServerFactory(impl TestServerFactory) {
 // caller is responsible for stopping the server.
 func StartServer(t testing.TB) serverutils.TestServerInterface {
 	params := srvFactoryImpl.MakeRangeTestServerArgs()
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	if err := srvFactoryImpl.PrepareRangeTestServer(s); err != nil {
 		t.Fatal(err)
 	}

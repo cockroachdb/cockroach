@@ -721,7 +721,7 @@ func TestMessageSizeTooBig(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
@@ -766,7 +766,7 @@ func TestCopyExceedsSQLMemory(t *testing.T) {
 					params := base.TestServerArgs{
 						SQLMemoryPoolSize: 10 << 20,
 					}
-					s, _, _ := serverutils.StartServer(t, params)
+					s := serverutils.StartServerOnly(t, params)
 					defer s.Stopper().Stop(ctx)
 
 					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))

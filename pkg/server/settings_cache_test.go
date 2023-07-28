@@ -78,7 +78,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		},
 	}
 	var settingsCache []roachpb.KeyValue
-	testServer, _, _ := serverutils.StartServer(t, serverArgs)
+	testServer := serverutils.StartServerOnly(t, serverArgs)
 	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
 	testutils.SucceedsSoon(t, func() error {

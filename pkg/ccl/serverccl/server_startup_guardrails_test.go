@@ -83,7 +83,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 				false, /* initializeVersion */
 			)
 
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Settings:          storageSettings,
 				Knobs: base.TestingKnobs{

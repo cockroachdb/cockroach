@@ -65,7 +65,7 @@ func TestDataDriven(t *testing.T) {
 
 				numExpectedTasks := len(configprofiles.TestingGetProfiles()[setter.String()])
 
-				s, _, _ = serverutils.StartServer(t, base.TestServerArgs{
+				s = serverutils.StartServerOnly(t, base.TestServerArgs{
 					DefaultTestTenant: base.TestControlsTenantsExplicitly,
 
 					AutoConfigProvider: provider,

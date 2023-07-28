@@ -698,7 +698,7 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 
 	ctx := context.Background()
 	manual := hlc.NewHybridManualClock()
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{
+	s := serverutils.StartServerOnly(b, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,

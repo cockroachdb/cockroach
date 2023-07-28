@@ -387,7 +387,7 @@ func TestExportInsideTenant(t *testing.T) {
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestTenantProbabilistic,
 		ExternalIODir:     dir,
 	})

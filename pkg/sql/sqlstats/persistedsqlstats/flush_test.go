@@ -210,7 +210,7 @@ func TestSQLStatsInitialDelay(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	srv, _, _ := serverutils.StartServer(t, params)
+	srv := serverutils.StartServerOnly(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 

@@ -85,7 +85,7 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 			false, /* initializeVersion */
 		)
 
-		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &TestingKnobs{
@@ -156,7 +156,7 @@ func TestBumpClusterVersion(t *testing.T) {
 				false, /* initializeVersion */
 			)
 
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
 				Settings: st,
 				Knobs: base.TestingKnobs{
 					Server: &TestingKnobs{
@@ -218,7 +218,7 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	}
 
 	intercepted := 0
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: storeSpecs,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{

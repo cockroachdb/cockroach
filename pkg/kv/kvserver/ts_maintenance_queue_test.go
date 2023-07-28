@@ -106,7 +106,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,

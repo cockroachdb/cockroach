@@ -61,7 +61,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 			},
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
 
 	_, err := s.InternalExecutor().(isql.Executor).ExecEx(ctx, "inline-exec", nil,
@@ -130,7 +130,7 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 			},
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
 
 	_, err := s.InternalDB().(isql.DB).Executor().ExecEx(ctx, "inline-exec", nil,

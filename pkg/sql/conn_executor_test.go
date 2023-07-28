@@ -474,7 +474,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	// Prepare a session with a custom application name.
@@ -973,7 +973,7 @@ func TestUnqualifiedIntSizeRace(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Insecure: true,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -1013,7 +1013,7 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	ctx := context.Background()
 
 	var stmtBuff *sql.StmtBuf
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				// get a handle to the statement buffer during the Bind phase
@@ -1192,7 +1192,7 @@ func TestTransactionDeadline(t *testing.T) {
 			SessionOverride: sessionOverrideKnob,
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestTenantAlwaysEnabled,
 		Knobs:             knobs,
 	})
