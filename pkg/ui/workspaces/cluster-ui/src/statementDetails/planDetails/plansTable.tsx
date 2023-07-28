@@ -23,7 +23,6 @@ import {
   limitText,
   Count,
   intersperse,
-  EncodeUriName,
   EncodeDatabaseTableIndexUri,
   EncodeDatabaseTableUri,
 } from "../../util";

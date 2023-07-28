@@ -30,11 +30,9 @@ import {
 } from "./databaseDetails.saga";
 import {
   actions,
-  DatabaseDetailsState,
   KeyedDatabaseDetailsState,
   reducer,
 } from "./databaseDetails.reducer";
-import { DatabasesListState, refreshDatabasesListSaga } from "../databasesList";
 
 describe("DatabaseDetails sagas", () => {
   const database = "test_db";
