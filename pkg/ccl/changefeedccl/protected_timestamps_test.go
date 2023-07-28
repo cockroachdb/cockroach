@@ -83,7 +83,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 		}
 
 		mkGetProtections := func(t *testing.T, ptp protectedts.Provider,
-			srv serverutils.TestTenantInterface, ptsReader spanconfig.ProtectedTSReader,
+			srv serverutils.ApplicationLayerInterface, ptsReader spanconfig.ProtectedTSReader,
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
@@ -200,7 +200,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			return nil
 		})
 		mkGetProtections = func(t *testing.T, ptp protectedts.Provider,
-			srv serverutils.TestTenantInterface, ptsReader spanconfig.ProtectedTSReader,
+			srv serverutils.ApplicationLayerInterface, ptsReader spanconfig.ProtectedTSReader,
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,

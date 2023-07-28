@@ -91,7 +91,7 @@ func (m LatencyMap) Apply(tc TestCluster) error {
 			if !ok {
 				continue
 			}
-			latencyMap.SetLatency(dst.ServingRPCAddr(), l)
+			latencyMap.SetLatency(dst.AdvRPCAddr(), l)
 		}
 	}
 	return nil

@@ -55,7 +55,7 @@ func TestCopyOutTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"StartServer", /* prefix */
 		url.User(username.RootUser),
 	)
@@ -124,7 +124,7 @@ func TestCopyOutRandom(t *testing.T) {
 	// Furthermore, it handles CopyTo!
 	s := tc.Server(0)
 	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"StartServer", /* prefix */
 		url.User(username.RootUser),
 	)

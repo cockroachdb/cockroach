@@ -40,7 +40,7 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 	_, err = db.Exec("ALTER TENANT ALL SET CLUSTER SETTING spanconfig.tenant_limit = 1000")
 	require.NoError(t, err)
 
-	sqlAddr := tc.Server(0).ServingSQLAddr()
+	sqlAddr := tc.Server(0).AdvSQLAddr()
 	var tenantDB *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error

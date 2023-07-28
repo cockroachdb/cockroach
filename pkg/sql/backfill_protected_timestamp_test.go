@@ -68,7 +68,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	ts := s.TenantOrServer()
+	ts := s.ApplicationLayer()
 	tenantSettings := ts.ClusterSettings()
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, time.Millisecond)
 	r := sqlutils.MakeSQLRunner(db)

@@ -36,7 +36,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.TenantOrServer()
+	ts := s.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "CREATE USER withadmin")

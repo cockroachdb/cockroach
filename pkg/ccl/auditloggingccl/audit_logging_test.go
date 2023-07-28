@@ -122,7 +122,7 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	testUserURL, cleanupFn := sqlutils.PGUrl(t,
-		s.ServingSQLAddr(), t.Name(), url.User(username.TestUser))
+		s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.TestUser))
 	defer cleanupFn()
 
 	testUserDb, err := gosql.Open("postgres", testUserURL.String())
@@ -254,7 +254,7 @@ func TestMultiRoleAuditLogging(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	testUserURL, cleanupFn := sqlutils.PGUrl(t,
-		s.ServingSQLAddr(), t.Name(), url.User(username.TestUser))
+		s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.TestUser))
 	defer cleanupFn()
 
 	testUserDb, err := gosql.Open("postgres", testUserURL.String())
@@ -375,7 +375,7 @@ func TestReducedAuditConfig(t *testing.T) {
 	})
 
 	testUserURL, cleanupFn := sqlutils.PGUrl(t,
-		s.ServingSQLAddr(), t.Name(), url.User(username.TestUser))
+		s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.TestUser))
 	defer cleanupFn()
 
 	testUserDb, err := gosql.Open("postgres", testUserURL.String())

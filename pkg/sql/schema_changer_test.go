@@ -612,7 +612,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-	codec := tc.Server(0).TenantOrServer().Codec()
+	codec := tc.Server(0).ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -799,7 +799,7 @@ func TestDropWhileBackfill(t *testing.T) {
 	defer cancel()
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-	codec := tc.Server(0).TenantOrServer().Codec()
+	codec := tc.Server(0).ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 	SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
@@ -905,7 +905,7 @@ func TestBackfillErrors(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-	codec := tc.Server(0).TenantOrServer().Codec()
+	codec := tc.Server(0).ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1045,7 +1045,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
-	codec := server.TenantOrServer().Codec()
+	codec := server.ApplicationLayer().Codec()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -1399,7 +1399,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	defer cancel()
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1503,7 +1503,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 		t.Log("unblocking GC")
 		close(unblockGC)
 	}()
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
@@ -1622,7 +1622,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
-	codec := server.TenantOrServer().Codec()
+	codec := server.ApplicationLayer().Codec()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -1744,7 +1744,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
-	codec := server.TenantOrServer().Codec()
+	codec := server.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
@@ -1837,7 +1837,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -2313,7 +2313,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	defer wg.Wait()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
-	codec := server.TenantOrServer().Codec()
+	codec := server.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -2605,7 +2605,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	defer cancel()
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
@@ -2786,7 +2786,7 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
 	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT NOT NULL, v INT);`)
@@ -3000,7 +3000,7 @@ COMMIT;
 	}
 	// Ensure that t.test doesn't have any pending mutations
 	// after the primary key change.
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "t", "test")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "t", "test")
 	if len(desc.AllMutations()) != 0 {
 		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.AllMutations()))
 	}
@@ -3215,7 +3215,7 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -3282,7 +3282,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	db = sqlDB
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -3807,7 +3807,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	defer cancel()
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-	codec := tc.Server(0).TenantOrServer().Codec()
+	codec := tc.Server(0).ApplicationLayer().Codec()
 	// Declarative schema changer does not use then new MVCC backfiller, so
 	// fall back for now.
 	if _, err := sqlDB.Exec("SET use_declarative_schema_changer='off'"); err != nil {
@@ -4188,7 +4188,7 @@ func TestSchemaChangeCompletion(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -4274,7 +4274,7 @@ func TestTruncateInternals(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -4365,7 +4365,7 @@ func TestTruncateCompletion(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -4554,7 +4554,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	db := tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
-	codec := tc.Server(0).TenantOrServer().Codec()
+	codec := tc.Server(0).ApplicationLayer().Codec()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
@@ -4662,7 +4662,7 @@ func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	// The schema change below can occasionally take more than
 	// 5 seconds and gets pushed by the closed timestamp mechanism
@@ -4831,7 +4831,7 @@ func TestCancelSchemaChange(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	db = tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
-	codec := tc.Server(0).TenantOrServer().Codec()
+	codec := tc.Server(0).ApplicationLayer().Codec()
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -5068,7 +5068,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
@@ -5146,7 +5146,7 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
@@ -5200,7 +5200,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
@@ -6190,7 +6190,7 @@ func TestRetriableErrorDuringRollback(t *testing.T) {
 	runTest := func(params base.TestServerArgs) {
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
-		codec := s.TenantOrServer().Codec()
+		codec := s.ApplicationLayer().Codec()
 
 		// Disable strict GC TTL enforcement because we're going to shove a zero-value
 		// TTL into the system with AddImmediateGCZoneConfig.
@@ -7809,7 +7809,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			count     int32 // accessed atomically
 			shouldRun int32 // accessed atomically
 
-			s     serverutils.TestTenantInterface
+			s     serverutils.ApplicationLayerInterface
 			sqlDB *gosql.DB
 			kvDB  *kv.DB
 		)

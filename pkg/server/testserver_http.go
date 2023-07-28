@@ -30,7 +30,7 @@ import (
 )
 
 // httpTestServer is embedded in TestServer / TenantServer to
-// provide the HTTP API subset of TestTenantInterface.
+// provide the HTTP API subset of ApplicationLayerInterface.
 type httpTestServer struct {
 	t struct {
 		// We need a sub-struct to avoid ambiguous overlap with the fields
@@ -38,6 +38,8 @@ type httpTestServer struct {
 		authentication authserver.Server
 		sqlServer      *SQLServer
 		tenantName     roachpb.TenantName
+		admin          *adminServer
+		status         *statusServer
 	}
 
 	// authClient is an http.Client that has been authenticated to access the

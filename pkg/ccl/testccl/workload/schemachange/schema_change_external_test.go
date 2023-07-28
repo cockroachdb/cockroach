@@ -80,7 +80,7 @@ func TestWorkload(t *testing.T) {
 		t.Logf("backup in %s", dir)
 	}()
 
-	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User("testuser"))
+	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User("testuser"))
 	defer cleanup()
 
 	const concurrency = 2

@@ -239,7 +239,7 @@ func BenchmarkSpanStats(b *testing.B) {
 					ts.numRanges,
 				), func(b *testing.B) {
 
-					tenant := tc.Server(0).TenantOrServer()
+					tenant := tc.Server(0).ApplicationLayer()
 					tenantCodec := keys.MakeSQLCodec(serverutils.TestTenantID())
 					tenantPrefix := tenantCodec.TenantPrefix()
 

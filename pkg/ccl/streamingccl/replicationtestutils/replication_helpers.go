@@ -209,7 +209,7 @@ SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 `, `;`)...)
 
 	// Sink to read data from.
-	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	sink, cleanupSink := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 
 	h := &ReplicationHelper{
 		SysServer: s,

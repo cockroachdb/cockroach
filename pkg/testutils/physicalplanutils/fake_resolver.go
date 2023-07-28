@@ -25,7 +25,7 @@ func FakeResolverForTestCluster(tc serverutils.TestClusterInterface) physicalpla
 		s := tc.Server(i)
 		nodeDescs[i] = &roachpb.NodeDescriptor{
 			NodeID:  s.NodeID(),
-			Address: util.UnresolvedAddr{AddressField: s.ServingRPCAddr()},
+			Address: util.UnresolvedAddr{AddressField: s.AdvRPCAddr()},
 		}
 	}
 

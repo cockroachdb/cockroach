@@ -106,7 +106,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	ctx := context.Background()
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	executor := filetable.MakeInternalFileToTableExecutor(
 		s.InternalDB().(isql.DB),
@@ -159,7 +159,7 @@ func TestReadWriteFile(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	executor := filetable.MakeInternalFileToTableExecutor(
 		s.InternalDB().(isql.DB),
@@ -334,7 +334,7 @@ func TestUserGrants(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	conn, err := sqlDB.Conn(ctx)
 	require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	conn, err := sqlDB.Conn(ctx)
 	require.NoError(t, err)
@@ -468,7 +468,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	conn, err := sqlDB.Conn(ctx)
 	require.NoError(t, err)
@@ -527,7 +527,7 @@ func TestDatabaseScope(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	executor := filetable.MakeInternalFileToTableExecutor(
 		s.InternalDB().(isql.DB),

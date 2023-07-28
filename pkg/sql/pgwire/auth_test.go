@@ -229,10 +229,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+		pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
-		s.TenantOrServer().PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+		s.ApplicationLayer().PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -488,7 +488,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.ServingSQLAddr(), t.Name(), url.User(systemIdentity),
+						t, s.AdvSQLAddr(), t.Name(), url.User(systemIdentity),
 						forceCerts ||
 							systemIdentity == username.RootUser ||
 							systemIdentity == username.TestUser /* withClientCerts */)
@@ -496,7 +496,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 					var host, port string
 					if td.Cmd == "connect" {
-						host, port, err = net.SplitHostPort(s.ServingSQLAddr())
+						host, port, err = net.SplitHostPort(s.AdvSQLAddr())
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -639,7 +639,7 @@ func TestClientAddrOverride(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
+		t, s.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
 	)
 	defer cleanupFunc()
 
@@ -651,9 +651,9 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+	pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
-	pgPreServer := s.TenantOrServer().PGPreServer().(*pgwire.PreServeConnHandler)
+	pgPreServer := s.ApplicationLayer().PGPreServer().(*pgwire.PreServeConnHandler)
 
 	testCases := []struct {
 		specialAddr string
@@ -806,12 +806,12 @@ func TestSSLSessionVar(t *testing.T) {
 	}
 
 	pgURLWithCerts, cleanupFuncCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,
+		t, s.AdvSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,
 	)
 	defer cleanupFuncCerts()
 
 	pgURLWithoutCerts, cleanupFuncWithoutCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false,
+		t, s.AdvSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false,
 	)
 	defer cleanupFuncWithoutCerts()
 	q := pgURLWithoutCerts.Query()

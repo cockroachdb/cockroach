@@ -67,7 +67,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	DestSysSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 
 	// Sink to read data from.
-	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
 	DestSysSQL.ExpectErr(t, "pq: neither the source tenant \"source\" nor the destination tenant \"system\" \\(0\\) can be the system tenant",

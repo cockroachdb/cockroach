@@ -40,7 +40,7 @@ func TestCacheInvalidation(t *testing.T) {
 	defer db.Close()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestCacheInvalidation" /* prefix */, url.UserPassword("testuser", "abc"),
+		t, s.AdvSQLAddr(), "TestCacheInvalidation" /* prefix */, url.UserPassword("testuser", "abc"),
 	)
 	defer cleanupFunc()
 

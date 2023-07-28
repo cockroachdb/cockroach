@@ -495,7 +495,7 @@ func TestCdcExpressionExecution(t *testing.T) {
 
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE foo (

@@ -94,10 +94,10 @@ func TestCancelQueryOtherNode(t *testing.T) {
 	proxy, err := net.Listen("tcp", util.TestAddr.String())
 	require.NoError(t, err)
 
-	node0, err := net.Dial("tcp", tc.Server(0).ServingSQLAddr())
+	node0, err := net.Dial("tcp", tc.Server(0).AdvSQLAddr())
 	require.NoError(t, err)
 	defer node0.Close()
-	node1, err := net.Dial("tcp", tc.Server(1).ServingSQLAddr())
+	node1, err := net.Dial("tcp", tc.Server(1).AdvSQLAddr())
 	require.NoError(t, err)
 	defer node1.Close()
 
@@ -179,7 +179,7 @@ func TestCancelCopyTo(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestCancelCopyTo",
 		url.User(username.RootUser),
 	)

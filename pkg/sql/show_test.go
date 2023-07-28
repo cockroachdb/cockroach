@@ -672,7 +672,7 @@ func TestShowQueriesDelegatesInternal(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestShowQueriesDelegatesInternal",
 		url.User(username.RootUser),
 	)
@@ -1012,7 +1012,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 		pgURL := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(tc.username),
-			Host:     s.ServingSQLAddr(),
+			Host:     s.AdvSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -1101,7 +1101,7 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 		pgURL := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(tc.username),
-			Host:     s.ServingSQLAddr(),
+			Host:     s.AdvSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}
 		db, err := gosql.Open("postgres", pgURL.String())

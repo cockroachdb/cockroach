@@ -51,7 +51,7 @@ func TestingReset() {
 // TestCLI wraps a test server and is used by tests to make assertions about the output of CLI commands.
 type TestCLI struct {
 	*server.TestServer
-	tenant      serverutils.TestTenantInterface
+	tenant      serverutils.ApplicationLayerInterface
 	certsDir    string
 	cleanupFunc func() error
 	prevStderr  *os.File
@@ -169,8 +169,8 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		}
 		c.TestServer = s.(*server.TestServer)
 
-		log.Infof(context.Background(), "server started at %s", c.ServingRPCAddr())
-		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
+		log.Infof(context.Background(), "server started at %s", c.AdvRPCAddr())
+		log.Infof(context.Background(), "SQL listener at %s", c.AdvSQLAddr())
 	}
 
 	if params.TenantArgs != nil && params.SharedProcessTenantArgs != nil {
@@ -222,12 +222,12 @@ func setCLIDefaultsForTests() {
 func (c *TestCLI) stopServer() {
 	if c.TestServer != nil {
 		log.Infof(context.Background(), "stopping server at %s / %s",
-			c.ServingRPCAddr(), c.ServingSQLAddr())
+			c.AdvRPCAddr(), c.AdvSQLAddr())
 		c.Stopper().Stop(context.Background())
 	}
 }
 
-// RestartServer stops and restarts the test server. The ServingRPCAddr() may
+// RestartServer stops and restarts the test server. The AdvRPCAddr() may
 // have changed after this method returns.
 func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.stopServer()
@@ -242,7 +242,7 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	}
 	c.TestServer = s.(*server.TestServer)
 	log.Infof(context.Background(), "restarted server at %s / %s",
-		c.ServingRPCAddr(), c.ServingSQLAddr())
+		c.AdvRPCAddr(), c.AdvSQLAddr())
 	if params.TenantArgs != nil {
 		if c.Insecure() {
 			params.TenantArgs.ForceInsecure = true
@@ -357,14 +357,14 @@ func (c TestCLI) getRPCAddr() string {
 	if c.tenant != nil && !c.useSystemTenant {
 		return c.tenant.RPCAddr()
 	}
-	return c.ServingRPCAddr()
+	return c.AdvRPCAddr()
 }
 
 func (c TestCLI) getSQLAddr() string {
 	if c.tenant != nil {
 		return c.tenant.SQLAddr()
 	}
-	return c.ServingSQLAddr()
+	return c.AdvSQLAddr()
 }
 
 // RunWithArgs add args according to TestCLI cfg.

@@ -56,7 +56,7 @@ func TestDropRoleConcurrentSession(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start a session as testuser.
-	testUserURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingSQLAddr(), "TestDropRoleConcurrentSession", url.User("testuser"))
+	testUserURL, cleanupFunc := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), "TestDropRoleConcurrentSession", url.User("testuser"))
 	defer cleanupFunc()
 	testuserConn, err := pgx.Connect(ctx, testUserURL.String())
 	require.NoError(t, err)

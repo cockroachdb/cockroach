@@ -28,7 +28,7 @@ import (
 // GetAdminJSONProto performs a RPC-over-HTTP request to the admin endpoint
 // and unmarshals the response into the specified proto message.
 func GetAdminJSONProto(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message,
 ) error {
 	return GetAdminJSONProtoWithAdminOption(ts, path, response, true)
 }
@@ -38,7 +38,7 @@ func GetAdminJSONProto(
 // proto message. It allows the caller to control whether the request
 // is made with the admin role.
 func GetAdminJSONProtoWithAdminOption(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, apiconstants.AdminPrefix+path, response, isAdmin)
 }
@@ -46,7 +46,7 @@ func GetAdminJSONProtoWithAdminOption(
 // PostAdminJSONProto performs a RPC-over-HTTP request to the admin endpoint
 // and unmarshals the response into the specified proto message.
 func PostAdminJSONProto(
-	ts serverutils.TestTenantInterface, path string, request, response protoutil.Message,
+	ts serverutils.ApplicationLayerInterface, path string, request, response protoutil.Message,
 ) error {
 	return PostAdminJSONProtoWithAdminOption(ts, path, request, response, true)
 }
@@ -56,7 +56,7 @@ func PostAdminJSONProto(
 // proto message. It allows the caller to control whether the request
 // is made with the admin role.
 func PostAdminJSONProtoWithAdminOption(
-	ts serverutils.TestTenantInterface,
+	ts serverutils.ApplicationLayerInterface,
 	path string,
 	request, response protoutil.Message,
 	isAdmin bool,
@@ -67,7 +67,7 @@ func PostAdminJSONProtoWithAdminOption(
 // GetStatusJSONProto performs a RPC-over-HTTP request to the status endpoint
 // and unmarshals the response into the specified proto message.
 func GetStatusJSONProto(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message,
 ) error {
 	return serverutils.GetJSONProto(ts, apiconstants.StatusPrefix+path, response)
 }
@@ -75,7 +75,7 @@ func GetStatusJSONProto(
 // PostStatusJSONProto performs a RPC-over-HTTP request to the status endpoint
 // and unmarshals the response into the specified proto message.
 func PostStatusJSONProto(
-	ts serverutils.TestTenantInterface, path string, request, response protoutil.Message,
+	ts serverutils.ApplicationLayerInterface, path string, request, response protoutil.Message,
 ) error {
 	return serverutils.PostJSONProto(ts, apiconstants.StatusPrefix+path, request, response)
 }
@@ -85,7 +85,7 @@ func PostStatusJSONProto(
 // proto message. It allows the caller to control whether the request
 // is made with the admin role.
 func GetStatusJSONProtoWithAdminOption(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, apiconstants.StatusPrefix+path, response, isAdmin)
 }
@@ -95,7 +95,7 @@ func GetStatusJSONProtoWithAdminOption(
 // proto message. It allows the caller to control whether the request
 // is made with the admin role.
 func PostStatusJSONProtoWithAdminOption(
-	ts serverutils.TestTenantInterface,
+	ts serverutils.ApplicationLayerInterface,
 	path string,
 	request, response protoutil.Message,
 	isAdmin bool,
@@ -105,7 +105,7 @@ func PostStatusJSONProtoWithAdminOption(
 
 // GetText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
-func GetText(ts serverutils.TestTenantInterface, url string) ([]byte, error) {
+func GetText(ts serverutils.ApplicationLayerInterface, url string) ([]byte, error) {
 	httpClient, err := ts.GetAdminHTTPClient()
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func GetText(ts serverutils.TestTenantInterface, url string) ([]byte, error) {
 // GetJSON fetches the JSON from the specified URL and returns
 // it as unmarshaled JSON. Returns an error on any failure to fetch
 // or unmarshal response body.
-func GetJSON(ts serverutils.TestTenantInterface, url string) (interface{}, error) {
+func GetJSON(ts serverutils.ApplicationLayerInterface, url string) (interface{}, error) {
 	body, err := GetText(ts, url)
 	if err != nil {
 		return nil, err

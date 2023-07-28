@@ -88,7 +88,7 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	require.NoError(b, db.QueryRow(`SELECT id FROM [SHOW TENANT benchtenant]`).Scan(&tenantID))
 
 	err = testutils.SucceedsSoonError(func() error {
-		capabilities, found := s.(*server.TestServer).Server.TenantCapabilitiesReader().GetCapabilities(roachpb.MustMakeTenantID(tenantID))
+		capabilities, found := s.StorageLayer().TenantCapabilitiesReader().GetCapabilities(roachpb.MustMakeTenantID(tenantID))
 		if !found {
 			return errors.Newf("capabilities not yet ready")
 		}

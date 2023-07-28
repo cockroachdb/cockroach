@@ -1293,7 +1293,7 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+				pgUrl, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(),
 					fmt.Sprintf("TestExecutionInsights-%s-%s", table, testCase.option),
 					url.User("testuser"),
 				)
@@ -1510,7 +1510,7 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	// do not disable background job creation nor job adoption. This is because creating
 	// users requires jobs to be created and run. Thus, this test only creates jobs of type
 	// jobspb.TypeImport and overrides the import resumer.
-	registry := s.TenantOrServer().JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	registry.TestingWrapResumerConstructor(jobspb.TypeImport, func(r jobs.Resumer) jobs.Resumer {
 		return &fakeResumer{}
 	})
@@ -1519,7 +1519,7 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(user, "test"),
-			Host:   s.ServingSQLAddr(),
+			Host:   s.AdvSQLAddr(),
 		}
 		db2, err := gosql.Open("postgres", pgURL.String())
 		assert.NoError(t, err)

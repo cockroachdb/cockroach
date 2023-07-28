@@ -111,11 +111,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	verifyDbZone(s.(*server.TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 	verifyTblZone(s.(*server.TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 
-	databaseID, err := ts.TestingQueryDatabaseID(ctx, username.RootUserName(), "test")
+	databaseID, err := ts.QueryDatabaseID(ctx, username.RootUserName(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableID, err := ts.TestingQueryTableID(ctx, username.RootUserName(), "test", "tbl")
+	tableID, err := ts.QueryTableID(ctx, username.RootUserName(), "test", "tbl")
 	if err != nil {
 		t.Fatal(err)
 	}

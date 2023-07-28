@@ -297,7 +297,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		// Observe backpressure now that the range is just over the limit.
 		// Use pgx so that cancellation does something reasonable.
-		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).ServingSQLAddr(), "", url.User("root"))
+		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).AdvSQLAddr(), "", url.User("root"))
 		defer cleanup()
 		conf, err := pgx.ParseConfig(url.String())
 		require.NoError(t, err)

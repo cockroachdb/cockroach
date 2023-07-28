@@ -97,7 +97,7 @@ func (c *transientCluster) doPersistence(
 	}
 
 	if len(c.servers) > 0 && c.servers[0].TestServer != nil {
-		sqlAddr := c.servers[0].ServingSQLAddr()
+		sqlAddr := c.servers[0].AdvSQLAddr()
 		host, port, _ := addr.SplitHostPort(sqlAddr, "")
 		u.WithNet(pgurl.NetTCP(host, port))
 		// See the comment above about options.

@@ -124,7 +124,7 @@ func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	defer cancel()
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		getTableDescriptor = func() catalog.TableDescriptor {
-			return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "db", "t")
+			return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "db", "t")
 		}
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -400,7 +400,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		getTableDescriptor = func() catalog.TableDescriptor {
-			return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "db", "t")
+			return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "db", "t")
 		}
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -700,7 +700,7 @@ func TestConcurrentSchemaChangesWait(t *testing.T) {
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		getTableDescriptor = func() catalog.TableDescriptor {
-			return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "db", "t")
+			return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "db", "t")
 		}
 
 		initialSchemaChange := func() error {
@@ -841,7 +841,7 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	jr = s.TenantOrServer().JobRegistry().(*jobs.Registry)
+	jr = s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
@@ -985,7 +985,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID().ToUint64()
 	getTableDescriptor = func() catalog.TableDescriptor {
-		return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "db", "t")
+		return desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "db", "t")
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)

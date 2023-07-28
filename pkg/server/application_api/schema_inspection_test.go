@@ -179,7 +179,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			databaseID, err := ts.TestingQueryDatabaseID(ctx, username.RootUserName(), testDbName)
+			databaseID, err := ts.QueryDatabaseID(ctx, username.RootUserName(), testDbName)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -312,7 +312,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
+				t, s.AdvSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
 			defer cleanupGoDB()
 			pgURL.Path = tc.dbName
 			db, err := gosql.Open("postgres", pgURL.String())
@@ -433,7 +433,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			tableID, err := ts.TestingQueryTableID(ctx, username.RootUserName(), tc.dbName, tc.tblName)
+			tableID, err := ts.QueryTableID(ctx, username.RootUserName(), tc.dbName, tc.tblName)
 			if err != nil {
 				t.Fatal(err)
 			}

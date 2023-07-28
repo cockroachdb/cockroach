@@ -30,13 +30,13 @@ import (
 var adminPrefix = "/_admin/v1/"
 
 func getAdminJSONProto(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message,
 ) error {
 	return getAdminJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 func getAdminJSONProtoWithAdminOption(
-	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, adminPrefix+path, response, isAdmin)
 }
@@ -212,7 +212,7 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	st := s.TenantOrServer()
+	st := s.ApplicationLayer()
 	_, err := db.Exec("CREATE TABLE test (id int)")
 	require.NoError(t, err)
 	_, err = db.Exec("INSERT INTO test VALUES (1)")

@@ -56,7 +56,7 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 
 	tenantID := serverutils.TestTenantID()
 
-	var tenantSQLServer serverutils.TestTenantInterface
+	var tenantSQLServer serverutils.ApplicationLayerInterface
 	var tenantDB *gosql.DB
 	for instanceID := 1; instanceID <= int(decommissionID); instanceID++ {
 		sqlServer, tenant := serverutils.StartTenant(t, server, base.TestTenantArgs{

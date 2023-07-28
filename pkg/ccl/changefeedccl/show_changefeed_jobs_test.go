@@ -118,7 +118,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 
 	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	registry := s.TenantOrServer().JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -241,7 +241,7 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
-	registry := s.TenantOrServer().JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.Background())
 

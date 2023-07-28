@@ -157,7 +157,7 @@ func TestTenantHTTP(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.TenantOrServer()
+	ts := s.ApplicationLayer()
 
 	t.Run("prometheus", func(t *testing.T) {
 		httpClient, err := ts.GetUnauthenticatedHTTPClient()
@@ -362,7 +362,7 @@ func TestTenantRowIDs(t *testing.T) {
 	rows := sqlDB.Query(t, "SELECT key FROM foo")
 	defer rows.Close()
 	rowCount := 0
-	instanceID := int(s.TenantOrServer().SQLInstanceID())
+	instanceID := int(s.ApplicationLayer().SQLInstanceID())
 	for rows.Next() {
 		var key int
 		if err := rows.Scan(&key); err != nil {

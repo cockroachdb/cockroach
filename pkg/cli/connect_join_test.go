@@ -58,7 +58,7 @@ func TestNodeJoin(t *testing.T) {
 	}()
 	sslCertsDir := filepath.Join(tempDir, "certs")
 	baseCfg.SSLCertsDir = sslCertsDir
-	serverCfg.JoinList = []string{s.ServingRPCAddr()}
+	serverCfg.JoinList = []string{s.AdvRPCAddr()}
 	baseCfg.Addr = "127.0.0.1:0"
 	baseCfg.AdvertiseAddr = baseCfg.Addr
 
@@ -109,7 +109,7 @@ func TestNodeJoinBadToken(t *testing.T) {
 	sslCertsDir := filepath.Join(tempDir, "certs")
 	require.NoError(t, os.MkdirAll(sslCertsDir, 0755))
 	baseCfg.SSLCertsDir = sslCertsDir
-	serverCfg.JoinList = []string{s.ServingRPCAddr()}
+	serverCfg.JoinList = []string{s.AdvRPCAddr()}
 	baseCfg.Addr = "127.0.0.1:0"
 	baseCfg.AdvertiseAddr = baseCfg.Addr
 

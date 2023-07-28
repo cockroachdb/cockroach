@@ -270,7 +270,7 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.TenantOrServer().Codec(), "t", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.ApplicationLayer().Codec(), "t", "test")
 		if len(desc.AllMutations()) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}

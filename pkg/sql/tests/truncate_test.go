@@ -396,7 +396,7 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 				},
 			})
 			defer tc.Stopper().Stop(ctx)
-			s := tc.TenantOrServer(0)
+			s := tc.ApplicationLayer(0)
 			tenantSettings := s.ClusterSettings()
 			conn := serverutils.OpenDBConn(t, s.SQLAddr(), "defaultdb", false, tc.Stopper())
 			// Ensure that if we're running with the test tenant, it can split

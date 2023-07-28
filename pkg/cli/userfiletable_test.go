@@ -846,7 +846,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 	err := os.WriteFile(localFilePath, []byte("a"), 0666)
 	require.NoError(t, err)
 
-	rootURL, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(),
+	rootURL, cleanup := sqlutils.PGUrl(t, c.AdvSQLAddr(), t.Name(),
 		url.User(username.RootUser))
 	defer cleanup()
 
@@ -885,7 +885,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			err = conn.Exec(ctx, privsUserQuery)
 			require.NoError(t, err)
 
-			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.ServingSQLAddr(), t.Name(),
+			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.AdvSQLAddr(), t.Name(),
 				url.UserPassword(tc.username, "a"), false)
 			defer cleanup2()
 

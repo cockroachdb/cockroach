@@ -75,9 +75,9 @@ func TestPGWireDrainClient(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
-	tt := srv.TenantOrServer()
+	tt := srv.ApplicationLayer()
 
-	host, port, err := net.SplitHostPort(srv.ServingSQLAddr())
+	host, port, err := net.SplitHostPort(srv.AdvSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	host, port, err := net.SplitHostPort(s.ServingSQLAddr())
+	host, port, err := net.SplitHostPort(s.AdvSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	}
 	defer db.Close()
 
-	pgServer := s.TenantOrServer().PGServer().(*pgwire.Server)
+	pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
 
 	// Make sure that the server reports correctly the case in which a
 	// connection did not respond to cancellation in time.
@@ -253,7 +253,7 @@ func TestPGUnwrapError(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -281,7 +281,7 @@ func TestPGPrepareFail(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -333,7 +333,7 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -848,9 +848,9 @@ func TestPGPreparedQuery(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.TenantOrServer().ClusterSettings().SV, true)
+	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1341,7 +1341,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1393,7 +1393,7 @@ func TestPGPrepareInvalidate(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1460,7 +1460,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+		t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1504,7 +1504,7 @@ func TestPGCommandTags(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1602,8 +1602,8 @@ func checkSQLNetworkMetrics(
 		return -1, -1, err
 	}
 
-	bytesIn := srv.TenantOrServer().MustGetSQLNetworkCounter(pgwire.MetaBytesIn.Name)
-	bytesOut := srv.TenantOrServer().MustGetSQLNetworkCounter(pgwire.MetaBytesOut.Name)
+	bytesIn := srv.ApplicationLayer().MustGetSQLNetworkCounter(pgwire.MetaBytesIn.Name)
+	bytesOut := srv.ApplicationLayer().MustGetSQLNetworkCounter(pgwire.MetaBytesOut.Name)
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, errors.Errorf("bytesin %d < expected min %d", a, min)
 	}
@@ -1629,7 +1629,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, srv.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+		t, srv.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	const minbytes = 10
@@ -1661,7 +1661,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	// Verify connection counter.
 	expectConns := func(n int) {
 		testutils.SucceedsSoon(t, func() error {
-			if conns := srv.TenantOrServer().MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
+			if conns := srv.ApplicationLayer().MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
 				return errors.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil
@@ -1747,7 +1747,7 @@ func TestPGWireResultChange(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1815,7 +1815,7 @@ func TestSessionParameters(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
+	host, ports, _ := net.SplitHostPort(s.AdvSQLAddr())
 	port, _ := strconv.Atoi(ports)
 
 	connCfg, err := pgx.ParseConfig(
@@ -1933,7 +1933,7 @@ func TestCancelRequest(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		var d net.Dialer
-		conn, err := d.DialContext(ctx, "tcp", s.ServingSQLAddr())
+		conn, err := d.DialContext(ctx, "tcp", s.AdvSQLAddr())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1971,7 +1971,7 @@ func TestUnsupportedGSSEnc(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		var d net.Dialer
-		conn, err := d.DialContext(ctx, "tcp", s.ServingSQLAddr())
+		conn, err := d.DialContext(ctx, "tcp", s.AdvSQLAddr())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2014,7 +2014,7 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())

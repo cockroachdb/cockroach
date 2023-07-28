@@ -140,7 +140,7 @@ func checkNodelocalContent(
 func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
-	s serverutils.TestTenantInterface,
+	s serverutils.ApplicationLayerInterface,
 	user username.SQLUsername,
 	filename string,
 	expectedContent []byte,
@@ -169,7 +169,7 @@ func TestFileUpload(t *testing.T) {
 		ExternalIODir: localExternalDir,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -198,7 +198,7 @@ func TestUploadEmptyFile(t *testing.T) {
 		ExternalIODir: localExternalDir,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -284,7 +284,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
+		t, s.ApplicationLayer().AdvSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
 	)
 	defer cleanupGoDB()
 	pgURL.RawQuery = "sslmode=disable"
@@ -316,7 +316,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 		Insecure:      true,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 
 	const smithUser = "jsmith"
 	smithUserName := username.MakeSQLUsernameFromPreNormalizedString(smithUser)
@@ -327,7 +327,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
+		t, s.ApplicationLayer().AdvSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
 	)
 	defer cleanupGoDB()
 	pgURL.RawQuery = "sslmode=disable"

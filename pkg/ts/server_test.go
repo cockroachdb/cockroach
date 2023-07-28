@@ -316,7 +316,7 @@ func TestServerQueryTenant(t *testing.T) {
 	tsrv := s.(*server.TestServer)
 	systemDB := serverutils.OpenDBConn(
 		t,
-		tsrv.ServingSQLAddr(),
+		tsrv.AdvSQLAddr(),
 		"",    /* useDatabase */
 		false, /* insecure */
 		tsrv.Stopper(),
@@ -736,7 +736,7 @@ func TestServerDump(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		require.NoError(t, s.DB().Run(ctx, &b))
 
-		conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+		conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 			rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)

@@ -40,7 +40,7 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 
 	openUser := func(username, dbName string) (_ *gosql.DB, cleanup func()) {
 		pgURL, testuserCleanupFunc := sqlutils.PGUrlWithOptionalClientCerts(
-			t, s.ServingSQLAddr(), username,
+			t, s.ApplicationLayer().AdvSQLAddr(), username,
 			url.UserPassword(username, username),
 			false, /* withClientCerts */
 		)

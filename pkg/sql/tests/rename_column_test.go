@@ -79,7 +79,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 				RunBeforeResume: func(jobID jobspb.JobID) error {
 					// Load the job to figure out if it's the rename or the
 					// backfill.
-					scJob, err := s.TenantOrServer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+					scJob, err := s.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 					if err != nil {
 						return err
 					}

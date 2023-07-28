@@ -96,7 +96,7 @@ func TestReplicationConnect(t *testing.T) {
 			if tc.useRoot {
 				u = url.User(username.RootUser)
 			}
-			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "pgrepl_conn_test", u)
+			pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "pgrepl_conn_test", u)
 			defer cleanup()
 
 			cfg, err := pgx.ParseConfig(pgURL.String())

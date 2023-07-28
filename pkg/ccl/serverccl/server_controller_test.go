@@ -103,7 +103,7 @@ ALTER TENANT application START SERVICE SHARED`)
 				continue
 			}
 
-			sqlAddr := tc.Server(i).ServingSQLAddr()
+			sqlAddr := tc.Server(i).AdvSQLAddr()
 			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:application", false, tc.Stopper())
 			if err != nil {
 				return err
@@ -194,7 +194,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	t.Logf("connecting to the test tenant")
 
 	// Get a SQL connection to the test tenant.
-	sqlAddr := s.ServingSQLAddr()
+	sqlAddr := s.AdvSQLAddr()
 	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
@@ -440,7 +440,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	// Pick a random node, try to run some SQL inside that tenant.
 	rng, _ := randutil.NewTestRand()
 	serverIdx := int(rng.Int31n(int32(numNodes)))
-	sqlAddr := tc.Server(serverIdx).ServingSQLAddr()
+	sqlAddr := tc.Server(serverIdx).AdvSQLAddr()
 	t.Logf("attempting to use tenant server on node %d (%s)", serverIdx, sqlAddr)
 	testutils.SucceedsSoon(t, func() error {
 		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
@@ -481,7 +481,7 @@ func TestServerStartStop(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	sqlAddr := s.ServingSQLAddr()
+	sqlAddr := s.AdvSQLAddr()
 
 	// Create our own test tenant with a known name.
 	_, err := db.Exec("CREATE TENANT hello")
