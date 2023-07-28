@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -72,7 +73,7 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 		LowerBound: []byte("a"),
 		UpperBound: []byte("z"),
 	}
-	iter := newPebbleIterator(p.db, iterOpts, StandardDurability, noopStatsReporter)
+	iter := newPebbleIterator(p.db, iterOpts, StandardDurability, p)
 
 	// Seeking into the table catches the corruption.
 	ok, err := iter.SeekEngineKeyGE(ek)
@@ -81,6 +82,10 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 
 	// Closing the iter results in a panic due to the corruption.
 	require.Panics(t, func() { iter.Close() })
+
+	// Should have laid down marker file to prevent startup.
+	_, err = p.Stat(base.PreventedStartupFile(p.GetAuxiliaryDir()))
+	require.NoError(t, err)
 }
 
 func randStr(fill []byte, rng *rand.Rand) {
