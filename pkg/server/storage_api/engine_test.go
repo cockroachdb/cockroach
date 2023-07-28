@@ -34,14 +34,11 @@ func TestStatusEngineStatsJson(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	s, err := serverutils.StartServerRaw(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer s.Stopper().Stop(context.Background())
 
 	t.Logf("using admin URL %s", s.AdminURL())
