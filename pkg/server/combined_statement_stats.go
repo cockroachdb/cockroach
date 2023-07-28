@@ -36,6 +36,35 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	// Table sources.
+	crdbInternalStmtStatsCombined  = "crdb_internal.statement_statistics"
+	crdbInternalStmtStatsPersisted = "crdb_internal.statement_statistics_persisted"
+	crdbInternalStmtStatsCached    = "crdb_internal.statement_activity"
+	crdbInternalTxnStatsCombined   = "crdb_internal.transaction_statistics"
+	crdbInternalTxnStatsPersisted  = "crdb_internal.transaction_statistics_persisted"
+	crdbInternalTxnStatsCached     = "crdb_internal.transaction_activity"
+
+	// Sorts
+	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
+	sortCPUTimeDesc        = `(statistics -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
+	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
+	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
+	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
+	sortLatencyInfoP50Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC`
+	sortLatencyInfoP90Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC`
+	sortLatencyInfoP99Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
+	sortLatencyInfoMinDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC`
+	sortLatencyInfoMaxDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC`
+	sortRowsProcessedDesc  = `((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
+												 (statistics -> 'statistics' -> 'rowsWritten' ->> 'mean')::FLOAT) DESC`
+	sortMaxMemoryDesc = `(statistics -> 'execution_statistics' -> 'maxMemUsage' ->> 'mean')::FLOAT DESC`
+	sortNetworkDesc   = `(statistics -> 'execution_statistics' -> 'networkBytes' ->> 'mean')::FLOAT DESC`
+	sortRetriesDesc   = `(statistics -> 'statistics' ->> 'maxRetries')::INT DESC`
+	sortLastExecDesc  = `(statistics -> 'statistics' ->> 'lastExecAt') DESC`
+)
+
 func getTimeFromSeconds(seconds int64) *time.Time {
 	if seconds != 0 {
 		t := timeutil.Unix(seconds, 0)
@@ -398,7 +427,7 @@ FROM %s %s`, table, whereClause)
 	// since statements are also returned for transactions only mode.
 	stmtsRuntime = 0
 	if activityTableHasAllData {
-		stmtSourceTable = "crdb_internal.statement_activity"
+		stmtSourceTable = crdbInternalStmtStatsCached
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createActivityTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -410,7 +439,7 @@ FROM %s %s`, table, whereClause)
 	}
 	// If there are no results from the activity table, retrieve the data from the persisted table.
 	if stmtsRuntime == 0 {
-		stmtSourceTable = "crdb_internal.statement_statistics_persisted" + tableSuffix
+		stmtSourceTable = crdbInternalStmtStatsPersisted + tableSuffix
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -423,7 +452,7 @@ FROM %s %s`, table, whereClause)
 	// If there are no results from the persisted table, retrieve the data from the combined view
 	// with data in-memory.
 	if stmtsRuntime == 0 {
-		stmtSourceTable = "crdb_internal.statement_statistics"
+		stmtSourceTable = crdbInternalStmtStatsCombined
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -437,7 +466,7 @@ FROM %s %s`, table, whereClause)
 	txnsRuntime = 0
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
 		if activityTableHasAllData {
-			txnSourceTable = "crdb_internal.transaction_activity"
+			txnSourceTable = crdbInternalTxnStatsCached
 			txnsRuntime, err = getRuntime(txnSourceTable, createActivityTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -445,7 +474,7 @@ FROM %s %s`, table, whereClause)
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if txnsRuntime == 0 {
-			txnSourceTable = "crdb_internal.transaction_statistics_persisted" + tableSuffix
+			txnSourceTable = crdbInternalTxnStatsPersisted + tableSuffix
 			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -454,7 +483,7 @@ FROM %s %s`, table, whereClause)
 		// If there are no results from the persisted table, retrieve the data from the combined view
 		// with data in-memory.
 		if txnsRuntime == 0 {
-			txnSourceTable = "crdb_internal.transaction_statistics"
+			txnSourceTable = crdbInternalTxnStatsCombined
 			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -483,26 +512,6 @@ func isSortOptionOnActivityTable(sort serverpb.StatsSortOptions) bool {
 	}
 	return false
 }
-
-const (
-	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
-	sortCPUTimeDesc        = `(statistics -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
-	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
-	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
-	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
-                         (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
-	sortLatencyInfoP50Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC`
-	sortLatencyInfoP90Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC`
-	sortLatencyInfoP99Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
-	sortLatencyInfoMinDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC`
-	sortLatencyInfoMaxDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC`
-	sortRowsProcessedDesc  = `((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
-												 (statistics -> 'statistics' -> 'rowsWritten' ->> 'mean')::FLOAT) DESC`
-	sortMaxMemoryDesc = `(statistics -> 'execution_statistics' -> 'maxMemUsage' ->> 'mean')::FLOAT DESC`
-	sortNetworkDesc   = `(statistics -> 'execution_statistics' -> 'networkBytes' ->> 'mean')::FLOAT DESC`
-	sortRetriesDesc   = `(statistics -> 'statistics' ->> 'maxRetries')::INT DESC`
-	sortLastExecDesc  = `(statistics -> 'statistics' ->> 'lastExecAt') DESC`
-)
 
 func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 	switch sort {
@@ -728,7 +737,7 @@ FROM (SELECT fingerprint_id,
           fingerprint_id,
           app_name) %s
 %s`,
-			"crdb_internal.statement_activity",
+			crdbInternalStmtStatsCached,
 			"combined-stmts-activity-by-interval",
 			whereClause,
 			args,
@@ -748,7 +757,7 @@ FROM (SELECT fingerprint_id,
 			ctx,
 			ie,
 			queryFormat,
-			"crdb_internal.statement_statistics_persisted"+tableSuffix,
+			crdbInternalStmtStatsPersisted+tableSuffix,
 			"combined-stmts-persisted-by-interval",
 			whereClause,
 			args,
@@ -767,7 +776,7 @@ FROM (SELECT fingerprint_id,
 			ctx,
 			ie,
 			queryFormat,
-			"crdb_internal.statement_statistics",
+			crdbInternalStmtStatsCombined,
 			"combined-stmts-with-memory-by-interval",
 			whereClause,
 			args,
@@ -914,7 +923,7 @@ FROM (SELECT app_name,
 			ctx,
 			ie,
 			queryFormat,
-			"crdb_internal.transaction_activity",
+			crdbInternalTxnStatsCached,
 			"combined-txns-activity-by-interval",
 			whereClause,
 			args,
@@ -938,7 +947,7 @@ FROM (SELECT app_name,
 			ctx,
 			ie,
 			queryFormat,
-			"crdb_internal.transaction_statistics_persisted"+tableSuffix,
+			crdbInternalTxnStatsPersisted+tableSuffix,
 			"combined-txns-persisted-by-interval",
 			whereClause,
 			args,
@@ -957,7 +966,7 @@ FROM (SELECT app_name,
 			ctx,
 			ie,
 			queryFormat,
-			"crdb_internal.transaction_statistics",
+			crdbInternalTxnStatsCombined,
 			"combined-txns-with-memory-by-interval",
 			whereClause,
 			args,
@@ -1078,7 +1087,7 @@ GROUP BY
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			"crdb_internal.statement_statistics_persisted"+tableSuffix,
+			crdbInternalStmtStatsPersisted+tableSuffix,
 			whereClause)
 		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -1095,7 +1104,7 @@ GROUP BY
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
-		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause)
+		query = fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause)
 
 		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -1389,7 +1398,7 @@ LIMIT 1`, whereClause), args...)
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				queryFormat,
-				"crdb_internal.statement_statistics_persisted"+tableSuffix,
+				crdbInternalStmtStatsPersisted+tableSuffix,
 				whereClause), args...)
 		if err != nil {
 			return statement, srverrors.ServerError(ctx, err)
@@ -1401,7 +1410,7 @@ LIMIT 1`, whereClause), args...)
 	if row.Len() == 0 {
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-details-total-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause), args...)
+			fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause), args...)
 		if err != nil {
 			return statement, srverrors.ServerError(ctx, err)
 		}
@@ -1503,7 +1512,7 @@ LIMIT $%d`, whereClause, len(args)),
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			"crdb_internal.statement_statistics_persisted"+tableSuffix,
+			crdbInternalStmtStatsPersisted+tableSuffix,
 			whereClause,
 			len(args))
 
@@ -1519,7 +1528,7 @@ LIMIT $%d`, whereClause, len(args)),
 	// with data in-memory.
 	if !it.HasResults() {
 		err = closeIterator(it, err)
-		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause, len(args))
+		query = fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause, len(args))
 		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
@@ -1715,7 +1724,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 	// with data in-memory.
 	if !it.HasResults() {
 		err = closeIterator(it, err)
-		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause, len(args))
+		query = fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause, len(args))
 		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-details-by-plan-hash-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if iterErr != nil {
