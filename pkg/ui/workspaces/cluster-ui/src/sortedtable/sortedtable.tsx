@@ -190,7 +190,6 @@ export class SortedTable<T> extends React.Component<
   SortedTableState
 > {
   static defaultProps: Partial<SortedTableProps<any>> = {
-    rowClass: (_obj: any) => "",
     columns: [],
     sortSetting: {
       ascending: false,
@@ -221,7 +220,7 @@ export class SortedTable<T> extends React.Component<
       data: T[],
       sortSetting: SortSetting,
       columns: ColumnDescriptor<T>[],
-      pagination?: ISortedTablePagination,
+      _pagination?: ISortedTablePagination,
     ): T[] => {
       if (!sortSetting) {
         return this.paginatedData();
