@@ -36,6 +36,17 @@ func GetRandomizedCollectedStatementStatisticsForTest(
 	return result
 }
 
+// GetRandomizedCollectedTransactionStatisticsForTest returns a
+// appstatspb.CollectedStatementStatistics with its fields randomly filled.
+func GetRandomizedCollectedTransactionStatisticsForTest(
+	t *testing.T,
+) (result appstatspb.CollectedTransactionStatistics) {
+	data := genRandomData()
+	fillObject(t, reflect.ValueOf(&result), &data)
+
+	return result
+}
+
 type randomData struct {
 	Bool        bool
 	String      string
