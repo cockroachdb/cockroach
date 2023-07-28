@@ -123,8 +123,9 @@ func MessageToJSON(msg protoutil.Message, flags FmtFlags) (jsonb.JSON, error) {
 // Returns serialized byte representation of the protocol message.
 func JSONBMarshalToMessage(input jsonb.JSON, target protoutil.Message) ([]byte, error) {
 	json := &jsonpb.Unmarshaler{}
-	if err := json.Unmarshal(strings.NewReader(input.String()), target); err != nil {
-		return nil, errors.Wrapf(err, "unmarshaling json to %s", proto.MessageName(target))
+	jsonString := input.String()
+	if err := json.Unmarshal(strings.NewReader(jsonString), target); err != nil {
+		return nil, errors.Wrapf(err, "unmarshaling to %s json: %s", proto.MessageName(target), jsonString)
 	}
 	data, err := protoutil.Marshal(target)
 	if err != nil {
