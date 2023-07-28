@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
 
@@ -36,14 +35,4 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 		},
 	}
 	return params, &cmdFilters
-}
-
-// CreateTestTenantParams creates a set of params suitable for SQL Tenant Tests.
-func CreateTestTenantParams(tenantID roachpb.TenantID) base.TestTenantArgs {
-	return base.TestTenantArgs{
-		TenantID: tenantID,
-		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
-		},
-	}
 }
