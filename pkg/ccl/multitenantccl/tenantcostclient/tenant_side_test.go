@@ -870,7 +870,7 @@ func TestConsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestControlsTenantsExplicitly})
+	hostServer := serverutils.StartServerOnly(t, base.TestServerArgs{DefaultTestTenant: base.TestControlsTenantsExplicitly})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	const targetPeriod = time.Millisecond
@@ -1020,7 +1020,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
 
-	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	hostServer := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Settings:          st,
 	})

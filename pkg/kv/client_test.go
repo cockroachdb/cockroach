@@ -124,7 +124,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 			},
 		},
 	}
-	s, _, _ := serverutils.StartServer(t, args)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
 
 	testCases := []struct {
@@ -240,7 +240,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 
@@ -298,7 +298,7 @@ func TestClientRunTransaction(t *testing.T) {
 func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 
@@ -328,7 +328,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 
@@ -351,7 +351,7 @@ func TestClientGetAndPut(t *testing.T) {
 func TestClientPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 
@@ -375,7 +375,7 @@ func TestClientCPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	db := createTestClient(t, s)
 	key := testUser + "/key"
@@ -444,7 +444,7 @@ func TestClientCPutInline(t *testing.T) {
 func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 
@@ -474,7 +474,7 @@ func TestClientEmptyValues(t *testing.T) {
 func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 	ctx := context.Background()
@@ -731,7 +731,7 @@ func concurrentIncrements(db *kv.DB, t *testing.T) {
 func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 
@@ -818,7 +818,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
 

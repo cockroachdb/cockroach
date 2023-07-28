@@ -1273,7 +1273,7 @@ func TestDirectoryConnect(t *testing.T) {
 	defer te.Close()
 
 	// Start KV server.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -2315,7 +2315,7 @@ func TestAcceptedConnCountMetric(t *testing.T) {
 	ctx := context.Background()
 
 	// Start KV server.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -2406,7 +2406,7 @@ func TestCurConnCountMetric(t *testing.T) {
 	ctx := context.Background()
 
 	// Start KV server.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)

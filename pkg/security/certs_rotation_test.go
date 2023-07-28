@@ -68,7 +68,7 @@ func TestRotateCerts(t *testing.T) {
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	// Client test function.

@@ -31,7 +31,7 @@ func TestEagerReplication(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// Need to trick the server to think it's part of a cluster, otherwise it
 		// will set the default zone config to require 1 replica and the split
 		// bellow will not trigger a replication attempt.
