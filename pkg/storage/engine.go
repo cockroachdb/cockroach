@@ -397,8 +397,8 @@ type EngineIterator interface {
 // CloneContext is an opaque type encapsulating sufficient context to construct
 // a clone of an existing iterator.
 type CloneContext struct {
-	rawIter       pebbleiter.Iterator
-	statsReporter iterStatsReporter
+	rawIter pebbleiter.Iterator
+	engine  *Pebble
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
