@@ -102,12 +102,12 @@ type TestingKnobs struct {
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
 	OnDecommissionedCallback func(id roachpb.NodeID)
-	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
-	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
+	// StickyVFSRegistry manages the lifecycle of sticky in memory engines,
+	// which can be enabled via base.StoreSpec.StickyVFSID.
 	//
 	// When supplied to a TestCluster, StickyEngineIDs will be associated auto-
 	// matically to the StoreSpecs used.
-	StickyEngineRegistry StickyInMemEnginesRegistry
+	StickyVFSRegistry StickyVFSRegistry
 	// WallClock is used to inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	WallClock hlc.WallClock

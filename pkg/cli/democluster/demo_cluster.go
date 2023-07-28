@@ -87,7 +87,7 @@ type transientCluster struct {
 	adminPassword string
 	adminUser     username.SQLUsername
 
-	stickyEngineRegistry server.StickyInMemEnginesRegistry
+	stickyVFSRegistry server.StickyVFSRegistry
 
 	drainAndShutdown func(ctx context.Context, adminClient serverpb.AdminClient) error
 
@@ -210,7 +210,7 @@ func NewDemoCluster(
 		}
 	}
 
-	c.stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
+	c.stickyVFSRegistry = server.NewStickyVFSRegistry()
 	return c, nil
 }
 
@@ -314,7 +314,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		// individual servers' Stop() methods have been registered
 		// via createAndAddNode() above.
 		c.stopper.AddCloser(stop.CloserFn(func() {
-			c.stickyEngineRegistry.CloseAllStickyInMemEngines()
+			c.stickyVFSRegistry.CloseAllEngines()
 		}))
 
 		// Start the remaining nodes asynchronously.
@@ -600,7 +600,7 @@ func (c *transientCluster) createAndAddNode(
 	}
 	args := c.demoCtx.testServerArgsForTransientCluster(
 		socketDetails, idx, joinAddr, c.demoDir,
-		c.stickyEngineRegistry,
+		c.stickyVFSRegistry,
 	)
 	if idx == 0 {
 		// The first node also auto-inits the cluster.
@@ -878,11 +878,11 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	serverIdx int,
 	joinAddr string,
 	demoDir string,
-	stickyEngineRegistry server.StickyInMemEnginesRegistry,
+	stickyVFSRegistry server.StickyVFSRegistry,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-server%d", serverIdx)
+	storeSpec.StickyVFSID = fmt.Sprintf("demo-server%d", serverIdx)
 
 	args := base.TestServerArgs{
 		SocketFile:              sock.filename(),
@@ -902,7 +902,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				StickyEngineRegistry: stickyEngineRegistry,
+				StickyVFSRegistry: stickyVFSRegistry,
 			},
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				// Allow the scheduler daemon to start earlier in demo.
@@ -1160,7 +1160,7 @@ func (c *transientCluster) startServerInternal(
 		socketDetails,
 		serverIdx,
 		c.firstServer.AdvRPCAddr(), c.demoDir,
-		c.stickyEngineRegistry)
+		c.stickyVFSRegistry)
 	srv, err := server.TestServerFactory.New(args)
 	if err != nil {
 		return 0, err
