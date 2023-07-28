@@ -240,6 +240,8 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	}}
 
 	args := base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107812),
+
 		Knobs:         knobs,
 		ExternalIODir: dir,
 		Settings:      cs,
@@ -249,8 +251,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	// (which breaks the global-seqno rewrite used when the added sstable
 	// overlaps with existing data in the RocksDB instance). #16345.
 	args.StoreSpecs = []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}}
-	s, _, kvDB := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
 	init(s.ClusterSettings())
 
 	evalCtx := eval.Context{Settings: s.ClusterSettings(), Tracer: s.AmbientCtx().Tracer}
@@ -266,12 +271,12 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 					opts...)
 			},
 			Settings:          s.ClusterSettings(),
-			Codec:             keys.SystemSQLCodec,
+			Codec:             s.Codec(),
 			BackupMonitor:     mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, 0, s.ClusterSettings()),
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx: &eval.Context{
-			Codec:    keys.SystemSQLCodec,
+			Codec:    s.Codec(),
 			Settings: s.ClusterSettings(),
 		},
 	}
