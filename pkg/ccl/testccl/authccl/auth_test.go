@@ -288,13 +288,13 @@ func jwtRunTest(t *testing.T, insecure bool) {
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.ServingSQLAddr(), t.Name(), url.User(user),
+						t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(user),
 						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
 					if td.Cmd == "connect" {
-						host, port, err = net.SplitHostPort(s.ServingSQLAddr())
+						host, port, err = net.SplitHostPort(s.ApplicationLayer().AdvSQLAddr())
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -418,9 +418,10 @@ func TestClientAddrOverride(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	ts := s.(*server.TestServer).ApplicationLayer()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
+		t, ts.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
 	)
 	defer cleanupFunc()
 
@@ -432,7 +433,6 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	ts := s.(*server.TestServer).TenantOrServer()
 	pgServer := ts.PGServer().(*pgwire.Server)
 	pgPreServer := ts.PGPreServer().(*pgwire.PreServeConnHandler)
 	pgServer.TestingEnableAuthLogging()

@@ -80,7 +80,7 @@ type transientCluster struct {
 	stopper       *stop.Stopper
 	firstServer   *server.TestServer
 	servers       []serverEntry
-	tenantServers []serverutils.TestTenantInterface
+	tenantServers []serverutils.ApplicationLayerInterface
 	defaultDB     string
 
 	adminPassword string
@@ -401,7 +401,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		if c.demoCtx.Multitenant {
 			c.infoLog(ctx, "starting tenant nodes")
 
-			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
+			c.tenantServers = make([]serverutils.ApplicationLayerInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
 				createTenant := i == 0
 
@@ -409,7 +409,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
 
-				var ts serverutils.TestTenantInterface
+				var ts serverutils.ApplicationLayerInterface
 				if c.demoCtx.DisableServerController {
 					tenantStopper := stop.NewStopper()
 					args := base.TestTenantArgs{
@@ -592,7 +592,7 @@ func (c *transientCluster) createAndAddNode(
 		// The caller is responsible for ensuring that the method
 		// is not called before the first server has finished
 		// computing its RPC listen address.
-		joinAddr = c.firstServer.ServingRPCAddr()
+		joinAddr = c.firstServer.AdvRPCAddr()
 	}
 	socketDetails, err := c.sockForServer(idx, forSystemTenant)
 	if err != nil {
@@ -1141,7 +1141,7 @@ func (c *transientCluster) startServerInternal(
 	args := c.demoCtx.testServerArgsForTransientCluster(
 		socketDetails,
 		serverIdx,
-		c.firstServer.ServingRPCAddr(), c.demoDir,
+		c.firstServer.AdvRPCAddr(), c.demoDir,
 		c.stickyEngineRegistry)
 	s, err := server.TestServerFactory.New(args)
 	if err != nil {
@@ -1485,7 +1485,7 @@ func (c *transientCluster) getNetworkURLForServer(
 			return nil, err
 		}
 	}
-	sqlAddr := c.servers[serverIdx].ServingSQLAddr()
+	sqlAddr := c.servers[serverIdx].AdvSQLAddr()
 	database := c.defaultDB
 	if target == forSecondaryTenant {
 		sqlAddr = c.tenantServers[serverIdx].SQLAddr()
@@ -1941,7 +1941,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 				if err != nil {
 					fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for system tenant server"))
 				}
-				c.printURLs(w, ew, sqlURL, uiURL, socketDetails, s.ServingRPCAddr(), verbose, includeHTTP)
+				c.printURLs(w, ew, sqlURL, uiURL, socketDetails, s.AdvRPCAddr(), verbose, includeHTTP)
 			}
 			fmt.Fprintln(w)
 		}

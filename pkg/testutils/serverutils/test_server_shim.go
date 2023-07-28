@@ -27,25 +27,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -106,211 +100,6 @@ func ShouldStartDefaultTestTenant(t testing.TB, serverArgs base.TestServerArgs) 
 	return enabled
 }
 
-// TestServerInterface defines test server functionality that tests need; it is
-// implemented by server.TestServer.
-type TestServerInterface interface {
-	Start(context.Context) error
-
-	// TestTenantInterface embeds SQL-only APIs that tests need to interact with
-	// the host tenant.
-	//
-	// TODO(irfansharif): Audit the remaining symbols in TestServerInterface to
-	// see if they're better suited to TestTenantInterface.
-	TestTenantInterface
-
-	// Node returns the server.Node as an interface{}.
-	Node() interface{}
-
-	// NodeID returns the ID of this node within its cluster.
-	NodeID() roachpb.NodeID
-
-	// StorageClusterID returns the storage cluster ID as understood by
-	// this node in the cluster.
-	StorageClusterID() uuid.UUID
-
-	// ServingRPCAddr returns the server's advertised address.
-	ServingRPCAddr() string
-
-	// ServingSQLAddr returns the server's advertised SQL address.
-	ServingSQLAddr() string
-
-	// RPCAddr returns the server's RPC address.
-	// Note: use ServingRPCAddr() instead unless specific reason not to.
-	RPCAddr() string
-
-	// LeaseManager returns the *sql.LeaseManager as an interface{}.
-	LeaseManager() interface{}
-
-	// GossipI returns the gossip used by the TestServer.
-	// The real return type is *gossip.Gossip.
-	GossipI() interface{}
-
-	// DistSenderI returns the DistSender used by the TestServer.
-	// The real return type is *kv.DistSender.
-	DistSenderI() interface{}
-
-	// MigrationServer returns the internal *migrationServer as in interface{}
-	MigrationServer() interface{}
-
-	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
-	SQLLivenessProvider() interface{}
-
-	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
-	// interface{}.
-	NodeLiveness() interface{}
-
-	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
-	HeartbeatNodeLiveness() error
-
-	// NodeDialer exposes the NodeDialer instance used by the TestServer as an
-	// interface{}.
-	NodeDialer() interface{}
-
-	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
-	// server's executor. The argument must be a physicalplan.SpanResolver
-	// instance.
-	//
-	// This method exists because we cannot pass the fake span resolver with the
-	// server or cluster params: the fake span resolver needs the node IDs and
-	// addresses of the servers in a cluster, which are not available before we
-	// start the servers.
-	//
-	// It is the caller's responsibility to make sure no queries are being run
-	// with DistSQL at the same time.
-	SetDistSQLSpanResolver(spanResolver interface{})
-
-	// WriteSummaries records summaries of time-series data, which is required for
-	// any tests that query server stats.
-	WriteSummaries() error
-
-	// GetFirstStoreID is a utility function returning the StoreID of the first
-	// store on this node.
-	GetFirstStoreID() roachpb.StoreID
-
-	// GetStores returns the collection of stores from this TestServer's node.
-	// The return value is of type *kvserver.Stores.
-	GetStores() interface{}
-
-	// Decommission idempotently sets the decommissioning flag for specified nodes.
-	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
-
-	// DecommissioningNodeMap returns a map of nodeIDs that are known to the
-	// server to be decommissioning.
-	DecommissioningNodeMap() map[roachpb.NodeID]interface{}
-
-	// SplitRange splits the range containing splitKey.
-	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
-
-	// MergeRanges merges the range containing leftKey with the following adjacent
-	// range.
-	MergeRanges(leftKey roachpb.Key) (merged roachpb.RangeDescriptor, err error)
-
-	// ExpectedInitialRangeCount returns the expected number of ranges that should
-	// be on the server after initial (asynchronous) splits have been completed,
-	// assuming no additional information is added outside of the normal bootstrap
-	// process.
-	ExpectedInitialRangeCount() (int, error)
-
-	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
-	//
-	// An error will be returned if the same table name exists in multiple schemas
-	// inside the specified database.
-	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
-
-	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
-	// interface{}. The UpdateChecker periodically phones home to check for new
-	// updates that are available.
-	UpdateChecker() interface{}
-
-	// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
-	// running alongside a KV server.
-	//
-	// args.TenantName must be specified. If a tenant with that name already
-	// exists, its ID is checked against args.TenantID (if set), and, if it
-	// matches, new tenant metadata is not created in the system.tenants table.
-	//
-	// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
-	// servers.
-	StartSharedProcessTenant(
-		ctx context.Context, args base.TestSharedProcessTenantArgs,
-	) (TestTenantInterface, *gosql.DB, error)
-
-	// StartTenant starts a tenant server connecting to this TestServer. The
-	// tenant server simulates an out-of-process server. See also
-	// StartSharedProcessTenant() for a tenant simulating a shared-memory server.
-	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
-
-	// DisableStartTenant prevents manual starting of tenants. If an attempt at
-	// starting a tenant is made, the server will return the specified error.
-	DisableStartTenant(reason error)
-
-	// WaitForTenantReadiness waits until the tenant record is known
-	// to the in-RAM caches. Trying to start a tenant server before
-	// this is called can run into a "missing record" error even
-	// if the tenant record exists in KV.
-	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
-
-	// ScratchRange splits off a range suitable to be used as KV scratch space.
-	// (it doesn't overlap system spans or SQL tables).
-	//
-	// Calling this multiple times is undefined (but see
-	// TestCluster.ScratchRange() which is idempotent).
-	ScratchRange() (roachpb.Key, error)
-
-	// Engines returns the TestServer's engines.
-	Engines() []storage.Engine
-
-	// MetricsRecorder periodically records node-level and store-level metrics.
-	MetricsRecorder() *status.MetricsRecorder
-
-	// CollectionFactory returns a *descs.CollectionFactory.
-	CollectionFactory() interface{}
-
-	// SystemTableIDResolver returns a catalog.SystemTableIDResolver.
-	SystemTableIDResolver() interface{}
-
-	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
-	// the server.
-	SpanConfigKVSubscriber() interface{}
-
-	// KVFlowController returns the embedded kvflowcontrol.Controller for the
-	// server.
-	KVFlowController() interface{}
-
-	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
-	KVFlowHandles() interface{}
-
-	// TestTenants returns the test tenants associated with the server
-	TestTenants() []TestTenantInterface
-
-	// StartedDefaultTestTenant returns true if the server has started the default
-	// test tenant.
-	StartedDefaultTestTenant() bool
-
-	// TenantOrServer returns the default test tenant, if it was started or this
-	// server if not.
-	TenantOrServer() TestTenantInterface
-
-	// BinaryVersionOverride returns the value of an override if set using
-	// TestingKnobs.
-	BinaryVersionOverride() roachpb.Version
-
-	// KvProber returns a *kvprober.Prober, which is useful when asserting the
-	//correctness of the prober from integration tests.
-	KvProber() *kvprober.Prober
-
-	// TenantCapabilitiesReader retrieves a reference to the
-	// capabilities reader.
-	TenantCapabilitiesReader() tenantcapabilities.Reader
-}
-
-// TestServerFactory encompasses the actual implementation of the shim
-// service.
-type TestServerFactory interface {
-	// New instantiates a test server.
-	New(params base.TestServerArgs) (interface{}, error)
-}
-
 var srvFactoryImpl TestServerFactory
 
 // InitTestServerFactory should be called once to provide the implementation
@@ -357,7 +146,7 @@ func StartServer(
 	}
 
 	goDB := OpenDBConn(
-		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+		t, s.ApplicationLayer().AdvSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 
 	// Now that we have started the server on the bootstrap version, let us run
 	// the migrations up to the overridden BinaryVersion.
@@ -448,7 +237,7 @@ func StartServerRaw(t testing.TB, args base.TestServerArgs) (TestServerInterface
 // without log.Scope() will cause a a "clusterID already set" panic).
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
-) (TestTenantInterface, *gosql.DB) {
+) (ApplicationLayerInterface, *gosql.DB) {
 
 	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
@@ -467,7 +256,7 @@ func StartTenant(
 
 func StartSharedProcessTenant(
 	t testing.TB, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
-) (TestTenantInterface, *gosql.DB) {
+) (ApplicationLayerInterface, *gosql.DB) {
 	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -498,14 +287,14 @@ func TestTenantID3() roachpb.TenantID {
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
-func GetJSONProto(ts TestTenantInterface, path string, response protoutil.Message) error {
+func GetJSONProto(ts ApplicationLayerInterface, path string, response protoutil.Message) error {
 	return GetJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 // GetJSONProtoWithAdminOption is like GetJSONProto but the caller can customize
 // whether the request is performed with admin privilege
 func GetJSONProtoWithAdminOption(
-	ts TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
+	ts ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
 	if err != nil {
@@ -519,7 +308,9 @@ func GetJSONProtoWithAdminOption(
 
 // PostJSONProto uses the supplied client to POST the URL specified by the parameters
 // and unmarshals the result into response.
-func PostJSONProto(ts TestTenantInterface, path string, request, response protoutil.Message) error {
+func PostJSONProto(
+	ts ApplicationLayerInterface, path string, request, response protoutil.Message,
+) error {
 	return PostJSONProtoWithAdminOption(ts, path, request, response, true)
 }
 
@@ -527,7 +318,7 @@ func PostJSONProto(ts TestTenantInterface, path string, request, response protou
 // can customize whether the request is performed with admin
 // privilege.
 func PostJSONProtoWithAdminOption(
-	ts TestTenantInterface, path string, request, response protoutil.Message, isAdmin bool,
+	ts ApplicationLayerInterface, path string, request, response protoutil.Message, isAdmin bool,
 ) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
 	if err != nil {

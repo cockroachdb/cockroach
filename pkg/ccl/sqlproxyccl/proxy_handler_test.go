@@ -139,7 +139,7 @@ func TestProxyProtocol(t *testing.T) {
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.(*server.TestServer).ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -152,7 +152,7 @@ func TestProxyProtocol(t *testing.T) {
 	var validateFn func(h *proxyproto.Header) error
 	withProxyProtocol := func(p bool) (server *Server, addr, httpAddr string) {
 		options := &ProxyOptions{
-			RoutingRule:          sql.ServingSQLAddr(),
+			RoutingRule:          ts.AdvSQLAddr(),
 			SkipVerify:           true,
 			RequireProxyProtocol: p,
 		}
@@ -249,7 +249,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.(*server.TestServer).ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
@@ -286,7 +286,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
 		tds.AddPod(tenID, &tenant.Pod{
 			TenantID:       tenID.ToUint64(),
-			Addr:           sql.ServingSQLAddr(),
+			Addr:           ts.AdvSQLAddr(),
 			State:          tenant.RUNNING,
 			StateTimestamp: timeutil.Now(),
 		})
@@ -422,7 +422,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
@@ -459,7 +459,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
 		tds.AddPod(tenID, &tenant.Pod{
 			TenantID:       tenID.ToUint64(),
-			Addr:           sql.ServingSQLAddr(),
+			Addr:           ts.AdvSQLAddr(),
 			State:          tenant.RUNNING,
 			StateTimestamp: timeutil.Now(),
 		})
@@ -691,7 +691,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.(*server.TestServer).ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -700,7 +700,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	s, addr, _ := newSecureProxyServer(
-		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
+		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.AdvSQLAddr(), SkipVerify: true},
 	)
 	_, port, err := net.SplitHostPort(addr)
 	require.NoError(t, err)
@@ -888,7 +888,7 @@ func TestProxyTLSClose(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.(*server.TestServer).ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -906,7 +906,7 @@ func TestProxyTLSClose(t *testing.T) {
 	})()
 
 	s, addr, _ := newSecureProxyServer(
-		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
+		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.AdvSQLAddr(), SkipVerify: true},
 	)
 
 	url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
@@ -939,7 +939,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.(*server.TestServer).ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -974,7 +974,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		delete(params, "authToken")
 		params["user"] = "testuser"
 
-		return originalBackendDial(ctx, msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
+		return originalBackendDial(ctx, msg, ts.AdvSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	s, proxyAddr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
@@ -997,7 +997,7 @@ func TestInsecureProxy(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).TenantOrServer()
+	ts := sql.(*server.TestServer).ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -1006,7 +1006,7 @@ func TestInsecureProxy(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	s, addr, _ := newProxyServer(
-		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
+		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: ts.AdvSQLAddr(), SkipVerify: true},
 	)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
@@ -1172,7 +1172,8 @@ func TestDenylistUpdate(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	sql.(*server.TestServer).TenantOrServer().
+	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts.
 		PGPreServer().(*pgwire.PreServeConnHandler).
 		TestingSetTrustClientProvidedRemoteAddr(true)
 
@@ -1199,7 +1200,7 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
-		Addr:           sql.ServingSQLAddr(),
+		Addr:           ts.AdvSQLAddr(),
 		State:          tenant.RUNNING,
 		StateTimestamp: timeutil.Now(),
 	})
@@ -1209,7 +1210,7 @@ func TestDenylistUpdate(t *testing.T) {
 	defer testutils.TestingHook(&BackendDial, func(
 		ctx context.Context, msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
-		return originalBackendDial(ctx, msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
+		return originalBackendDial(ctx, msg, ts.AdvSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	opts := &ProxyOptions{
@@ -2965,7 +2966,7 @@ func startTestTenantPods(
 	tenantID roachpb.TenantID,
 	count int,
 	knobs base.TestingKnobs,
-) []serverutils.TestTenantInterface {
+) []serverutils.ApplicationLayerInterface {
 	return startTestTenantPodsWithStopper(ctx, t, ts, tenantID, count, knobs, nil)
 }
 
@@ -2979,10 +2980,10 @@ func startTestTenantPodsWithStopper(
 	count int,
 	knobs base.TestingKnobs,
 	stopper *stop.Stopper,
-) []serverutils.TestTenantInterface {
+) []serverutils.ApplicationLayerInterface {
 	t.Helper()
 
-	var tenants []serverutils.TestTenantInterface
+	var tenants []serverutils.ApplicationLayerInterface
 	for i := 0; i < count; i++ {
 		params := tests.CreateTestTenantParams(tenantID)
 		params.TestingKnobs = knobs

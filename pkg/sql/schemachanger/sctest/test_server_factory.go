@@ -97,7 +97,7 @@ func (f SingleNodeTestClusterFactory) Run(
 		args.Knobs.SQLDeclarativeSchemaChanger = f.scexec
 	}
 	s, db, _ := serverutils.StartServer(t, args)
-	sv := &s.TenantOrServer().ClusterSettings().SV
+	sv := &s.ApplicationLayer().ClusterSettings().SV
 	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, sv, true)
 	defer func() {
 		s.Stopper().Stop(ctx)

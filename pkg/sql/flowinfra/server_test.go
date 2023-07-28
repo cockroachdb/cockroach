@@ -45,7 +45,7 @@ func TestServer(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func runLocalFlow(
 // then run to completion. The result rows are returned. All metadata except for
 // errors is ignored.
 func runLocalFlowTenant(
-	ctx context.Context, s serverutils.TestTenantInterface, req *execinfrapb.SetupFlowRequest,
+	ctx context.Context, s serverutils.ApplicationLayerInterface, req *execinfrapb.SetupFlowRequest,
 ) (rowenc.EncDatumRows, error) {
 	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)

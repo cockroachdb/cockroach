@@ -1698,7 +1698,7 @@ func TestImportRowLimit(t *testing.T) {
 	// Also create a pgx connection so we can check notices.
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		tc.Server(0).ServingSQLAddr(),
+		tc.ApplicationLayer(0).AdvSQLAddr(),
 		"TestImportRowLimit",
 		url.User(username.RootUser),
 	)
@@ -2544,7 +2544,7 @@ func TestImportCSVStmt(t *testing.T) {
 		sqlDB.Exec(t, `CREATE USER testuser`)
 		sqlDB.Exec(t, `GRANT admin TO testuser`)
 		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+			t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestImportPrivileges-testuser",
 			url.User("testuser"),
 		)
 		defer cleanupFunc()
@@ -2785,7 +2785,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 	rootDB.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestImportPrivileges-testuser",
 		url.User("testuser"),
 	)
 	defer cleanupFunc()
@@ -5301,13 +5301,13 @@ func TestImportControlJobRBAC(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	rootDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	registry := tc.ApplicationLayer(0).JobRegistry().(*jobs.Registry)
 
 	// Create non-root user.
 	rootDB.Exec(t, `CREATE USER testuser`)
 	rootDB.Exec(t, `ALTER ROLE testuser CONTROLJOB`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		t, tc.ApplicationLayer(0).AdvSQLAddr(), "TestImportPrivileges-testuser",
 		url.User("testuser"),
 	)
 	defer cleanupFunc()
@@ -6870,7 +6870,7 @@ func TestImportClientDisconnect(t *testing.T) {
 	// Make credentials for the new connection.
 	runner.Exec(t, `CREATE USER testuser`)
 	runner.Exec(t, `GRANT admin TO testuser`)
-	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).AdvSQLAddr(),
 		"TestImportClientDisconnect-testuser", url.User("testuser"))
 	defer cleanup()
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v STRING)")

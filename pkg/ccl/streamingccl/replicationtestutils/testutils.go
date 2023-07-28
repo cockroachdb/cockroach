@@ -100,7 +100,7 @@ type TenantStreamingClusters struct {
 	SrcSysServer    serverutils.TestServerInterface
 	SrcSysSQL       *sqlutils.SQLRunner
 	SrcTenantSQL    *sqlutils.SQLRunner
-	SrcTenantServer serverutils.TestTenantInterface
+	SrcTenantServer serverutils.ApplicationLayerInterface
 	SrcURL          url.URL
 	SrcCleanup      func()
 
@@ -291,7 +291,7 @@ func startC2CTestCluster(
 	c := testcluster.StartTestCluster(t, numNodes, params)
 	c.Server(0).Clock().Now()
 	// TODO(casper): support adding splits when we have multiple nodes.
-	pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	return c, pgURL, func() {
 		c.Stopper().Stop(ctx)
 		cleanupSinkCert()

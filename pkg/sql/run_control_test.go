@@ -821,7 +821,7 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(username),
-		Host:     server.ServingSQLAddr(),
+		Host:     server.AdvSQLAddr(),
 		RawQuery: "sslmode=disable",
 	}
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -926,7 +926,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	tt := s.TenantOrServer()
+	tt := s.ApplicationLayer()
 
 	r1 := sqlutils.MakeSQLRunner(db)
 	r1.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)

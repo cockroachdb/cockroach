@@ -880,7 +880,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "StartServer", url.User(username.RootUser))
+		t, s.AdvSQLAddr(), "StartServer", url.User(username.RootUser))
 	defer cleanupGoDB()
 	c, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err, "error connecting with pg url")
@@ -1416,7 +1416,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Note that we're not using pgx here because it *always* prepares
 			// statements, and we want to test our client latency measurements
 			// both with and without prepared statements.
-			dbUrl, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+			dbUrl, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 			defer cleanup()
 			connector, err := pq.NewConnector(dbUrl.String())
 			require.NoError(t, err)

@@ -476,7 +476,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		// Run the testCase's setupDesc function to prepare an index backfill
 		// mutation. Also, create an associated job and set it up to be blocked.
 		lm := s.LeaseManager().(*lease.Manager)
-		tt := s.TenantOrServer()
+		tt := s.ApplicationLayer()
 		codec := tt.Codec()
 		settings := tt.ClusterSettings()
 		execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)

@@ -49,7 +49,7 @@ func ShowCreateTableTest(
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tenantSettings := s.TenantOrServer().ClusterSettings()
+	tenantSettings := s.ApplicationLayer().ClusterSettings()
 	// In case we're with multi region abstractions against the test tenant.
 	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &tenantSettings.SV, true)
 

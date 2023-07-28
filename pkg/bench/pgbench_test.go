@@ -113,7 +113,7 @@ func BenchmarkPgbenchExec(b *testing.B) {
 		defer s.Stopper().Stop(context.Background())
 
 		pgURL, cleanupFn := sqlutils.PGUrl(
-			b, s.ServingSQLAddr(), "benchmarkCockroach", url.User(username.RootUser))
+			b, s.AdvSQLAddr(), "benchmarkCockroach", url.User(username.RootUser))
 		pgURL.RawQuery = "sslmode=disable"
 		defer cleanupFn()
 

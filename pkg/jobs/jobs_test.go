@@ -1190,7 +1190,7 @@ func checkTraceFiles(
 	t.Helper()
 
 	recordings := make([][]byte, 0)
-	execCfg := s.TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
 	require.NoError(t, err)
 	require.Len(t, edFiles, expectedNumFiles)
@@ -1227,7 +1227,7 @@ func TestJobLifecycle(t *testing.T) {
 	params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{DisableRegistryLifecycleManagent: true}
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
-	s := srv.TenantOrServer()
+	s := srv.ApplicationLayer()
 
 	registry := s.JobRegistry().(*jobs.Registry)
 
@@ -1967,7 +1967,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{DontUseJobs: true}
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
-	r := s.TenantOrServer().JobRegistry().(*jobs.Registry)
+	r := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.Background())
 
@@ -2115,7 +2115,7 @@ SELECT id, payload, progress FROM "".crdb_internal.system_jobs ORDER BY id DESC 
 	}
 
 	// Create 3 rows from the valid row, one of which is corrupted.
-	createJob(context.Background(), t, s.TenantOrServer().JobRegistry().(*jobs.Registry), jobID+1, payload, progress)
+	createJob(context.Background(), t, s.ApplicationLayer().JobRegistry().(*jobs.Registry), jobID+1, payload, progress)
 
 	// Create the second row with a corrupted progress field.
 	if _, err := sqlDB.Exec(`

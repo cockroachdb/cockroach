@@ -128,10 +128,22 @@ func (tc *TestCluster) StartedDefaultTestTenant() bool {
 	return tc.Servers[0].StartedDefaultTestTenant()
 }
 
-// TenantOrServer returns either the ith server in the cluster or the tenant server associated with
-// the ith server if the cluster started with a default test tenant.
-func (tc *TestCluster) TenantOrServer(idx int) serverutils.TestTenantInterface {
-	return tc.Server(idx).TenantOrServer()
+// ApplicationLayer calls .ApplicationLayer() on the ith server in
+// the cluster.
+func (tc *TestCluster) ApplicationLayer(idx int) serverutils.ApplicationLayerInterface {
+	return tc.Server(idx).ApplicationLayer()
+}
+
+// SystemLayer calls .SystemLayer() on the ith server in the
+// cluster.
+func (tc *TestCluster) SystemLayer(idx int) serverutils.ApplicationLayerInterface {
+	return tc.Server(idx).SystemLayer()
+}
+
+// StorageLayer calls .StorageLayer() on the ith server in the
+// cluster.
+func (tc *TestCluster) StorageLayer(idx int) serverutils.StorageLayerInterface {
+	return tc.Server(idx).StorageLayer()
 }
 
 // stopServers stops the stoppers for each individual server in the cluster.
@@ -470,7 +482,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 		var err error
 		for _, ssrv := range tc.Servers {
 			for _, dsrv := range tc.Servers {
-				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.ServingRPCAddr(), dsrv.NodeID(), rpc.DefaultClass).Connect(context.TODO())
+				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.AdvRPCAddr(), dsrv.NodeID(), rpc.DefaultClass).Connect(context.TODO())
 				err = errors.CombineErrors(err, e)
 			}
 		}
@@ -525,7 +537,7 @@ func (tc *TestCluster) AddAndStartServer(t *testing.T, serverArgs base.TestServe
 // cluster's ReplicationMode.
 func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
-		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
+		serverArgs.JoinAddr = tc.Servers[0].AdvRPCAddr()
 	}
 	if _, err := tc.AddServer(serverArgs); err != nil {
 		return err
@@ -610,16 +622,17 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	}
 
 	dbConn, err := serverutils.OpenDBConnE(
-		server.ServingSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+		server.ApplicationLayer().AdvSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
 	if err != nil {
 		return err
 	}
 
-	// For the first server started, populate the host cluster connection.
-	var hostDbConn *gosql.DB
+	// For the first server started, populate the storage cluster
+	// connection.
+	var storageDbConn *gosql.DB
 	if idx == 0 {
-		hostDbConn, err = serverutils.OpenDBConnE(
-			server.HostSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+		storageDbConn, err = serverutils.OpenDBConnE(
+			server.SystemLayer().AdvSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
 		if err != nil {
 			return err
 		}
@@ -629,7 +642,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	defer tc.mu.Unlock()
 	tc.Conns = append(tc.Conns, dbConn)
 	if idx == 0 {
-		tc.storageConn = hostDbConn
+		tc.storageConn = storageDbConn
 	}
 	return nil
 }
@@ -1678,7 +1691,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 			// Try and point the server to a live server in the cluster to join.
 			for i := range tc.Servers {
 				if !tc.ServerStopped(i) {
-					serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+					serverArgs.JoinAddr = tc.Servers[i].AdvRPCAddr()
 				}
 			}
 		}
@@ -1724,7 +1737,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 			return err
 		}
 
-		dbConn, err := serverutils.OpenDBConnE(srv.ServingSQLAddr(),
+		dbConn, err := serverutils.OpenDBConnE(srv.ApplicationLayer().AdvSQLAddr(),
 			serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
 		if err != nil {
 			return err

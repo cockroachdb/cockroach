@@ -681,7 +681,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, srv.ServingSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(),
 		"TestShowBackupPrivileges-testuser", url.User("testuser"))
 	defer cleanup()
 	testuser, err := gosql.Open("postgres", pgURL.String())

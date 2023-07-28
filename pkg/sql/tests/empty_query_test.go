@@ -35,7 +35,7 @@ func TestEmptyQuery(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+		t, s.ApplicationLayer().AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 

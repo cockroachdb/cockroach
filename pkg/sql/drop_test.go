@@ -227,7 +227,7 @@ func TestDropDatabaseEmpty(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec := s.TenantOrServer().Codec()
+	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1143,7 +1143,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	base, err := pq.NewConnector(url.String())
 	if err != nil {

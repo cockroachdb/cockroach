@@ -556,7 +556,7 @@ func TestZipRetries(t *testing.T) {
 		sqlURL := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(username.RootUser),
-			Host:     s.ServingSQLAddr(),
+			Host:     s.AdvSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}
 		sqlConn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, sqlURL.String())

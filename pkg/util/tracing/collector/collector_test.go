@@ -240,7 +240,7 @@ func TestClusterInflightTraces(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 			defer tc.Stopper().Stop(ctx)
 
-			systemServers := []serverutils.TestTenantInterface{tc.Servers[0], tc.Servers[1]}
+			systemServers := []serverutils.ApplicationLayerInterface{tc.Servers[0], tc.Servers[1]}
 			systemDBs := make([]*gosql.DB, len(tc.Servers))
 			for i, s := range tc.Servers {
 				db, cleanup := getDB(s.SQLAddr(), "System" /* prefix */)
@@ -249,23 +249,23 @@ func TestClusterInflightTraces(t *testing.T) {
 			}
 
 			type testCase struct {
-				servers []serverutils.TestTenantInterface
+				servers []serverutils.ApplicationLayerInterface
 				dbs     []*gosql.DB
 				// otherServers, if set, represents the servers corresponding to
 				// other tenants (or to the system tenant) than the ones being
 				// tested.
-				otherServers []serverutils.TestTenantInterface
+				otherServers []serverutils.ApplicationLayerInterface
 			}
 			var testCases []testCase
 			switch config {
 			case "single-tenant":
 				testCases = []testCase{{
-					servers: []serverutils.TestTenantInterface{tc.Servers[0], tc.Servers[1]},
+					servers: []serverutils.ApplicationLayerInterface{tc.Servers[0], tc.Servers[1]},
 					dbs:     systemDBs,
 				}}
 
 			case "shared-process":
-				tenants := make([]serverutils.TestTenantInterface, len(tc.Servers))
+				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
 				dbs := make([]*gosql.DB, len(tc.Servers))
 				for i, s := range tc.Servers {
 					tenant, db, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
@@ -288,7 +288,7 @@ func TestClusterInflightTraces(t *testing.T) {
 
 			case "separate-process":
 				tenantID := roachpb.MustMakeTenantID(10)
-				tenants := make([]serverutils.TestTenantInterface, len(tc.Servers))
+				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
 				dbs := make([]*gosql.DB, len(tc.Servers))
 				for i := range tc.Servers {
 					tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})

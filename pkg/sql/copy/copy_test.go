@@ -102,7 +102,7 @@ func TestDataDriven(t *testing.T) {
 					})
 					defer s.Stopper().Stop(ctx)
 
-					url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 					defer cleanup()
 					var sqlConnCtx clisqlclient.Context
 					conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -259,7 +259,7 @@ func TestCopyFromTransaction(t *testing.T) {
 		})
 		defer s.Stopper().Stop(ctx)
 
-		url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+		url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 		defer cleanup()
 		var sqlConnCtx clisqlclient.Context
 
@@ -406,7 +406,7 @@ func TestCopyFromTimeout(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestCopyFromTimeout",
 		url.User(username.RootUser),
 	)
@@ -472,7 +472,7 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"TestShowQueriesIncludesCopy",
 		url.User(username.RootUser),
 	)
@@ -569,7 +569,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -623,7 +623,7 @@ func TestTinyRows(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -678,7 +678,7 @@ func TestLargeCopy(t *testing.T) {
 	s, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -793,7 +793,7 @@ func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup, err := sqlutils.PGUrlE(
-		s.ServingSQLAddr(),
+		s.AdvSQLAddr(),
 		"BenchmarkCopyEndToEnd", /* prefix */
 		url.User(username.RootUser),
 	)

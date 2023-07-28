@@ -41,7 +41,7 @@ func TestBackendDialTLSInsecure(t *testing.T) {
 	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer sql.Stopper().Stop(ctx)
 
-	conn, err := BackendDial(context.Background(), startupMsg, sql.ServingSQLAddr(), &tls.Config{})
+	conn, err := BackendDial(context.Background(), startupMsg, sql.ApplicationLayer().AdvSQLAddr(), &tls.Config{})
 	require.Error(t, err)
 	require.Regexp(t, "target server refused TLS connection", err)
 	require.Nil(t, conn)
@@ -128,12 +128,12 @@ func TestBackendDialTLS(t *testing.T) {
 		errCode:  codeBackendDown,
 	}, {
 		name:     "tenant10ToStorage",
-		addr:     storageServer.ServingSQLAddr(),
+		addr:     storageServer.SystemLayer().AdvSQLAddr(),
 		tenantID: 10,
 		errCode:  codeBackendDown,
 	}, {
 		name:     "tenantWithNodeIDToStoage",
-		addr:     storageServer.ServingSQLAddr(),
+		addr:     storageServer.SystemLayer().AdvSQLAddr(),
 		tenantID: uint64(storageServer.NodeID()),
 		errCode:  codeBackendDown,
 	}}

@@ -480,7 +480,7 @@ func TestSQLSink(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgURL.Path = `d`
 

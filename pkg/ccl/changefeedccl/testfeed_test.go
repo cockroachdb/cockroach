@@ -66,7 +66,7 @@ import (
 )
 
 type sinklessFeedFactory struct {
-	s serverutils.TestTenantInterface
+	s serverutils.ApplicationLayerInterface
 	// postgres url used for creating sinkless changefeeds. This may be the same as
 	// the rootURL.
 	sink url.URL
@@ -78,7 +78,7 @@ type sinklessFeedFactory struct {
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.TestTenantInterface, sink url.URL, rootConn url.URL, sinkForUser sinkForUser,
+	s serverutils.ApplicationLayerInterface, sink url.URL, rootConn url.URL, sinkForUser sinkForUser,
 ) cdctest.TestFeedFactory {
 	return &sinklessFeedFactory{s: s, sink: sink, rootURL: rootConn, sinkForUser: sinkForUser}
 }
@@ -140,7 +140,7 @@ func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.
 }
 
 // Server implements the TestFeedFactory interface.
-func (f *sinklessFeedFactory) Server() serverutils.TestTenantInterface {
+func (f *sinklessFeedFactory) Server() serverutils.ApplicationLayerInterface {
 	return f.s
 }
 
@@ -638,7 +638,7 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 var _ Sink = (*notifyFlushSink)(nil)
 
 // feedInjectable is the subset of the
-// TestServerInterface/TestTenantInterface needed for depInjector to
+// TestServerInterface/ApplicationLayerInterface needed for depInjector to
 // work correctly.
 type feedInjectable interface {
 	JobRegistry() interface{}
@@ -739,7 +739,7 @@ func (di *depInjector) getJobFeed(jobID jobspb.JobID) *jobFeed {
 }
 
 type enterpriseFeedFactory struct {
-	s  serverutils.TestTenantInterface
+	s  serverutils.ApplicationLayerInterface
 	di *depInjector
 	// db is used for creating changefeeds. This may be the same as rootDB.
 	db *gosql.DB
@@ -802,9 +802,11 @@ type tableFeedFactory struct {
 	uri url.URL
 }
 
-func getInjectables(srvOrCluster interface{}) (serverutils.TestTenantInterface, []feedInjectable) {
+func getInjectables(
+	srvOrCluster interface{},
+) (serverutils.ApplicationLayerInterface, []feedInjectable) {
 	switch t := srvOrCluster.(type) {
-	case serverutils.TestTenantInterface:
+	case serverutils.ApplicationLayerInterface:
 		t.PGServer()
 		return t, []feedInjectable{t}
 	case serverutils.TestClusterInterface:
@@ -885,7 +887,7 @@ func (f *tableFeedFactory) Feed(
 }
 
 // Server implements the TestFeedFactory interface.
-func (f *tableFeedFactory) Server() serverutils.TestTenantInterface {
+func (f *tableFeedFactory) Server() serverutils.ApplicationLayerInterface {
 	return f.s
 }
 
@@ -1128,7 +1130,7 @@ func (f *cloudFeedFactory) Feed(
 }
 
 // Server implements the TestFeedFactory interface.
-func (f *cloudFeedFactory) Server() serverutils.TestTenantInterface {
+func (f *cloudFeedFactory) Server() serverutils.ApplicationLayerInterface {
 	return f.s
 }
 
@@ -1826,7 +1828,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 }
 
 // Server implements TestFeedFactory
-func (k *kafkaFeedFactory) Server() serverutils.TestTenantInterface {
+func (k *kafkaFeedFactory) Server() serverutils.ApplicationLayerInterface {
 	return k.s
 }
 
@@ -2027,7 +2029,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	return c, nil
 }
 
-func (f *webhookFeedFactory) Server() serverutils.TestTenantInterface {
+func (f *webhookFeedFactory) Server() serverutils.ApplicationLayerInterface {
 	return f.s
 }
 
@@ -2338,7 +2340,7 @@ func makePubsubFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.T
 	s, injectables := getInjectables(srvOrCluster)
 
 	switch t := srvOrCluster.(type) {
-	case serverutils.TestTenantInterface:
+	case serverutils.ApplicationLayerInterface:
 		t.DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PubsubClientSkipClientCreation = true
 	case serverutils.TestClusterInterface:
 		servers := make([]feedInjectable, t.NumServers())
@@ -2416,7 +2418,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 }
 
 // Server implements TestFeedFactory
-func (p *pubsubFeedFactory) Server() serverutils.TestTenantInterface {
+func (p *pubsubFeedFactory) Server() serverutils.ApplicationLayerInterface {
 	return p.s
 }
 
