@@ -348,19 +348,38 @@ Replaces 'make ui-watch'.`,
 
 			// Start the cluster-ui watch tasks
 			nbExec := d.exec.AsNonBlocking()
-			argv := []string{
-				"--dir", dirs.clusterUI, "run", "build:watch",
+			{
+				argv := []string{
+					"--dir", dirs.clusterUI, "run", "build:watch",
+				}
+
+				// Add additional webpack args to copy cluster-ui output to external directories.
+				for _, dst := range clusterUiDestinations {
+					argv = append(argv, "--env.copy-to="+dst)
+				}
+
+				err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
+				if err != nil {
+					log.Fatalf("Unable to start webpack watcher cluster-ui for changes: %v", err)
+					return err
+				}
 			}
 
-			// Add additional webpack args to copy cluster-ui output to external directories.
-			for _, dst := range clusterUiDestinations {
-				argv = append(argv, "--env.copy-to="+dst)
-			}
+			{
+				argv := []string{
+					"--dir", dirs.clusterUI, "run", "tsc:watch",
+				}
 
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
-			if err != nil {
-				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
-				return err
+				// Add additional webpack args to copy cluster-ui output to external directories.
+				for _, dst := range clusterUiDestinations {
+					argv = append(argv, "--copy-to="+dst)
+				}
+
+				err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
+				if err != nil {
+					log.Fatalf("Unable to start typescript cluster-ui for changes: %v", err)
+					return err
+				}
 			}
 
 			var webpackDist string
