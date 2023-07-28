@@ -66,6 +66,10 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, on: true, checks: isV232Active},
 }
 
+// supportedStatementTags tracks statement tags which are implemented
+// by the declarative schema changer.
+var supportedStatementTags = map[string]struct{}{}
+
 func init() {
 	boolType := reflect.TypeOf((*bool)(nil)).Elem()
 	// Check function signatures inside the supportedStatements map.
@@ -99,6 +103,14 @@ func init() {
 					statementType, checks))
 			}
 		}
+		// Fetch the statement tag using the statement tag method on the type,
+		// we can use this as a blacklist of blocked schema changes.
+		typTag, found := statementType.MethodByName("StatementTag")
+		if !found {
+			panic(errors.AssertionFailedf("statement tag was missing on %T", typTag))
+		}
+		ret := typTag.Func.Call([]reflect.Value{reflect.New(statementType.Elem())})
+		supportedStatementTags[ret[0].String()] = struct{}{}
 	}
 }
 
@@ -157,9 +169,16 @@ func isFullySupportedWithFalsePositiveInternal(
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
+	newSchemaChangerMode := b.EvalCtx().SessionData().NewSchemaChangerMode
+	// Check if the feature is either forced disabled or enabled,
+	// using a cluster setting.
+	disabledStatements := getSchemaChangerStatementControl(&b.ClusterSettings().SV)
+	if forcedEnabled := disabledStatements.CheckStatementControl(n); forcedEnabled {
+		newSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+	}
 	// Run a few "quick checks" to see if the statement is not supported.
 	if !IsFullySupportedWithFalsePositive(n, b.EvalCtx().Settings.Version.ActiveVersion(b),
-		b.EvalCtx().SessionData().NewSchemaChangerMode) {
+		newSchemaChangerMode) {
 		panic(scerrors.NotImplementedError(n))
 	}
 
