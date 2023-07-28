@@ -636,15 +636,11 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	const clusterScope = "cluster"
 	const nodeScope = "node"
 	getNum := func(db *sqlutils.SQLRunner, scope string) int {
-		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows", scope)
-		// Check that all remote flows (if any) correspond to the expected
-		// statement.
-		stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
-		for _, stmt := range stmts {
-			require.Equal(t, query, stmt[0])
-		}
+		// Count the number of flows matching our target query. Note that there
+		// could be other flows in the table for the internal operations.
+		countQuery := fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s_distsql_flows WHERE stmt = '%s'", scope, query)
 		var num int
-		db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
+		db.QueryRow(t, countQuery).Scan(&num)
 		return num
 	}
 	for nodeID := 0; nodeID < numNodes; nodeID++ {
