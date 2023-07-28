@@ -52,6 +52,9 @@ export class CachedDataReducerState<TResponseMessage> {
 
 // KeyedCachedDataReducerState is used to track the state of the cached data
 // that is associated with a key.
+// This error is a false positive because we do use 'TResponseMessage' to type
+// CachedDataReducerState. We'll suppress the error to make the linter happy.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export class KeyedCachedDataReducerState<TResponseMessage> {
   [id: string]: CachedDataReducerState<TResponseMessage>;
 }

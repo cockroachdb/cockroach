@@ -38,6 +38,8 @@ class OverviewAlertListSection extends React.Component<AlertSectionProps, {}> {
     return (
       <section className="section">
         {_.map(alerts, (a, i) => {
+          // Extract values we don't want.
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { dismiss, ...alertProps } = a;
           const boundDismiss = bindActionCreators(() => a.dismiss, dispatch);
           return <AlertBox key={i} dismiss={boundDismiss} {...alertProps} />;
