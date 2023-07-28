@@ -10,9 +10,7 @@
 
 const fs = require("fs");
 const fsp = require("fs/promises");
-const os = require("os");
 const path = require("path");
-const semver = require("semver");
 const { validate } = require("schema-utils");
 
 const { cleanDestinationPaths, tildeify } = require("../util");
@@ -82,24 +80,25 @@ class CopyEmittedFilesPlugin {
     compiler.hooks.afterEnvironment.tap(PLUGIN_NAME, () => {
       logger.warn("Deleting destinations in preparation for copied files:");
       for (const dst of destinations) {
-        const stat = fs.statSync(dst);
+        // Use lstat to avoid resolving the possible symbolic link.
+        const stat = fs.lstatSync(dst);
+        const jsDir = path.join(dst, "js");
 
-        if (stat.isDirectory()) {
+        if (stat.isDirectory() && fs.existsSync(jsDir)) {
           // Since the destination is already a directory, it's likely been
           // created by webpack or typescript already. Don't remove the entire
           // directory --- only remove the js subtree.
-          const jsDir = path.join(dst, "js");
           logger.warn(`  rm -r ${tildeify(jsDir)}`);
           fs.rmSync(jsDir, { recursive: true });
-        } else {
-          // Since the destination is a symlink, just remove the single file.
-          logger.warn(`  rm ${tildeify(dst)}`);
-          fs.rmSync(dst, { recursive: false });
+        } else if (stat.isSymbolicLink()) {
+          // Since the destination is a symlink, just unlink it.
+          logger.warn(`  unlink ${tildeify(dst)}`);
+          fs.unlinkSync(dst);
         }
 
         // Ensure the destination directory and package.json exist.
-        logger.debug(`mkdir -p ${path.join(dst, relOutputPath)}`);
-        fs.mkdirSync(path.join(dst, relOutputPath), { recursive: true });
+        logger.debug(`mkdir -p ${path.join(jsDir, relOutputPath)}`);
+        fs.mkdirSync(path.join(jsDir, relOutputPath), { recursive: true });
 
         logger.debug(`cp package.json ${path.join(dst, "package.json")}`);
         fs.copyFileSync(
