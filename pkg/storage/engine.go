@@ -398,7 +398,7 @@ type EngineIterator interface {
 // a clone of an existing iterator.
 type CloneContext struct {
 	rawIter       pebbleiter.Iterator
-	statsReporter iterStatsReporter
+	statsReporter *Pebble
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
