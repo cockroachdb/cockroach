@@ -682,21 +682,26 @@ func (s *PLpgSQLStmtAssert) WalkStmt(visitor PLpgSQLStmtVisitor) {
 // stmt_execsql
 type PLpgSQLStmtExecSql struct {
 	PLpgSQLStatementImpl
-	SqlStmt string
-	Into    bool // INTO provided?
+	SqlStmt tree.Statement
 	Strict  bool // INTO STRICT flag
+	Target  []PLpgSQLVariable
 }
 
 func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
-	// TODO(drewk): Pretty print the sql statement
-	ctx.WriteString("EXECUTE bare sql query")
-	if s.Into {
-		ctx.WriteString(" WITH INTO")
+	s.SqlStmt.Format(ctx)
+	if s.Target != nil {
+		ctx.WriteString(" INTO ")
+		if s.Strict {
+			ctx.WriteString("STRICT ")
+		}
+		for i := range s.Target {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			s.Target[i].Format(ctx)
+		}
 	}
-	if s.Strict {
-		ctx.WriteString(" STRICT")
-	}
-	ctx.WriteString("\n")
+	ctx.WriteString(";\n")
 }
 
 func (s *PLpgSQLStmtExecSql) PlpgSQLStatementTag() string {

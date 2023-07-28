@@ -7,7 +7,7 @@ EXCEPTION
       ASSERT 0 == 0, 'error message';
 END;
 ----
-expected parse error: at or near "exception": syntax error: unimplemented: this syntax
+at or near "exception": syntax error: unimplemented: this syntax
 
 
 
@@ -20,4 +20,4 @@ EXCEPTION
     x = 22012;
 END;
 ----
-expected parse error: at or near "exception": syntax error: unimplemented: this syntax
+at or near "exception": syntax error: unimplemented: this syntax

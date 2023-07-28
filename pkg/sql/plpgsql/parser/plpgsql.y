@@ -625,7 +625,9 @@ proc_stmt:pl_block ';'
     $$.val = $1.plpgsqlStatement()
   }
 | stmt_loop
-  { }
+  {
+    $$.val = $1.plpgsqlStatement()
+  }
 | stmt_while
   { }
 | stmt_for
@@ -1196,23 +1198,21 @@ loop_body: proc_sect END LOOP
   }
 ;
 
-// MakeExecSqlStmt read until a ';'
-stmt_execsql: IMPORT
+stmt_execsql: stmt_execsql_start
   {
-    $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(IMPORT)
+    stmt, err := plpgsqllex.(*lexer).MakeExecSqlStmt()
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = stmt
   }
+;
+
+stmt_execsql_start:
+  IMPORT
 | INSERT
-  {
-    $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(INSERT)
-  }
 | MERGE
-  {
-    $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(MERGE)
-  }
 | IDENT
-  {
-    $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(IDENT)
-  }
 ;
 
 stmt_dynexecute: EXECUTE
