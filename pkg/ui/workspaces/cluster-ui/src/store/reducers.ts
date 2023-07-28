@@ -77,8 +77,8 @@ import {
   reducer as tableDetails,
 } from "./databaseTableDetails/tableDetails.reducer";
 import {
-  JobProfilerState,
-  reducer as executionDetails,
+  JobProfilerExecutionDetailFilesState,
+  reducer as executionDetailFiles,
 } from "./jobs/jobProfiler.reducer";
 
 export type AdminUiState = {
@@ -95,7 +95,7 @@ export type AdminUiState = {
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobDetailsReducerState;
-  executionDetails: JobProfilerState;
+  executionDetailFiles: JobProfilerExecutionDetailFilesState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   databaseDetails: KeyedDatabaseDetailsState;
@@ -129,7 +129,7 @@ export const reducers = combineReducers<AdminUiState>({
   indexStats,
   jobs,
   job,
-  executionDetails,
+  executionDetailFiles,
   clusterLocks,
   databasesList,
   databaseDetails,

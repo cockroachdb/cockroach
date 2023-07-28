@@ -16,12 +16,29 @@ export type ListJobProfilerExecutionDetailsRequest =
 export type ListJobProfilerExecutionDetailsResponse =
   cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse;
 
-export const getExecutionDetails = (
+export type GetJobProfilerExecutionDetailRequest =
+  cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest;
+export type GetJobProfilerExecutionDetailResponse =
+  cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse;
+
+export const listExecutionDetailFiles = (
   req: ListJobProfilerExecutionDetailsRequest,
 ): Promise<cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse> => {
   return fetchData(
     cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse,
     `/_status/list_job_profiler_execution_details/${req.job_id}`,
+    null,
+    null,
+    "30M",
+  );
+};
+
+export const getExecutionDetailFile = (
+  req: GetJobProfilerExecutionDetailRequest,
+): Promise<cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse> => {
+  return fetchData(
+    cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse,
+    `/_status/job_profiler_execution_details/${req.job_id}/${req.filename}`,
     null,
     null,
     "30M",
