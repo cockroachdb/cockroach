@@ -75,6 +75,6 @@ export const selectStatementDetails = createSelector(
 );
 
 export const selectStatementDetailsUiConfig = createSelector(
-  (state: AppState) => state.adminUI?.uiConfig.pages.statementDetails,
+  (state: AppState) => state.adminUI?.uiConfig?.pages.statementDetails,
   statementDetailsUiConfig => statementDetailsUiConfig,
 );
