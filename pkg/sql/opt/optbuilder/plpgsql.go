@@ -16,13 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -197,22 +195,7 @@ func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *s
 			b.constants[dec.Var] = struct{}{}
 		}
 	}
-	if s = b.buildPLpgSQLStatements(block.Body, s); s != nil {
-		return s
-	}
-	// At least one path in the control flow does not terminate with a RETURN
-	// statement.
-	//
-	// Postgres throws this error at runtime, so it's possible to define a
-	// function that runs correctly for some inputs, but returns this error for
-	// others. We are compiling rather than interpreting, so it seems better to
-	// eagerly return the error if there is an execution path with no RETURN.
-	// TODO(drewk): consider using RAISE (when it is implemented) to throw the
-	// error at runtime instead.
-	panic(pgerror.New(
-		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement,
-		"control reached end of function without RETURN",
-	))
+	return b.buildPLpgSQLStatements(block.Body, s)
 }
 
 // buildPLpgSQLStatements performs the majority of the work building a PL/pgSQL
@@ -260,7 +243,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			//   IF (...) THEN ... END IF;
 			//   RETURN (...); <-- This is used to build the continuation function.
 			con := b.makeContinuation("stmt_if")
-			b.finishContinuation(stmts[i+1:], &con, false /* recursive */)
+			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			b.pushContinuation(con)
 			// Build each branch of the IF statement, calling the continuation
 			// function at the end of construction in order to resume execution after
@@ -310,12 +293,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// statement, the exit continuation is called to model returning control
 			// flow to the statements outside the loop.
 			exitCon := b.makeContinuation("loop_exit")
-			b.finishContinuation(stmts[i+1:], &exitCon, false /* recursive */)
+			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
 			b.pushExitContinuation(exitCon)
-			loopContinuation := b.makeContinuation("stmt_loop")
-			loopContinuation.isLoopContinuation = true
+			loopContinuation := b.makeRecursiveContinuation("stmt_loop")
 			b.pushContinuation(loopContinuation)
-			b.finishContinuation(t.Body, &loopContinuation, true /* recursive */)
+			b.appendPlpgSQLStmts(&loopContinuation, t.Body)
 			b.popContinuation()
 			b.popExitContinuation()
 			return b.callContinuation(&loopContinuation, s)
@@ -358,31 +340,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// statement, which returns the actual result of evaluation.
 			//
 			// The synchronous notice sending behavior is implemented in the
-			// crdb_internal.plpgsql_raise builtin function. The side-effecting body
-			// statement just makes a call into crdb_internal.plpgsql_raise using the
-			// RAISE statement options as parameters.
+			// crdb_internal.plpgsql_raise builtin function.
 			con := b.makeContinuation("_stmt_raise")
-			const raiseFnName = "crdb_internal.plpgsql_raise"
-			props, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
-			if len(overloads) != 1 {
-				panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
-			}
-			raiseCall := b.ob.factory.ConstructFunction(
-				b.getRaiseArgs(con.s, t),
-				&memo.FunctionPrivate{
-					Name:       raiseFnName,
-					Typ:        types.Int,
-					Properties: props,
-					Overload:   &overloads[0],
-				},
-			)
-			raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
-			raiseScope := con.s.push()
-			b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
-			b.ob.constructProjectForScope(con.s, raiseScope)
-			con.def.Body = []memo.RelExpr{raiseScope.expr}
-			con.def.BodyProps = []*physical.Required{raiseScope.makePhysicalProps()}
-			b.finishContinuation(stmts[i+1:], &con, false /* recursive */)
+			b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
+			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			return b.callContinuation(&con, s)
 		default:
 			panic(unimplemented.New(
@@ -391,8 +352,14 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			))
 		}
 	}
-	// Call the parent continuation to execute the rest of the function.
-	return b.callContinuation(b.getContinuation(), s)
+	// Call the parent continuation to execute the rest of the routine.
+	con := b.getContinuation()
+	if con != nil {
+		return b.callContinuation(con, s)
+	}
+	// There is no continuation. If the control flow reaches this point, we need
+	// to throw a runtime error.
+	return b.buildEndOfFunctionRaise(s)
 }
 
 // addPLpgSQLAssign adds a PL/pgSQL assignment to the current scope as a
@@ -428,6 +395,30 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	return assignScope
+}
+
+// buildPLpgSQLRaise builds a call to the crdb_internal.plpgsql_raise builtin
+// function, which implements the notice-sending behavior of RAISE statements.
+func (b *plpgsqlBuilder) buildPLpgSQLRaise(inScope *scope, args memo.ScalarListExpr) *scope {
+	const raiseFnName = "crdb_internal.plpgsql_raise"
+	props, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
+	}
+	raiseCall := b.ob.factory.ConstructFunction(
+		args,
+		&memo.FunctionPrivate{
+			Name:       raiseFnName,
+			Typ:        types.Int,
+			Properties: props,
+			Overload:   &overloads[0],
+		},
+	)
+	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
+	raiseScope := inScope.push()
+	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
+	b.ob.constructProjectForScope(inScope, raiseScope)
+	return raiseScope
 }
 
 // getRaiseArgs validates the options attached to the given PLpgSQL RAISE
@@ -557,6 +548,31 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 	return result
 }
 
+// buildEndOfFunctionRaise builds a RAISE statement that throws an error when
+// control reaches the end of a PLpgSQL routine without reaching a RETURN
+// statement.
+func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
+	makeConstStr := func(str string) opt.ScalarExpr {
+		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
+	}
+	args := memo.ScalarListExpr{
+		makeConstStr("ERROR"), /* severity */
+		makeConstStr("control reached end of function without RETURN"), /* message */
+		makeConstStr(""), /* detail */
+		makeConstStr(""), /* hint */
+		makeConstStr(pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String()), /* code */
+	}
+	con := b.makeContinuation("_end_of_function")
+	b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, args))
+	// Build a dummy statement that returns NULL. It won't be executed, but
+	// ensures that the continuation routine's return type is correct.
+	eofColName := scopeColName("").WithMetadataName(b.makeIdentifier("end_of_function"))
+	eofScope := inScope.push()
+	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, memo.NullSingleton)
+	b.ob.constructProjectForScope(inScope, eofScope)
+	return b.callContinuation(&con, inScope)
+}
+
 // makeContinuation allocates a new continuation function with an uninitialized
 // definition.
 func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
@@ -588,52 +604,47 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 	}
 }
 
-// finishContinuation adds the final body statement to the definition of a
-// continuation function. This statement returns the result of executing the
-// given PLpgSQL statements. There may be other statements that are executed
-// before this final statement for their side effects (e.g. RAISE statement).
+// makeRecursiveContinuation allocates a new continuation routine that can
+// recursively invoke itself.
+func (b *plpgsqlBuilder) makeRecursiveContinuation(name string) continuation {
+	con := b.makeContinuation(name)
+	con.def.IsRecursive = true
+	return con
+}
+
+// appendBodyStmt adds a body statement to the definition of a continuation
+// function. Only the last body statement will return results; all others will
+// only be executed for their side effects (e.g. RAISE statement).
 //
-// finishContinuation is separate from makeContinuation to allow recursive
-// function definitions, which need to push the continuation before it is
-// finished.
-func (b *plpgsqlBuilder) finishContinuation(
-	stmts []plpgsqltree.PLpgSQLStatement, con *continuation, recursive bool,
+// appendBodyStmt is separate from makeContinuation to allow recursive routine
+// definitions, which need to push the continuation before it is finished. The
+// separation also allows for appending multiple body statements.
+func (b *plpgsqlBuilder) appendBodyStmt(con *continuation, bodyScope *scope) {
+	// Set the volatility of the continuation routine to the least restrictive
+	// volatility level in the Relational properties of the body statements.
+	vol := bodyScope.expr.Relational().VolatilitySet.ToVolatility()
+	if con.def.Volatility < vol {
+		con.def.Volatility = vol
+	}
+	con.def.Body = append(con.def.Body, bodyScope.expr)
+	con.def.BodyProps = append(con.def.BodyProps, bodyScope.makePhysicalProps())
+}
+
+// appendPlpgSQLStmts builds the given PLpgSQL statements into a relational
+// expression and appends it to the given continuation routine's body statements
+// list.
+func (b *plpgsqlBuilder) appendPlpgSQLStmts(
+	con *continuation, stmts []plpgsqltree.PLpgSQLStatement,
 ) {
 	// Make sure to push s before constructing the continuation scope to ensure
 	// that the parameter columns are not projected.
 	continuationScope := b.buildPLpgSQLStatements(stmts, con.s.push())
-	if continuationScope == nil {
-		// One or more branches did not terminate with a RETURN statement.
-		con.reachedEndOfFunction = true
-		return
-	}
-	// Append to the body statements because some PLpgSQL statements will make a
-	// continuation routine with more than one body statement in order to handle
-	// side effects (see the RAISE case in buildPLpgSQLStatements).
-	con.def.Body = append(con.def.Body, continuationScope.expr)
-	con.def.BodyProps = append(con.def.BodyProps, continuationScope.makePhysicalProps())
-	con.def.IsRecursive = recursive
-	// Set the volatility of the continuation routine to the least restrictive
-	// volatility level in the expression's Relational properties.
-	vol := continuationScope.expr.Relational().VolatilitySet
-	if vol.HasVolatile() {
-		con.def.Volatility = volatility.Volatile
-	} else if vol.HasStable() {
-		con.def.Volatility = volatility.Stable
-	} else if vol.IsLeakproof() {
-		con.def.Volatility = volatility.Leakproof
-	} else {
-		con.def.Volatility = volatility.Immutable
-	}
+	b.appendBodyStmt(con, continuationScope)
 }
 
 // callContinuation adds a column that projects the result of calling the
 // given continuation function.
 func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
-	if con == nil || con.reachedEndOfFunction {
-		// Return nil to signify "control reached end of function without RETURN".
-		return nil
-	}
 	args := make(memo.ScalarListExpr, 0, len(b.decls)+len(b.params))
 	addArg := func(name tree.Name, typ *types.T) {
 		_, source, _, _ := s.FindSourceProvidingColumn(b.ob.ctx, name)
@@ -696,16 +707,6 @@ type continuation struct {
 	// s is a scope initialized with the parameters of the routine. It should be
 	// used to construct the routine body statement.
 	s *scope
-
-	// isLoopContinuation indicates that this continuation was constructed for the
-	// body statements of a loop.
-	isLoopContinuation bool
-
-	// reachedEndOfFunction indicates that the statements used to define this
-	// continuation did not return from at least one path in the control flow.
-	// If this continuation is reachable from the root, we return a
-	// "control reached end of function without RETURN" error.
-	reachedEndOfFunction bool
 }
 
 func (b *plpgsqlBuilder) pushContinuation(con continuation) {
@@ -744,7 +745,7 @@ func (b *plpgsqlBuilder) getExitContinuation() *continuation {
 
 func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
 	for i := len(b.continuations) - 1; i >= 0; i-- {
-		if b.continuations[i].isLoopContinuation {
+		if b.continuations[i].def.IsRecursive {
 			return &b.continuations[i]
 		}
 	}

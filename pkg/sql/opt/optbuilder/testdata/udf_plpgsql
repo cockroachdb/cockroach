@@ -549,20 +549,20 @@ build format=show-scalars
 SELECT f(1, 2);
 ----
 project
- ├── columns: f:10
+ ├── columns: f:16
  ├── values
  │    └── tuple
  └── projections
-      └── udf: f [as=f:10]
+      └── udf: f [as=f:16]
            ├── args
            │    ├── const: 1
            │    └── const: 2
            ├── params: a:1 b:2
            └── body
                 └── limit
-                     ├── columns: stmt_if_4:9
+                     ├── columns: stmt_if_7:15
                      ├── project
-                     │    ├── columns: stmt_if_4:9
+                     │    ├── columns: stmt_if_7:15
                      │    ├── project
                      │    │    ├── columns: c:3
                      │    │    ├── values
@@ -571,7 +571,7 @@ project
                      │    │         └── cast: INT8 [as=c:3]
                      │    │              └── null
                      │    └── projections
-                     │         └── case [as=stmt_if_4:9]
+                     │         └── case [as=stmt_if_7:15]
                      │              ├── true
                      │              ├── when
                      │              │    ├── lt
@@ -579,18 +579,18 @@ project
                      │              │    │    └── variable: b:2
                      │              │    └── subquery
                      │              │         └── project
-                     │              │              ├── columns: stmt_return_2:7!null
+                     │              │              ├── columns: stmt_return_5:13!null
                      │              │              ├── values
                      │              │              │    └── tuple
                      │              │              └── projections
-                     │              │                   └── const: 100 [as=stmt_return_2:7]
+                     │              │                   └── const: 100 [as=stmt_return_5:13]
                      │              └── subquery
                      │                   └── project
-                     │                        ├── columns: stmt_return_3:8!null
+                     │                        ├── columns: stmt_return_6:14!null
                      │                        ├── values
                      │                        │    └── tuple
                      │                        └── projections
-                     │                             └── const: 0 [as=stmt_return_3:8]
+                     │                             └── const: 0 [as=stmt_return_6:14]
                      └── const: 1
 
 exec-ddl
@@ -599,61 +599,6 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
     i INT := a;
   BEGIN
     LOOP
-      RETURN 100;
-    END LOOP;
-  END
-$$ LANGUAGE PLpgSQL;
-----
-
-build format=show-scalars
-SELECT f(1, 2);
-----
-project
- ├── columns: f:12
- ├── values
- │    └── tuple
- └── projections
-      └── udf: f [as=f:12]
-           ├── args
-           │    ├── const: 1
-           │    └── const: 2
-           ├── params: a:1 b:2
-           └── body
-                └── limit
-                     ├── columns: stmt_loop_2:11
-                     ├── project
-                     │    ├── columns: stmt_loop_2:11
-                     │    ├── project
-                     │    │    ├── columns: i:3
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:3]
-                     │    └── projections
-                     │         └── udf: stmt_loop_2 [as=stmt_loop_2:11]
-                     │              ├── args
-                     │              │    ├── variable: i:3
-                     │              │    ├── variable: a:1
-                     │              │    └── variable: b:2
-                     │              ├── params: i:7 a:8 b:9
-                     │              └── body
-                     │                   └── project
-                     │                        ├── columns: stmt_return_3:10!null
-                     │                        ├── values
-                     │                        │    └── tuple
-                     │                        └── projections
-                     │                             └── const: 100 [as=stmt_return_3:10]
-                     └── const: 1
-
-exec-ddl
-CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
-  DECLARE
-    i INT := a;
-  BEGIN
-    LOOP
-      IF a < b THEN
-        RETURN 0;
-      END IF;
       RETURN 100;
     END LOOP;
   END
@@ -675,9 +620,9 @@ project
            ├── params: a:1 b:2
            └── body
                 └── limit
-                     ├── columns: stmt_loop_2:17
+                     ├── columns: stmt_loop_5:17
                      ├── project
-                     │    ├── columns: stmt_loop_2:17
+                     │    ├── columns: stmt_loop_5:17
                      │    ├── project
                      │    │    ├── columns: i:3
                      │    │    ├── values
@@ -685,50 +630,105 @@ project
                      │    │    └── projections
                      │    │         └── variable: a:1 [as=i:3]
                      │    └── projections
-                     │         └── udf: stmt_loop_2 [as=stmt_loop_2:17]
+                     │         └── udf: stmt_loop_5 [as=stmt_loop_5:17]
                      │              ├── args
                      │              │    ├── variable: i:3
                      │              │    ├── variable: a:1
                      │              │    └── variable: b:2
-                     │              ├── params: i:7 a:8 b:9
+                     │              ├── params: i:13 a:14 b:15
                      │              └── body
                      │                   └── project
-                     │                        ├── columns: stmt_if_6:16
+                     │                        ├── columns: stmt_return_6:16!null
                      │                        ├── values
                      │                        │    └── tuple
                      │                        └── projections
-                     │                             └── case [as=stmt_if_6:16]
+                     │                             └── const: 100 [as=stmt_return_6:16]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := a;
+  BEGIN
+    LOOP
+      IF a < b THEN
+        RETURN 0;
+      END IF;
+      RETURN 100;
+    END LOOP;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(1, 2);
+----
+project
+ ├── columns: f:24
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:24]
+           ├── args
+           │    ├── const: 1
+           │    └── const: 2
+           ├── params: a:1 b:2
+           └── body
+                └── limit
+                     ├── columns: stmt_loop_5:23
+                     ├── project
+                     │    ├── columns: stmt_loop_5:23
+                     │    ├── project
+                     │    │    ├── columns: i:3
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── variable: a:1 [as=i:3]
+                     │    └── projections
+                     │         └── udf: stmt_loop_5 [as=stmt_loop_5:23]
+                     │              ├── args
+                     │              │    ├── variable: i:3
+                     │              │    ├── variable: a:1
+                     │              │    └── variable: b:2
+                     │              ├── params: i:13 a:14 b:15
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: stmt_if_9:22
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── case [as=stmt_if_9:22]
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── lt
-                     │                                  │    │    ├── variable: a:8
-                     │                                  │    │    └── variable: b:9
+                     │                                  │    │    ├── variable: a:14
+                     │                                  │    │    └── variable: b:15
                      │                                  │    └── subquery
                      │                                  │         └── project
-                     │                                  │              ├── columns: stmt_return_5:14!null
+                     │                                  │              ├── columns: stmt_return_8:20!null
                      │                                  │              ├── values
                      │                                  │              │    └── tuple
                      │                                  │              └── projections
-                     │                                  │                   └── const: 0 [as=stmt_return_5:14]
+                     │                                  │                   └── const: 0 [as=stmt_return_8:20]
                      │                                  └── subquery
                      │                                       └── project
-                     │                                            ├── columns: stmt_if_3:15
+                     │                                            ├── columns: stmt_if_6:21
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── udf: stmt_if_3 [as=stmt_if_3:15]
+                     │                                                 └── udf: stmt_if_6 [as=stmt_if_6:21]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: i:7
-                     │                                                      │    ├── variable: a:8
-                     │                                                      │    └── variable: b:9
-                     │                                                      ├── params: i:10 a:11 b:12
+                     │                                                      │    ├── variable: i:13
+                     │                                                      │    ├── variable: a:14
+                     │                                                      │    └── variable: b:15
+                     │                                                      ├── params: i:16 a:17 b:18
                      │                                                      └── body
                      │                                                           └── project
-                     │                                                                ├── columns: stmt_return_4:13!null
+                     │                                                                ├── columns: stmt_return_7:19!null
                      │                                                                ├── values
                      │                                                                │    └── tuple
                      │                                                                └── projections
-                     │                                                                     └── const: 100 [as=stmt_return_4:13]
+                     │                                                                     └── const: 100 [as=stmt_return_7:19]
                      └── const: 1
 
 exec-ddl
