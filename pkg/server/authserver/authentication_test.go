@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -176,7 +175,7 @@ func TestSSLEnforcement(t *testing.T) {
 			}
 			url := url.URL{
 				Scheme: tc.ctx.HTTPRequestScheme(),
-				Host:   s.(*server.TestServer).Cfg.HTTPAddr,
+				Host:   s.HTTPAddr(),
 				Path:   tc.path,
 			}
 			resp, err := client.Get(url.String())

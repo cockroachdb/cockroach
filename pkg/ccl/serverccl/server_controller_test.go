@@ -184,7 +184,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	t.Logf("waking up a test tenant")
 
 	// Create our own test tenant with a known name.
-	_, _, err = s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, _, err = s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "hello",
 		})
@@ -643,7 +643,7 @@ func TestServiceShutdownUsesGracefulDrain(t *testing.T) {
 	drainCh := make(chan struct{})
 
 	// Start a shared process server.
-	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, _, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "hello",
 			Knobs: base.TestingKnobs{

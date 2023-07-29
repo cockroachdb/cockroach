@@ -87,9 +87,8 @@ func TestStatusJson(t *testing.T) {
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-	s := srv.(*server.TestServer)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
 	node := s.Node().(*server.Node)
 
 	wrapper := serverpb.NodesResponse{}

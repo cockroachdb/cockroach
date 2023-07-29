@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/rangetestutils"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -454,7 +453,6 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ts := s.(*server.TestServer)
 
 	span := roachpb.Span{
 		Key:    roachpb.RKeyMin.AsRawKey(),
@@ -465,14 +463,14 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 		Spans:  []roachpb.Span{span},
 	}
 
-	conn := ts.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := serverpb.NewStatusClient(conn)
 
 	response, err := client.SpanStats(ctx, &request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	initialRanges, err := ts.ExpectedInitialRangeCount()
+	initialRanges, err := s.ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}

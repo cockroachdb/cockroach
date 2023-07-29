@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,7 +30,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -39,10 +38,9 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	key := roachpb.Key("b")
@@ -58,7 +56,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes(content),
 	}
-	if _, pErr := kv.SendWrapped(ctx, s.DistSender(), pArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, s.DistSenderI().(kv.Sender), pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -73,7 +71,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 			EndKey: r.EndKey.AsRawKey(),
 		},
 	}
-	if _, pErr := kv.SendWrapped(ctx, s.DistSender(), drArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, s.DistSenderI().(kv.Sender), drArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 

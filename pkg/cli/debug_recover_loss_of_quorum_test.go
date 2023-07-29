@@ -269,7 +269,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		"Failed to decommission removed nodes")
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(true)
 			return nil
 		}), "Failed to activate replication queue")
@@ -279,7 +279,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	require.NoError(t, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceConsistencyQueueProcess()
 		}), "Failed to force replicas to consistency queue")
 	}

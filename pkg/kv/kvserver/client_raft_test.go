@@ -1075,7 +1075,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Perform another write. The partitioned replica should be able to receive
 	// replicated updates.
 	incArgs = incrementArgs(key, incC)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	tc.WaitForValues(t, key, []int64{incABC, incABC, incABC})
@@ -1211,7 +1211,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		t.Fatalf("expected leader to be 1 or 2, was: %d", leaderReplicaID)
 	}
 	leaderNodeIdx := int(leaderReplicaID - 1)
-	leaderNode := tc.Server(leaderNodeIdx).(*server.TestServer)
+	leaderNode := tc.Server(leaderNodeIdx)
 	leaderStore, err := leaderNode.GetStores().(*kvserver.Stores).GetStore(leaderNode.GetFirstStoreID())
 	require.NoError(t, err)
 
@@ -3736,7 +3736,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// established after the first node's removal.
 	value := int64(5)
 	incArgs := incrementArgs(key, value)
-	if _, err := kv.SendWrapped(ctx, tc.Servers[1].DistSender(), incArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, tc.Servers[1].DistSenderI().(kv.Sender), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4516,7 +4516,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-	distSender := tc.Servers[0].DistSender()
+	distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 	key := []byte("a")
 	tc.SplitRangeOrFatal(t, key)
@@ -5687,7 +5687,7 @@ func TestElectionAfterRestart(t *testing.T) {
 				var err error
 				var lastIndex kvpb.RaftIndex
 				for _, srv := range tc.Servers {
-					_ = srv.Stores().VisitStores(func(s *kvserver.Store) error {
+					_ = srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 						s.VisitReplicas(func(replica *kvserver.Replica) (more bool) {
 							if replica.RangeID != rangeID {
 								return
@@ -5712,7 +5712,7 @@ func TestElectionAfterRestart(t *testing.T) {
 			return nil
 		})
 		for _, srv := range tc.Servers {
-			require.NoError(t, srv.Stores().VisitStores(func(s *kvserver.Store) error {
+			require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				return s.TODOEngine().Flush()
 			}))
 		}
@@ -5818,7 +5818,7 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 
 	// Read them back from all stores.
 	for _, srv := range tc.Servers {
-		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
 		require.Equal(t, kvs{
 			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),

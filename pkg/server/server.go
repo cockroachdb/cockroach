@@ -2229,15 +2229,6 @@ func (s *Server) AcceptInternalClients(ctx context.Context) error {
 		})
 }
 
-// Stop shuts down this server instance. Note that this method exists
-// solely for the benefit of the `\demo shutdown` command in
-// `cockroach demo`. It is not called as part of the regular server
-// shutdown sequence; for this, see cli/start.go and the Drain()
-// RPC.
-func (s *Server) Stop() {
-	s.stopper.Stop(context.Background())
-}
-
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
 func (s *Server) ShutdownRequested() <-chan ShutdownRequest {

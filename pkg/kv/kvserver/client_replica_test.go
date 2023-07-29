@@ -162,7 +162,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 
 	manual := hlc.NewHybridManualClock()
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -170,9 +170,8 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	manual.Pause()
@@ -271,7 +270,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	}
 	manual := hlc.NewHybridManualClock()
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
@@ -287,9 +286,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	// Put an initial value.
@@ -453,16 +451,15 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 func testTxnReadWithinUncertaintyInterval(t *testing.T, observedTS bool, readOp string) {
 	ctx := context.Background()
 	manual := hlc.NewHybridManualClock()
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
 			},
 		},
 	})
-	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	// Split off a scratch range.
@@ -633,7 +630,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	// Write to key A and key B in the writer transaction.
 	for _, key := range []roachpb.Key{keyA, keyB} {
 		put := putArgs(key, []byte("val"))
-		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), kvpb.Header{Txn: &writerTxn}, put)
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &writerTxn}, put)
 		require.Nil(t, pErr)
 		writerTxn.Update(resp.Header().Txn)
 	}
@@ -659,7 +656,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 			et.LockSpans[i].EndKey = et.LockSpans[i].Key.Next()
 		}
 	}
-	etResp, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), etH, et)
+	etResp, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), etH, et)
 	require.Nil(t, pErr)
 	writerTxn.Update(etResp.Header().Txn)
 
@@ -686,7 +683,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	// transactions are always an observed timestamp from their own gateway node.
 	for i, key := range []roachpb.Key{keyB, keyA} {
 		get := getArgs(key.Next())
-		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), kvpb.Header{Txn: &readerTxn}, get)
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &readerTxn}, get)
 		require.Nil(t, pErr)
 		require.Nil(t, resp.(*kvpb.GetResponse).Value)
 		readerTxn.Update(resp.Header().Txn)
@@ -738,14 +735,14 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 			//     leading to a stale read.
 			//
 			resolve := resolveIntentArgs(roachpb.PENDING)
-			_, pErr = kv.SendWrapped(ctx, tc.Servers[0].DistSender(), resolve)
+			_, pErr = kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), resolve)
 			require.Nil(t, pErr)
 		}
 
 		if alreadyResolved {
 			// Resolve the committed value on key B to COMMITTED.
 			resolve := resolveIntentArgs(roachpb.COMMITTED)
-			_, pErr = kv.SendWrapped(ctx, tc.Servers[0].DistSender(), resolve)
+			_, pErr = kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), resolve)
 			require.Nil(t, pErr)
 		}
 	}
@@ -754,7 +751,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	// ReadWithinUncertaintyIntervalErrors.
 	for _, key := range []roachpb.Key{keyA, keyB} {
 		get := getArgs(key)
-		_, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), kvpb.Header{Txn: &readerTxn}, get)
+		_, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &readerTxn}, get)
 		require.NotNil(t, pErr)
 		var rwuiErr *kvpb.ReadWithinUncertaintyIntervalError
 		require.True(t, errors.As(pErr.GetDetail(), &rwuiErr))
@@ -835,7 +832,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 
 	// Collect an observed timestamp in that transaction from node 2.
 	getB := getArgs(keyB)
-	resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), kvpb.Header{Txn: &txn}, getB)
+	resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getB)
 	require.Nil(t, pErr)
 	txn.Update(resp.Header().Txn)
 	require.Len(t, txn.ObservedTimestamps, 1)
@@ -860,7 +857,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// stale read.
 	ba := &kvpb.BatchRequest{}
 	ba.Add(putArgs(keyA, []byte("val")))
-	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+	br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
 
@@ -882,7 +879,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// avoid the uncertainty error. This is a good thing, as doing so would allow
 	// for a stale read.
 	getA := getArgs(keyA)
-	_, pErr = kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), kvpb.Header{Txn: &txn}, getA)
+	_, pErr = kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getA)
 	require.NotNil(t, pErr)
 	require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
 }
@@ -1011,7 +1008,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 
 		// Write the data from a different transaction to establish the time for the
 		// key as 10 ns in the future.
-		_, pErr := kv.SendWrapped(ctx, tc.Servers[2].DistSender(), putArgs(keyC, []byte("value")))
+		_, pErr := kv.SendWrapped(ctx, tc.Servers[2].DistSenderI().(kv.Sender), putArgs(keyC, []byte("value")))
 		require.Nil(t, pErr)
 
 		// Create two identical transactions. The first one will perform a read to a
@@ -1020,7 +1017,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 		txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, 1, now, maxOffset, instanceId)
 
 		// Simulate a read which will cause the observed time to be set to now
-		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), kvpb.Header{Txn: &txn}, getArgs(keyA))
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyA))
 		require.Nil(t, pErr)
 		// The client needs to update its transaction to the returned transaction which has observed timestamps in it
 		txn = *resp.Header().Txn
@@ -1046,7 +1043,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 
 		// Try and read the transaction from the context of a new transaction. This
 		// will fail as expected as the observed timestamp will not be set.
-		_, pErr = kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), kvpb.Header{Txn: &txn2}, getArgs(keyC))
+		_, pErr = kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn2}, getArgs(keyC))
 		require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
 
 		// Try and read the key from the existing transaction. This should fail the
@@ -1056,7 +1053,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 		// - Other error (Bad) - We expect an uncertainty error so the client can choose a new timestamp and retry.
 		// - Not found (Bad) - Error because the data was written before us.
 		// - Found (Bad) - The write HLC timestamp is after our timestamp.
-		_, pErr = kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), kvpb.Header{Txn: &txn}, getArgs(keyC))
+		_, pErr = kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyC))
 		require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
 	}
 
@@ -1205,7 +1202,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// absence would not be a true stale read.
 	ba := &kvpb.BatchRequest{}
 	ba.Add(putArgs(key, []byte("val")))
-	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+	br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
 	require.True(t, nonTxnOrigTs.Less(writeTs))
@@ -1248,7 +1245,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -1256,9 +1253,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	// Init test ranges:
@@ -1463,7 +1459,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	// First, do a write; we'll use it to determine when the dust has settled.
 	l.leftKey = key
 	incArgs := incrementArgs(l.leftKey, 1)
-	if _, pErr := kv.SendWrapped(context.Background(), l.tc.Servers[0].DistSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), l.tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	l.replica0 = l.tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
@@ -2003,7 +1999,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 
 	// Do a write on node1 to establish a key with its timestamp at now.
 	if _, pErr := kv.SendWrapped(
-		ctx, tc.Servers[0].DistSender(), putArgs(keyA, []byte("value")),
+		ctx, tc.Servers[0].DistSenderI().(kv.Sender), putArgs(keyA, []byte("value")),
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2035,7 +2031,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	// expect to see an uncertainty interval error.
 	h := kvpb.Header{Txn: &txn}
 	if _, pErr := kv.SendWrappedWith(
-		ctx, tc.Servers[0].DistSender(), h, getArgs(keyA),
+		ctx, tc.Servers[0].DistSenderI().(kv.Sender), h, getArgs(keyA),
 	); !testutils.IsPError(pErr, "uncertainty") {
 		t.Fatalf("expected an uncertainty interval error; got %v", pErr)
 	}
@@ -2264,7 +2260,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 		return nil
 	}
-	srv := serverutils.StartServerOnly(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -2274,7 +2270,6 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				},
 			},
 		})
-	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
@@ -2330,7 +2325,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 
 		for {
-			leaseInfo, _, err := s.GetRangeLease(ctx, key, server.AllowQueryToBeForwardedToDifferentNode)
+			leaseInfo, _, err := s.GetRangeLease(ctx, key, roachpb.AllowQueryToBeForwardedToDifferentNode)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2476,7 +2471,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// use an old, cached, version of the range descriptor that doesn't have the
 	// local replica in it (and so the request would be routed away).
 	// TODO(andrei): Add a batch option to not use the range cache.
-	s, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+	s, err := tc.Servers[1].GetStores().(*kvserver.Stores).GetStore(tc.Servers[1].GetFirstStoreID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2519,7 +2514,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		}
 		return nil
 	}
-	srv := serverutils.StartServerOnly(t,
+	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -2529,7 +2524,6 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 				},
 			},
 		})
-	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(context.Background())
 
 	// Send the lease request.
@@ -2693,16 +2687,15 @@ func TestClearRange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			// This makes sure that our writes are visible when we go
 			// straight to the engine to check them.
 			DisableCanAckBeforeApplication: true,
 		}},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	clearRange := func(start, end roachpb.Key) {
@@ -2836,7 +2829,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(getArgs(keyA))
-		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+		br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 		require.Nil(t, pErr)
 		require.Equal(t, readTS, br.Timestamp)
 		v, err := br.Responses[0].GetGet().Value.GetInt()
@@ -2901,7 +2894,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		ba = &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(incrementArgs(keyA, 1))
-		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
+		br, pErr = tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 		require.Nil(t, pErr)
 		require.NotEqual(t, readTS, br.Timestamp)
 		require.True(t, readTS.Less(br.Timestamp))
@@ -3744,7 +3737,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	// completed.
 
 	// Code above verified r1 is the leaseholder, so use it to ChangeReplicas.
-	r1, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(ctx, rangeInfo.Desc.RangeID)
+	r1, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeInfo.Desc.RangeID)
 	assert.Nil(t, err)
 	expDescAfterAdd := rangeInfo.Desc // for use with ChangeReplicas
 	expDescAfterAdd.NextReplicaID++

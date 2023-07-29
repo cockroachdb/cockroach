@@ -558,7 +558,9 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 }
 
 // AddServer is like AddAndStartServer, except it does not start it.
-func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestServer, error) {
+func (tc *TestCluster) AddServer(
+	serverArgs base.TestServerArgs,
+) (serverutils.TestServerInterface, error) {
 	serverArgs.PartOfCluster = true
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
@@ -1193,7 +1195,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 	if err != nil {
 		return nil, err
 	}
-	destStore, err := destServer.Stores().GetStore(dest.StoreID)
+	destStore, err := destServer.GetStores().(*kvserver.Stores).GetStore(dest.StoreID)
 	if err != nil {
 		return nil, err
 	}
@@ -1286,27 +1288,27 @@ func (tc *TestCluster) FindRangeLease(
 // stale - i.e. there might be a newer lease unbeknownst to the queried node.
 func (tc *TestCluster) FindRangeLeaseEx(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
-) (_ server.LeaseInfo, now hlc.ClockTimestamp, _ error) {
-	var queryPolicy server.LeaseInfoOpt
+) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error) {
+	var queryPolicy roachpb.LeaseInfoOpt
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return server.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
+			return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
-		queryPolicy = server.QueryLocalNodeOnly
+		queryPolicy = roachpb.QueryLocalNodeOnly
 	} else {
 		hint = &roachpb.ReplicationTarget{
 			NodeID:  rangeDesc.Replicas().Descriptors()[0].NodeID,
 			StoreID: rangeDesc.Replicas().Descriptors()[0].StoreID}
-		queryPolicy = server.AllowQueryToBeForwardedToDifferentNode
+		queryPolicy = roachpb.AllowQueryToBeForwardedToDifferentNode
 	}
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
 	// it.
 	hintServer, err := tc.FindMemberServer(hint.StoreID)
 	if err != nil {
-		return server.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
+		return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
 	}
 
 	return hintServer.GetRangeLease(ctx, rangeDesc.StartKey.AsRawKey(), queryPolicy)
@@ -1399,7 +1401,7 @@ func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error
 // FindMemberServer returns the server containing a given store.
 func (tc *TestCluster) FindMemberServer(storeID roachpb.StoreID) (*server.TestServer, error) {
 	for _, server := range tc.Servers {
-		if server.Stores().HasStore(storeID) {
+		if server.GetStores().(*kvserver.Stores).HasStore(storeID) {
 			return server, nil
 		}
 	}
@@ -1412,7 +1414,7 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store
 	if err != nil {
 		return nil, err
 	}
-	return server.Stores().GetStore(storeID)
+	return server.GetStores().(*kvserver.Stores).GetStore(storeID)
 }
 
 // WaitForFullReplication waits until all stores in the cluster
@@ -1443,7 +1445,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	for r := retry.Start(opts); r.Next() && notReplicated; {
 		notReplicated = false
 		for _, s := range tc.Servers {
-			err := s.Stores().VisitStores(func(s *kvserver.Store) error {
+			err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				if n := s.ClusterNodeCount(); n != len(tc.Servers) {
 					log.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
 					notReplicated = true
@@ -1590,7 +1592,7 @@ func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 // ToggleReplicateQueues implements TestClusterInterface.
 func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	for _, s := range tc.Servers {
-		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
+		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(active)
 			return nil
 		})
@@ -1603,7 +1605,7 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	results := make([]int64, len(tc.Servers))
 	for i, server := range tc.Servers {
-		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
+		err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			valRes, err := storage.MVCCGet(context.Background(), s.TODOEngine(), key,
 				server.Clock().Now(), storage.MVCCGetOptions{})
 			if err != nil {
@@ -1644,7 +1646,7 @@ func (tc *TestCluster) GetFirstStoreFromServer(
 	t serverutils.TestFataler, server int,
 ) *kvserver.Store {
 	ts := tc.Servers[server]
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1673,7 +1675,9 @@ func (tc *TestCluster) RestartServer(idx int) error {
 // passed in that can observe the server once its been re-created but before it's
 // been started. This is useful for tests that want to capture that the startup
 // sequence performs the correct actions i.e. that on startup liveness is gossiped.
-func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.TestServer)) error {
+func (tc *TestCluster) RestartServerWithInspect(
+	idx int, inspect func(s serverutils.TestServerInterface),
+) error {
 	if !tc.ServerStopped(idx) {
 		return errors.Errorf("server %d must be stopped before attempting to restart", idx)
 	}
@@ -1811,7 +1815,7 @@ func (tc *TestCluster) GetRaftLeader(
 	testutils.SucceedsSoon(t, func() error {
 		var latestTerm uint64
 		for i := range tc.Servers {
-			err := tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+			err := tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 				repl := store.LookupReplica(key)
 				if repl == nil {
 					// Replica does not exist on this store or there is no raft

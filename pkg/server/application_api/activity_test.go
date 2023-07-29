@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -36,8 +35,7 @@ func TestListActivitySecurity(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ts := s.(*server.TestServer)
-	defer ts.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(ctx)
 
 	expectedErrNoPermission := "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED system privilege"
 	contentionMsg := &serverpb.ListContentionEventsResponse{}
@@ -109,7 +107,7 @@ func TestListActivitySecurity(t *testing.T) {
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
-	conn := ts.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := serverpb.NewStatusClient(conn)
 	{
 		request := &serverpb.ListContentionEventsRequest{}

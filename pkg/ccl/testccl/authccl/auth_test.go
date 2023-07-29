@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -418,7 +417,7 @@ func TestClientAddrOverride(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
-	ts := s.(*server.TestServer).ApplicationLayer()
+	ts := s.ApplicationLayer()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, ts.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),

@@ -34,7 +34,7 @@ func Example_node() {
 	defer c.Cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
-	if err := c.WriteSummaries(); err != nil {
+	if err := c.Server.WriteSummaries(); err != nil {
 		log.Fatalf(context.Background(), "Couldn't write stats summaries: %s", err)
 	}
 
@@ -71,7 +71,7 @@ func TestNodeStatus(t *testing.T) {
 	defer c.Cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
-	if err := c.WriteSummaries(); err != nil {
+	if err := c.Server.WriteSummaries(); err != nil {
 		t.Fatalf("couldn't write stats summaries: %s", err)
 	}
 
@@ -161,18 +161,18 @@ func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 		t.Fatalf("%s", err)
 	}
 
-	nodeID := c.NodeID()
+	nodeID := c.Server.NodeID()
 	nodeIDStr := strconv.FormatInt(int64(nodeID), 10)
 	if a, e := fields[0], nodeIDStr; a != e {
 		t.Errorf("node id (%s) != expected (%s)", a, e)
 	}
 
-	nodeAddr := c.AdvRPCAddr()
+	nodeAddr := c.Server.AdvRPCAddr()
 	if a, e := fields[1], nodeAddr; a != e {
 		t.Errorf("node address (%s) != expected (%s)", a, e)
 	}
 
-	nodeSQLAddr := c.AdvSQLAddr()
+	nodeSQLAddr := c.Server.AdvSQLAddr()
 	if a, e := fields[2], nodeSQLAddr; a != e {
 		t.Errorf("node SQL address (%s) != expected (%s)", a, e)
 	}

@@ -49,10 +49,9 @@ func TestServerQuery(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
 	// Populate data directly.
-	tsdb := tsrv.TsDB()
+	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
@@ -179,7 +178,7 @@ func TestServerQuery(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -270,14 +269,13 @@ func TestServerQueryStarvation(t *testing.T) {
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
 	seriesCount := workerCount * 2
-	if err := populateSeries(seriesCount, 10, 3, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, 10, 3, s.TsDB().(*ts.DB)); err != nil {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -313,11 +311,11 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
+
 	systemDB := s.SystemLayer().SQLConn(t, "")
 
 	// Populate data directly.
-	tsdb := tsrv.TsDB()
+	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
@@ -417,7 +415,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -492,7 +490,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
-	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, tsrv.NodeID(), rpc.DefaultClass).Connect(context.Background())
+	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, s.NodeID(), rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,13 +546,12 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 		TimeSeriesQueryMemoryBudget: budget,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
-	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, valueCount, s.TsDB().(*ts.DB)); err != nil {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -622,9 +619,8 @@ func TestServerDump(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	tsrv := s.(*server.TestServer)
 
-	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, valueCount, s.TsDB().(*ts.DB)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -633,7 +629,7 @@ func TestServerDump(t *testing.T) {
 		names = append(names, seriesName(series))
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -756,16 +752,15 @@ func BenchmarkServerQuery(b *testing.B) {
 
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
 	// Populate data for large number of time series.
 	seriesCount := 50
 	sourceCount := 10
-	if err := populateSeries(seriesCount, sourceCount, 3, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, 3, s.TsDB().(*ts.DB)); err != nil {
 		b.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
+	conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		b.Fatal(err)

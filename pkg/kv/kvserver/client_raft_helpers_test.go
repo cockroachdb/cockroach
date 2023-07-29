@@ -181,7 +181,7 @@ type testClusterStoreRaftMessageHandler struct {
 
 func (h *testClusterStoreRaftMessageHandler) getStore() (*kvserver.Store, error) {
 	ts := h.tc.Servers[h.storeIdx]
-	return ts.Stores().GetStore(ts.GetFirstStoreID())
+	return ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 }
 
 func (h *testClusterStoreRaftMessageHandler) HandleRaftRequest(
@@ -302,7 +302,7 @@ func setupPartitionedRangeWithHandlers(
 	pr.mu.partitionedNodeIdx = partitionedNodeIdx
 	if replicaID == 0 {
 		ts := tc.Servers[partitionedNodeIdx]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			return nil, err
 		}
@@ -436,7 +436,7 @@ func dropRaftMessagesFrom(
 		return rID == rangeID && (cond == nil || cond.Load()) && dropFrom[from]
 	}
 
-	store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
 	srv.RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
 		rangeID:                    rangeID,

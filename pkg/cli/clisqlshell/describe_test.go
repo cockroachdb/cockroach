@@ -38,7 +38,7 @@ func TestDescribe(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	db := c.TestServer.SQLConn(t, "defaultdb")
+	db := c.Server.SQLConn(t, "defaultdb")
 
 	var commonArgs []string
 

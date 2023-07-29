@@ -212,9 +212,8 @@ func TestRedundantNodeLivenessHeartbeatsAvoided(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	s := serv.(*server.TestServer)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	defer s.Stopper().Stop(ctx)
 
@@ -520,7 +519,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	}
 
 	// Restart store and verify gossip contains liveness record for nodes 1&2.
-	require.NoError(t, tc.RestartServerWithInspect(1, func(s *server.TestServer) {
+	require.NoError(t, tc.RestartServerWithInspect(1, func(s serverutils.TestServerInterface) {
 		livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 		s.GossipI().(*gossip.Gossip).
 			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value) {
@@ -749,14 +748,13 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manualClock,
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	testutils.SucceedsSoon(t, func() error {
@@ -981,7 +979,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -990,7 +988,6 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	// Verify retry of the ambiguous result for heartbeat loop.
@@ -1108,7 +1105,7 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 		<-sem
 		return nil
 	}
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -1123,7 +1120,6 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
 

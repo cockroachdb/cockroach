@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -541,9 +540,8 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			params, _ := tests.CreateTestServerParams()
-			si, _, db := serverutils.StartServer(t, params)
-			defer si.Stopper().Stop(ctx)
-			s := si.(*server.TestServer)
+			s, _, db := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
 
 			// Setup a txn.
 			txn := db.NewTxn(ctx, "test")

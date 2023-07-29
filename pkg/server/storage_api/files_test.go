@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -38,12 +37,11 @@ func TestStatusGetFiles(t *testing.T) {
 
 	storeSpec := base.StoreSpec{Path: tempDir}
 
-	tsI := serverutils.StartServerOnly(t, base.TestServerArgs{
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			storeSpec,
 		},
 	})
-	ts := tsI.(*server.TestServer)
 	defer ts.Stopper().Stop(context.Background())
 
 	conn := ts.RPCClientConn(t, username.RootUserName())
