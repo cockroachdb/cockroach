@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -55,9 +54,9 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 			PARTITION p1 VALUES IN (DEFAULT)
 		)`)
 
-	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", s.(*server.TestServer).Cfg.DefaultZoneConfig.GC.TTLSeconds)
+	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", s.DefaultZoneConfig().GC.TTLSeconds)
 	yamlOverride := "gc: {ttlseconds: 42}"
-	zoneOverride := s.(*server.TestServer).Cfg.DefaultZoneConfig
+	zoneOverride := s.DefaultZoneConfig()
 	zoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
 	partialZoneOverride := *zonepb.NewZoneConfig()
 	partialZoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
@@ -67,7 +66,7 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,
-		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		Config: s.DefaultZoneConfig(),
 	}
 	defaultOverrideRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,
@@ -403,11 +402,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`); err != nil {
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:     keys.RootNamespaceID,
-		Config: s.(*server.TestServer).Cfg.DefaultZoneConfig,
+		Config: s.DefaultZoneConfig(),
 	}
 
 	tableID := sqlutils.QueryTableID(t, sqlDB, "t", "public", "test")
-	zoneOverride := s.(*server.TestServer).Cfg.DefaultZoneConfig
+	zoneOverride := s.DefaultZoneConfig()
 	zoneOverride.GC = &zonepb.GCPolicy{TTLSeconds: 42}
 
 	overrideRow := sqlutils.ZoneRow{

@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -639,7 +638,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 }
 
 func acquire(
-	ctx context.Context, s *server.TestServer, descID descpb.ID,
+	ctx context.Context, s serverutils.TestServerInterface, descID descpb.ID,
 ) (lease.LeasedDescriptor, error) {
 	return s.LeaseManager().(*lease.Manager).Acquire(ctx, s.Clock().Now(), descID)
 }
@@ -710,11 +709,11 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	ctx := context.Background()
 
-	lease1, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
+	lease1, err := acquire(ctx, s, tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease2, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
+	lease2, err := acquire(ctx, s, tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -737,7 +736,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	<-deleted
 
 	// We should still be able to acquire, because we have an active lease.
-	lease3, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
+	lease3, err := acquire(ctx, s, tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -748,7 +747,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	lease3.Release(ctx)
 
 	// Now we shouldn't be able to acquire any more.
-	_, err = acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
+	_, err = acquire(ctx, s, tableDesc.GetID())
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}

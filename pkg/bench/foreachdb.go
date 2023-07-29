@@ -26,7 +26,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -71,7 +70,7 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 
 	// Create our own test tenant with a known name.
 	tenantName := "benchtenant"
-	_, tenantDB, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, tenantDB, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName:  roachpb.TenantName(tenantName),
 			UseDatabase: "bench",

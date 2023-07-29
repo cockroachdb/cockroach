@@ -796,7 +796,7 @@ func makeSystemServerWithOptions(
 			TestServer: TestServer{
 				DB:           systemDB,
 				Server:       systemServer,
-				TestingKnobs: systemServer.(*server.TestServer).Cfg.TestingKnobs,
+				TestingKnobs: *systemServer.SystemLayer().TestingKnobs(),
 				Codec:        keys.SystemSQLCodec,
 			},
 			SystemServer: systemServer,

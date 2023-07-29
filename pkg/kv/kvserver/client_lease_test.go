@@ -129,7 +129,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	// Turn off liveness heartbeats on all nodes to ensure that updates to node
 	// liveness are not triggering gossiping.
 	for _, s := range tc.Servers {
-		pErr := s.Stores().VisitStores(func(store *kvserver.Store) error {
+		pErr := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.GetStoreConfig().NodeLiveness.PauseHeartbeatLoopForTest()
 			return nil
 		})
@@ -142,7 +142,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 
 	initialServerId := -1
 	for i, s := range tc.Servers {
-		pErr := s.Stores().VisitStores(func(store *kvserver.Store) error {
+		pErr := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			if store.Gossip().InfoOriginatedHere(nodeLivenessKey) {
 				initialServerId = i
 			}
@@ -617,7 +617,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		manualClock.Pause()
 
 		// Write a key.
-		_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incrementArgs(key, 1))
+		_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), incrementArgs(key, 1))
 		require.Nil(t, pErr)
 
 		// Determine when to read.
@@ -631,7 +631,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(getArgs(key))
-		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+		br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 		require.Nil(t, pErr)
 		require.Equal(t, readTS, br.Timestamp)
 		v, err := br.Responses[0].GetGet().Value.GetInt()
@@ -649,7 +649,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		ba = &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(incrementArgs(key, 1))
-		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
+		br, pErr = tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 		require.Nil(t, pErr)
 		require.NotEqual(t, readTS, br.Timestamp)
 		require.True(t, readTS.Less(br.Timestamp))

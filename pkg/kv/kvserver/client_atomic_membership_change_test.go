@@ -69,7 +69,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			var sawStores []roachpb.StoreID
 			for _, s := range tc.Servers {
-				r, _, _ := s.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
+				r, _, _ := s.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 				if r == nil {
 					continue
 				}

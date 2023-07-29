@@ -611,7 +611,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	// The stats should magically repair themselves. We'll first do a quick check
 	// and then a full recomputation.
-	repl, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(ctx, rangeID)
+	repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
 	require.NoError(t, err)
 	ms := repl.GetMVCCStats()
 	if ms.SysCount >= sysCountGarbage {

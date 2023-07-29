@@ -139,7 +139,7 @@ func TestProxyProtocol(t *testing.T) {
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -249,7 +249,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 
 	// Create a default user.
@@ -691,7 +691,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -888,7 +888,7 @@ func TestProxyTLSClose(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -939,7 +939,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -997,7 +997,7 @@ func TestInsecureProxy(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := ts.PGServer().(*pgwire.Server)
 	pgs.TestingEnableAuthLogging()
@@ -1172,7 +1172,7 @@ func TestDenylistUpdate(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sql.Stopper().Stop(ctx)
 
-	ts := sql.(*server.TestServer).ApplicationLayer()
+	ts := sql.ApplicationLayer()
 	ts.
 		PGPreServer().(*pgwire.PreServeConnHandler).
 		TestingSetTrustClientProvidedRemoteAddr(true)

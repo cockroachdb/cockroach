@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,9 +46,8 @@ func countEvents(
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	ts := s.(*server.TestServer)
 	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	// Count the number of split events.
@@ -121,7 +119,7 @@ func TestLogSplits(t *testing.T) {
 		t.Fatal(rows.Err())
 	}
 
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	store, pErr := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -163,8 +161,7 @@ func TestLogMerges(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.(*server.TestServer)
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	store, pErr := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -272,7 +269,7 @@ func TestLogRebalances(t *testing.T) {
 	// StoreID 1 is present on the testserver. If this assumption changes in the
 	// future, *any* store will work, but a new method will need to be added to
 	// Stores (or a creative usage of VisitStores could suffice).
-	store, err := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(roachpb.StoreID(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,11 +416,10 @@ func TestAsyncLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	ts := s.(*server.TestServer)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	// Log a fake split event inside a transaction that also writes to key a.

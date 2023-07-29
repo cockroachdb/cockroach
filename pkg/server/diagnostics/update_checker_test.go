@@ -55,7 +55,7 @@ func TestCheckVersion(t *testing.T) {
 		require.Equal(t, 1, r.NumRequests())
 
 		last := r.LastRequestData()
-		require.Equal(t, s.(*server.TestServer).StorageClusterID().String(), last.UUID)
+		require.Equal(t, s.StorageLayer().StorageClusterID().String(), last.UUID)
 		require.Equal(t, "system", last.TenantID)
 		require.Equal(t, build.GetInfo().Tag, last.Version)
 		require.Equal(t, "OSS", last.LicenseType)

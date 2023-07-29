@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -181,7 +181,7 @@ type testClusterStoreRaftMessageHandler struct {
 
 func (h *testClusterStoreRaftMessageHandler) getStore() (*kvserver.Store, error) {
 	ts := h.tc.Servers[h.storeIdx]
-	return ts.Stores().GetStore(ts.GetFirstStoreID())
+	return ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 }
 
 func (h *testClusterStoreRaftMessageHandler) HandleRaftRequest(
@@ -302,7 +302,7 @@ func setupPartitionedRangeWithHandlers(
 	pr.mu.partitionedNodeIdx = partitionedNodeIdx
 	if replicaID == 0 {
 		ts := tc.Servers[partitionedNodeIdx]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			return nil, err
 		}
@@ -383,7 +383,7 @@ func setupPartitionedRangeWithHandlers(
 			}
 		}
 		pr.handlers = append(pr.handlers, h)
-		tc.Servers[s].RaftTransport().ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
 	}
 	return pr, nil
 }
@@ -423,7 +423,7 @@ func (pr *testClusterPartitionedRange) extend(
 // This will replace the previous message handler, if any.
 func dropRaftMessagesFrom(
 	t *testing.T,
-	srv *server.TestServer,
+	srv serverutils.TestServerInterface,
 	rangeID roachpb.RangeID,
 	fromReplicaIDs []roachpb.ReplicaID,
 	cond *atomic.Bool,
@@ -436,9 +436,9 @@ func dropRaftMessagesFrom(
 		return rID == rangeID && (cond == nil || cond.Load()) && dropFrom[from]
 	}
 
-	store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
-	srv.RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+	srv.RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
 		rangeID:                    rangeID,
 		IncomingRaftMessageHandler: store,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{

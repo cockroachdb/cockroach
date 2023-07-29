@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -48,7 +50,18 @@ type TestServerInterface interface {
 	ApplicationLayerInterface
 	TenantControlInterface
 
+	// Start runs the server. This is pre-called by StartServer().
+	// It is provided for tests that use the TestServerFactory directly
+	// (mostly 'cockroach demo').
 	Start(context.Context) error
+
+	// Stop stops the server. This must be called at the end of a test
+	// to avoid leaking resources.
+	Stop(context.Context)
+
+	// SetReadyFn can be configured to notify a test when the server is
+	// ready. This is only effective when called before Start().
+	SetReadyFn(fn func(bool))
 
 	// ApplicationLayer returns the interface to the application layer that is
 	// exercised by the test. Depending on how the test server is started
@@ -63,9 +76,18 @@ type TestServerInterface interface {
 	// StorageLayer returns the interface to the storage layer.
 	StorageLayer() StorageLayerInterface
 
+	// TenantController returns the interface to the tenant controller.
+	TenantController() TenantControlInterface
+
 	// BinaryVersionOverride returns the value of an override if set using
 	// TestingKnobs.
 	BinaryVersionOverride() roachpb.Version
+
+	// RunInitialSQL is used by 'cockroach demo' to initialize
+	// an admin user.
+	// TODO(knz): Migrate this logic to a demo-specific init task
+	// or config profile.
+	RunInitialSQL(ctx context.Context, startSingleNode bool, adminUser, adminPassword string) error
 }
 
 // ApplicationLayerInterface defines accessors to the application
@@ -73,6 +95,10 @@ type TestServerInterface interface {
 // effectively agnostic to whether they use a secondary tenant or not.
 // This interface is implemented by server.Test{Tenant,Server}.
 type ApplicationLayerInterface interface {
+	// Readiness returns true when the server is ready, that is,
+	// when it is accepting connections and it is not draining.
+	Readiness(ctx context.Context) error
+
 	// SQLInstanceID is the ephemeral ID assigned to a running instance of the
 	// SQLServer. Each tenant can have zero or more running SQLServer instances.
 	SQLInstanceID() base.SQLInstanceID
@@ -248,6 +274,10 @@ type ApplicationLayerInterface interface {
 	// TestingKnobs returns the TestingKnobs in use by the test server.
 	TestingKnobs() *base.TestingKnobs
 
+	// SQLServerInternal returns the *server.SQLServer as an interface{}
+	// Note: most tests should use SQLServer() and InternalExecutor() instead.
+	SQLServerInternal() interface{}
+
 	// AmbientCtx retrieves the AmbientContext for this server,
 	// so that a test can instantiate additional one-off components
 	// using the same context details as the server. This should not
@@ -347,9 +377,20 @@ type ApplicationLayerInterface interface {
 		ctx context.Context, database, table string, timestamp hlc.Timestamp,
 	) error
 
-	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
-	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
-	// it by hand each time.
+	// DefaultZoneConfig is a convenience function that accesses
+	// .SystemConfigProvider().GetSystemConfig().DefaultZoneConfig.
+	DefaultZoneConfig() zonepb.ZoneConfig
+
+	// SetReady changes the SQL readiness.
+	SetReady(bool)
+
+	// SetAcceptSQLWithoutTLS changes the corresponding configuration parameter.
+	SetAcceptSQLWithoutTLS(bool)
+
+	// PrivilegeChecker returns the privilege checker in use by the HTTP
+	// server. The concrete return value is of type
+	// privchecker.SQLPrivilegeChecker (interface).
+	PrivilegeChecker() interface{}
 }
 
 // TenantControlInterface defines the API of a test server that can
@@ -397,6 +438,18 @@ type TenantControlInterface interface {
 	// StartedDefaultTestTenant returns true if the server has started
 	// the service for the default test tenant.
 	StartedDefaultTestTenant() bool
+
+	// DefaultTestTenantDisabled returns true if the server has disabled
+	// the service for the default test tenant.
+	// TODO(knz): Verify whether this accessor is needed. This should
+	// be simplified.
+	DefaultTestTenantDisabled() bool
+
+	// DisableDefaultTestTenant prevents the server from starting the
+	// service for the default test tenant.
+	// TODO(knz): Verify whether this accessor is needed. This should
+	// be simplified.
+	DisableDefaultTestTenant()
 }
 
 // StorageLayerInterface defines accessors to the storage layer of a
@@ -453,9 +506,24 @@ type StorageLayerInterface interface {
 	// SplitRange splits the range containing splitKey.
 	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 
+	// SplitRangeWithExpiration splits the range containing splitKey with a sticky
+	// bit expiring at expirationTime.
+	// The right range created by the split starts at the split key and extends to the
+	// original range's end key.
+	// Returns the new descriptors of the left and right ranges.
+	//
+	// splitKey must correspond to a SQL table key (it must end with a family ID /
+	// col ID).
+	SplitRangeWithExpiration(
+		splitKey roachpb.Key, expirationTime hlc.Timestamp,
+	) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error)
+
 	// MergeRanges merges the range containing leftKey with the following adjacent
 	// range.
 	MergeRanges(leftKey roachpb.Key) (merged roachpb.RangeDescriptor, err error)
+
+	// LookupRange looks up the range descriptor which contains key.
+	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
 
 	// ExpectedInitialRangeCount returns the expected number of ranges that should
 	// be on the server after initial (asynchronous) splits have been completed,
@@ -481,6 +549,21 @@ type StorageLayerInterface interface {
 	// TestCluster.ScratchRange() which is idempotent).
 	ScratchRange() (roachpb.Key, error)
 
+	// ScratchRangeEx splits off a range suitable to be used as KV scratch space.
+	// (it doesn't overlap system spans or SQL tables).
+	ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error)
+
+	// ScratchRangeWithExpirationLease is like ScratchRange but the
+	// range has an expiration lease.
+	ScratchRangeWithExpirationLease() (roachpb.Key, error)
+
+	// ScratchRangeWithExpirationLeaseEx is like ScratchRangeEx but the
+	// range has an expiration lease.
+	ScratchRangeWithExpirationLeaseEx() (
+		roachpb.RangeDescriptor,
+		roachpb.RangeDescriptor,
+		error)
+
 	// Engines returns the TestServer's engines.
 	Engines() []storage.Engine
 
@@ -499,12 +582,55 @@ type StorageLayerInterface interface {
 	KVFlowHandles() interface{}
 
 	// KvProber returns a *kvprober.Prober, which is useful when asserting the
-	//correctness of the prober from integration tests.
+	// correctness of the prober from integration tests.
 	KvProber() *kvprober.Prober
+
+	// RaftTransport returns access to the raft transport.
+	// The return value is of type *kvserver.RaftTransport.
+	RaftTransport() interface{}
+
+	// GetRangeLease returns information on the lease for the range
+	// containing key, and a timestamp taken from the node. The lease is
+	// returned regardless of its status.
+	//
+	// queryPolicy specifies if its OK to forward the request to a
+	// different node.
+	GetRangeLease(
+		ctx context.Context, key roachpb.Key, queryPolicy roachpb.LeaseInfoOpt,
+	) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error)
 
 	// TenantCapabilitiesReader retrieves a reference to the
 	// capabilities reader.
 	TenantCapabilitiesReader() tenantcapabilities.Reader
+
+	// TsDB returns the ts.DB instance used by the TestServer.
+	TsDB() interface{}
+
+	// Locality returns a pointer to the locality used by the server.
+	//
+	// TODO(test-eng): investigate if this should really be a pointer.
+	//
+	// TODO(test-eng): Investigate if this method should be on
+	// ApplicationLayerInterface instead.
+	Locality() *roachpb.Locality
+
+	// DefaultSystemZoneConfig returns the internal system zone config
+	// for the server.
+	// Note: most tests should instead use the .DefaultZoneConfig() method
+	// on ApplicationLayerInterface.
+	DefaultSystemZoneConfig() zonepb.ZoneConfig
+
+	// DecommissionPreCheck is used to evaluate if nodes are ready for decommission.
+	DecommissionPreCheck(
+		ctx context.Context,
+		nodeIDs []roachpb.NodeID,
+		strictReadiness bool,
+		collectTraces bool,
+		maxErrors int,
+	) (decommissioning.PreCheckResult, error)
+
+	// RaftConfig retrieves a copy of the raft configuration.
+	RaftConfig() base.RaftConfig
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

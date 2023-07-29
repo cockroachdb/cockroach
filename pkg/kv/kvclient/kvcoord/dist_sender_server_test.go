@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -53,7 +52,7 @@ import (
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
 
-func startNoSplitMergeServer(t *testing.T) (*server.TestServer, *kv.DB) {
+func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -62,7 +61,7 @@ func startNoSplitMergeServer(t *testing.T) (*server.TestServer, *kv.DB) {
 			},
 		},
 	})
-	return s.(*server.TestServer), db
+	return s, db
 }
 
 // TestRangeLookupWithOpenTransaction verifies that range lookups are
@@ -4045,11 +4044,10 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			si, _, db := serverutils.StartServer(t,
-				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			ctx := context.Background()
-			defer si.Stopper().Stop(ctx)
-			s := si.(*server.TestServer)
+			s, _, db := serverutils.StartServer(t,
+				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+			defer s.Stopper().Stop(ctx)
 
 			keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
 			require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))

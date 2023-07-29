@@ -82,7 +82,7 @@ func TestDebugJobTrace(t *testing.T) {
 	defer c.Cleanup()
 	c.omitArgs = true
 
-	registry := c.TestServer.JobRegistry().(*jobs.Registry)
+	registry := c.Server.JobRegistry().(*jobs.Registry)
 	jobCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -107,7 +107,7 @@ func TestDebugJobTrace(t *testing.T) {
 	// to inject our traceSpanResumer.
 	var job *jobs.StartableJob
 	id := registry.MakeJobID()
-	require.NoError(t, c.TestServer.InternalDB().(isql.DB).Txn(ctx, func(
+	require.NoError(t, c.Server.InternalDB().(isql.DB).Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) (err error) {
 		err = registry.CreateStartableJobWithTxn(ctx, &job, id, txn, jobs.Record{
@@ -124,7 +124,7 @@ func TestDebugJobTrace(t *testing.T) {
 	<-recordedSpanCh
 
 	args := []string{strconv.Itoa(int(id))}
-	pgURL, cleanup := sqlutils.PGUrl(t, c.TestServer.AdvSQLAddr(),
+	pgURL, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(),
 		"TestDebugJobTrace", url.User(username.RootUser))
 	defer cleanup()
 

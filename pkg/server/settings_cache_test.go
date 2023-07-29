@@ -68,6 +68,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
 	serverArgs := base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		StoreSpecs: []base.StoreSpec{
 			{InMemory: true, StickyInMemoryEngineID: "1"},
 		},
@@ -98,28 +99,26 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	})
 	testServer.Stopper().Stop(context.Background())
 
-	ts, err := serverutils.NewServer(serverArgs)
+	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := ts.(*TestServer)
-	defer srv.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(context.Background())
 
-	s := srv.Server
 	var initServer *initServer
 	{
-		getDialOpts := s.rpcContext.GRPCDialOptions
+		getDialOpts := s.RPCContext().GRPCDialOptions
 
-		initConfig := newInitServerConfig(ctx, s.cfg, getDialOpts)
+		initConfig := newInitServerConfig(ctx, s.(*TestServer).Server.cfg, getDialOpts)
 		inspectState, err := inspectEngines(
 			context.Background(),
-			s.engines,
-			s.cfg.Settings.Version.BinaryVersion(),
-			s.cfg.Settings.Version.BinaryMinSupportedVersion(),
+			s.Engines(),
+			s.ClusterSettings().Version.BinaryVersion(),
+			s.ClusterSettings().Version.BinaryMinSupportedVersion(),
 		)
 		require.NoError(t, err)
 
-		initServer = newInitServer(s.cfg.AmbientCtx, inspectState, initConfig)
+		initServer = newInitServer(s.AmbientCtx(), inspectState, initConfig)
 	}
 
 	// ServeAndWait should return immediately since the server is already initialized
@@ -128,8 +127,8 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		state, initialBoot, err := initServer.ServeAndWait(
 			context.Background(),
-			s.stopper,
-			&s.cfg.Settings.SV,
+			s.Stopper(),
+			&s.ClusterSettings().SV,
 		)
 		if err != nil {
 			return err

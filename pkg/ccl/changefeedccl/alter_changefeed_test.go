@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -50,7 +49,9 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -66,8 +67,6 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			},
 		},
 	})
-	ctx := context.Background()
-	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	rootDB := sqlutils.MakeSQLRunner(db)
