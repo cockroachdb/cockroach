@@ -17,10 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestGetMaxTimespan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	sizeOfSample := sizeOfInt32 + sizeOfFloat64
 
 	for _, tc := range []struct {
 		r                   Resolution
@@ -153,6 +156,8 @@ func TestGetMaxTimespan(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
+			defer log.Scope(t).Close(t)
+
 			mem := QueryMemoryContext{
 				QueryMemoryOptions: tc.opts,
 			}

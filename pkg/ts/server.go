@@ -315,7 +315,6 @@ func (s *Server) Query(
 							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
 							EstimatedSources:        estimatedSourceCount,
 							InterpolationLimitNanos: interpolationLimit,
-							Columnar:                s.db.WriteColumnar(),
 						},
 					)
 
@@ -441,13 +440,8 @@ func (dd defaultDumper) Dump(kv *roachpb.KeyValue) error {
 		Datapoints: make([]tspb.TimeSeriesDatapoint, idata.SampleCount()),
 	}
 	for i := 0; i < idata.SampleCount(); i++ {
-		if idata.IsColumnar() {
-			tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Offset[i])
-			tsdata.Datapoints[i].Value = idata.Last[i]
-		} else {
-			tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Samples[i].Offset)
-			tsdata.Datapoints[i].Value = idata.Samples[i].Sum
-		}
+		tsdata.Datapoints[i].TimestampNanos = idata.TimestampForOffset(idata.Offset[i])
+		tsdata.Datapoints[i].Value = idata.Last[i]
 	}
 	return dd.stream.Send(tsdata)
 }

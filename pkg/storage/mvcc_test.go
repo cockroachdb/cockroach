@@ -78,11 +78,11 @@ var (
 	value4       = roachpb.MakeValueFromString("testValue4")
 	value5       = roachpb.MakeValueFromString("testValue5")
 	value6       = roachpb.MakeValueFromString("testValue6")
-	tsvalue1     = timeSeriesRowAsValue(testtime, 1000, []tsSample{
-		{1, 1, 5, 5, 5},
+	tsvalue1     = timeSeriesAsValue(testtime, 1000, []tsSample{
+		{1, 5},
 	}...)
-	tsvalue2 = timeSeriesRowAsValue(testtime, 1000, []tsSample{
-		{1, 1, 15, 15, 15},
+	tsvalue2 = timeSeriesAsValue(testtime, 1000, []tsSample{
+		{1, 15},
 	}...)
 )
 

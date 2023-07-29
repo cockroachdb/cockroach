@@ -58,14 +58,11 @@ func (tsdb *DB) MaintainTimeSeries(
 	if err != nil {
 		return err
 	}
-	if tsdb.WriteRollups() {
-		qmc := MakeQueryMemoryContext(mem, mem, QueryMemoryOptions{
-			BudgetBytes: budgetBytes,
-			Columnar:    tsdb.WriteColumnar(),
-		})
-		if err := tsdb.rollupTimeSeries(ctx, series, now, qmc); err != nil {
-			return err
-		}
+	qmc := MakeQueryMemoryContext(mem, mem, QueryMemoryOptions{
+		BudgetBytes: budgetBytes,
+	})
+	if err = tsdb.rollupTimeSeries(ctx, series, now, qmc); err != nil {
+		return err
 	}
 	return tsdb.pruneTimeSeries(ctx, db, series, now)
 }
