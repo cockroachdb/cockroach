@@ -68,10 +68,6 @@ type testModelRunner struct {
 	workerMemMonitor  *mon.BytesMonitor
 	resultMemMonitor  *mon.BytesMonitor
 	queryMemoryBudget int64
-	// firstColumnarTimestamp is a map from a string name for a series to the
-	// first timestamp at which columnar data was inserted into that timestamp.
-	// This is used when computing the expected on-disk layout from the model.
-	firstColumnarTimestamp map[string]int64
 }
 
 // newTestModelRunner creates a new testModel instance. The Start() method must
@@ -97,13 +93,12 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		st,
 	)
 	return testModelRunner{
-		t:                      t,
-		model:                  testmodel.NewModelDB(),
-		LocalTestCluster:       &localtestcluster.LocalTestCluster{},
-		workerMemMonitor:       workerMonitor,
-		resultMemMonitor:       resultMonitor,
-		queryMemoryBudget:      math.MaxInt64,
-		firstColumnarTimestamp: make(map[string]int64),
+		t:                 t,
+		model:             testmodel.NewModelDB(),
+		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
+		workerMemMonitor:  workerMonitor,
+		resultMemMonitor:  resultMonitor,
+		queryMemoryBudget: math.MaxInt64,
 	}
 }
 
@@ -165,11 +160,8 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 			data = data.GroupByResolution(resolution.SampleDuration(), testmodel.AggregateLast)
 		}
 
-		// Depending on when column-based storage was activated, some slabs will
-		// be in row format and others in column format. Find the dividing line
-		// and generate two sets of slabs.
 		var allSlabs []roachpb.InternalTimeSeriesData
-		addSlabs := func(datapoints testmodel.DataSeries, columnar bool) {
+		func(datapoints testmodel.DataSeries) {
 			tsdata := tspb.TimeSeriesData{
 				Name:       seriesName,
 				Source:     source,
@@ -182,26 +174,13 @@ func (tm *testModelRunner) getModelDiskLayout() map[string]roachpb.Value {
 				rollup := computeRollupsFromData(tsdata, resolution.SampleDuration())
 				slabs, err = rollup.toInternal(resolution.SlabDuration(), resolution.SampleDuration())
 			} else {
-				slabs, err = tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration(), columnar)
+				slabs, err = tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration())
 			}
 			if err != nil {
 				tm.t.Fatalf("error converting testmodel data to internal format: %s", err.Error())
 			}
 			allSlabs = append(allSlabs, slabs...)
-		}
-
-		if resolution.IsRollup() {
-			addSlabs(data, true)
-		} else {
-			firstColumnTime, hasColumns := tm.firstColumnarTimestamp[name]
-			if !hasColumns {
-				addSlabs(data, false)
-			} else {
-				firstColumnTime = resolution.normalizeToSlab(firstColumnTime)
-				addSlabs(data.TimeSlice(math.MinInt64, firstColumnTime), false)
-				addSlabs(data.TimeSlice(firstColumnTime, math.MaxInt64), true)
-			}
-		}
+		}(data)
 
 		for _, slab := range allSlabs {
 			key := MakeDataKey(seriesName, source, resolution, slab.StartTimestampNanos)
@@ -235,12 +214,6 @@ func (tm *testModelRunner) storeInModel(r Resolution, data tspb.TimeSeriesData) 
 	}
 
 	key := resolutionModelKey(data.Name, r)
-	if tm.DB.WriteColumnar() {
-		firstColumar, ok := tm.firstColumnarTimestamp[key]
-		if candidate := data.Datapoints[0].TimestampNanos; !ok || candidate < firstColumar {
-			tm.firstColumnarTimestamp[key] = candidate
-		}
-	}
 	tm.model.Record(key, data.Source, data.Datapoints)
 }
 

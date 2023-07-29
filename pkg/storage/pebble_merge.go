@@ -22,62 +22,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// sortAndDeduplicateRows sorts all the samples field of the time series data
-// structure according to the samples' `Offset`s. At the same time, samples with
-// duplicate offset values are removed - only the last sample with a given offset
-// in the collection is retained.
-func sortAndDeduplicateRows(ts *roachpb.InternalTimeSeriesData) {
-	// In the common case, appending the newer entries to the older entries
-	// will result in an already ordered result, and there will be one sample
-	// per offset. Optimize for that case.
-	isSortedUniq := true
-	for i := 1; i < len(ts.Samples); i++ {
-		if ts.Samples[i-1].Offset >= ts.Samples[i].Offset {
-			isSortedUniq = false
-			break
-		}
-	}
-	if isSortedUniq {
-		return
-	}
-
-	// Create an auxiliary array of array indexes, and sort that array according
-	// to the corresponding offset value in the ts.Samples collection. This
-	// yields the permutation of the current array indexes that will place the
-	// samples into sorted order. In order to guarantee only the last sample with
-	// a duplicated offset is retained, we must do a stable sort.
-	sortedSrcIdxs := make([]int, len(ts.Samples))
-	for i := range sortedSrcIdxs {
-		sortedSrcIdxs[i] = i
-	}
-	sort.SliceStable(sortedSrcIdxs, func(i, j int) bool {
-		return ts.Samples[sortedSrcIdxs[i]].Offset < ts.Samples[sortedSrcIdxs[j]].Offset
-	})
-
-	// Remove any duplicates from the permutation, keeping the *last* element
-	// merged for any given offset.
-	uniqSortedSrcIdxs := make([]int, 0, len(ts.Samples))
-	for destIdx := range sortedSrcIdxs {
-		if destIdx == len(sortedSrcIdxs)-1 || ts.Samples[sortedSrcIdxs[destIdx]].Offset != ts.Samples[sortedSrcIdxs[destIdx+1]].Offset {
-			uniqSortedSrcIdxs = append(uniqSortedSrcIdxs, sortedSrcIdxs[destIdx])
-		}
-	}
-
-	origSamples := ts.Samples
-	ts.Samples = make([]roachpb.InternalTimeSeriesSample, len(uniqSortedSrcIdxs))
-
-	// Apply the permutation in the auxiliary array to all of the relevant column
-	// arrays in the data set.
-	for destIdx, srcIdx := range uniqSortedSrcIdxs {
-		ts.Samples[destIdx] = origSamples[srcIdx]
-	}
-}
-
-// sortAndDeduplicateColumns sorts all column fields of the time series data
+// sortAndDeduplicate sorts all column fields of the time series data
 // structure according to the timeseries's `Offset` column. At the same time,
 // duplicate offset values are removed - only the last instance of an offset in
 // the collection is retained.
-func sortAndDeduplicateColumns(ts *roachpb.InternalTimeSeriesData) {
+func sortAndDeduplicate(ts *roachpb.InternalTimeSeriesData) {
 	// In the common case, appending the newer entries to the older entries
 	// will result in an already ordered result with no duplicated offsets.
 	// Optimize for that case.
@@ -146,16 +95,6 @@ func sortAndDeduplicateColumns(ts *roachpb.InternalTimeSeriesData) {
 			ts.Variance[destIdx] = origVariance[srcIdx]
 		}
 	}
-}
-
-// ensureColumnar detects time series data which is in the old row format,
-// converting the row data into the new columnar format.
-func ensureColumnar(ts *roachpb.InternalTimeSeriesData) {
-	for _, sample := range ts.Samples {
-		ts.Offset = append(ts.Offset, sample.Offset)
-		ts.Last = append(ts.Last, sample.Sum)
-	}
-	ts.Samples = ts.Samples[:0]
 }
 
 // MVCCValueMerger implements the `ValueMerger` interface. It buffers
@@ -256,8 +195,7 @@ func (t *MVCCValueMerger) MergeOlder(value []byte) error {
 // In case of non-timeseries the values are simply concatenated from old to new. In case
 // of timeseries the values are sorted, deduplicated, and potentially migrated to columnar
 // format. When deduplicating, only the latest sample for a given offset is retained.
-func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
-	isColumnar := false
+func (t *MVCCValueMerger) Finish(bool) ([]byte, io.Closer, error) {
 	if t.timeSeriesOps == nil && t.rawByteOps == nil {
 		return nil, nil, errors.Errorf("empty merge unsupported")
 	}
@@ -282,11 +220,6 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		return res, nil, nil
 	}
 
-	// TODO(ajkr): confirm it is the case that (1) today's CRDB always merges timeseries
-	// values in columnar format, and (2) today's CRDB does not need to be downgrade-
-	// compatible with any version that supports row format only. Then we can drop support
-	// for row format entirely. It requires significant cleanup effort as many tests target
-	// the row format.
 	var merged roachpb.InternalTimeSeriesData
 	merged.StartTimestampNanos = t.timeSeriesOps[0].StartTimestampNanos
 	merged.SampleDurationNanos = t.timeSeriesOps[0].SampleDurationNanos
@@ -297,20 +230,9 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		if timeSeriesOp.SampleDurationNanos != merged.SampleDurationNanos {
 			return nil, nil, errors.Errorf("sample duration mismatch")
 		}
-		if !isColumnar && len(timeSeriesOp.Offset) > 0 {
-			ensureColumnar(&merged)
-			ensureColumnar(&timeSeriesOp)
-			isColumnar = true
-		} else if isColumnar {
-			ensureColumnar(&timeSeriesOp)
-		}
 		proto.Merge(&merged, &timeSeriesOp)
 	}
-	if isColumnar {
-		sortAndDeduplicateColumns(&merged)
-	} else {
-		sortAndDeduplicateRows(&merged)
-	}
+	sortAndDeduplicate(&merged)
 	tsBytes, err := protoutil.Marshal(&merged)
 	if err != nil {
 		return nil, nil, err
@@ -367,10 +289,8 @@ func deserializeMergeOutput(mergedBytes []byte) (roachpb.InternalTimeSeriesData,
 // MergeInternalTimeSeriesData exports the engine's MVCC merge logic for
 // InternalTimeSeriesData to higher level packages. This is intended primarily
 // for consumption by high level testing of time series functionality.
-// If usePartialMerge is true, the operands are merged together using a partial
-// merge operation first, and are then merged in to the initial state.
 func MergeInternalTimeSeriesData(
-	usePartialMerge bool, sources ...roachpb.InternalTimeSeriesData,
+	sources ...roachpb.InternalTimeSeriesData,
 ) (roachpb.InternalTimeSeriesData, error) {
 	// Merge every element into a nil byte slice, one at a time.
 	var mvccMerger MVCCValueMerger
@@ -383,7 +303,7 @@ func MergeInternalTimeSeriesData(
 			return roachpb.InternalTimeSeriesData{}, err
 		}
 	}
-	resBytes, closer, err := mvccMerger.Finish(!usePartialMerge)
+	resBytes, closer, err := mvccMerger.Finish(false /* (unused) */)
 	if err != nil {
 		return roachpb.InternalTimeSeriesData{}, err
 	}

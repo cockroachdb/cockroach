@@ -71,7 +71,7 @@ func TestComputeRollupFromData(t *testing.T) {
 				tsdp(1348, 888),
 			),
 			expected: []roachpb.InternalTimeSeriesData{
-				makeInternalColumnData(0, 50, []tspb.TimeSeriesDatapoint{
+				makeInternalData(0, 50, []tspb.TimeSeriesDatapoint{
 					tsdp(10, 200),
 					tsdp(20, 300),
 					tsdp(40, 400),
@@ -84,7 +84,7 @@ func TestComputeRollupFromData(t *testing.T) {
 					tsdp(426, 643),
 					tsdp(427, 835),
 				}),
-				makeInternalColumnData(1000, 50, []tspb.TimeSeriesDatapoint{
+				makeInternalData(1000, 50, []tspb.TimeSeriesDatapoint{
 					tsdp(1023, 999),
 					tsdp(1048, 888),
 					tsdp(1123, 999),
@@ -102,7 +102,7 @@ func TestComputeRollupFromData(t *testing.T) {
 				tsdp(1248, 888),
 			),
 			expected: []roachpb.InternalTimeSeriesData{
-				makeInternalColumnData(1000, 50, []tspb.TimeSeriesDatapoint{
+				makeInternalData(1000, 50, []tspb.TimeSeriesDatapoint{
 					tsdp(1023, 999),
 					tsdp(1048, 888),
 					tsdp(1123, 999),

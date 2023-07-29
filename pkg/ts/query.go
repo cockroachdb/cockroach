@@ -140,108 +140,64 @@ func (tsi *timeSeriesSpanIterator) seekTimestamp(timestamp int64) {
 	tsi.seekIndex(index)
 }
 
-func (tsi *timeSeriesSpanIterator) isColumnar() bool {
-	return tsi.span[tsi.outer].IsColumnar()
-}
-
 func (tsi *timeSeriesSpanIterator) isRollup() bool {
 	return tsi.span[tsi.outer].IsRollup()
 }
 
 func (tsi *timeSeriesSpanIterator) offset() int32 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		return data.Offset[tsi.inner]
-	}
-	return data.Samples[tsi.inner].Offset
+	return data.Offset[tsi.inner]
 }
 
 func (tsi *timeSeriesSpanIterator) count() uint32 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		if tsi.isRollup() {
-			return data.Count[tsi.inner]
-		}
-		return 1
+	if tsi.isRollup() {
+		return data.Count[tsi.inner]
 	}
-	return data.Samples[tsi.inner].Count
+	return 1
 }
 
 func (tsi *timeSeriesSpanIterator) sum() float64 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		if tsi.isRollup() {
-			return data.Sum[tsi.inner]
-		}
-		return data.Last[tsi.inner]
+	if tsi.isRollup() {
+		return data.Sum[tsi.inner]
 	}
-	return data.Samples[tsi.inner].Sum
+	return data.Last[tsi.inner]
 }
 
 func (tsi *timeSeriesSpanIterator) max() float64 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		if tsi.isRollup() {
-			return data.Max[tsi.inner]
-		}
-		return data.Last[tsi.inner]
+	if tsi.isRollup() {
+		return data.Max[tsi.inner]
 	}
-	if max := data.Samples[tsi.inner].Max; max != nil {
-		return *max
-	}
-	return data.Samples[tsi.inner].Sum
+	return data.Last[tsi.inner]
 }
 
 func (tsi *timeSeriesSpanIterator) min() float64 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		if tsi.isRollup() {
-			return data.Min[tsi.inner]
-		}
-		return data.Last[tsi.inner]
+	if tsi.isRollup() {
+		return data.Min[tsi.inner]
 	}
-	if min := data.Samples[tsi.inner].Min; min != nil {
-		return *min
-	}
-	return data.Samples[tsi.inner].Sum
+	return data.Last[tsi.inner]
 }
 
 func (tsi *timeSeriesSpanIterator) first() float64 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		if tsi.isRollup() {
-			return data.First[tsi.inner]
-		}
-		return data.Last[tsi.inner]
+	if tsi.isRollup() {
+		return data.First[tsi.inner]
 	}
-
-	// First was not recorded in the planned row-format rollups, but since these
-	// rollups were never actually generated we can safely use sum.
-	return data.Samples[tsi.inner].Sum
+	return data.Last[tsi.inner]
 }
 
 func (tsi *timeSeriesSpanIterator) last() float64 {
-	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		return data.Last[tsi.inner]
-	}
-
-	// Last was not recorded in the planned row-format rollups, but since these
-	// rollups were never actually generated we can safely use sum.
-	return data.Samples[tsi.inner].Sum
+	return tsi.span[tsi.outer].Last[tsi.inner]
 }
 
 func (tsi *timeSeriesSpanIterator) variance() float64 {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		if tsi.isRollup() {
-			return data.Variance[tsi.inner]
-		}
-		return 0
+	if tsi.isRollup() {
+		return data.Variance[tsi.inner]
 	}
-
-	// Variance was not recorded in the planned row-format rollups, but since
-	// these rollups were never actually generated we can safely return 0.
 	return 0
 }
 
@@ -251,23 +207,12 @@ func (tsi *timeSeriesSpanIterator) average() float64 {
 
 func (tsi *timeSeriesSpanIterator) setOffset(value int32) {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		data.Offset[tsi.inner] = value
-		return
-	}
-	data.Samples[tsi.inner].Offset = value
+	data.Offset[tsi.inner] = value
 }
 
 func (tsi *timeSeriesSpanIterator) setSingleValue(value float64) {
 	data := tsi.span[tsi.outer]
-	if tsi.isColumnar() {
-		data.Last[tsi.inner] = value
-		return
-	}
-	data.Samples[tsi.inner].Sum = value
-	data.Samples[tsi.inner].Count = 1
-	data.Samples[tsi.inner].Min = nil
-	data.Samples[tsi.inner].Max = nil
+	data.Last[tsi.inner] = value
 }
 
 // truncateSpan truncates the span underlying this iterator to the current
@@ -291,19 +236,15 @@ func (tsi *timeSeriesSpanIterator) truncateSpan() {
 	if tsi.inner != 0 {
 		data := tsi.span[tsi.outer]
 		size := tsi.inner
-		if data.IsColumnar() {
-			data.Offset = data.Offset[:size]
-			data.Last = data.Last[:size]
-			if data.IsRollup() {
-				data.First = data.First[:size]
-				data.Min = data.Min[:size]
-				data.Max = data.Max[:size]
-				data.Count = data.Count[:size]
-				data.Sum = data.Sum[:size]
-				data.Variance = data.Variance[:size]
-			}
-		} else {
-			data.Samples = data.Samples[:size]
+		data.Offset = data.Offset[:size]
+		data.Last = data.Last[:size]
+		if data.IsRollup() {
+			data.First = data.First[:size]
+			data.Min = data.Min[:size]
+			data.Max = data.Max[:size]
+			data.Count = data.Count[:size]
+			data.Sum = data.Sum[:size]
+			data.Variance = data.Variance[:size]
 		}
 		tsi.span[tsi.outer] = data
 	}
@@ -316,14 +257,12 @@ func (tsi *timeSeriesSpanIterator) truncateSpan() {
 // from any columnar spans.
 func convertToSingleValue(span timeSeriesSpan) {
 	for i := range span {
-		if span[i].IsColumnar() {
-			span[i].Count = nil
-			span[i].Sum = nil
-			span[i].Min = nil
-			span[i].Max = nil
-			span[i].First = nil
-			span[i].Variance = nil
-		}
+		span[i].Count = nil
+		span[i].Sum = nil
+		span[i].Min = nil
+		span[i].Max = nil
+		span[i].First = nil
+		span[i].Variance = nil
 	}
 }
 
@@ -939,10 +878,7 @@ func convertKeysToSpans(
 		if err != nil {
 			return nil, err
 		}
-		sampleSize := sizeOfSample
-		if data.IsColumnar() {
-			sampleSize = sizeOfInt32 + sizeOfFloat64
-		}
+		sampleSize := sizeOfInt32 + sizeOfFloat64
 		if err := acc.Grow(
 			ctx, sampleSize*int64(data.SampleCount())+sizeOfTimeSeriesData,
 		); err != nil {

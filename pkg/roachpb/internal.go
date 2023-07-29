@@ -10,12 +10,6 @@
 
 package roachpb
 
-// IsColumnar returns true if this InternalTimeSeriesData stores its samples
-// in columnar format.
-func (data *InternalTimeSeriesData) IsColumnar() bool {
-	return len(data.Offset) > 0
-}
-
 // IsRollup returns true if this InternalTimeSeriesData is both in columnar
 // format and contains "rollup" data.
 func (data *InternalTimeSeriesData) IsRollup() bool {
@@ -25,10 +19,7 @@ func (data *InternalTimeSeriesData) IsRollup() bool {
 // SampleCount returns the number of samples contained in this
 // InternalTimeSeriesData.
 func (data *InternalTimeSeriesData) SampleCount() int {
-	if data.IsColumnar() {
-		return len(data.Offset)
-	}
-	return len(data.Samples)
+	return len(data.Offset)
 }
 
 // OffsetForTimestamp returns the offset within this collection that would

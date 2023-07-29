@@ -2298,7 +2298,7 @@ func writeRandomTimeSeriesDataToRange(
 			data = append(data, d)
 		}
 		for _, d := range data {
-			idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration(), false)
+			idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
 			if err != nil {
 				t.Fatal(err)
 			}
