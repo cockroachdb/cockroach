@@ -490,6 +490,7 @@
 /pkg/roachpb/.gitattributes  @cockroachdb/dev-inf
 #!/pkg/roachpb/BUILD.bazel     @cockroachdb/kv-prs-noreview
 /pkg/roachpb/data*           @cockroachdb/kv-prs
+/pkg/roachpb/leaseinfo*      @cockroachdb/kv-prs
 /pkg/roachpb/index*          @cockroachdb/cluster-observability
 /pkg/roachpb/internal*       @cockroachdb/kv-prs
 /pkg/roachpb/io-formats*     @cockroachdb/disaster-recovery

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -773,7 +772,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	verifyLearnerInRaftOnNodes := func(
-		key roachpb.Key, id roachpb.ReplicaID, servers []*server.TestServer,
+		key roachpb.Key, id roachpb.ReplicaID, servers []serverutils.TestServerInterface,
 	) {
 		t.Helper()
 		var repls []*kvserver.Replica

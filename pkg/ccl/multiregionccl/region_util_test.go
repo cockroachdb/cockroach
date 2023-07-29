@@ -41,7 +41,7 @@ func TestGetLocalityRegionEnumPhysicalRepresentation(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	tDB.Exec(t, `CREATE DATABASE foo PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3"`)
 
-	s0 := tc.ServerTyped(0)
+	s0 := tc.Server(0)
 	idb := s0.InternalDB().(descs.DB)
 	dbID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "foo"))
 

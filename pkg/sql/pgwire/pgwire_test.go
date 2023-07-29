@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -77,7 +76,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	tt := srv.ApplicationLayer()
 
-	host, port, err := net.SplitHostPort(srv.AdvSQLAddr())
+	host, port, err := net.SplitHostPort(tt.AdvSQLAddr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,9 +143,10 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	host, port, err := net.SplitHostPort(s.AdvSQLAddr())
 	if err != nil {
@@ -166,7 +166,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	}
 	defer db.Close()
 
-	pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
+	pgServer := s.PGServer().(*pgwire.Server)
 
 	// Make sure that the server reports correctly the case in which a
 	// connection did not respond to cancellation in time.
@@ -1522,14 +1522,10 @@ func TestPGCommandTags(t *testing.T) {
 // checkSQLNetworkMetrics returns the server's pgwire bytesIn/bytesOut and an
 // error if the bytesIn/bytesOut don't satisfy the given minimums and maximums.
 func checkSQLNetworkMetrics(
-	srv serverutils.TestServerInterface, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
+	srv serverutils.ApplicationLayerInterface, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
 ) (int64, int64, error) {
-	if err := srv.WriteSummaries(); err != nil {
-		return -1, -1, err
-	}
-
-	bytesIn := srv.ApplicationLayer().MustGetSQLNetworkCounter(pgwire.MetaBytesIn.Name)
-	bytesOut := srv.ApplicationLayer().MustGetSQLNetworkCounter(pgwire.MetaBytesOut.Name)
+	bytesIn := srv.MustGetSQLNetworkCounter(pgwire.MetaBytesIn.Name)
+	bytesOut := srv.MustGetSQLNetworkCounter(pgwire.MetaBytesOut.Name)
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, errors.Errorf("bytesin %d < expected min %d", a, min)
 	}
@@ -1548,14 +1544,14 @@ func checkSQLNetworkMetrics(
 func TestSQLNetworkMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	srv := s.ApplicationLayer()
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, srv.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+		t, srv.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	const minbytes = 10
@@ -1587,7 +1583,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	// Verify connection counter.
 	expectConns := func(n int) {
 		testutils.SucceedsSoon(t, func() error {
-			if conns := srv.ApplicationLayer().MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
+			if conns := srv.MustGetSQLNetworkCounter(pgwire.MetaConns.Name); conns != int64(n) {
 				return errors.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil

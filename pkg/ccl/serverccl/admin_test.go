@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -177,7 +176,7 @@ func TestListTenants(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, _, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "test",
 		})

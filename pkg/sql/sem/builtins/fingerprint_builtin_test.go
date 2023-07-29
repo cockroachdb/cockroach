@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -44,7 +43,7 @@ func TestFingerprint(t *testing.T) {
 	var mu syncutil.Mutex
 	var numExportResponses int
 	var numSSTsInExportResponses int
-	serv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
@@ -62,6 +61,7 @@ func TestFingerprint(t *testing.T) {
 			},
 		},
 	})
+	defer s.Stopper().Stop(ctx)
 
 	resetVars := func() {
 		mu.Lock()
@@ -109,10 +109,7 @@ func TestFingerprint(t *testing.T) {
 		require.Zero(t, fingerprint)
 	})
 
-	s := serv.(*server.TestServer)
-	defer s.Stopper().Stop(ctx)
-
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	eng := store.TODOEngine()
 

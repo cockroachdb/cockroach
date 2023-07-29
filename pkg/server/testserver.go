@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
@@ -60,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -333,15 +331,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 // A TestServer encapsulates an in-memory instantiation of a cockroach node with
 // a single store. It provides tests with access to Server internals.
 // Where possible, it should be used through the
-// testingshim.TestServerInterface.
+// serverutils.TestServerInterface.
 //
 // Example usage of a TestServer:
 //
 //	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 //	defer s.Stopper().Stop()
-//	// If really needed, in tests that can depend on server, downcast to
-//	// server.TestServer:
-//	ts := s.(*server.TestServer)
 type TestServer struct {
 	Cfg    *Config
 	params base.TestServerArgs
@@ -473,11 +468,8 @@ func (ts *TestServer) RPCContext() *rpc.Context {
 }
 
 // TsDB returns the ts.DB instance used by the TestServer.
-func (ts *TestServer) TsDB() *ts.DB {
-	if ts != nil {
-		return ts.tsDB
-	}
-	return nil
+func (ts *TestServer) TsDB() interface{} {
+	return ts.tsDB
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
@@ -536,8 +528,8 @@ func (ts *TestServer) PGPreServer() interface{} {
 	return nil
 }
 
-// RaftTransport returns the RaftTransport used by the TestServer.
-func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
+// RaftTransport is part of the serverutils.StorageLayerInterface.
+func (ts *TestServer) RaftTransport() interface{} {
 	if ts != nil {
 		return ts.raftTransport
 	}
@@ -567,6 +559,16 @@ func (ts *TestServer) TenantStatusServer() interface{} {
 // TestTenants provides information to tenant(s) that _may_ have been created
 func (ts *TestServer) TestTenants() []serverutils.ApplicationLayerInterface {
 	return ts.testTenants
+}
+
+// DefaultTestTenantDisabled is part of the serverutils.TenantControlInterface.
+func (ts *TestServer) DefaultTestTenantDisabled() bool {
+	return ts.cfg.DisableDefaultTestTenant
+}
+
+// DisableDefaultTestTenant is part of the serverutils.TenantControlInterface.
+func (ts *TestServer) DisableDefaultTestTenant() {
+	ts.cfg.DisableDefaultTestTenant = true
 }
 
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
@@ -693,6 +695,12 @@ func (ts *TestServer) Start(ctx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+// Stop is part of the serverutils.TestServerInterface.
+func (ts *TestServer) Stop(ctx context.Context) {
+	ctx = ts.Server.AnnotateCtx(ctx)
+	ts.Server.stopper.Stop(ctx)
 }
 
 // TestTenant is an in-memory instantiation of the SQL-only process created for
@@ -933,6 +941,11 @@ func (t *TestTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
+// Readiness is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) Readiness(ctx context.Context) error {
+	return t.t.admin.checkReadinessForHealthCheck(ctx)
+}
+
 // MustGetSQLCounter implements the serverutils.ApplicationLayerInterface.
 func (t *TestTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.sql.metricsRegistry, name)
@@ -972,6 +985,11 @@ func (t *TestTenant) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
 	return internalForceTableGC(ctx, t, database, table, timestamp)
+}
+
+// DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) DefaultZoneConfig() zonepb.ZoneConfig {
+	return *t.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
 }
 
 // SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
@@ -1137,6 +1155,21 @@ func (t *TestTenant) StatsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
 	return t.t.admin.statsForSpan(ctx, span)
+}
+
+// SetReady is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SetReady(ready bool) {
+	t.sql.isReady.Set(ready)
+}
+
+// SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) SetAcceptSQLWithoutTLS(accept bool) {
+	t.Cfg.AcceptSQLWithoutTLS = accept
+}
+
+// PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) PrivilegeChecker() interface{} {
+	return t.t.admin.privilegeChecker
 }
 
 // HTTPAuthServer is part of the serverutils.ApplicationLayerInterface.
@@ -1506,11 +1539,6 @@ func ExpectedInitialRangeCount(
 	return len(config.StaticSplits()) + len(splits) + 1, nil
 }
 
-// Stores returns the collection of stores from this TestServer's node.
-func (ts *TestServer) Stores() *kvserver.Stores {
-	return ts.node.stores
-}
-
 // GetStores is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) GetStores() interface{} {
 	return ts.node.stores
@@ -1563,10 +1591,14 @@ func (ts *TestServer) DrainClients(ctx context.Context) error {
 	return ts.drain.drainClients(ctx, nil /* reporter */)
 }
 
-// Readiness returns nil when the server's health probe reports
-// readiness, a readiness error otherwise.
+// Readiness is part of the serverutils.ApplicationLayerInterface.
 func (ts *TestServer) Readiness(ctx context.Context) error {
 	return ts.admin.checkReadinessForHealthCheck(ctx)
+}
+
+// SetReadyFn is part of TestServerInterface.
+func (ts *TestServer) SetReadyFn(fn func(bool)) {
+	ts.Server.cfg.ReadyFn = fn
 }
 
 // WriteSummaries implements the serverutils.StorageLayerInterface.
@@ -1609,7 +1641,7 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(reg, name)
 }
 
-// Locality returns the Locality used by the TestServer.
+// Locality is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) Locality() *roachpb.Locality {
 	return &ts.cfg.Locality
 }
@@ -1637,12 +1669,6 @@ func (ts *TestServer) GetNode() *Node {
 // DistSenderI is part of DistSenderInterface.
 func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
-}
-
-// DistSender is like DistSenderI(), but returns the real type instead of
-// interface{}.
-func (ts *TestServer) DistSender() *kvcoord.DistSender {
-	return ts.DistSenderI().(*kvcoord.DistSender)
 }
 
 // MigrationServer is part of the serverutils.ApplicationLayerInterface.
@@ -1702,7 +1728,7 @@ func (ts *TestServer) SetDistSQLSpanResolver(spanResolver interface{}) {
 // GetFirstStoreID is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
-	err := ts.Stores().VisitStores(func(s *kvserver.Store) error {
+	err := ts.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		if firstStoreID == -1 {
 			firstStoreID = s.Ident.StoreID
 		}
@@ -1743,14 +1769,7 @@ func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor,
 	return ts.LookupRange(leftKey)
 }
 
-// SplitRangeWithExpiration splits the range containing splitKey with a sticky
-// bit expiring at expirationTime.
-// The right range created by the split starts at the split key and extends to the
-// original range's end key.
-// Returns the new descriptors of the left and right ranges.
-//
-// splitKey must correspond to a SQL table key (it must end with a family ID /
-// col ID).
+// SplitRangeWithExpiration is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
@@ -1829,46 +1848,10 @@ func (ts *TestServer) SplitRange(
 	return ts.SplitRangeWithExpiration(splitKey, hlc.MaxTimestamp)
 }
 
-// LeaseInfo describes a range's current and potentially future lease.
-type LeaseInfo struct {
-	cur, next roachpb.Lease
-}
-
-// Current returns the range's current lease.
-func (l LeaseInfo) Current() roachpb.Lease {
-	return l.cur
-}
-
-// CurrentOrProspective returns the range's potential next lease, if a lease
-// request is in progress, or the current lease otherwise.
-func (l LeaseInfo) CurrentOrProspective() roachpb.Lease {
-	if !l.next.Empty() {
-		return l.next
-	}
-	return l.cur
-}
-
-// LeaseInfoOpt enumerates options for GetRangeLease.
-type LeaseInfoOpt int
-
-const (
-	// AllowQueryToBeForwardedToDifferentNode specifies that, if the current node
-	// doesn't have a voter replica, the lease info can come from a different
-	// node.
-	AllowQueryToBeForwardedToDifferentNode LeaseInfoOpt = iota
-	// QueryLocalNodeOnly specifies that an error should be returned if the node
-	// is not able to serve the lease query (because it doesn't have a voting
-	// replica).
-	QueryLocalNodeOnly
-)
-
-// GetRangeLease returns information on the lease for the range containing key, and a
-// timestamp taken from the node. The lease is returned regardless of its status.
-//
-// queryPolicy specifies if its OK to forward the request to a different node.
+// GetRangeLease is part of severutils.StorageLayerInterface.
 func (ts *TestServer) GetRangeLease(
-	ctx context.Context, key roachpb.Key, queryPolicy LeaseInfoOpt,
-) (_ LeaseInfo, now hlc.ClockTimestamp, _ error) {
+	ctx context.Context, key roachpb.Key, queryPolicy roachpb.LeaseInfoOpt,
+) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error) {
 	leaseReq := kvpb.LeaseInfoRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: key,
@@ -1888,23 +1871,22 @@ func (ts *TestServer) GetRangeLease(
 		&leaseReq,
 	)
 	if pErr != nil {
-		return LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
+		return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
 	}
 	// Adapt the LeaseInfoResponse format to LeaseInfo.
 	resp := leaseResp.(*kvpb.LeaseInfoResponse)
-	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
+	if queryPolicy == roachpb.QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
 		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
 		// This API should permit addressing the query to a particular store.
-		return LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
+		return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 			"request not evaluated locally; evaluated by s%d instead of local s%d",
 			resp.EvaluatedBy, ts.GetFirstStoreID())
 	}
-	var l LeaseInfo
+	var l roachpb.LeaseInfo
 	if resp.CurrentLease != nil {
-		l.cur = *resp.CurrentLease
-		l.next = resp.Lease
+		l = roachpb.MakeLeaseInfo(*resp.CurrentLease, resp.Lease)
 	} else {
-		l.cur = resp.Lease
+		l = roachpb.MakeLeaseInfo(resp.Lease, roachpb.Lease{})
 	}
 	return l, ts.Clock().NowAsClockTimestamp(), nil
 }
@@ -1929,6 +1911,11 @@ func (ts *TestServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
 
 // StorageLayer is part of the serverutils.TestServerInterface.
 func (ts *TestServer) StorageLayer() serverutils.StorageLayerInterface {
+	return ts
+}
+
+// TenantController is part of the serverutils.TestServerInterface.
+func (ts *TestServer) TenantController() serverutils.TenantControlInterface {
 	return ts
 }
 
@@ -1977,8 +1964,17 @@ func internalForceTableGC(
 	return pErr.GoError()
 }
 
-// ScratchRange is like ScratchRangeEx, but only returns the start key of the
-// new range instead of the range descriptor.
+// DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) DefaultZoneConfig() zonepb.ZoneConfig {
+	return *ts.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
+}
+
+// DefaultSystemZoneConfig is part of the serverutils.StorageLayerInterface.
+func (ts *TestServer) DefaultSystemZoneConfig() zonepb.ZoneConfig {
+	return ts.Server.cfg.DefaultSystemZoneConfig
+}
+
+// ScratchRange is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 	_, desc, err := ts.ScratchRangeEx()
 	if err != nil {
@@ -1987,15 +1983,13 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 	return desc.StartKey.AsRawKey(), nil
 }
 
-// ScratchRangeEx splits off a range suitable to be used as KV scratch space.
-// (it doesn't overlap system spans or SQL tables).
+// ScratchRangeEx is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	scratchKey := keys.ScratchRangeMin
 	return ts.SplitRange(scratchKey)
 }
 
-// ScratchRangeWithExpirationLease is like ScratchRangeWithExpirationLeaseEx but
-// returns a key for the RHS ranges, instead of both descriptors from the split.
+// ScratchRangeWithExpirationLease is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
 	_, desc, err := ts.ScratchRangeWithExpirationLeaseEx()
 	if err != nil {
@@ -2004,8 +1998,7 @@ func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
 	return desc.StartKey.AsRawKey(), nil
 }
 
-// ScratchRangeWithExpirationLeaseEx is like ScratchRange but creates a range with
-// an expiration based lease.
+// ScratchRangeWithExpirationLeaseEx is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
 	roachpb.RangeDescriptor,
 	roachpb.RangeDescriptor,
@@ -2014,6 +2007,11 @@ func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
 	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
 		roachpb.RKey("\x00aaa-testing")}, nil))
 	return ts.SplitRange(scratchKey)
+}
+
+// RaftConfig is part of the serverutils.StorageLayerInterface.
+func (ts *TestServer) RaftConfig() base.RaftConfig {
+	return ts.Cfg.RaftConfig
 }
 
 // MetricsRecorder periodically records node-level and store-level metrics.
@@ -2096,9 +2094,19 @@ func (ts *TestServer) StatsForSpan(
 	return ts.admin.statsForSpan(ctx, span)
 }
 
-// TestingSetReady is exposed for use in health tests.
-func (ts *TestServer) TestingSetReady(ready bool) {
+// SetReady is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SetReady(ready bool) {
 	ts.sqlServer.isReady.Set(ready)
+}
+
+// SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) SetAcceptSQLWithoutTLS(accept bool) {
+	ts.Cfg.AcceptSQLWithoutTLS = accept
+}
+
+// PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) PrivilegeChecker() interface{} {
+	return ts.admin.privilegeChecker
 }
 
 // HTTPAuthServer is part of the ApplicationLayerInterface.
@@ -2134,7 +2142,7 @@ func (testServerFactoryImpl) MakeRangeTestServerArgs() base.TestServerArgs {
 
 // PrepareRangeTestServer is part of the rangetestutils.TestServerFactory interface.
 func (testServerFactoryImpl) PrepareRangeTestServer(srv interface{}) error {
-	ts := srv.(*TestServer)
+	ts := srv.(serverutils.TestServerInterface)
 	kvDB := ts.ApplicationLayer().DB()
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
@@ -2146,7 +2154,7 @@ func (testServerFactoryImpl) PrepareRangeTestServer(srv interface{}) error {
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.node.computeMetricsPeriodically(context.Background(), map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
+	if err := ts.Node().(*Node).computeMetricsPeriodically(context.Background(), map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
 		return errors.Wrap(err, "error publishing store statuses")
 	}
 

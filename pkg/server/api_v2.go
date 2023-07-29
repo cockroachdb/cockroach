@@ -347,6 +347,12 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 //	"500":
 //	  description: Indicates unhealthy node.
 func (a *apiV2SystemServer) health(w http.ResponseWriter, r *http.Request) {
+	healthInternal(w, r, a.systemAdmin.checkReadinessForHealthCheck)
+}
+
+func healthInternal(
+	w http.ResponseWriter, r *http.Request, checkReadinessForHealthCheck func(context.Context) error,
+) {
 	ready := false
 	readyStr := r.URL.Query().Get("ready")
 	if len(readyStr) > 0 {
@@ -366,7 +372,7 @@ func (a *apiV2SystemServer) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.systemAdmin.checkReadinessForHealthCheck(ctx); err != nil {
+	if err := checkReadinessForHealthCheck(ctx); err != nil {
 		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
@@ -374,7 +380,7 @@ func (a *apiV2SystemServer) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
-	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+	healthInternal(w, r, a.admin.checkReadinessForHealthCheck)
 }
 
 // swagger:operation GET /rules/ rules

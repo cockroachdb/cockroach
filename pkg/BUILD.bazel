@@ -1529,6 +1529,7 @@ GO_TARGETS = [
     "//pkg/server/debug/replay:replay",
     "//pkg/server/debug:debug",
     "//pkg/server/debug:debug_test",
+    "//pkg/server/decommissioning:decommissioning",
     "//pkg/server/diagnostics/diagnosticspb:diagnosticspb",
     "//pkg/server/diagnostics:diagnostics",
     "//pkg/server/diagnostics:diagnostics_test",

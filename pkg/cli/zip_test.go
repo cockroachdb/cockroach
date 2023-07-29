@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -225,8 +224,9 @@ func TestConcurrentZip(t *testing.T) {
 
 	// Zip it. We fake a CLI test context for this.
 	c := TestCLI{
-		t:          t,
-		TestServer: tc.Server(0).(*server.TestServer),
+		t:        t,
+		Server:   tc.Server(0),
+		Insecure: true,
 	}
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
@@ -347,8 +347,9 @@ func TestUnavailableZip(t *testing.T) {
 
 	// Zip it. We fake a CLI test context for this.
 	c := TestCLI{
-		t:          t,
-		TestServer: tc.Server(0).(*server.TestServer),
+		t:        t,
+		Server:   tc.Server(0),
+		Insecure: true,
 	}
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
@@ -452,8 +453,9 @@ func TestPartialZip(t *testing.T) {
 
 	// Zip it. We fake a CLI test context for this.
 	c := TestCLI{
-		t:          t,
-		TestServer: tc.Server(0).(*server.TestServer),
+		t:        t,
+		Server:   tc.Server(0),
+		Insecure: true,
 	}
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout

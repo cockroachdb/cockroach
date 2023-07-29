@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -49,10 +48,9 @@ func TestServerQuery(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
 	// Populate data directly.
-	tsdb := tsrv.TsDB()
+	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
@@ -179,7 +177,7 @@ func TestServerQuery(t *testing.T) {
 		},
 	}
 
-	conn := tsrv.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
@@ -266,14 +264,13 @@ func TestServerQueryStarvation(t *testing.T) {
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
 	seriesCount := workerCount * 2
-	if err := populateSeries(seriesCount, 10, 3, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, 10, 3, s.TsDB().(*ts.DB)); err != nil {
 		t.Fatal(err)
 	}
 
-	conn := tsrv.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
@@ -305,11 +302,11 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
+
 	systemDB := s.SystemLayer().SQLConn(t, "")
 
 	// Populate data directly.
-	tsdb := tsrv.TsDB()
+	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
@@ -409,7 +406,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	}
 
-	conn := tsrv.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
@@ -533,13 +530,12 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 		TimeSeriesQueryMemoryBudget: budget,
 	})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
-	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, valueCount, s.TsDB().(*ts.DB)); err != nil {
 		t.Fatal(err)
 	}
 
-	conn := tsrv.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
@@ -603,9 +599,8 @@ func TestServerDump(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-	tsrv := s.(*server.TestServer)
 
-	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, valueCount, s.TsDB().(*ts.DB)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -614,7 +609,7 @@ func TestServerDump(t *testing.T) {
 		names = append(names, seriesName(series))
 	}
 
-	conn := tsrv.RPCClientConn(t, username.RootUserName())
+	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
@@ -729,16 +724,15 @@ func BenchmarkServerQuery(b *testing.B) {
 
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	tsrv := s.(*server.TestServer)
 
 	// Populate data for large number of time series.
 	seriesCount := 50
 	sourceCount := 10
-	if err := populateSeries(seriesCount, sourceCount, 3, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, 3, s.TsDB().(*ts.DB)); err != nil {
 		b.Fatal(err)
 	}
 
-	conn := tsrv.RPCClientConn(b, username.RootUserName())
+	conn := s.RPCClientConn(b, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
