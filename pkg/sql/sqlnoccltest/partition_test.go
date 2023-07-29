@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -107,12 +106,12 @@ func TestRemovePartitioningOSS(t *testing.T) {
 			{
 				IndexID:       uint32(tableDesc.GetPrimaryIndexID()),
 				PartitionName: "p1",
-				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
+				Config:        s.DefaultZoneConfig(),
 			},
 			{
 				IndexID:       uint32(tableDesc.PublicNonPrimaryIndexes()[0].GetID()),
 				PartitionName: "p2",
-				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
+				Config:        s.DefaultZoneConfig(),
 			},
 		},
 	}

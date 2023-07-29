@@ -28,10 +28,11 @@ func TestInternalExecutorClearsMonitorMemory(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	mon := s.(*TestServer).sqlServer.internalDBMemMonitor
+	mon := s.SQLServerInternal().(*SQLServer).internalDBMemMonitor
 	ief := s.ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	sessionData := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "TestInternalExecutorClearsMonitorMemory")
 	ie := ief.NewInternalExecutor(sessionData)
@@ -40,6 +41,6 @@ func TestInternalExecutorClearsMonitorMemory(t *testing.T) {
 	require.Greater(t, mon.AllocBytes(), int64(0))
 	err = rows.Close()
 	require.NoError(t, err)
-	s.Stopper().Stop(ctx)
+	srv.Stopper().Stop(ctx)
 	require.Equal(t, mon.AllocBytes(), int64(0))
 }

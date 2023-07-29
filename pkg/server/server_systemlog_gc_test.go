@@ -34,11 +34,13 @@ func TestLogGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
 
-	a := assert.New(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ts := s.(*TestServer)
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	a := assert.New(t)
+	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer ts.Stopper().Stop(ctx)
+
 	const testRangeID = 10001
 	const table = "rangelog"
 
@@ -93,7 +95,7 @@ func TestLogGC(t *testing.T) {
 
 	gc := func(ctx context.Context, table string, tsLow, tsHigh time.Time) (time.Time, int64, error) {
 		return gcSystemLog(ctx,
-			ts.sqlServer,
+			ts.SQLServerInternal().(*SQLServer),
 			"test", table, "timestamp", tsLow, tsHigh, 1000)
 	}
 

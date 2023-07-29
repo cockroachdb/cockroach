@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,13 +34,12 @@ func TestMVCCGCCorrectStats(t *testing.T) {
 	ctx := context.Background()
 	var args base.TestServerArgs
 	args.Knobs.Store = &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true}
-	serv := serverutils.StartServerOnly(t, args)
-	s := serv.(*server.TestServer)
+	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	key, err := s.ScratchRange()
 	require.NoError(t, err)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
 	repl := store.LookupReplica(roachpb.RKey(key))

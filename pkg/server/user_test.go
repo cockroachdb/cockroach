@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -33,17 +34,20 @@ import (
 func TestValidRoles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	s := srv.ApplicationLayer()
 
 	ctx := context.Background()
 	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
 	_, err := sqlDB.Exec(fmt.Sprintf("CREATE USER %s", fooUser))
 	require.NoError(t, err)
 
+	privChecker := s.PrivilegeChecker().(privchecker.SQLPrivilegeChecker)
 	for name := range roleoption.ByName {
 		// Test user without the role.
-		hasRole, err := s.(*TestServer).status.baseStatusServer.privilegeChecker.HasRoleOption(ctx, fooUser, roleoption.ByName[name])
+		hasRole, err := privChecker.HasRoleOption(ctx, fooUser, roleoption.ByName[name])
 		require.NoError(t, err)
 		require.Equal(t, false, hasRole)
 
@@ -62,7 +66,7 @@ func TestValidRoles(t *testing.T) {
 		_, err = sqlDB.Exec(fmt.Sprintf("ALTER USER %s %s%s", fooUser, name, extraInfo))
 		require.NoError(t, err)
 
-		hasRole, err = s.(*TestServer).status.baseStatusServer.privilegeChecker.HasRoleOption(ctx, fooUser, roleoption.ByName[name])
+		hasRole, err = privChecker.HasRoleOption(ctx, fooUser, roleoption.ByName[name])
 		require.NoError(t, err)
 
 		expectedHasRole := true

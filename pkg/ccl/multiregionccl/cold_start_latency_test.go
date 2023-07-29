@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -288,7 +289,7 @@ SELECT checkpoint > extract(epoch from after)
 	// Wait for the configs to be applied.
 	testutils.SucceedsWithin(t, func() error {
 		for _, server := range tc.Servers {
-			reporter := server.Server.SpanConfigReporter()
+			reporter := server.SpanConfigReporter().(spanconfig.Reporter)
 			report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
 				{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
 			})

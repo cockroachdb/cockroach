@@ -171,7 +171,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	// We can also probe directly at each Replica. This is the intended use case
 	// for Replica-level circuit breakers (#33007).
 	for _, srv := range tc.Servers {
-		repl, _, err := srv.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
+		repl, _, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
 		ba := &kvpb.BatchRequest{}
 		ba.Add(probeReq)
@@ -189,7 +189,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	seen.injectedErr = injErr
 	seen.Unlock()
 	for _, srv := range tc.Servers {
-		repl, _, err := srv.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
+		repl, _, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = srv.Clock().Now()

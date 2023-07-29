@@ -46,7 +46,7 @@ var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
-func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
+func forceNewConfig(t testing.TB, s serverutils.TestServerInterface) *config.SystemConfig {
 	configID++
 	configDesc := &descpb.Descriptor{
 		Union: &descpb.Descriptor_Database{
@@ -67,7 +67,7 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfig {
+func waitForConfigChange(t testing.TB, s serverutils.TestServerInterface) *config.SystemConfig {
 	var foundDesc descpb.Descriptor
 	var cfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
@@ -103,13 +103,12 @@ func TestGetZoneConfig(t *testing.T) {
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
 	}
 
-	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	s := srv.(*server.TestServer)
 
 	type testCase struct {
 		objectID uint32
@@ -339,13 +338,12 @@ func TestCascadingZoneConfig(t *testing.T) {
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
 	}
 
-	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	s := srv.(*server.TestServer)
 
 	type testCase struct {
 		objectID uint32
@@ -651,13 +649,12 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	params, _ := tests.CreateTestServerParams()
-	srv, sqlDB, _ := serverutils.StartServer(b, params)
-	defer srv.Stopper().Stop(context.Background())
+	s, sqlDB, _ := serverutils.StartServer(b, params)
+	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	s := srv.(*server.TestServer)
 	cfg := forceNewConfig(b, s)
 
 	key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))

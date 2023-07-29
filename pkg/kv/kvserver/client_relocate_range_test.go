@@ -462,7 +462,7 @@ func TestReplicaRemovalDuringGet(t *testing.T) {
 
 	// Perform write.
 	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), pArgs)
 	require.Nil(t, pErr)
 
 	// Perform delayed read during replica removal.
@@ -488,7 +488,7 @@ func TestReplicaRemovalDuringCPut(t *testing.T) {
 
 	// Perform write.
 	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), pArgs)
 	require.Nil(t, pErr)
 
 	// Perform delayed conditional put during replica removal. This will cause
@@ -564,7 +564,7 @@ func setupReplicaRemovalTest(
 		srv := tc.Servers[0]
 		err := srv.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
 			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
-			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSender(), req)
+			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSenderI().(kv.Sender), req)
 			resultC <- result{resp, pErr}
 		})
 		require.NoError(t, err)

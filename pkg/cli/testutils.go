@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,7 +49,10 @@ func TestingReset() {
 
 // TestCLI wraps a test server and is used by tests to make assertions about the output of CLI commands.
 type TestCLI struct {
-	*server.TestServer
+	// Insecure is a copy of the insecure mode parameter.
+	Insecure bool
+
+	Server      serverutils.TestServerInterface
 	tenant      serverutils.ApplicationLayerInterface
 	certsDir    string
 	cleanupFunc func() error
@@ -126,7 +128,7 @@ func NewCLITest(params TestCLIParams) TestCLI {
 }
 
 func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerArgs)) TestCLI {
-	c := TestCLI{t: params.T}
+	c := TestCLI{t: params.T, Insecure: params.Insecure}
 
 	certsDir, err := os.MkdirTemp("", "cli-test")
 	if err != nil {
@@ -169,10 +171,10 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		if err != nil {
 			c.fail(err)
 		}
-		c.TestServer = s.(*server.TestServer)
+		c.Server = s
 
-		log.Infof(context.Background(), "server started at %s", c.AdvRPCAddr())
-		log.Infof(context.Background(), "SQL listener at %s", c.AdvSQLAddr())
+		log.Infof(context.Background(), "server started at %s", c.Server.AdvRPCAddr())
+		log.Infof(context.Background(), "SQL listener at %s", c.Server.AdvSQLAddr())
 	}
 
 	if params.TenantArgs != nil && params.SharedProcessTenantArgs != nil {
@@ -180,23 +182,23 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 	}
 
 	if params.TenantArgs != nil || params.SharedProcessTenantArgs != nil {
-		if c.TestServer == nil {
+		if c.Server == nil {
 			c.fail(errors.AssertionFailedf("multitenant mode for CLI requires a DB server, try setting `NoServer` argument to false"))
 		}
 	}
 
 	if params.TenantArgs != nil {
-		if c.Insecure() {
+		if params.Insecure {
 			params.TenantArgs.ForceInsecure = true
 		}
-		c.tenant, err = c.TestServer.StartTenant(context.Background(), *params.TenantArgs)
+		c.tenant, err = c.Server.StartTenant(context.Background(), *params.TenantArgs)
 		if err != nil {
 			c.fail(err)
 		}
 	}
 
 	if params.SharedProcessTenantArgs != nil {
-		c.tenant, _, err = c.TestServer.StartSharedProcessTenant(context.Background(), *params.SharedProcessTenantArgs)
+		c.tenant, _, err = c.Server.StartSharedProcessTenant(context.Background(), *params.SharedProcessTenantArgs)
 		if err != nil {
 			c.fail(err)
 		}
@@ -228,10 +230,10 @@ func setCLIDefaultsForTests() {
 
 // stopServer stops the test server.
 func (c *TestCLI) stopServer() {
-	if c.TestServer != nil {
+	if c.Server != nil {
 		log.Infof(context.Background(), "stopping server at %s / %s",
-			c.AdvRPCAddr(), c.AdvSQLAddr())
-		c.Stopper().Stop(context.Background())
+			c.Server.AdvRPCAddr(), c.Server.AdvSQLAddr())
+		c.Server.Stopper().Stop(context.Background())
 	}
 }
 
@@ -248,14 +250,15 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	if err != nil {
 		c.fail(err)
 	}
-	c.TestServer = s.(*server.TestServer)
+	c.Insecure = params.Insecure
+	c.Server = s
 	log.Infof(context.Background(), "restarted server at %s / %s",
-		c.AdvRPCAddr(), c.AdvSQLAddr())
+		c.Server.AdvRPCAddr(), c.Server.AdvSQLAddr())
 	if params.TenantArgs != nil {
-		if c.Insecure() {
+		if c.Insecure {
 			params.TenantArgs.ForceInsecure = true
 		}
-		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, *params.TenantArgs)
+		c.tenant, _ = serverutils.StartTenant(c.t, c.Server, *params.TenantArgs)
 		log.Infof(context.Background(), "restarted tenant SQL only server at %s", c.tenant.SQLAddr())
 	}
 }
@@ -363,16 +366,16 @@ func isSQLCommand(args []string) (bool, error) {
 
 func (c TestCLI) getRPCAddr() string {
 	if c.tenant != nil && !c.useSystemTenant {
-		return c.tenant.RPCAddr()
+		return c.tenant.AdvRPCAddr()
 	}
-	return c.AdvRPCAddr()
+	return c.Server.AdvRPCAddr()
 }
 
 func (c TestCLI) getSQLAddr() string {
 	if c.tenant != nil {
-		return c.tenant.SQLAddr()
+		return c.tenant.AdvSQLAddr()
 	}
-	return c.AdvSQLAddr()
+	return c.Server.AdvSQLAddr()
 }
 
 // RunWithArgs add args according to TestCLI cfg.
@@ -381,7 +384,7 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
-		if c.TestServer != nil {
+		if c.Server != nil {
 			addr := c.getRPCAddr()
 			if isSQL, err := isSQLCommand(origArgs); err != nil {
 				return err
@@ -393,7 +396,7 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 				return err
 			}
 			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
-			if c.Cfg.Insecure {
+			if c.Insecure {
 				args = append(args, "--insecure=true")
 			} else {
 				args = append(args, "--insecure=false")
@@ -445,7 +448,7 @@ func (c TestCLI) RunWithCAArgs(origArgs []string) {
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
-		if c.TestServer != nil {
+		if c.Server != nil {
 			args = append(args, fmt.Sprintf("--ca-key=%s", filepath.Join(c.certsDir, certnames.EmbeddedCAKey)))
 			args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 		}
