@@ -89,7 +89,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
-		s3.Gossip(),
+		s3.GossipI().(*gossip.Gossip),
 		s3.GetNode().Descriptor.NodeID,
 		s3.GetNode().Descriptor.Locality,
 		s3.Clock(),

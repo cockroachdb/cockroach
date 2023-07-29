@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -382,15 +381,7 @@ func (ts *TestServer) Stopper() *stop.Stopper {
 
 // GossipI is part of the serverutils.StorageLayerInterface.
 func (ts *TestServer) GossipI() interface{} {
-	return ts.Gossip()
-}
-
-// Gossip is like GossipI but returns the real type instead of interface{}.
-func (ts *TestServer) Gossip() *gossip.Gossip {
-	if ts != nil {
-		return ts.gossip
-	}
-	return nil
+	return ts.Server.gossip
 }
 
 // RangeFeedFactory is part of serverutils.ApplicationLayerInterface.

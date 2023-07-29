@@ -36,19 +36,15 @@ import (
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	ts := s.(*server.TestServer)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.SystemLayer()
 
-	nodeID := ts.Gossip().NodeID.Get()
-	addr, err := ts.Gossip().GetNodeIDAddress(nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlAddr, err := ts.Gossip().GetNodeIDSQLAddress(nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	nodeID := srv.StorageLayer().NodeID()
+	addr := s.AdvRPCAddr()
+	sqlAddr := s.AdvSQLAddr()
 
 	var nodes serverpb.NodesResponse
 	testutils.SucceedsSoon(t, func() error {
@@ -73,10 +69,10 @@ func TestStatusJson(t *testing.T) {
 		if a, e := details.NodeID, nodeID; a != e {
 			t.Errorf("expected: %d, got: %d", e, a)
 		}
-		if a, e := details.Address, *addr; a != e {
+		if a, e := details.Address.String(), addr; a != e {
 			t.Errorf("expected: %v, got: %v", e, a)
 		}
-		if a, e := details.SQLAddress, *sqlAddr; a != e {
+		if a, e := details.SQLAddress.String(), sqlAddr; a != e {
 			t.Errorf("expected: %v, got: %v", e, a)
 		}
 		if a, e := details.BuildInfo, build.GetInfo(); a != e {
@@ -172,12 +168,14 @@ func TestMetricsRecording(t *testing.T) {
 func TestMetricsEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer srv.Stopper().Stop(context.Background())
 
-	s := srv.(*server.TestServer)
+	s := srv.ApplicationLayer()
 
-	if _, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"metrics/"+s.Gossip().NodeID.String()).String()); err != nil {
+	if _, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"metrics/"+srv.NodeID().String()).String()); err != nil {
 		t.Fatal(err)
 	}
 }
