@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 )
@@ -197,6 +198,8 @@ func makeInternalColumnData(
 
 func TestMakeInternalData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	data := []tspb.TimeSeriesDatapoint{
 		tsdp(110, 20),
 		tsdp(120, 300),
@@ -436,25 +439,9 @@ func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
 		verifySpanIteratorPosition(t, iter, explicitPositions[6])
 	}
 
-	// Row data only.
-	t.Run("row only", func(t *testing.T) {
-		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
-			makeInternalRowData(0, 10, []tspb.TimeSeriesDatapoint{
-				tsdp(10, 1),
-				tsdp(20, 2),
-			}),
-			makeInternalRowData(30, 10, []tspb.TimeSeriesDatapoint{
-				tsdp(30, 3),
-			}),
-			makeInternalRowData(50, 10, []tspb.TimeSeriesDatapoint{
-				tsdp(50, 5),
-				tsdp(70, 7),
-				tsdp(90, 9),
-			}),
-		}))
-	})
+	t.Run("", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
 
-	t.Run("columns only", func(t *testing.T) {
 		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
 			makeInternalColumnData(0, 10, []tspb.TimeSeriesDatapoint{
 				tsdp(10, 1),
@@ -470,27 +457,12 @@ func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
 			}),
 		}))
 	})
-
-	t.Run("mixed rows and columns", func(t *testing.T) {
-		verifyIterTest(t, makeTimeSeriesSpanIterator(timeSeriesSpan{
-			makeInternalRowData(0, 10, []tspb.TimeSeriesDatapoint{
-				tsdp(10, 1),
-				tsdp(20, 2),
-			}),
-			makeInternalColumnData(30, 10, []tspb.TimeSeriesDatapoint{
-				tsdp(30, 3),
-			}),
-			makeInternalRowData(50, 10, []tspb.TimeSeriesDatapoint{
-				tsdp(50, 5),
-				tsdp(70, 7),
-				tsdp(90, 9),
-			}),
-		}))
-	})
 }
 
 func TestTimeSeriesSpanIteratorValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	iter := makeTimeSeriesSpanIterator(timeSeriesSpan{
 		makeInternalRowData(0, 10, []tspb.TimeSeriesDatapoint{
 			tsdp(10, 1),
@@ -859,30 +831,9 @@ func TestDownsampleSpans(t *testing.T) {
 			},
 		},
 	} {
+		t.Run(fmt.Sprintf("%d", tcnum), func(t *testing.T) {
+			defer log.Scope(t).Close(t)
 
-		// Run case in Row format.
-		t.Run(fmt.Sprintf("%d:Row", tcnum), func(t *testing.T) {
-			span := make(timeSeriesSpan, len(tc.inputDesc))
-			for i, desc := range tc.inputDesc {
-				span[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-			}
-			expectedSpan := make(timeSeriesSpan, len(tc.expectedDesc))
-			for i, desc := range tc.expectedDesc {
-				expectedSpan[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-			}
-			spans := map[string]timeSeriesSpan{
-				"test": span,
-			}
-			downsampleSpans(spans, tc.samplePeriod, tc.downsampler)
-			if a, e := spans["test"], expectedSpan; !reflect.DeepEqual(a, e) {
-				for _, diff := range pretty.Diff(a, e) {
-					t.Error(diff)
-				}
-			}
-		})
-
-		// Run case in Column format.
-		t.Run(fmt.Sprintf("%d:Column", tcnum), func(t *testing.T) {
 			span := make(timeSeriesSpan, len(tc.inputDesc))
 			for i, desc := range tc.inputDesc {
 				span[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
@@ -890,35 +841,6 @@ func TestDownsampleSpans(t *testing.T) {
 			expectedSpan := make(timeSeriesSpan, len(tc.expectedDesc))
 			for i, desc := range tc.expectedDesc {
 				expectedSpan[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-			}
-			spans := map[string]timeSeriesSpan{
-				"test": span,
-			}
-			downsampleSpans(spans, tc.samplePeriod, tc.downsampler)
-			if a, e := spans["test"], expectedSpan; !reflect.DeepEqual(a, e) {
-				for _, diff := range pretty.Diff(a, e) {
-					t.Error(diff)
-				}
-			}
-		})
-
-		// Run case in Mixed format.
-		t.Run(fmt.Sprintf("%d:Mixed", tcnum), func(t *testing.T) {
-			span := make(timeSeriesSpan, len(tc.inputDesc))
-			for i, desc := range tc.inputDesc {
-				if i%2 == 0 {
-					span[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-				} else {
-					span[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-				}
-			}
-			expectedSpan := make(timeSeriesSpan, len(tc.expectedDesc))
-			for i, desc := range tc.expectedDesc {
-				if i%2 == 0 {
-					expectedSpan[i] = makeInternalRowData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-				} else {
-					expectedSpan[i] = makeInternalColumnData(desc.startTimestamp, desc.sampleDuration, desc.samples)
-				}
 			}
 			spans := map[string]timeSeriesSpan{
 				"test": span,

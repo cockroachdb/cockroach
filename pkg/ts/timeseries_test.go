@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func tsd(name, source string, dps ...tspb.TimeSeriesDatapoint) tspb.TimeSeriesData {
@@ -41,6 +42,8 @@ func tsdp(ts time.Duration, val float64) tspb.TimeSeriesDatapoint {
 // format is correct.
 func TestToInternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	tcases := []struct {
 		keyDuration    int64
 		sampleDuration int64
@@ -181,6 +184,8 @@ func TestToInternal(t *testing.T) {
 // sample period; earlier samples are discarded.
 func TestDiscardEarlierSamples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// TODO(ajkr): this should also run on Pebble. Maybe combine it into the merge_test.go tests or prove
 	// it is redundant with the tests there.
 	ts := tsd("test.series", "",

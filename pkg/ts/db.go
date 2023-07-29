@@ -80,11 +80,6 @@ type DB struct {
 	// which is older than the given threshold for a resolution is considered
 	// eligible for deletion. Thresholds are specified in nanoseconds.
 	pruneThresholdByResolution map[Resolution]func() int64
-
-	// forceRowFormat is set to true if the database should write in the old row
-	// format, regardless of the current cluster setting. Currently only set to
-	// true in tests to verify backwards compatibility.
-	forceRowFormat bool
 }
 
 // NewDB creates a new DB instance.
@@ -341,11 +336,11 @@ func (db *DB) Metrics() *TimeSeriesMetrics {
 // WriteColumnar returns true if this DB should write data in the newer columnar
 // format.
 func (db *DB) WriteColumnar() bool {
-	return !db.forceRowFormat
+	return true
 }
 
 // WriteRollups returns true if this DB should write rollups for resolutions
 // targeted for a rollup resolution.
 func (db *DB) WriteRollups() bool {
-	return !db.forceRowFormat
+	return true
 }
