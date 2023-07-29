@@ -328,13 +328,16 @@ SELECT f(1, 5), f(-5, 5), f(0, 1)
 # TODO(drewk): add back the dijkstra test once UDFs calling other UDFs is
 # allowed.
 
-statement error pgcode 2F005 control reached end of function without RETURN
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
   END
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   DECLARE
     i INT;
@@ -344,6 +347,9 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     IF a < b THEN
@@ -352,7 +358,15 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+query I
+SELECT f(1, 2);
+----
+1
+
 statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(2, 1);
+
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   DECLARE
     i INT;
@@ -366,6 +380,14 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(1, 2);
+
+query I
+SELECT f(2, 1);
+----
+0
+
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
@@ -374,7 +396,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error pgcode 2F005 control reached end of function without RETURN
+statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
@@ -385,6 +407,29 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
     END IF;
   END
 $$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(1, 2);
+----
+0
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(2, 1);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  BEGIN
+    IF a < b THEN
+      RAISE 'foo % %', a, b;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0001 foo 1 2
+SELECT f(1, 2);
+
+statement error pgcode 2F005 control reached end of function without RETURN
+SELECT f(2, 1);
 
 statement error pgcode 0A000 PL/pgSQL functions with RECORD input arguments are not yet supported
 CREATE FUNCTION f_err(p1 RECORD) RETURNS RECORD AS $$
