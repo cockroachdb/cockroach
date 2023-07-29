@@ -2473,7 +2473,8 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
 		tc.Servers[0].AmbientCtx().Tracer,
-		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(tc.Servers[0].Gossip())),
+		nodedialer.New(tc.Servers[0].RPCContext(),
+			gossip.AddressResolver(tc.Servers[0].GossipI().(*gossip.Gossip))),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
 		kvflowdispatch.NewDummyDispatch(),

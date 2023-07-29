@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -1181,7 +1180,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn := ba.Txn
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
-						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
+						txn.UpdateObservedTimestamp(s.NodeID(), now)
 						return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
@@ -1265,7 +1264,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
 					now := s.Clock().NowAsClockTimestamp()
-					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
+					txn.UpdateObservedTimestamp(s.NodeID(), now)
 					return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 				}
 			}

@@ -161,25 +161,19 @@ func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 		t.Fatalf("%s", err)
 	}
 
-	nodeID := c.Gossip().NodeID.Get()
+	nodeID := c.NodeID()
 	nodeIDStr := strconv.FormatInt(int64(nodeID), 10)
 	if a, e := fields[0], nodeIDStr; a != e {
 		t.Errorf("node id (%s) != expected (%s)", a, e)
 	}
 
-	nodeAddr, err := c.Gossip().GetNodeIDAddress(nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := fields[1], nodeAddr.String(); a != e {
+	nodeAddr := c.AdvRPCAddr()
+	if a, e := fields[1], nodeAddr; a != e {
 		t.Errorf("node address (%s) != expected (%s)", a, e)
 	}
 
-	nodeSQLAddr, err := c.Gossip().GetNodeIDSQLAddress(nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := fields[2], nodeSQLAddr.String(); a != e {
+	nodeSQLAddr := c.AdvSQLAddr()
+	if a, e := fields[2], nodeSQLAddr; a != e {
 		t.Errorf("node SQL address (%s) != expected (%s)", a, e)
 	}
 
