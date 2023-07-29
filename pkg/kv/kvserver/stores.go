@@ -296,7 +296,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
 		s := (*Store)(v)
 		// TODO(sep-raft-log): see ReadBootstrapInfo.
-		err = storage.MVCCPutProto(ctx, s.TODOEngine(), nil, keys.StoreGossipKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, bi)
+		err = storage.MVCCPutProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, bi, storage.MVCCWriteOptions{})
 		return err == nil
 	})
 	return err

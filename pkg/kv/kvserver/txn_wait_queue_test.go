@@ -39,9 +39,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
-	key := keys.TransactionKey(txn.Key, txn.ID)
-	return storage.MVCCPutProto(ctx, tc.store.TODOEngine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn)
+func writeTxnRecord(ctx context.Context, tc *testContext, txnRecord *roachpb.Transaction) error {
+	key := keys.TransactionKey(txnRecord.Key, txnRecord.ID)
+	return storage.MVCCPutProto(ctx, tc.store.TODOEngine(), key, hlc.Timestamp{}, txnRecord, storage.MVCCWriteOptions{})
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"

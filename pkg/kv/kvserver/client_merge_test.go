@@ -3894,7 +3894,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
 			tombstoneValue := &kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32}
 			if err := storage.MVCCBlindPutProto(
-				context.Background(), &sst, nil, tombstoneKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, tombstoneValue, nil,
+				context.Background(), &sst, tombstoneKey, hlc.Timestamp{}, tombstoneValue, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}

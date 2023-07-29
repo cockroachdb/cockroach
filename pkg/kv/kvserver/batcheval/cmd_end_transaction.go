@@ -685,7 +685,7 @@ func updateStagingTxn(
 	txn.LockSpans = args.LockSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{Stats: ms})
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
@@ -703,6 +703,7 @@ func updateFinalizedTxn(
 	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
 ) error {
+	opts := storage.MVCCWriteOptions{Stats: ms}
 	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
@@ -713,13 +714,13 @@ func updateFinalizedTxn(
 			// BatchRequest writes.
 			return nil
 		}
-		_, err := storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		_, err := storage.MVCCDelete(ctx, readWriter, key, hlc.Timestamp{}, opts)
 		return err
 	}
 	txn.LockSpans = externalLocks
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, opts)
 }
 
 // RunCommitTrigger runs the commit trigger from an end transaction request.
@@ -1092,7 +1093,7 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := storage.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &replicaGCTS); err != nil {
+	if err := storage.MVCCPutProto(ctx, batch, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, &replicaGCTS, storage.MVCCWriteOptions{}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 

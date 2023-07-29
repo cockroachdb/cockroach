@@ -2586,12 +2586,10 @@ func handleTruncatedStateBelowRaftPreApply(
 	if err := storage.MVCCPutProto(
 		ctx,
 		readWriter,
-		nil, /* ms */
 		prefixBuf.RaftTruncatedStateKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil, /* txn */
 		suggestedTruncatedState,
+		storage.MVCCWriteOptions{},
 	); err != nil {
 		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
 	}

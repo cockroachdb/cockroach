@@ -1786,8 +1786,8 @@ func TestOptimizePuts(t *testing.T) {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.engine, nil,
 				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
 		} else if c.exKey != nil {
-			require.NoError(t, storage.MVCCPut(ctx, tc.engine, nil, c.exKey,
-				hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
+			require.NoError(t, storage.MVCCPut(ctx, tc.engine, c.exKey,
+				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{}))
 		}
 		batch := kvpb.BatchRequest{}
 		for _, r := range c.reqs {
@@ -3492,7 +3492,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	err := storage.MVCCPut(ctx, tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
+	err := storage.MVCCPut(ctx, tc.engine, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), storage.MVCCWriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4571,7 +4571,7 @@ func TestEndTxnWithErrors(t *testing.T) {
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
 			if err := storage.MVCCPutProto(
-				ctx, tc.repl.store.TODOEngine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRecord,
+				ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{}, &existTxnRecord, storage.MVCCWriteOptions{},
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -4614,7 +4614,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	existTxn.Status = roachpb.ABORTED
 	existTxnRec := existTxn.AsRecord()
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	err := storage.MVCCPutProto(ctx, tc.repl.store.TODOEngine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRec)
+	err := storage.MVCCPutProto(ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{}, &existTxnRec, storage.MVCCWriteOptions{})
 	require.NoError(t, err)
 
 	// End the transaction, verify expected error, shouldn't deadlock.
@@ -10985,7 +10985,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// Write a value outside the transaction.
 	tc.manualClock.Advance(10)
 	ts2 := tc.Clock().Now()
-	if err := storage.MVCCPut(ctx, tc.engine, nil, k, ts2, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("one"), nil); err != nil {
+	if err := storage.MVCCPut(ctx, tc.engine, k, ts2, roachpb.MakeValueFromString("one"), storage.MVCCWriteOptions{}); err != nil {
 		t.Fatalf("writing interfering value: %+v", err)
 	}
 
@@ -13491,10 +13491,10 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 		ctx context.Context, readWriter storage.ReadWriter, cArgs batcheval.CommandArgs, _ kvpb.Response,
 	) (result.Result, error) {
 		args := cArgs.Args.(*kvpb.PutRequest)
-		ms := cArgs.Stats
-		ms.ContainsEstimates += containsEstimatesDelta
+		opts := storage.MVCCWriteOptions{Txn: cArgs.Header.Txn, Stats: cArgs.Stats}
+		opts.Stats.ContainsEstimates += containsEstimatesDelta
 		ts := cArgs.Header.Timestamp
-		return result.Result{}, storage.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, hlc.ClockTimestamp{}, args.Value, cArgs.Header.Txn)
+		return result.Result{}, storage.MVCCBlindPut(ctx, readWriter, args.Key, ts, args.Value, opts)
 	}
 
 	batcheval.UnregisterCommand(kvpb.Put)

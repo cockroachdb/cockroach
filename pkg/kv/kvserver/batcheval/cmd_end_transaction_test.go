@@ -1098,7 +1098,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Write the existing transaction record, if necessary.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if c.existingTxn != nil {
-				if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, c.existingTxn); err != nil {
+				if err := storage.MVCCPutProto(ctx, batch, txnKey, hlc.Timestamp{}, c.existingTxn, storage.MVCCWriteOptions{}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1200,13 +1200,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, k, ts, v, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1219,7 +1219,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		if storeTxnBeforeEndTxn {
 			txnRec := txn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, batch, nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRec); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1648,7 +1648,7 @@ func TestResolveLocalLocks(t *testing.T) {
 			txn.Status = roachpb.COMMITTED
 
 			for i := 0; i < numKeys; i++ {
-				err := storage.MVCCPut(ctx, batch, nil, intToKey(i), ts, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("a"), &txn)
+				err := storage.MVCCPut(ctx, batch, intToKey(i), ts, roachpb.MakeValueFromString("a"), storage.MVCCWriteOptions{Txn: &txn})
 				require.NoError(t, err)
 			}
 			resolvedLocks, externalLocks, err := resolveLocalLocksWithPagination(

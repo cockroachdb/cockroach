@@ -1381,7 +1381,7 @@ func SendEmptySnapshot(
 	var ms enginepb.MVCCStats
 	// Seed an empty range into the new engine.
 	if err := storage.MVCCPutProto(
-		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, hlc.ClockTimestamp{}, nil /* txn */, &desc,
+		ctx, eng, keys.RangeDescriptorKey(desc.StartKey), now, &desc, storage.MVCCWriteOptions{Stats: &ms},
 	); err != nil {
 		return err
 	}

@@ -32,9 +32,15 @@ func Increment(
 	h := cArgs.Header
 	reply := resp.(*kvpb.IncrementResponse)
 
+	opts := storage.MVCCWriteOptions{
+		Txn:            h.Txn,
+		LocalTimestamp: cArgs.Now,
+		Stats:          cArgs.Stats,
+	}
+
 	var err error
 	reply.NewValue, err = storage.MVCCIncrement(
-		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn, args.Increment)
+		ctx, readWriter, args.Key, h.Timestamp, opts, args.Increment)
 	if err != nil {
 		return result.Result{}, err
 	}

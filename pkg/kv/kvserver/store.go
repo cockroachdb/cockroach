@@ -2543,12 +2543,10 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 	return storage.MVCCPutProto(
 		ctx,
 		s.TODOEngine(), // TODO(sep-raft-log): probably state engine
-		nil,
 		keys.StoreLastUpKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
 		&time,
+		storage.MVCCWriteOptions{},
 	)
 }
 
@@ -2579,12 +2577,10 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	if err := storage.MVCCPutProto(
 		ctx,
 		batch,
-		nil,
 		keys.StoreHLCUpperBoundKey(),
 		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
 		&ts,
+		storage.MVCCWriteOptions{},
 	); err != nil {
 		return err
 	}

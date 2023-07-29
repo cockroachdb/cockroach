@@ -92,7 +92,7 @@ func createEngineOrFatal(ctx context.Context, t *testing.T, uuid uuid.UUID, id i
 		StoreID:   roachpb.StoreID(id),
 	}
 	if err = storage.MVCCPutProto(
-		context.Background(), eng, nil, keys.StoreIdentKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &sIdent,
+		context.Background(), eng, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
 	); err != nil {
 		t.Fatalf("failed to populate test store ident: %v", err)
 	}
