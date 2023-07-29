@@ -42,25 +42,26 @@ func TestGossipFirstRange(t *testing.T) {
 
 	errors := make(chan error, 1)
 	descs := make(chan *roachpb.RangeDescriptor)
-	unregister := tc.Servers[0].Gossip().RegisterCallback(gossip.KeyFirstRangeDescriptor,
-		func(_ string, content roachpb.Value) {
-			var desc roachpb.RangeDescriptor
-			if err := content.GetProto(&desc); err != nil {
-				select {
-				case errors <- err:
-				default:
+	unregister := tc.Servers[0].GossipI().(*gossip.Gossip).
+		RegisterCallback(gossip.KeyFirstRangeDescriptor,
+			func(_ string, content roachpb.Value) {
+				var desc roachpb.RangeDescriptor
+				if err := content.GetProto(&desc); err != nil {
+					select {
+					case errors <- err:
+					default:
+					}
+				} else {
+					select {
+					case descs <- &desc:
+					case <-time.After(45 * time.Second):
+						t.Logf("had to drop descriptor %+v", desc)
+					}
 				}
-			} else {
-				select {
-				case descs <- &desc:
-				case <-time.After(45 * time.Second):
-					t.Logf("had to drop descriptor %+v", desc)
-				}
-			}
-		},
-		// Redundant callbacks are required by this test.
-		gossip.Redundant,
-	)
+			},
+			// Redundant callbacks are required by this test.
+			gossip.Redundant,
+		)
 	// Unregister the callback before attempting to stop the stopper to prevent
 	// deadlock. This is still flaky in theory since a callback can fire between
 	// the last read from the channels and this unregister, but testing has
