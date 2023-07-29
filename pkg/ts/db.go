@@ -28,15 +28,10 @@ import (
 
 var (
 	resolution1nsDefaultRollupThreshold = time.Second
-	// The deprecated prune threshold for the 10s resolution was created before
-	// time series rollups were enabled. It is still used in the transition period
-	// during an upgrade before the cluster version is finalized. After the
-	// version upgrade, the rollup threshold is used instead.
-	deprecatedResolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
-	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
-	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
-	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
-	storeDataTimeout                             = 1 * time.Minute
+	resolution10sDefaultRollupThreshold = 10 * 24 * time.Hour
+	resolution30mDefaultPruneThreshold  = 90 * 24 * time.Hour
+	resolution50nsDefaultPruneThreshold = 1 * time.Millisecond
+	storeDataTimeout                    = 1 * time.Minute
 )
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
@@ -80,11 +75,6 @@ type DB struct {
 	// which is older than the given threshold for a resolution is considered
 	// eligible for deletion. Thresholds are specified in nanoseconds.
 	pruneThresholdByResolution map[Resolution]func() int64
-
-	// forceRowFormat is set to true if the database should write in the old row
-	// format, regardless of the current cluster setting. Currently only set to
-	// true in tests to verify backwards compatibility.
-	forceRowFormat bool
 }
 
 // NewDB creates a new DB instance.
@@ -227,7 +217,7 @@ func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSe
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
 	for _, d := range data {
-		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration(), db.WriteColumnar())
+		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
 		if err != nil {
 			return err
 		}
@@ -336,16 +326,4 @@ func (db *DB) PruneThreshold(r Resolution) int64 {
 // Metrics gets the TimeSeriesMetrics structure used by this DB instance.
 func (db *DB) Metrics() *TimeSeriesMetrics {
 	return db.metrics
-}
-
-// WriteColumnar returns true if this DB should write data in the newer columnar
-// format.
-func (db *DB) WriteColumnar() bool {
-	return !db.forceRowFormat
-}
-
-// WriteRollups returns true if this DB should write rollups for resolutions
-// targeted for a rollup resolution.
-func (db *DB) WriteRollups() bool {
-	return !db.forceRowFormat
 }

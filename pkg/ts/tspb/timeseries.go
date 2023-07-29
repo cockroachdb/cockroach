@@ -47,7 +47,7 @@ import (
 // For more information on how time series data is stored, see
 // InternalTimeSeriesData and its related structures.
 func (ts TimeSeriesData) ToInternal(
-	keyDuration, sampleDuration int64, columnar bool,
+	keyDuration, sampleDuration int64,
 ) ([]roachpb.InternalTimeSeriesData, error) {
 	if err := VerifySlabAndSampleDuration(keyDuration, sampleDuration); err != nil {
 		return nil, err
@@ -75,16 +75,8 @@ func (ts TimeSeriesData) ToInternal(
 
 		// Create a new sample for this datapoint and place it into the
 		// InternalTimeSeriesData.
-		if columnar {
-			itsd.Offset = append(itsd.Offset, itsd.OffsetForTimestamp(dp.TimestampNanos))
-			itsd.Last = append(itsd.Last, dp.Value)
-		} else {
-			itsd.Samples = append(itsd.Samples, roachpb.InternalTimeSeriesSample{
-				Offset: itsd.OffsetForTimestamp(dp.TimestampNanos),
-				Count:  1,
-				Sum:    dp.Value,
-			})
-		}
+		itsd.Offset = append(itsd.Offset, itsd.OffsetForTimestamp(dp.TimestampNanos))
+		itsd.Last = append(itsd.Last, dp.Value)
 	}
 
 	return result, nil
