@@ -182,7 +182,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 		}
 		seen[name] = struct{}{}
 		props, fns := builtinsregistry.GetBuiltinProperties(name)
-		if !props.ShouldDocument() {
+		if !props.ShouldDocument() || strings.HasPrefix(name, "crdb_internal.") {
 			continue
 		}
 		for _, fn := range fns {
