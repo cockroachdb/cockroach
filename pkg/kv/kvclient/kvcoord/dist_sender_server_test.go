@@ -87,14 +87,15 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
 	ambient := s.AmbientCtx()
+	gs := s.GossipI().(*gossip.Gossip)
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         ambient,
 		Settings:           cluster.MakeTestingClusterSettings(),
 		Clock:              s.Clock(),
-		NodeDescs:          s.Gossip(),
+		NodeDescs:          gs,
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
-		FirstRangeProvider: s.Gossip(),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+		FirstRangeProvider: gs,
 	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -1120,16 +1121,17 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				// applied by time we execute the scan. If it has not run, then try the
 				// scan again. READ_UNCOMMITTED and INCONSISTENT reads to not push
 				// intents.
+				gs := s.GossipI().(*gossip.Gossip)
 				testutils.SucceedsSoon(t, func() error {
 					clock := hlc.NewClockForTesting(timeutil.NewManualTime(ts.GoTime().Add(1)))
 					ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 						AmbientCtx:         s.AmbientCtx(),
 						Settings:           s.ClusterSettings(),
 						Clock:              clock,
-						NodeDescs:          s.Gossip(),
+						NodeDescs:          gs,
 						RPCContext:         s.RPCContext(),
-						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
-						FirstRangeProvider: s.Gossip(),
+						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+						FirstRangeProvider: gs,
 					})
 
 					reply, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{ReadConsistency: rc}, request)
@@ -1650,14 +1652,15 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
+	gs := s.GossipI().(*gossip.Gossip)
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         s.AmbientCtx(),
 		Clock:              s.Clock(),
-		NodeDescs:          s.Gossip(),
+		NodeDescs:          gs,
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
 		Settings:           cluster.MakeTestingClusterSettings(),
-		FirstRangeProvider: s.Gossip(),
+		FirstRangeProvider: gs,
 	})
 	for _, key := range []string{"c"} {
 		req := &kvpb.AdminSplitRequest{

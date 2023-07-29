@@ -413,7 +413,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			// We want to wait for stores for each server in order to have predictable
 			// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
 			// unexpected order (#22342).
-			tc.WaitForNStores(t, i+1, tc.Servers[0].Gossip())
+			tc.WaitForNStores(t, i+1, tc.Servers[0].GossipI().(*gossip.Gossip))
 		}
 	}
 
@@ -428,7 +428,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			}
 		}
 
-		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].Gossip())
+		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].GossipI().(*gossip.Gossip))
 	}
 
 	// Now that we have started all the servers on the bootstrap version, let us
