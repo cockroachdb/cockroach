@@ -144,6 +144,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 							TestingRequestFilter: kvInterceptor.intercept,
 						},
 					},
+					// This test relies on results on store level and should have an ability
+					// to disable auto split and merge ranges cluster setting.
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 				},
 			)
 			defer srv.Stopper().Stop(ctx)
@@ -179,6 +182,10 @@ func TestSQLStatsCompactor(t *testing.T) {
 			// Change the automatic compaction job to avoid it running during the test.
 			// Test creates a new compactor and calls it directly.
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
+			// Disable automatic merge/split ranges to avoid affecting number of wide scans.
+			sqlConn.Exec(t, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'")
+			sqlConn.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'")
+			sqlConn.Exec(t, "SET CLUSTER SETTING server.consistency_check.interval = '0'")
 
 			_, err := internalExecutor.ExecEx(
 				ctx,
