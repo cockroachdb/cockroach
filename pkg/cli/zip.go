@@ -161,7 +161,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	var tenants []*serverpb.Tenant
 	if err := func() error {
 		s := zr.start("discovering virtual clusters")
-		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
 		}
@@ -215,7 +215,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			sqlAddr := tenant.SqlAddr
 
 			s := zr.start("establishing RPC connection to %s", cfg.AdvertiseAddr)
-			conn, _, finish, err := getClientGRPCConn(ctx, cfg)
+			conn, finish, err := getClientGRPCConn(ctx, cfg)
 			if err != nil {
 				return s.fail(err)
 			}

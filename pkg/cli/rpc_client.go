@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -26,13 +25,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// getClientGRPCConn returns a ClientConn, a Clock and a method that blocks
+// getClientGRPCConn returns a ClientConn and a method that blocks
 // until the connection (and its associated goroutines) have terminated.
-func getClientGRPCConn(
-	ctx context.Context, cfg server.Config,
-) (*grpc.ClientConn, hlc.WallClock, func(), error) {
+func getClientGRPCConn(ctx context.Context, cfg server.Config) (*grpc.ClientConn, func(), error) {
 	if ctx.Done() == nil {
-		return nil, nil, nil, errors.New("context must be cancellable")
+		return nil, nil, errors.New("context must be cancellable")
 	}
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
@@ -59,14 +56,14 @@ func getClientGRPCConn(
 	addr, err := addr.AddrWithDefaultLocalhost(cfg.AdvertiseAddr)
 	if err != nil {
 		stopper.Stop(ctx)
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	// We use GRPCUnvalidatedDial() here because it does not matter
 	// to which node we're talking to.
 	conn, err := rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
 	if err != nil {
 		stopper.Stop(ctx)
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	stopper.AddCloser(stop.CloserFn(func() {
 		_ = conn.Close() // nolint:grpcconnclose
@@ -76,13 +73,13 @@ func getClientGRPCConn(
 	closer := func() {
 		stopper.Stop(ctx)
 	}
-	return conn, clock, closer, nil
+	return conn, closer, nil
 }
 
 // getAdminClient returns an AdminClient and a closure that must be invoked
 // to free associated resources.
 func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
-	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
+	conn, finish, err := getClientGRPCConn(ctx, cfg)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to the node")
 	}
@@ -94,7 +91,7 @@ func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClien
 func getStatusClient(
 	ctx context.Context, cfg server.Config,
 ) (serverpb.StatusClient, func(), error) {
-	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
+	conn, finish, err := getClientGRPCConn(ctx, cfg)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to the node")
 	}

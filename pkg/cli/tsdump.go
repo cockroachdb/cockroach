@@ -52,7 +52,7 @@ output.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return err
 		}
