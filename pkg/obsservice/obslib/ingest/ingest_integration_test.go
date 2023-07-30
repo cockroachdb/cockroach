@@ -15,14 +15,12 @@ import (
 	"net"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -76,16 +73,12 @@ func TestEventIngestionIntegration(t *testing.T) {
 			obsStop := stop.NewStopper()
 			defer obsStop.Stop(ctx)
 			e := MakeEventIngester(ctx, testConsumer, nil)
-			rpcContext := rpc.NewContext(ctx,
-				rpc.ContextOptions{
-					TenantID:        roachpb.SystemTenantID,
-					NodeID:          &base.NodeIDContainer{},
-					Config:          &base.Config{Insecure: true},
-					Clock:           &timeutil.DefaultTimeSource{},
-					ToleratedOffset: time.Nanosecond,
-					Stopper:         obsStop,
-					Settings:        cluster.MakeTestingClusterSettings(),
-				})
+			opts := rpc.DefaultContextOptions()
+			opts.NodeID = &base.NodeIDContainer{}
+			opts.Insecure = true
+			opts.Stopper = obsStop
+			opts.Settings = cluster.MakeTestingClusterSettings()
+			rpcContext := rpc.NewContext(ctx, opts)
 			grpcServer, err := rpc.NewServer(rpcContext)
 			require.NoError(t, err)
 			defer grpcServer.Stop()

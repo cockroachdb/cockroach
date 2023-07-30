@@ -16,7 +16,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"google.golang.org/grpc"
 )
@@ -70,19 +68,15 @@ func NewNetwork(
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.RPCContext = rpc.NewContext(ctx,
-		rpc.ContextOptions{
-			TenantID:        roachpb.SystemTenantID,
-			Config:          &base.Config{Insecure: true},
-			Clock:           &timeutil.DefaultTimeSource{},
-			ToleratedOffset: 0,
-			Stopper:         n.Stopper,
-			Settings:        cluster.MakeTestingClusterSettings(),
+	opts := rpc.DefaultContextOptions()
+	opts.Insecure = true
+	opts.Stopper = n.Stopper
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	opts.Knobs = rpc.ContextTestingKnobs{
+		NoLoopbackDialer: true,
+	}
+	n.RPCContext = rpc.NewContext(ctx, opts)
 
-			Knobs: rpc.ContextTestingKnobs{
-				NoLoopbackDialer: true,
-			},
-		})
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {

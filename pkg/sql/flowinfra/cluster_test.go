@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -258,7 +259,7 @@ func runTestClusterFlow(
 func TestClusterFlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+
 	const numNodes = 3
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
@@ -273,10 +274,7 @@ func TestClusterFlow(t *testing.T) {
 		s := tc.Server(i)
 		servers[i] = s
 		conns[i] = tc.ServerConn(i)
-		conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
+		conn := s.RPCClientConn(t, username.RootUserName())
 		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
 
@@ -772,13 +770,10 @@ func BenchmarkInfrastructure(b *testing.B) {
 					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
 
 					var clients []execinfrapb.DistSQLClient
-					ctx := context.Background()
+
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
-						conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
-						if err != nil {
-							b.Fatal(err)
-						}
+						conn := s.RPCClientConn(b, username.RootUserName())
 						clients = append(clients, execinfrapb.NewDistSQLClient(conn))
 					}
 

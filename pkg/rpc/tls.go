@@ -54,12 +54,33 @@ func wrapError(err error) error {
 	return err
 }
 
+// SecurityContextOptions contains the subset of base.Config
+// useful to define a SecurityContext.
+type SecurityContextOptions struct {
+	SSLCertsDir string
+	Insecure    bool
+
+	// DisableTLSForHTTP is only used by GetUIServerTLSConfig().
+	//
+	// TODO(kv): it's a bit strange that the 'rpc' package
+	// is responsible for the HTTP TLS config. Maybe move it
+	// elsewhere?
+	DisableTLSForHTTP bool
+	// AdvertiseAddrH is only used by CheckCertificateAddrs().
+	*base.AdvertiseAddrH
+	// SQLAdvertiseAddrH is only used by CheckCertificateAddrs().
+	//
+	// TODO(kv): it's a bit strange that the 'rpc' package is
+	// responsible for the SQL TLS config. Maybe move it elsewhere?
+	*base.SQLAdvertiseAddrH
+}
+
 // SecurityContext is a wrapper providing transport security helpers such as
 // the certificate manager.
 type SecurityContext struct {
 	certnames.Locator
 	security.TLSSettings
-	config                 *base.Config
+	config                 SecurityContextOptions
 	tenID                  roachpb.TenantID
 	capabilitiesAuthorizer tenantcapabilities.Authorizer
 	lazy                   struct {
@@ -75,7 +96,7 @@ type SecurityContext struct {
 //
 // TODO(tbg): don't take a whole Config. This can be trimmed down significantly.
 func NewSecurityContext(
-	cfg *base.Config,
+	cfg SecurityContextOptions,
 	tlsSettings security.TLSSettings,
 	tenID roachpb.TenantID,
 	capabilitiesAuthorizer tenantcapabilities.Authorizer,
@@ -284,7 +305,10 @@ func (ctx *SecurityContext) CheckCertificateAddrs(cctx context.Context) {
 // HTTPRequestScheme returns "http" or "https" based on the value of
 // Insecure and DisableTLSForHTTP.
 func (ctx *SecurityContext) HTTPRequestScheme() string {
-	return ctx.config.HTTPRequestScheme()
+	if ctx.config.Insecure || ctx.config.DisableTLSForHTTP {
+		return "http"
+	}
+	return "https"
 }
 
 // certAddrs formats the list of addresses included in a certificate for

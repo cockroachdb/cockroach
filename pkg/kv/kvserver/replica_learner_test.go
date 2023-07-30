@@ -985,8 +985,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		// effect on the outcome of this test.
 		const drainingServerIdx = 1
 		const drainingNodeID = drainingServerIdx + 1
-		client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
-		require.NoError(t, err)
+		client := tc.GetAdminClient(t, drainingServerIdx)
 		drain(ctx, t, client, drainingNodeID)
 	}
 
@@ -1091,13 +1090,12 @@ func TestSnapshotsToDrainingNodes(t *testing.T) {
 			},
 		)
 		defer tc.Stopper().Stop(ctx)
-		client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
-		require.NoError(t, err)
+		client := tc.GetAdminClient(t, drainingServerIdx)
 		drain(ctx, t, client, drainingNodeID)
 
 		// Now, we try to add a replica to it, we expect that to fail.
 		scratchKey := tc.ScratchRange(t)
-		_, err = tc.AddVoters(scratchKey, makeReplicationTargets(drainingNodeID)...)
+		_, err := tc.AddVoters(scratchKey, makeReplicationTargets(drainingNodeID)...)
 		require.Regexp(t, "store is draining", err)
 	})
 

@@ -370,10 +370,10 @@ func runSingleHeartbeat(
 	// heartbeat to heartbeat: we compute a new .Offset at the end of
 	// the current heartbeat as input to the next one.
 	request := &PingRequest{
-		OriginAddr:      opts.Config.AdvertiseAddr,
+		OriginAddr:      opts.AdvertiseAddr,
 		TargetNodeID:    k.NodeID,
 		ServerVersion:   opts.Settings.Version.BinaryVersion(),
-		LocalityAddress: opts.Config.LocalityAddresses,
+		LocalityAddress: opts.LocalityAddresses,
 		ClusterID:       &clusterID,
 		OriginNodeID:    opts.NodeID.Get(),
 		NeedsDialback:   preferredDialback,
@@ -414,9 +414,9 @@ func runSingleHeartbeat(
 	// new node in a cluster and mistakenly joins the wrong
 	// cluster gets a chance to see the error message on their
 	// management console.
-	if !opts.Config.DisableClusterNameVerification && !response.DisableClusterNameVerification {
+	if !opts.DisableClusterNameVerification && !response.DisableClusterNameVerification {
 		err = errors.Wrap(
-			checkClusterName(opts.Config.ClusterName, response.ClusterName),
+			checkClusterName(opts.ClusterName, response.ClusterName),
 			"cluster name check failed on ping response")
 		if err != nil {
 			return err

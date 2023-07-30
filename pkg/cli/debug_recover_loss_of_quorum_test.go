@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -258,10 +257,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// attempt. That would increase number of replicas on system ranges to 5 and we
 	// would not be able to upreplicate properly. So we need to decommission old nodes
 	// first before proceeding.
-	grpcConn, err := tcAfter.Server(0).RPCContext().GRPCDialNode(
-		tcAfter.Server(0).AdvRPCAddr(), tcAfter.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err, "Failed to create test cluster after recovery")
-	adminClient := serverpb.NewAdminClient(grpcConn)
+	adminClient := tcAfter.Server(0).GetAdminClient(t)
 
 	require.NoError(t, runDecommissionNodeImpl(
 		ctx, adminClient, nodeDecommissionWaitNone, nodeDecommissionChecksSkip, false,
@@ -353,10 +349,7 @@ func TestStageVersionCheck(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	tc.StopServer(3)
 
-	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).AdvRPCAddr(),
-		tc.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err, "Failed to create test cluster after recovery")
-	adminClient := serverpb.NewAdminClient(grpcConn)
+	adminClient := tc.Server(0).GetAdminClient(t)
 	v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
 	v.Internal++
 	// To avoid crafting real replicas we use StaleLeaseholderNodeIDs to force
@@ -369,7 +362,7 @@ func TestStageVersionCheck(t *testing.T) {
 		StaleLeaseholderNodeIDs: []roachpb.NodeID{1},
 	}
 	// Attempts to stage plan with different internal version must fail.
-	_, err = adminClient.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+	_, err := adminClient.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
 		Plan:                      &p,
 		AllNodes:                  true,
 		ForcePlan:                 false,
@@ -559,8 +552,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	// Verifying that post start cleanup performed node decommissioning that
 	// prevents old nodes from rejoining.
-	ac, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	ac := tc.GetAdminClient(t, 0)
 	testutils.SucceedsSoon(t, func() error {
 		dr, err := ac.DecommissionStatus(ctx,
 			&serverpb.DecommissionStatusRequest{NodeIDs: []roachpb.NodeID{2, 3}})

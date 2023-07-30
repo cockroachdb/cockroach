@@ -248,8 +248,7 @@ func TestCollectLeaseholderStatus(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	require.NoError(t, tc.WaitForFullReplication())
 
-	adm, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err, "failed to get admin client")
+	adm := tc.GetAdminClient(t, 0)
 
 	// Note: we need to retry because replica collection is not atomic and
 	// leaseholder could move around so we could see none or more than one.

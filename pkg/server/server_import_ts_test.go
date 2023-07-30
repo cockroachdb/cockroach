@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -51,8 +52,7 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 		srv := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer srv.Stopper().Stop(ctx)
 
-		cc, err := srv.Servers[0].RPCContext().GRPCUnvalidatedDial(srv.Servers[0].RPCAddr()).Connect(ctx)
-		require.NoError(t, err)
+		cc := srv.Server(0).RPCClientConn(t, username.RootUserName())
 		bytesDumped = dumpTSNonempty(t, cc, path)
 		t.Logf("dumped %s bytes", humanizeutil.IBytes(bytesDumped))
 	}()
@@ -68,8 +68,7 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 	}
 	srv := testcluster.StartTestCluster(t, 1, args)
 	defer srv.Stopper().Stop(ctx)
-	cc, err := srv.Servers[0].RPCContext().GRPCUnvalidatedDial(srv.Servers[0].RPCAddr()).Connect(ctx)
-	require.NoError(t, err)
+	cc := srv.Server(0).RPCClientConn(t, username.RootUserName())
 	// This would fail if we didn't supply a dump. Just the fact that it returns
 	// successfully proves that we ingested at least some time series (or that we
 	// failed to disable time series).

@@ -992,23 +992,21 @@ func makeTenantSQLServerArgs(
 		testingKnobShutdownTenantConnectorEarlyIfNoRecordPresent = p.ShutdownTenantConnectorEarlyIfNoRecordPresent
 	}
 
+	rpcCtxOpts := rpc.ServerContextOptionsFromBaseConfig(baseCfg.Config)
+	rpcCtxOpts.TenantID = sqlCfg.TenantID
+	rpcCtxOpts.UseNodeAuth = sqlCfg.LocalKVServerInfo != nil
+	rpcCtxOpts.NodeID = baseCfg.IDContainer
+	rpcCtxOpts.StorageClusterID = baseCfg.ClusterIDContainer
+	rpcCtxOpts.Clock = clock.WallClock()
+	rpcCtxOpts.ToleratedOffset = clock.ToleratedOffset()
+	rpcCtxOpts.Stopper = stopper
+	rpcCtxOpts.Settings = st
+	rpcCtxOpts.Knobs = rpcTestingKnobs
 	// This tenant's SQL server only serves SQL connections and SQL-to-SQL
 	// RPCs; so it should refuse to serve SQL-to-KV RPCs completely.
-	authorizer := tenantcapabilitiesauthorizer.NewAllowNothingAuthorizer()
+	rpcCtxOpts.TenantRPCAuthorizer = tenantcapabilitiesauthorizer.NewAllowNothingAuthorizer()
 
-	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
-		TenantID:            sqlCfg.TenantID,
-		UseNodeAuth:         sqlCfg.LocalKVServerInfo != nil,
-		NodeID:              baseCfg.IDContainer,
-		StorageClusterID:    baseCfg.ClusterIDContainer,
-		Config:              baseCfg.Config,
-		Clock:               clock.WallClock(),
-		ToleratedOffset:     clock.ToleratedOffset(),
-		Stopper:             stopper,
-		Settings:            st,
-		Knobs:               rpcTestingKnobs,
-		TenantRPCAuthorizer: authorizer,
-	})
+	rpcContext := rpc.NewContext(startupCtx, rpcCtxOpts)
 
 	if !baseCfg.Insecure {
 		// This check mirrors that done in NewServer().
