@@ -158,6 +158,7 @@ package must
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -180,6 +181,19 @@ var (
 	// OnFail can be injected in tests.
 	OnFail func(ctx context.Context, err error)
 )
+
+// DisableFatalAssertions disables fatal assertions for the duration of a test,
+// re-enabling them at the end. This is useful for tests that check assertion
+// failures as errors.
+func DisableFatalAssertions(t testing.TB) {
+	t.Helper()
+	if FatalAssertions {
+		FatalAssertions = false
+		t.Cleanup(func() {
+			FatalAssertions = true
+		})
+	}
+}
 
 // Fail triggers an assertion failure. In non-release builds, it fatals with a
 // stack trace. In release builds, if returns an assertion error, logs it with a
