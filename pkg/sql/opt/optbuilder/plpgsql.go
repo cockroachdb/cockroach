@@ -345,6 +345,70 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
 			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			return b.callContinuation(&con, s)
+		case *plpgsqltree.PLpgSQLStmtExecSql:
+			if t.Strict {
+				panic(unimplemented.NewWithIssuef(107854,
+					"INTO STRICT statements are not yet implemented",
+				))
+			}
+			// Create a new continuation routine to handle executing a SQL statement.
+			execCon := b.makeContinuation("_stmt_exec")
+			stmtScope := b.ob.buildStmtAtRootWithScope(t.SqlStmt, nil /* desiredTypes */, execCon.s)
+			if t.Target == nil {
+				// When there is not INTO target, build the SQL statement into a body
+				// statement that is only executed for its side effects.
+				b.appendBodyStmt(&execCon, stmtScope)
+				b.appendPlpgSQLStmts(&execCon, stmts[i+1:])
+				return b.callContinuation(&execCon, s)
+			}
+			// This statement has an INTO target. Unlike the above case, we need the
+			// result of executing the SQL statement, since its result is assigned to
+			// the target variables. We handle this using the following steps:
+			//   1. Build the PLpgSQL statements following this one into a
+			//      continuation routine.
+			//   2. Build the INTO statement into a continuation routine that calls
+			//      the continuation from Step 1 using its output as parameters.
+			//   3. Call the INTO continuation from the parent scope.
+			//
+			// Step 1: build a continuation for the remaining PLpgSQL statements.
+			retCon := b.makeContinuation("_stmt_exec_ret")
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+
+			// We only need the first row from the SQL statement.
+			stmtScope.expr = b.ob.factory.ConstructLimit(
+				stmtScope.expr,
+				b.ob.factory.ConstructConst(tree.NewDInt(tree.DInt(1)), types.Int),
+				stmtScope.makeOrderingChoice(),
+			)
+
+			// Step 2: build the INTO statement into a continuation routine that calls
+			// the previously built continuation.
+			//
+			// For each target variable, project an output column that aliases the
+			// corresponding column from the SQL statement. Previous values for the
+			// variables will naturally be "overwritten" by the projection, since
+			// input columns are always considered before outer columns when resolving
+			// a column reference.
+			intoScope := stmtScope.push()
+			for j := range t.Target {
+				typ := b.resolveVariableForAssign(t.Target[j])
+				colName := scopeColName(t.Target[j])
+				var scalar opt.ScalarExpr
+				if j < len(stmtScope.cols) {
+					scalar = b.ob.factory.ConstructVariable(stmtScope.cols[j].id)
+				} else {
+					// If there are less output columns than target variables, NULL is
+					// assigned to any remaining targets.
+					scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
+				}
+				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+			}
+			b.ob.constructProjectForScope(stmtScope, intoScope)
+			intoScope = b.callContinuation(&retCon, intoScope)
+
+			// Step 3: call the INTO continuation from the parent scope.
+			b.appendBodyStmt(&execCon, intoScope)
+			return b.callContinuation(&execCon, s)
 		default:
 			panic(unimplemented.New(
 				"unimplemented PL/pgSQL statement",
@@ -369,15 +433,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	inScope *scope, ident plpgsqltree.PLpgSQLVariable, val plpgsqltree.PLpgSQLExpr,
 ) *scope {
-	if b.constants != nil {
-		if _, ok := b.constants[ident]; ok {
-			panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", ident))
-		}
-	}
-	typ, ok := b.varTypes[ident]
-	if !ok {
-		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", ident))
-	}
+	typ := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
@@ -573,7 +629,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
 	return b.callContinuation(&con, inScope)
 }
 
-// makeContinuation allocates a new continuation function with an uninitialized
+// makeContinuation allocates a new continuation routine with an uninitialized
 // definition.
 func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 	s := b.ob.allocScope()
@@ -681,6 +737,21 @@ func (b *plpgsqlBuilder) buildPLpgSQLExpr(
 		panic(err)
 	}
 	return b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
+}
+
+// resolveVariableForAssign attempts to retrieve the type of the variable with
+// the given name, throwing an error if no such variable exists.
+func (b *plpgsqlBuilder) resolveVariableForAssign(name tree.Name) *types.T {
+	typ, ok := b.varTypes[name]
+	if !ok {
+		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
+	}
+	if b.constants != nil {
+		if _, ok := b.constants[name]; ok {
+			panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
+		}
+	}
+	return typ
 }
 
 func (b *plpgsqlBuilder) ensureScopeHasExpr(s *scope) {
