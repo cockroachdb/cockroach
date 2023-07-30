@@ -18,6 +18,19 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// AddrWithDefaultLocalhost returns addr with the host set
+// to localhost if it is empty.
+func AddrWithDefaultLocalhost(addr string) (string, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", err
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
 // SplitHostPort is like net.SplitHostPort however it supports
 // addresses without a port number. In that case, the provided port
 // number is used.
