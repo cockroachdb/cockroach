@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"google.golang.org/grpc"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -177,8 +178,15 @@ type ApplicationLayerInterface interface {
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
-	// RPCContext returns the *rpc.Context used by the test tenant.
+	// RPCContext returns the *rpc.Context used by the server.
 	RPCContext() *rpc.Context
+
+	// NewClientRPCContext creates a new rpc.Context suitable to open
+	// client RPC connections to the server.
+	NewClientRPCContext(ctx context.Context, userName username.SQLUsername) *rpc.Context
+
+	// RPCClientConn opens a RPC client connection to the server.
+	RPCClientConn(ctx context.Context, userName username.SQLUsername) (*grpc.ClientConn, error)
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context

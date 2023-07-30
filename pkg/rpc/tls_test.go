@@ -13,17 +13,13 @@ package rpc
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestClientSSLSettings(t *testing.T) {
@@ -55,29 +51,26 @@ func TestClientSSLSettings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
+			opts := DefaultContextOptions()
+			opts.Insecure = tc.insecure
+			opts.User = tc.user
 			if tc.hasCerts {
-				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
+				opts.SSLCertsDir = certnames.EmbeddedCertsDir
 			} else {
 				// We can't leave this empty because otherwise it refers to the cwd which
 				// always exists.
-				cfg.SSLCertsDir = "i-do-not-exist"
+				opts.SSLCertsDir = "i-do-not-exist"
 			}
 			ctx := context.Background()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID:        roachpb.SystemTenantID,
-				ClientOnly:      true,
-				Clock:           &timeutil.DefaultTimeSource{},
-				ToleratedOffset: time.Nanosecond,
-				Stopper:         stopper,
-				Settings:        cluster.MakeTestingClusterSettings(),
-				Config:          cfg,
-			})
+			opts.ClientOnly = true
+			opts.Stopper = stopper
+			opts.Settings = cluster.MakeTestingClusterSettings()
+			rpcContext := NewContext(ctx, opts)
 
-			if cfg.HTTPRequestScheme() != tc.requestScheme {
-				t.Fatalf("expected HTTPRequestScheme=%s, got: %s", tc.requestScheme, cfg.HTTPRequestScheme())
+			if expected, actual := tc.requestScheme, rpcContext.SecurityContext.HTTPRequestScheme(); expected != actual {
+				t.Fatalf("expected HTTPRequestScheme=%s, got: %s", expected, actual)
 			}
 			tlsConfig, err := rpcContext.GetClientTLSConfig()
 			if !testutils.IsError(err, tc.configErr) {
@@ -119,23 +112,20 @@ func TestServerSSLSettings(t *testing.T) {
 
 	for tcNum, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			cfg := &base.Config{Insecure: tc.insecure, User: username.NodeUserName()}
-			if tc.hasCerts {
-				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
+			opts := DefaultContextOptions()
+			opts.Insecure = tc.insecure
+			if !tc.hasCerts {
+				opts.SSLCertsDir = "i-do-not-exist"
 			}
 			ctx := context.Background()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID:        roachpb.SystemTenantID,
-				Clock:           &timeutil.DefaultTimeSource{},
-				ToleratedOffset: time.Nanosecond,
-				Stopper:         stopper,
-				Settings:        cluster.MakeTestingClusterSettings(),
-				Config:          cfg,
-			})
-			if cfg.HTTPRequestScheme() != tc.requestScheme {
-				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
+
+			opts.Stopper = stopper
+			opts.Settings = cluster.MakeTestingClusterSettings()
+			rpcContext := NewContext(ctx, opts)
+			if actual, expected := rpcContext.HTTPRequestScheme(), tc.requestScheme; actual != expected {
+				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, expected, actual)
 			}
 			tlsConfig, err := rpcContext.GetServerTLSConfig()
 			if (err == nil) != tc.configSuccess {

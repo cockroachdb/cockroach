@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -126,14 +125,10 @@ func newRaftTransportTestContext(t testing.TB, st *cluster.Settings) *raftTransp
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 		st:         st,
 	}
-	rttc.nodeRPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          testutils.NewNodeTestBaseContext(),
-		Clock:           &timeutil.DefaultTimeSource{},
-		ToleratedOffset: time.Nanosecond,
-		Stopper:         rttc.stopper,
-		Settings:        st,
-	})
+	opts := rpc.DefaultContextOptions()
+	opts.Stopper = rttc.stopper
+	opts.Settings = st
+	rttc.nodeRPCContext = rpc.NewContext(ctx, opts)
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.

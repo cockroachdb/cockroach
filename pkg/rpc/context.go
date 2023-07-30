@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -111,7 +113,7 @@ func NewServerEx(
 		grpc.KeepaliveParams(serverKeepalive),
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
 	}
-	if !rpcCtx.Config.Insecure {
+	if !rpcCtx.ContextOptions.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
 			return nil, sii, err
@@ -144,7 +146,7 @@ func NewServerEx(
 		})
 	})
 
-	if !rpcCtx.Config.Insecure {
+	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
 			tenant: tenantAuthorizer{
@@ -288,13 +290,37 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID               roachpb.TenantID
-	Config                 *base.Config
+	TenantID roachpb.TenantID
+
 	Clock                  hlc.WallClock
 	ToleratedOffset        time.Duration
 	FatalOnOffsetViolation bool
 	Stopper                *stop.Stopper
 	Settings               *cluster.Settings
+
+	// Fields from base.Config used by a rpc.Context, either in clients
+	// or servers.
+	SSLCertsDir                    string
+	Insecure                       bool
+	ClusterName                    string
+	DisableClusterNameVerification bool
+	RPCHeartbeatInterval           time.Duration
+	RPCHeartbeatTimeout            time.Duration
+	HistogramWindowInterval        time.Duration
+
+	// Fields from base.Config used only in RPC servers.
+	LocalityAddresses []roachpb.LocalityAddress
+	// We include the advertised address by reference because it is set
+	// during server startup after the rpc.Context is created.
+	*base.AdvertiseAddrH
+
+	// The following fields come from base.Config and only needed by
+	// SecurityContextOptions. They are not really used by the 'rpc'
+	// code. They really belong elsehere - see comments in
+	// SecurityContextOptions.
+	*base.SQLAdvertiseAddrH      // only for servers
+	DisableTLSForHTTP       bool // only for servers
+
 	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	// It can inject an error or modify the response.
@@ -328,6 +354,9 @@ type ContextOptions struct {
 	// cluster version, a node ID, etc.
 	ClientOnly bool
 
+	// User is used in case ClientOnly is true.
+	User username.SQLUsername
+
 	// UseNodeAuth is only used when ClientOnly is not set.
 	// When set, it indicates that this rpc.Context is running inside
 	// the same process as a KV layer and thus should feel empowered
@@ -350,12 +379,43 @@ type ContextOptions struct {
 	NeedsDialback bool
 }
 
+// DefaultContextOptions are mostly used in tests.
+func DefaultContextOptions() ContextOptions {
+	return ContextOptions{
+		SSLCertsDir:             certnames.EmbeddedCertsDir,
+		TenantID:                roachpb.SystemTenantID,
+		User:                    username.NodeUserName(),
+		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
+		RPCHeartbeatInterval:    base.PingInterval,
+		RPCHeartbeatTimeout:     base.DefaultRPCHeartbeatTimeout,
+		AdvertiseAddrH:          &base.AdvertiseAddrH{},
+		SQLAdvertiseAddrH:       &base.SQLAdvertiseAddrH{},
+		Clock:                   &timeutil.DefaultTimeSource{},
+		ToleratedOffset:         time.Nanosecond,
+	}
+}
+
+// ServerContextOptionsFromBaseConfig initializes a ContextOptions struct from
+// a base.Config struct.
+func ServerContextOptionsFromBaseConfig(cfg *base.Config) ContextOptions {
+	return ContextOptions{
+		SSLCertsDir:                    cfg.SSLCertsDir,
+		Insecure:                       cfg.Insecure,
+		ClusterName:                    cfg.ClusterName,
+		DisableClusterNameVerification: cfg.DisableClusterNameVerification,
+		RPCHeartbeatInterval:           cfg.RPCHeartbeatInterval,
+		RPCHeartbeatTimeout:            cfg.RPCHeartbeatTimeout,
+		HistogramWindowInterval:        cfg.HistogramWindowInterval(),
+		LocalityAddresses:              cfg.LocalityAddresses,
+		AdvertiseAddrH:                 &cfg.AdvertiseAddrH,
+		SQLAdvertiseAddrH:              &cfg.SQLAdvertiseAddrH,
+		DisableTLSForHTTP:              cfg.DisableTLSForHTTP,
+	}
+}
+
 func (c ContextOptions) validate() error {
 	if c.TenantID == (roachpb.TenantID{}) {
 		return errors.New("must specify TenantID")
-	}
-	if c.Config == nil {
-		return errors.New("Config must be set")
 	}
 	if c.Clock == nil {
 		return errors.New("Clock must be set")
@@ -365,6 +425,9 @@ func (c ContextOptions) validate() error {
 	}
 	if c.Settings == nil {
 		return errors.New("Settings must be set")
+	}
+	if c.RPCHeartbeatInterval == 0 {
+		return errors.New("RPCHeartbeatInterval must be set")
 	}
 
 	// NB: OnOutgoingPing and OnIncomingPing default to noops.
@@ -454,7 +517,13 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
 
 	secCtx := NewSecurityContext(
-		opts.Config,
+		SecurityContextOptions{
+			SSLCertsDir:       opts.SSLCertsDir,
+			Insecure:          opts.Insecure,
+			AdvertiseAddr:     opts.AdvertiseAddr,
+			SQLAdvertiseAddr:  opts.SQLAdvertiseAddr,
+			DisableTLSForHTTP: opts.DisableTLSForHTTP,
+		},
 		security.ClusterTLSSettings(opts.Settings),
 		opts.TenantID,
 		opts.TenantRPCAuthorizer,
@@ -467,8 +536,8 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		rpcCompression:    enableRPCCompression,
 		MasterCtx:         masterCtx,
 		metrics:           makeMetrics(),
-		heartbeatInterval: opts.Config.RPCHeartbeatInterval,
-		heartbeatTimeout:  opts.Config.RPCHeartbeatTimeout,
+		heartbeatInterval: opts.RPCHeartbeatInterval,
+		heartbeatTimeout:  opts.RPCHeartbeatTimeout,
 	}
 
 	rpcCtx.dialbackMu.Lock()
@@ -479,7 +548,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		panic("tenant ID not set")
 	}
 
-	if opts.ClientOnly && opts.Config.User.Undefined() {
+	if opts.ClientOnly && opts.User.Undefined() {
 		panic("client username not set")
 	}
 
@@ -492,7 +561,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		// Ensure we still have a working dial function in that case.
 		rpcCtx.loopbackDialFn = func(ctx context.Context) (net.Conn, error) {
 			d := onlyOnceDialer{}
-			return d.dial(ctx, opts.Config.AdvertiseAddr)
+			return d.dial(ctx, opts.AdvertiseAddr)
 		}
 	}
 
@@ -500,7 +569,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// CLI commands are exempted.
 	if !opts.ClientOnly {
 		rpcCtx.RemoteClocks = newRemoteClockMonitor(
-			opts.Clock, opts.ToleratedOffset, 10*opts.Config.RPCHeartbeatTimeout, opts.Config.HistogramWindowInterval())
+			opts.Clock, opts.ToleratedOffset, 10*opts.RPCHeartbeatTimeout, opts.HistogramWindowInterval)
 	}
 
 	if id := opts.Knobs.StorageClusterID; id != nil {
@@ -546,7 +615,7 @@ func (rpcCtx *Context) ClusterName() string {
 		// This is used in tests.
 		return "<MISSING RPC CONTEXT>"
 	}
-	return rpcCtx.Config.ClusterName
+	return rpcCtx.ContextOptions.ClusterName
 }
 
 // Metrics returns the Context's Metrics struct.
@@ -1444,7 +1513,7 @@ func (rpcCtx *Context) GRPCDialOptions(
 	ctx context.Context, target string, class ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	transport := tcpTransport
-	if rpcCtx.Config.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
@@ -1543,7 +1612,7 @@ func (rpcCtx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	switch {
 	case rpcCtx.ClientOnly:
 		// A CLI command is performing a remote RPC.
-		tlsCfg, err := cm.GetClientTLSConfig(rpcCtx.config.User)
+		tlsCfg, err := cm.GetClientTLSConfig(rpcCtx.User)
 		return tlsCfg, wrapError(err)
 
 	case rpcCtx.UseNodeAuth || rpcCtx.tenID.IsSystem():
@@ -1568,7 +1637,7 @@ func (rpcCtx *Context) GetClientTLSConfig() (*tls.Config, error) {
 // RPC client authenticates itself to the remote server.
 func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
-	if rpcCtx.Config.Insecure {
+	if rpcCtx.ContextOptions.Insecure {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
 		tlsConfig, err := rpcCtx.GetClientTLSConfig()
@@ -2010,7 +2079,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context, target string, class ConnectionClass, additionalOpts ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	transport := tcpTransport
-	if rpcCtx.Config.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
@@ -2116,7 +2185,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		clock:                                 rpcCtx.Clock,
 		remoteClockMonitor:                    rpcCtx.RemoteClocks,
 		clusterName:                           rpcCtx.ClusterName(),
-		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,
+		disableClusterNameVerification:        rpcCtx.ContextOptions.DisableClusterNameVerification,
 		clusterID:                             rpcCtx.StorageClusterID,
 		nodeID:                                rpcCtx.NodeID,
 		version:                               rpcCtx.Settings.Version,

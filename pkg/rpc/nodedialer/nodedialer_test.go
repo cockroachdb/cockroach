@@ -233,7 +233,7 @@ func TestConnHealthInternal(t *testing.T) {
 		&internalServer{},
 		rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
-	rpcCtx.Config.AdvertiseAddr = localAddr.String()
+	rpcCtx.AdvertiseAddr = localAddr.String()
 
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, localAddr))
 	defer stopper.Stop(ctx)
@@ -310,19 +310,16 @@ func newTestServer(
 func newTestContext(
 	clock hlc.WallClock, maxOffset time.Duration, stopper *stop.Stopper,
 ) *rpc.Context {
-	cfg := testutils.NewNodeTestBaseContext()
-	cfg.Insecure = true
-	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
-	cfg.RPCHeartbeatTimeout = 500 * time.Millisecond
 	ctx := context.Background()
-	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          cfg,
-		Clock:           clock,
-		ToleratedOffset: maxOffset,
-		Stopper:         stopper,
-		Settings:        cluster.MakeTestingClusterSettings(),
-	})
+	opts := rpc.DefaultContextOptions()
+	opts.Insecure = true
+	opts.RPCHeartbeatInterval = 100 * time.Millisecond
+	opts.RPCHeartbeatTimeout = 500 * time.Millisecond
+	opts.Clock = clock
+	opts.ToleratedOffset = maxOffset
+	opts.Stopper = stopper
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	rctx := rpc.NewContext(ctx, opts)
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.

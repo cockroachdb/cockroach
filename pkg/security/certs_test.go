@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -376,6 +377,8 @@ func generateSplitCACerts(certsDir string) error {
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -398,8 +401,7 @@ func TestUseCerts(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = true
+	clientContext := rpc.SecurityContextOptions{Insecure: true}
 	sCtx := rpc.NewSecurityContext(
 		clientContext,
 		security.CommandTLSSettings{},
@@ -422,8 +424,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
+	clientContext = rpc.SecurityContextOptions{SSLCertsDir: certsDir}
 	{
 		secondSCtx := rpc.NewSecurityContext(
 			clientContext,
@@ -468,6 +469,8 @@ func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) str
 // We construct SSL server and clients and use the generated certs.
 func TestUseSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -490,8 +493,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = true
+	clientContext := rpc.SecurityContextOptions{Insecure: true}
 	sCtx := rpc.NewSecurityContext(
 		clientContext,
 		security.CommandTLSSettings{},
@@ -514,8 +516,7 @@ func TestUseSplitCACerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
+	clientContext = rpc.SecurityContextOptions{SSLCertsDir: certsDir}
 	{
 		secondSCtx := rpc.NewSecurityContext(
 			clientContext,
@@ -587,6 +588,8 @@ func TestUseSplitCACerts(t *testing.T) {
 // We construct SSL server and clients and use the generated certs.
 func TestUseWrongSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -618,8 +621,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = true
+	clientContext := rpc.SecurityContextOptions{Insecure: true}
 	sCtx := rpc.NewSecurityContext(
 		clientContext,
 		security.CommandTLSSettings{},
@@ -642,8 +644,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	}
 
 	// New client with certs, but the UI CA is gone, we have no way to verify the Admin UI cert.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
+	clientContext = rpc.SecurityContextOptions{SSLCertsDir: certsDir}
 	{
 		secondCtx := rpc.NewSecurityContext(
 			clientContext,

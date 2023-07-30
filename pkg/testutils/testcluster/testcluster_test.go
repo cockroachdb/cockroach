@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -34,8 +34,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestClusterStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+}
+
 func TestManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := StartTestCluster(t, 3,
 		base.TestClusterArgs{
@@ -143,6 +152,7 @@ func TestManualReplication(t *testing.T) {
 // waiting for all of the stores to initialize.
 func TestBasicManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 	defer tc.Stopper().Stop(context.Background())
@@ -175,6 +185,7 @@ func TestBasicManualReplication(t *testing.T) {
 
 func TestBasicAutoReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
 	defer tc.Stopper().Stop(context.Background())
@@ -183,6 +194,7 @@ func TestBasicAutoReplication(t *testing.T) {
 
 func TestStopServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Use insecure mode so our servers listen on util.IsolatedTestAddr
 	// and they fail cleanly instead of interfering with other tests.
@@ -209,18 +221,7 @@ func TestStopServer(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          server1.RPCContext().Config,
-		Clock:           server1.Clock().WallClock(),
-		ToleratedOffset: server1.Clock().ToleratedOffset(),
-		Stopper:         tc.Stopper(),
-		Settings:        server1.ClusterSettings(),
-
-		ClientOnly: true,
-	})
-	conn, err := rpcContext.GRPCDialNode(server1.AdvRPCAddr(), server1.NodeID(),
-		rpc.DefaultClass).Connect(ctx)
+	conn, err := server1.RPCClientConn(ctx, username.NodeUserName())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +274,7 @@ func TestStopServer(t *testing.T) {
 
 func TestRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()

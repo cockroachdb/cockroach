@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"google.golang.org/grpc"
 )
 
 // makeTestConfig returns a config for testing. It overrides the
@@ -2271,4 +2272,85 @@ func TestingMakeLoggingContexts(
 		serverID:  &base.NodeIDContainer{},
 	})
 	return ctxSysTenant, ctxAppTenant
+}
+
+// NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) NewClientRPCContext(
+	ctx context.Context, user username.SQLUsername,
+) *rpc.Context {
+	return newClientRPCContext(ctx, user,
+		ts.Server.cfg.Config,
+		ts.Server.cfg.TestingKnobs.Server,
+		ts.Server.cfg.ClusterIDContainer,
+		ts)
+}
+
+// RPCClientConn is part of the serverutils.ApplicationLayerInterface.
+func (ts *TestServer) RPCClientConn(
+	ctx context.Context, user username.SQLUsername,
+) (*grpc.ClientConn, error) {
+	rpcCtx := ts.NewClientRPCContext(ctx, user)
+	return rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
+}
+
+// NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) NewClientRPCContext(
+	ctx context.Context, user username.SQLUsername,
+) *rpc.Context {
+	return newClientRPCContext(ctx, user,
+		t.Cfg.Config,
+		t.Cfg.TestingKnobs.Server,
+		t.Cfg.ClusterIDContainer,
+		t)
+}
+
+// RPCClientConn is part of the serverutils.ApplicationLayerInterface.
+func (t *TestTenant) RPCClientConn(
+	ctx context.Context, user username.SQLUsername,
+) (*grpc.ClientConn, error) {
+	rpcCtx := t.NewClientRPCContext(ctx, user)
+	return rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
+}
+
+func newClientRPCContext(
+	ctx context.Context,
+	user username.SQLUsername,
+	cfg *base.Config,
+	sknobs base.ModuleTestingKnobs,
+	cid *base.ClusterIDContainer,
+	s serverutils.ApplicationLayerInterface,
+) *rpc.Context {
+	stopper := s.Stopper()
+	if ctx.Done() == nil {
+		// The RPCContext initialization wants a cancellable context,
+		// since that will be used to stop async goroutines. Help
+		// the test by making one.
+		cctx, cancel := context.WithCancel(ctx)
+		stopper.AddCloser(stop.CloserFn(cancel))
+		ctx = cctx
+	}
+	var knobs rpc.ContextTestingKnobs
+	if sknobs != nil {
+		knobs = sknobs.(*TestingKnobs).ContextTestingKnobs
+	}
+	ccfg := rpc.MakeClientConnConfigFromBaseConfig(*cfg,
+		user,
+		nil, /* tracer */
+		s.ClusterSettings(),
+		s.Clock(),
+		knobs,
+	)
+
+	// Make tests react faster to down servers.
+	ccfg.RPCHeartbeatInterval = 10 * time.Millisecond
+	ccfg.RPCHeartbeatTimeout = 0
+
+	rpcCtx, clientStopper := rpc.NewClientContext(ctx, ccfg)
+	// Ensure that the RPC client context validates the server cluster ID.
+	// This ensures that a test where the server is restarted will not let
+	// its test RPC client talk to a server started by an unrelated concurrent test.
+	rpcCtx.StorageClusterID.Set(ctx, cid.Get())
+
+	stopper.AddCloser(stop.CloserFn(func() { clientStopper.Stop(ctx) }))
+	return rpcCtx
 }
