@@ -69,7 +69,7 @@ var _ http.RoundTripper = &tenantHeaderDecorator{}
 
 // AdminURL implements TestServerInterface.
 func (ts *httpTestServer) AdminURL() *serverutils.TestURL {
-	u := ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL()
+	u := ts.t.sqlServer.cfg.Config.AdminURL()
 	if ts.t.tenantName != "" {
 		q := u.Query()
 		q.Add(ClusterNameParamInQueryURL, string(ts.t.tenantName))
@@ -156,7 +156,7 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClientAndCookie(
 			if err != nil {
 				return err
 			}
-			url, err := url.Parse(ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String())
+			url, err := url.Parse(ts.t.sqlServer.cfg.Config.AdminURL().String())
 			if err != nil {
 				return err
 			}

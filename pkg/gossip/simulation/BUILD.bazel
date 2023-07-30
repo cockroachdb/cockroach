@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/gossip/simulation",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/roachpb",
@@ -18,7 +17,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/netutil",
         "//pkg/util/stop",
-        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@org_golang_google_grpc//:go_default_library",
     ],

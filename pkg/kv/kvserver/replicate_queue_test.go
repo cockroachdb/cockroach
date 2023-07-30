@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -860,10 +859,8 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
 	adminSrv := tc.Server(decomNodeIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
-	_, err = adminClient.Decommission(
+	adminClient := adminSrv.GetAdminClient(t)
+	_, err := adminClient.Decommission(
 		ctx, &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{decomNodeID},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
@@ -987,10 +984,8 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
 	adminSrv := tc.Server(decomNodeIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
-	_, err = adminClient.Decommission(
+	adminClient := adminSrv.GetAdminClient(t)
+	_, err := adminClient.Decommission(
 		ctx, &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{decomNodeID},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,

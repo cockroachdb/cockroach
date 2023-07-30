@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -187,23 +185,17 @@ func TestMetricsEndpoint(t *testing.T) {
 func TestNodesGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	ts := s.(*server.TestServer)
 
-	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
-	rpcContext := srvtestutils.NewRPCTestContext(context.Background(), ts, rootConfig)
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
 	var request serverpb.NodesRequest
 
-	url := ts.AdvRPCAddr()
-	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := serverpb.NewStatusClient(conn)
+	client := s.GetStatusClient(t)
 
-	response, err := client.Nodes(context.Background(), &request)
+	response, err := client.Nodes(ctx, &request)
 	if err != nil {
 		t.Fatal(err)
 	}

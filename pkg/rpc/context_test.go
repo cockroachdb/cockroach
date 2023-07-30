@@ -98,15 +98,18 @@ func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *
 func newTestContextWithKnobs(
 	clock hlc.WallClock, maxOffset time.Duration, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
-	return NewContext(context.Background(), ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          testutils.NewNodeTestBaseContext(),
-		Clock:           clock,
-		ToleratedOffset: maxOffset,
-		Stopper:         stopper,
-		Settings:        cluster.MakeTestingClusterSettings(),
-		Knobs:           knobs,
-	})
+	opts := DefaultContextOptions()
+	opts.Clock = clock
+	opts.ToleratedOffset = maxOffset
+	opts.Stopper = stopper
+	opts.Knobs = knobs
+	opts.Settings = cluster.MakeTestingClusterSettings()
+
+	// Make tests faster.
+	opts.RPCHeartbeatInterval = 10 * time.Millisecond
+	opts.RPCHeartbeatTimeout = 0
+
+	return NewContext(context.Background(), opts)
 }
 
 func newTestContext(
@@ -131,26 +134,23 @@ func TestPingInterceptors(t *testing.T) {
 	errBoomSend := errors.Handled(errors.New("boom due to onSendPing"))
 	recvMsg := "boom due to onHandlePing"
 	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
-	opts := ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          testutils.NewNodeTestBaseContext(),
-		Clock:           &timeutil.DefaultTimeSource{},
-		ToleratedOffset: 500 * time.Millisecond,
-		Stopper:         stop.NewStopper(),
-		Settings:        cluster.MakeTestingClusterSettings(),
-		OnOutgoingPing: func(ctx context.Context, req *PingRequest) error {
-			if req.TargetNodeID == blockedTargetNodeID {
-				return errBoomSend
-			}
-			return nil
-		},
-		OnIncomingPing: func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
-			if req.OriginNodeID == blockedOriginNodeID {
-				return errBoomRecv
-			}
-			return nil
-		},
+	opts := DefaultContextOptions()
+	opts.ToleratedOffset = 500 * time.Millisecond
+	opts.Stopper = stop.NewStopper()
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	opts.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
+		if req.TargetNodeID == blockedTargetNodeID {
+			return errBoomSend
+		}
+		return nil
 	}
+	opts.OnIncomingPing = func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
+		if req.OriginNodeID == blockedOriginNodeID {
+			return errBoomRecv
+		}
+		return nil
+	}
+
 	defer opts.Stopper.Stop(ctx)
 
 	rpcCtx := NewContext(ctx, opts)
@@ -203,21 +203,16 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	defer func() { close(done) }()
 
 	// Build a minimal server.
-	opts := ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          testutils.NewNodeTestBaseContext(),
-		Clock:           &timeutil.DefaultTimeSource{},
-		ToleratedOffset: 500 * time.Millisecond,
-		Stopper:         stopper,
-		Settings:        cluster.MakeTestingClusterSettings(),
-	}
+	opts := DefaultContextOptions()
+	opts.ToleratedOffset = 500 * time.Millisecond
+	opts.Stopper = stopper
+	opts.Settings = cluster.MakeTestingClusterSettings()
 	rpcCtxServer := NewContext(ctx, opts)
 
 	clientOpts := opts
-	clientOpts.Config = testutils.NewNodeTestBaseContext()
 	// Experimentally, values below 50ms seem to incur flakiness.
-	clientOpts.Config.RPCHeartbeatInterval = 100 * time.Millisecond
-	clientOpts.Config.RPCHeartbeatTimeout = 100 * time.Millisecond
+	clientOpts.RPCHeartbeatInterval = 100 * time.Millisecond
+	clientOpts.RPCHeartbeatTimeout = 100 * time.Millisecond
 	clientOpts.ClientOnly = clientOnly
 	clientOpts.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
 		select {
@@ -418,8 +413,7 @@ func TestInternalServerAddress(t *testing.T) {
 	maxOffset := time.Duration(0)
 
 	serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-	serverCtx.Config.Addr = "127.0.0.1:9999"
-	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	internal := &internalServer{}
@@ -446,8 +440,7 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	maxOffset := time.Duration(0)
 
 	serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-	serverCtx.Config.Addr = "127.0.0.1:9999"
-	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
@@ -547,8 +540,7 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 	maxOffset := time.Duration(0)
 
 	serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-	serverCtx.Config.Addr = "127.0.0.1:9999"
-	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
@@ -623,8 +615,7 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 	maxOffset := time.Duration(0)
 
 	serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-	serverCtx.Config.Addr = "127.0.0.1:9999"
-	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
@@ -778,8 +769,7 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
 	maxOffset := time.Duration(0)
 	serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-	serverCtx.Config.Addr = "127.0.0.1:9999"
-	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	_, interceptors, err := NewServerEx(serverCtx)
@@ -844,7 +834,7 @@ func TestConnectLoopback(t *testing.T) {
 	require.NoError(t, err)
 
 	addr := ln.Addr().String()
-	clientCtx.Config.AdvertiseAddr = addr
+	clientCtx.AdvertiseAddr = addr
 
 	// Connect and get the error that comes from loopbackLn, proving that we were routed there.
 	_, err = clientCtx.GRPCDialNode(addr, nodeID, DefaultClass).Connect(ctx)
@@ -887,8 +877,8 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
 	// Make the interval shorter to speed up the test.
-	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
-	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
+	clientCtx.RPCHeartbeatInterval = 1 * time.Millisecond
+	clientCtx.RPCHeartbeatTimeout = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientClock.getAdvancementInterval()
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
@@ -1033,8 +1023,8 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
 	// Make the interval shorter to speed up the test.
-	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
-	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
+	clientCtx.RPCHeartbeatInterval = 1 * time.Millisecond
+	clientCtx.RPCHeartbeatTimeout = 1 * time.Millisecond
 
 	var hbDecommission atomic.Value
 	hbDecommission.Store(false)
@@ -1159,8 +1149,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		clock := timeutil.NewManualTime(timeutil.Unix(0, start.Add(nodeCtxs[i].offset).UnixNano()))
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clusterID, clock, maxOffset, stopper)
-		nodeCtxs[i].ctx.Config.RPCHeartbeatInterval = maxOffset
-		nodeCtxs[i].ctx.Config.RPCHeartbeatTimeout = maxOffset
+		nodeCtxs[i].ctx.RPCHeartbeatInterval = maxOffset
+		nodeCtxs[i].ctx.RPCHeartbeatTimeout = maxOffset
 		nodeCtxs[i].ctx.NodeID.Set(context.Background(), roachpb.NodeID(i+1))
 
 		s := newTestServer(t, nodeCtxs[i].ctx)
@@ -1175,7 +1165,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		nodeCtxs[i].ctx.Config.Addr = ln.Addr().String()
+		nodeCtxs[i].ctx.AdvertiseAddr = ln.Addr().String()
 	}
 
 	// Fully connect the nodes.
@@ -1184,7 +1174,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if i == j {
 				continue
 			}
-			if _, err := clientNodeContext.ctx.GRPCDialNode(serverNodeContext.ctx.Config.Addr, serverNodeContext.ctx.NodeID.Get(), DefaultClass).Connect(ctx); err != nil {
+			if _, err := clientNodeContext.ctx.GRPCDialNode(serverNodeContext.ctx.AdvertiseAddr, serverNodeContext.ctx.NodeID.Get(), DefaultClass).Connect(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1377,8 +1367,8 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	log.Infof(ctx, "setting up client")
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	// Disable automatic heartbeats. We'll send them by hand.
-	clientCtx.Config.RPCHeartbeatInterval = math.MaxInt64
-	clientCtx.Config.RPCHeartbeatTimeout = math.MaxInt64
+	clientCtx.RPCHeartbeatInterval = math.MaxInt64
+	clientCtx.RPCHeartbeatTimeout = math.MaxInt64
 
 	var firstConn int32 = 1
 
@@ -1709,8 +1699,8 @@ func TestClusterNameMismatch(t *testing.T) {
 			defer stopper.Stop(context.Background())
 
 			serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-			serverCtx.Config.ClusterName = c.serverName
-			serverCtx.Config.DisableClusterNameVerification = c.serverDisablePeerCheck
+			serverCtx.ContextOptions.ClusterName = c.serverName
+			serverCtx.ContextOptions.DisableClusterNameVerification = c.serverDisablePeerCheck
 
 			s := newTestServer(t, serverCtx)
 			RegisterHeartbeatServer(s, &HeartbeatService{
@@ -1719,8 +1709,8 @@ func TestClusterNameMismatch(t *testing.T) {
 				clusterID:                      serverCtx.StorageClusterID,
 				nodeID:                         serverCtx.NodeID,
 				version:                        serverCtx.Settings.Version,
-				clusterName:                    serverCtx.Config.ClusterName,
-				disableClusterNameVerification: serverCtx.Config.DisableClusterNameVerification,
+				clusterName:                    serverCtx.ContextOptions.ClusterName,
+				disableClusterNameVerification: serverCtx.ContextOptions.DisableClusterNameVerification,
 			})
 
 			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1730,8 +1720,8 @@ func TestClusterNameMismatch(t *testing.T) {
 			remoteAddr := ln.Addr().String()
 
 			clientCtx := newTestContext(serverCtx.StorageClusterID.Get(), clock, maxOffset, stopper)
-			clientCtx.Config.ClusterName = c.clientName
-			clientCtx.Config.DisableClusterNameVerification = c.clientDisablePeerCheck
+			clientCtx.ContextOptions.ClusterName = c.clientName
+			clientCtx.ContextOptions.DisableClusterNameVerification = c.clientDisablePeerCheck
 
 			var wg sync.WaitGroup
 			for i := 0; i < 10; i++ {
@@ -2188,19 +2178,17 @@ func newRegisteredServer(
 	nodeID roachpb.NodeID,
 ) (*Context, string, *trackingListener) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	opts := ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          testutils.NewNodeTestBaseContext(),
-		Clock:           clock,
-		ToleratedOffset: time.Duration(0),
-		Stopper:         stopper,
-		Settings:        cluster.MakeTestingClusterSettings(),
-		NeedsDialback:   true,
-		Knobs:           ContextTestingKnobs{NoLoopbackDialer: true},
-	}
+	opts := DefaultContextOptions()
+	opts.Clock = clock
+	opts.ToleratedOffset = time.Duration(0)
+	opts.Stopper = stopper
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	opts.NeedsDialback = true
+	opts.Knobs = ContextTestingKnobs{NoLoopbackDialer: true}
+
 	// Heartbeat faster so we don't have to wait as long.
-	opts.Config.RPCHeartbeatInterval = 10 * time.Millisecond
-	opts.Config.RPCHeartbeatTimeout = 1000 * time.Millisecond
+	opts.RPCHeartbeatInterval = 10 * time.Millisecond
+	opts.RPCHeartbeatTimeout = 1000 * time.Millisecond
 
 	rpcCtx := NewContext(context.Background(), opts)
 	// This is normally set up inside the server, we want to hold onto all PingRequests that come through.
@@ -2237,7 +2225,7 @@ func newRegisteredServer(
 	log.Infof(ctx, "Listening on %s", addr)
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
-	rpcCtx.Config.AdvertiseAddr = addr
+	rpcCtx.AdvertiseAddr = addr
 	return rpcCtx, addr, &tracker
 }
 

@@ -104,8 +104,7 @@ func TestRotateCerts(t *testing.T) {
 	const kBadCertificate = "tls: bad certificate"
 
 	// Test client with the same certs.
-	clientContext := testutils.NewNodeTestBaseContext()
-	clientContext.SSLCertsDir = certsDir
+	clientContext := rpc.SecurityContextOptions{SSLCertsDir: certsDir}
 	firstSCtx := rpc.NewSecurityContext(
 		clientContext,
 		security.CommandTLSSettings{},
@@ -140,7 +139,6 @@ func TestRotateCerts(t *testing.T) {
 	// Setup a second http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
 	// Fails on crypto errors.
-	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 
 	secondSCtx := rpc.NewSecurityContext(
@@ -255,7 +253,6 @@ func TestRotateCerts(t *testing.T) {
 	// Setup a third http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
 	// This is HTTP and succeeds because we do not ask for or verify client certificates.
-	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	thirdSCtx := rpc.NewSecurityContext(
 		clientContext,

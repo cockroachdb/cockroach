@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -179,11 +179,7 @@ func TestServerQuery(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := tsrv.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
@@ -277,11 +273,7 @@ func TestServerQueryStarvation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := tsrv.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
@@ -417,11 +409,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := tsrv.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
@@ -492,10 +480,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
-	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, tsrv.NodeID(), rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	tenantConn := tenant.RPCClientConn(t, username.RootUserName())
 	tenantClient := tspb.NewTimeSeriesClient(tenantConn)
 
 	tenantResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
@@ -554,11 +539,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := tsrv.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
@@ -633,11 +614,7 @@ func TestServerDump(t *testing.T) {
 		names = append(names, seriesName(series))
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
-		rpc.DefaultClass).Connect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := tsrv.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
@@ -730,11 +707,7 @@ func TestServerDump(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		require.NoError(t, s.DB().Run(ctx, &b))
 
-		conn, err := s.RPCContext().GRPCDialNode(s.AdvRPCAddr(), s.NodeID(),
-			rpc.DefaultClass).Connect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
+		conn := s.RPCClientConn(t, username.RootUserName())
 		client := tspb.NewTimeSeriesClient(conn)
 
 		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
@@ -765,11 +738,7 @@ func BenchmarkServerQuery(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		b.Fatal(err)
-	}
+	conn := tsrv.RPCClientConn(b, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)

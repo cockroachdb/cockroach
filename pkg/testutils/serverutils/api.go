@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"google.golang.org/grpc"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -177,8 +178,27 @@ type ApplicationLayerInterface interface {
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
-	// RPCContext returns the *rpc.Context used by the test tenant.
+	// RPCContext returns the *rpc.Context used by the server.
 	RPCContext() *rpc.Context
+
+	// NewClientRPCContext creates a new rpc.Context suitable to open
+	// client RPC connections to the server.
+	NewClientRPCContext(ctx context.Context, userName username.SQLUsername) *rpc.Context
+
+	// RPCClientConn opens a RPC client connection to the server.
+	RPCClientConn(t TestFataler, userName username.SQLUsername) *grpc.ClientConn
+
+	// RPCClientConnE is like RPCClientConn but it allows the test to check the
+	// error.
+	RPCClientConnE(userName username.SQLUsername) (*grpc.ClientConn, error)
+
+	// GetAdminClient creates a serverpb.AdminClient connection to the server.
+	// Shorthand for serverpb.AdminClient(.RPCClientConn(t, "root"))
+	GetAdminClient(t TestFataler) serverpb.AdminClient
+
+	// GetStatusClient creates a serverpb.StatusClient connection to the server.
+	// Shorthand for serverpb.StatusClient(.RPCClientConn(t, "root"))
+	GetStatusClient(t TestFataler) serverpb.StatusClient
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context
