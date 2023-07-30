@@ -450,6 +450,14 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 	return true
 }
 
+// setDraining sets the server's draining state and returns whether the
+// state changed (i.e. drain != s.mu.draining).
+func (s *Server) setDraining(drain bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.setDrainingLocked(drain)
+}
+
 // setRejectNewConnectionsLocked sets the server's rejectNewConnections state.
 // s.mu must be locked when setRejectNewConnectionsLocked is called.
 func (s *Server) setRejectNewConnectionsLocked(rej bool) {
@@ -567,13 +575,10 @@ func (s *Server) drainImpl(
 	stopper *stop.Stopper,
 ) error {
 
-	s.mu.Lock()
-	if !s.setDrainingLocked(true) {
+	if !s.setDraining(true) {
 		// We are already draining.
-		s.mu.Unlock()
 		return nil
 	}
-	s.mu.Unlock()
 
 	// If there is no open SQL connections to drain, just return.
 	if s.GetConnCancelMapLen() == 0 {
