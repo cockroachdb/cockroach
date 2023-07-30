@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -8171,6 +8172,132 @@ expires until the statement bundle is collected`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"varbit_or": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		stringOverload2(
+			"a",
+			"b",
+			func(_ context.Context, _ *eval.Context, a, b string) (tree.Datum, error) {
+				aBitArray, err := bitarray.Parse(a)
+				if err != nil {
+					return nil, err
+				}
+
+				bBitArray, err := bitarray.Parse(b)
+				if err != nil {
+					return nil, err
+				}
+
+				return varbitOr(aBitArray.String(), bBitArray.String())
+			},
+			types.VarBit,
+			"Calculates bitwise OR value of bit array 'a' and 'b' that may have different lengths.",
+			volatility.Immutable),
+		bitsOverload2("a", "b",
+			func(_ context.Context, _ *eval.Context, a, b *tree.DBitArray) (tree.Datum, error) {
+				return varbitOr(a.BitArray.String(), b.BitArray.String())
+			},
+			types.VarBit,
+			"Calculates bitwise OR value of bit array 'a' and 'b' that may have different lengths.",
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.VarBit},
+				{Name: "b", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ context.Context, _ *eval.Context, a *tree.DBitArray, b string) (tree.Datum, error) {
+				bBitArray, err := bitarray.Parse(b)
+				if err != nil {
+					return nil, err
+				}
+
+				return varbitOr(a.BitArray.String(), bBitArray.String())
+			},
+			Info:       "Calculates bitwise OR value of bit array 'a' and 'b' that may have different lengths.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.String},
+				{Name: "b", Typ: types.VarBit},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ context.Context, _ *eval.Context, a string, b *tree.DBitArray) (tree.Datum, error) {
+				aBitArray, err := bitarray.Parse(a)
+				if err != nil {
+					return nil, err
+				}
+
+				return varbitOr(aBitArray.String(), b.BitArray.String())
+			},
+			Info:       "Calculates bitwise OR value of bit array 'a' and 'b' that may have different lengths.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"varbit_and": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		stringOverload2(
+			"a",
+			"b",
+			func(_ context.Context, _ *eval.Context, a, b string) (tree.Datum, error) {
+				aBitArray, err := bitarray.Parse(a)
+				if err != nil {
+					return nil, err
+				}
+
+				bBitArray, err := bitarray.Parse(b)
+				if err != nil {
+					return nil, err
+				}
+
+				return varbitAnd(aBitArray.String(), bBitArray.String())
+			},
+			types.VarBit,
+			"Calculates bitwise AND value of bit array 'a' and 'b' that may have different lengths.",
+			volatility.Immutable),
+		bitsOverload2("a", "b",
+			func(_ context.Context, _ *eval.Context, a, b *tree.DBitArray) (tree.Datum, error) {
+				return varbitAnd(a.BitArray.String(), b.BitArray.String())
+			},
+			types.VarBit,
+			"Calculates bitwise AND value of bit array 'a' and 'b' that may have different lengths.",
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.VarBit},
+				{Name: "b", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ context.Context, _ *eval.Context, a *tree.DBitArray, b string) (tree.Datum, error) {
+				bBitArray, err := bitarray.Parse(b)
+				if err != nil {
+					return nil, err
+				}
+
+				return varbitAnd(a.BitArray.String(), bBitArray.String())
+			},
+			Info:       "Calculates bitwise AND value of bit array 'a' and 'b' that may have different lengths.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.String},
+				{Name: "b", Typ: types.VarBit},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ context.Context, _ *eval.Context, a string, b *tree.DBitArray) (tree.Datum, error) {
+				aBitArray, err := bitarray.Parse(a)
+				if err != nil {
+					return nil, err
+				}
+
+				return varbitAnd(aBitArray.String(), b.BitArray.String())
+			},
+			Info:       "Calculates bitwise AND value of bit array 'a' and 'b' that may have different lengths.",
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
@@ -10932,4 +11059,58 @@ func spanToDatum(span roachpb.Span) (tree.Datum, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+// Perform bitwise AND operation 2 bit strings that may have different lengths. The function applies left padding implicitly.
+// The function also assumes the input both strings are only comprised of charactor '0' and '1'.
+func varbitOr(aStr, bStr string) (*tree.DBitArray, error) {
+	aLen, bLen := len(aStr), len(bStr)
+	bufLen := max(aLen, bLen)
+	buf := make([]byte, bufLen)
+	for i := 0; i < bufLen; i++ {
+		var a, b byte
+
+		if i >= aLen {
+			a = '0'
+		} else {
+			a = aStr[aLen-i-1]
+		}
+
+		if i >= bLen {
+			b = '0'
+		} else {
+			b = bStr[bLen-i-1]
+		}
+
+		buf[bufLen-i-1] = (a | b)
+	}
+
+	return tree.ParseDBitArray(string(buf))
+}
+
+// Perform bitwise AND operation 2 bit strings that may have different lengths. The function applies left padding implicitly.
+// The function also assumes the input both strings are only comprised of charactor '0' and '1'.
+func varbitAnd(aStr, bStr string) (*tree.DBitArray, error) {
+	aLen, bLen := len(aStr), len(bStr)
+	bufLen := max(aLen, bLen)
+	buf := make([]byte, bufLen)
+	for i := 0; i < bufLen; i++ {
+		var a, b byte
+
+		if i >= aLen {
+			a = '0'
+		} else {
+			a = aStr[aLen-i-1]
+		}
+
+		if i >= bLen {
+			b = '0'
+		} else {
+			b = bStr[bLen-i-1]
+		}
+
+		buf[bufLen-i-1] = (a & b)
+	}
+
+	return tree.ParseDBitArray(string(buf))
 }

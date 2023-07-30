@@ -782,3 +782,40 @@ func TestPGBuiltinsCalledOnNull(t *testing.T) {
 		require.Equalf(t, [][]string{{"NULL"}}, res, "failed test case %d", i+1)
 	}
 }
+
+func TestVarbitOrAnd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		bitFn    func(string, string) (*tree.DBitArray, error)
+		a        string
+		b        string
+		expected string
+	}{
+		{varbitOr, "010", "0", "010"},
+		{varbitOr, "010", "101", "111"},
+		{varbitOr, "010", "101", "111"},
+		{varbitOr, "010", "1010", "1010"},
+		{varbitOr, "0100010", "1010", "0101010"},
+		{varbitOr, "001010010000", "0101010100", "001111010100"},
+		{varbitOr, "001010010111", "", "001010010111"},
+		{varbitOr, "", "1000100", "1000100"},
+		{varbitAnd, "010", "101", "000"},
+		{varbitAnd, "010", "01", "000"},
+		{varbitAnd, "111", "000", "000"},
+		{varbitAnd, "110", "101", "100"},
+		{varbitAnd, "0100010", "1010", "0000010"},
+		{varbitAnd, "001010010000", "0101010100", "000000010000"},
+		{varbitAnd, "001010010000", "", "000000000000"},
+		{varbitAnd, "", "01000100", "00000000"},
+	}
+	for _, tc := range testCases {
+		bitArray, err := tc.bitFn(tc.a, tc.b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resultStr := bitArray.BitArray.String()
+		if resultStr != tc.expected {
+			t.Errorf("expected %s, found %s", tc.expected, resultStr)
+		}
+	}
+}

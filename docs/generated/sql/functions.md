@@ -3112,6 +3112,22 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 <tr><td><a name="unaccent"></a><code>unaccent(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes accents (diacritic signs) from the text provided in <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="upper"></a><code>upper(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their to their upper-case equivalents.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_and"></a><code>varbit_and(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_and"></a><code>varbit_and(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_and"></a><code>varbit_and(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_and"></a><code>varbit_and(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_or"></a><code>varbit_or(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_or"></a><code>varbit_or(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_or"></a><code>varbit_or(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit_or"></a><code>varbit_or(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of bit array ‘a’ and ‘b’ that may have different lengths.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 

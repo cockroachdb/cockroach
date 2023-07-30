@@ -2436,6 +2436,14 @@ var builtinOidsArray = []string{
 	2463: `workload_index_recs(timestamptz: timestamptz) -> string`,
 	2464: `workload_index_recs(budget: string) -> string`,
 	2465: `workload_index_recs(timestamptz: timestamptz, budget: string) -> string`,
+	2466: `varbit_or(a: varbit, b: varbit) -> varbit`,
+	2467: `varbit_or(a: string, b: string) -> varbit`,
+	2468: `varbit_or(a: varbit, b: string) -> varbit`,
+	2469: `varbit_or(a: string, b: varbit) -> varbit`,
+	2470: `varbit_and(a: varbit, b: varbit) -> varbit`,
+	2471: `varbit_and(a: string, b: string) -> varbit`,
+	2472: `varbit_and(a: varbit, b: string) -> varbit`,
+	2473: `varbit_and(a: string, b: varbit) -> varbit`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

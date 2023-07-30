@@ -4037,3 +4037,55 @@ SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"aMalformedMetadaOb
 {"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
 
 subtest end
+
+# Test varbit_or function for string and varbit data
+query T
+SELECT varbit_or('1010010', '0101');
+----
+1010101
+
+query T
+SELECT varbit_or('1010010'::bit(7), '0101'::bit(4));
+----
+1010101
+
+query T
+SELECT varbit_or('1010010'::bit(7), '0101');
+----
+1010101
+
+query T
+SELECT varbit_or('1010010', '0101'::bit(4));
+----
+1010101
+
+query T
+SELECT varbit_or('1010010'::varbit, '0101'::varbit);
+----
+1010101
+
+# Test varbit_and function for string and varbit data
+query T
+SELECT varbit_and('1010010', '0101');
+----
+0000000
+
+query T
+SELECT varbit_and('1010010'::bit(7), '0101'::bit(4));
+----
+0000000
+
+query T
+SELECT varbit_and('1010010'::bit(7), '0101');
+----
+0000000
+
+query T
+SELECT varbit_and('1010010', '0101'::bit(4));
+----
+0000000
+query T
+
+SELECT varbit_and('1010010'::varbit, '0101'::varbit);
+----
+0000000
