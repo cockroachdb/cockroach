@@ -171,7 +171,7 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	// Send BatchRequest.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}
