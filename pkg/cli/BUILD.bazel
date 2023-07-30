@@ -405,6 +405,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
+        "//pkg/util/netutil/addr",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",

@@ -274,7 +274,7 @@ func retrievePasswordFromRoleOptions(
 	if err != nil {
 		return true, nil, err
 	}
-	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
+	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
 		// We disallow setting a non-empty password in insecure mode
 		// because insecure means an observer may have MITM'ed the change
 		// and learned the password.

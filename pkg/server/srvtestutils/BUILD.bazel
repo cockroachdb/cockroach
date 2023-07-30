@@ -6,13 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/srvtestutils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
-        "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/server/apiconstants",
         "//pkg/testutils/serverutils",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
