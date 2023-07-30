@@ -154,6 +154,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 			// Change the automatic compaction job to avoid it running during the test.
 			// Test creates a new compactor and calls it directly.
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
+			// Disable auto split by load as it affects the number of wide scans.
+			sqlConn.Exec(t, "SET CLUSTER SETTING kv.range_split.by_load_enabled = false")
 
 			_, err := internalExecutor.ExecEx(
 				ctx,
