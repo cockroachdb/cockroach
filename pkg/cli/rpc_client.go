@@ -12,13 +12,13 @@ package cli
 
 import (
 	"context"
-	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -56,7 +56,7 @@ func getClientGRPCConn(
 	if cfg.TestingKnobs.Server != nil {
 		rpcContext.Knobs = cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs
 	}
-	addr, err := addrWithDefaultHost(cfg.AdvertiseAddr)
+	addr, err := addr.AddrWithDefaultLocalhost(cfg.AdvertiseAddr)
 	if err != nil {
 		stopper.Stop(ctx)
 		return nil, nil, nil, err
@@ -77,17 +77,6 @@ func getClientGRPCConn(
 		stopper.Stop(ctx)
 	}
 	return conn, clock, closer, nil
-}
-
-func addrWithDefaultHost(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", err
-	}
-	if host == "" {
-		host = "localhost"
-	}
-	return net.JoinHostPort(host, port), nil
 }
 
 // getAdminClient returns an AdminClient and a closure that must be invoked
