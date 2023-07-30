@@ -192,7 +192,7 @@ var (
 	defaultRangeLeaseDuration = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RANGE_LEASE_DURATION", 6*time.Second)
 
-	// defaultRPCHeartbeatTimeout is the default RPC heartbeat timeout. It is set
+	// DefaultRPCHeartbeatTimeout is the default RPC heartbeat timeout. It is set
 	// very high at 3 * NetworkTimeout for several reasons: the gRPC transport may
 	// need to complete a dial/handshake before sending the heartbeat, the
 	// heartbeat has occasionally been seen to require 3 RTTs even post-dial (for
@@ -212,7 +212,7 @@ var (
 	// heartbeats and reduce this to NetworkTimeout (plus DialTimeout for the
 	// initial heartbeat), see:
 	// https://github.com/cockroachdb/cockroach/issues/93397.
-	defaultRPCHeartbeatTimeout = 3 * NetworkTimeout
+	DefaultRPCHeartbeatTimeout = 3 * NetworkTimeout
 
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
@@ -341,10 +341,13 @@ type Config struct {
 	// Addr is the address the server is listening on.
 	Addr string
 
-	// AdvertiseAddr is the address advertised by the server to other nodes
-	// in the cluster. It should be reachable by all other nodes and should
-	// route to an interface that Addr is listening on.
-	AdvertiseAddr string
+	// AdvertiseAddrH contains the address advertised by the server to
+	// other nodes in the cluster. It should be reachable by all other
+	// nodes and should route to an interface that Addr is listening on.
+	//
+	// It is set after the server instance has been created, when the
+	// network listeners are being set up.
+	AdvertiseAddrH
 
 	// ClusterName is the name used as a sanity check when a node joins
 	// an uninitialized cluster, or when an uninitialized node joins an
@@ -367,9 +370,12 @@ type Config struct {
 	// This is used if SplitListenSQL is set to true.
 	SQLAddr string
 
-	// SQLAdvertiseAddr is the advertised SQL address.
+	// SQLAdvertiseAddrH contains the advertised SQL address.
 	// This is computed from SQLAddr if specified otherwise Addr.
-	SQLAdvertiseAddr string
+	//
+	// It is set after the server instance has been created, when the
+	// network listeners are being set up.
+	SQLAdvertiseAddrH
 
 	// SocketFile, if non-empty, sets up a TLS-free local listener using
 	// a unix datagram socket at the specified path for SQL clients.
@@ -382,9 +388,12 @@ type Config struct {
 	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
 	DisableTLSForHTTP bool
 
-	// HTTPAdvertiseAddr is the advertised HTTP address.
+	// HTTPAdvertiseAddrH contains the advertised HTTP address.
 	// This is computed from HTTPAddr if specified otherwise Addr.
-	HTTPAdvertiseAddr string
+	//
+	// It is set after the server instance has been created, when the
+	// network listeners are being set up.
+	HTTPAdvertiseAddrH
 
 	// RPCHeartbeatInterval controls how often Ping requests are sent on peer
 	// connections to determine connection health and update the local view of
@@ -421,6 +430,21 @@ type Config struct {
 	LocalityAddresses []roachpb.LocalityAddress
 }
 
+// AdvertiseAddr is the type of the AdvertiseAddr field in Config.
+type AdvertiseAddrH struct {
+	AdvertiseAddr string
+}
+
+// SQLAdvertiseAddr is the type of the SQLAdvertiseAddr field in Config.
+type SQLAdvertiseAddrH struct {
+	SQLAdvertiseAddr string
+}
+
+// HTTPAdvertiseAddr is the type of the HTTPAdvertiseAddr field in Config.
+type HTTPAdvertiseAddrH struct {
+	HTTPAdvertiseAddr string
+}
+
 // HistogramWindowInterval is used to determine the approximate length of time
 // that individual samples are retained in in-memory histograms. Currently,
 // it is set to the arbitrary length of six times the Metrics sample interval.
@@ -455,7 +479,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.SocketFile = ""
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.RPCHeartbeatInterval = PingInterval
-	cfg.RPCHeartbeatTimeout = defaultRPCHeartbeatTimeout
+	cfg.RPCHeartbeatTimeout = DefaultRPCHeartbeatTimeout
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""

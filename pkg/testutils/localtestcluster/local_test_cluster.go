@@ -52,8 +52,7 @@ import (
 // usage of a LocalTestCluster follows:
 //
 //	s := &LocalTestCluster{}
-//	s.Start(t, testutils.NewNodeTestBaseContext(),
-//	        kv.InitFactoryForLocalTestCluster)
+//	s.Start(t, kv.InitFactoryForLocalTestCluster)
 //	defer s.Stop()
 //
 // Note that the LocalTestCluster is different from server.TestCluster
@@ -114,7 +113,7 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
+func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manualClock,
 		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */)
@@ -137,17 +136,17 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	ltc.tester = t
-	cfg.RPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          baseCtx,
-		Clock:           ltc.Clock.WallClock(),
-		ToleratedOffset: ltc.Clock.ToleratedOffset(),
-		Stopper:         ltc.stopper,
-		Settings:        cfg.Settings,
-		NodeID:          nc,
 
-		TenantRPCAuthorizer: tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
-	})
+	opts := rpc.DefaultContextOptions()
+	opts.Clock = ltc.Clock.WallClock()
+	opts.ToleratedOffset = ltc.Clock.ToleratedOffset()
+	opts.Stopper = ltc.stopper
+	opts.Settings = cfg.Settings
+	opts.NodeID = nc
+	opts.TenantRPCAuthorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
+
+	cfg.RPCContext = rpc.NewContext(ctx, opts)
+
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())

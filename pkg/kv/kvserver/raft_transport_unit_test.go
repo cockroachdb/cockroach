@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -44,15 +42,14 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	rpcC := rpc.NewContext(ctx,
-		rpc.ContextOptions{
-			TenantID:        roachpb.SystemTenantID,
-			Config:          &base.Config{Insecure: true},
-			Clock:           &timeutil.DefaultTimeSource{},
-			ToleratedOffset: 500 * time.Millisecond,
-			Stopper:         stopper,
-			Settings:        st,
-		})
+	opts := rpc.DefaultContextOptions()
+	opts.Insecure = true
+	opts.ToleratedOffset = 500 * time.Millisecond
+	opts.Stopper = stopper
+	opts.Settings = st
+
+	rpcC := rpc.NewContext(ctx, opts)
+
 	rpcC.StorageClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}

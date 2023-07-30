@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -420,15 +419,7 @@ func TestJobStatusResponse(t *testing.T) {
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
-	rpcContext := srvtestutils.NewRPCTestContext(context.Background(), ts.(*server.TestServer), rootConfig)
-
-	url := ts.AdvRPCAddr()
-	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := ts.RPCClientConn(t, username.RootUserName())
 	client := serverpb.NewStatusClient(conn)
 
 	request := &serverpb.JobStatusRequest{JobId: -1}

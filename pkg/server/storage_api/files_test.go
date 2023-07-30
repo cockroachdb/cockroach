@@ -19,11 +19,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,15 +46,7 @@ func TestStatusGetFiles(t *testing.T) {
 	ts := tsI.(*server.TestServer)
 	defer ts.Stopper().Stop(context.Background())
 
-	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
-	rpcContext := srvtestutils.NewRPCTestContext(context.Background(), ts, rootConfig)
-
-	url := ts.AdvRPCAddr()
-	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	conn := ts.RPCClientConn(t, username.RootUserName())
 	client := serverpb.NewStatusClient(conn)
 
 	// Test fetching heap files.
@@ -137,7 +127,7 @@ func TestStatusGetFiles(t *testing.T) {
 	t.Run("path separators", func(t *testing.T) {
 		request := serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
 			Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
-		_, err = client.GetFiles(context.Background(), &request)
+		_, err := client.GetFiles(context.Background(), &request)
 		if !testutils.IsError(err, "invalid pattern: cannot have path seperators") {
 			t.Errorf("GetFiles: path separators allowed in pattern")
 		}
@@ -147,7 +137,7 @@ func TestStatusGetFiles(t *testing.T) {
 	t.Run("filetypes", func(t *testing.T) {
 		request := serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
 			Type: -1, Patterns: []string{"*"}}
-		_, err = client.GetFiles(context.Background(), &request)
+		_, err := client.GetFiles(context.Background(), &request)
 		if !testutils.IsError(err, "unknown file type: -1") {
 			t.Errorf("GetFiles: invalid file type allowed")
 		}
