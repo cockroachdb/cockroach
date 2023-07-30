@@ -60,7 +60,6 @@ type PLpgSQLStmtBlock struct {
 	Decls      []PLpgSQLDecl
 	Body       []PLpgSQLStatement
 	Exceptions *PLpgSQLExceptionBlock
-	Scope      VariableScope
 }
 
 // TODO(drewk): format Label and Exceptions fields.

@@ -325,172 +325,16 @@ SELECT f(1, 5), f(-5, 5), f(0, 1)
 ----
 10  10  0
 
-# Dijkstra's Algorithm
-#
-#        ┌─┬────8──┬─┬──7────┬─┐
-#  ┌─────┤1│       │2│       │3├─────┐
-#  │     └┬┘       └┬┴───┐   └┬┘     │
-#  │      │         │    │    │      │
-#  4      │         2    │    │      9
-#  │      │         │    │    │      │
-# ┌┴┐     │        ┌┴┐   │    │     ┌┴┐
-# │0│    11    ┌───┤8│   │    14    │4│
-# └┬┘     │    │   └┬┘   │    │     └┬┘
-#  │      │    7    │    │    │      │
-#  8      │    │    6    │    │      10
-#  │      │    │    │    │    │      │
-#  │     ┌┴┬───┘   ┌┴┐   └───┬┴┐     │
-#  └─────┤7│       │6│       │5├─────┘
-#        └─┴────1──┴─┴──4────┴─┘
-#
-# Encode the graph as a series of undirected edges, where "a" and "b" are the
-# "to" and "from" nodes and "weight" is the weight of the edge.
-statement ok
-CREATE TABLE edges (a INT, b INT, weight INT);
-INSERT INTO edges VALUES
-(0, 1, 4),
-(0, 7, 8),
-(1, 7, 11),
-(1, 2, 8),
-(2, 8, 2),
-(7, 8, 7),
-(7, 6, 1),
-(6, 8, 6),
-(2, 5, 4),
-(5, 6, 2),
-(2, 3, 7),
-(3, 5, 14),
-(3, 4, 9),
-(4, 5, 10);
+# TODO(drewk): add back the dijkstra test once UDFs calling other UDFs is
+# allowed.
 
-# Get the number of vertexes in the graph.
-statement ok
-CREATE FUNCTION vertexes() RETURNS INT AS $$ SELECT max(greatest(a, b)) + 1 FROM edges $$ LANGUAGE SQL;
-
-# Get the maximum int32 value.
-statement ok
-CREATE FUNCTION max_int() RETURNS INT AS $$ SELECT 2147483647 $$ LANGUAGE SQL;
-
-# Get the weight of the edge between the two given nodes, if any.
-statement ok
-CREATE FUNCTION graph(x INT, y INT) RETURNS INT AS $$
-  SELECT coalesce((SELECT weight FROM edges WHERE (a = x AND b = y) OR (a = y AND b = x) LIMIT 1), 0);
-$$ LANGUAGE SQL;
-
-# Replace the element at the given index of the array with the given value.
-statement ok
-CREATE FUNCTION replace(arr INT[], idx INT, val INT) RETURNS INT[] AS $$
-  DECLARE
-    i INT;
-    n INT := array_length(arr, 1);
-    res INT[] := ARRAY[]::INT[];
-  BEGIN
-    i := 0;
-    LOOP
-      IF i = idx THEN
-        res := res || val;
-      ELSE
-        res := res || arr[i+1];
-      END IF;
-    i := i + 1;
-    IF i >= n THEN EXIT; END IF;
-    END LOOP;
-    RETURN res;
-  END
-$$ LANGUAGE PLpgSQL;
-
-# Return the node with the minimum distance from the source node known so far
-# out of the nodes that don't already have a shortest path calculated.
-statement ok
-CREATE FUNCTION min_distance(dist INT[], spt_set INT[]) RETURNS INT AS $$
-  DECLARE
-    n INT := vertexes();
-    i INT;
-    min INT := max_int();
-    min_index INT := 0;
-  BEGIN
-    i := 0;
-    LOOP
-      IF spt_set[i+1] = 0 AND dist[i+1] <= min THEN
-        min := dist[i+1];
-        min_index := i;
-      END IF;
-    i := i + 1;
-    IF i >= n THEN EXIT; END IF;
-    END LOOP;
-    RETURN min_index;
-  END
-$$ LANGUAGE PLPGSQL;
-
-# Implement dijkstra's algorithm using the "edges" table.
-statement ok
-CREATE FUNCTION dijkstra(src INT) RETURNS INT[] AS $$
-  DECLARE
-    n INT := vertexes();
-    i INT;
-    count INT;
-    dist INT[] := ARRAY[]::INT[];
-    spt_set INT[] := ARRAY[]::INT[];
-    u INT;
-  BEGIN
-    i := 0;
-    LOOP
-      dist := dist || max_int();
-      spt_set := spt_set || 0;
-      i := i + 1;
-      IF i >= n THEN EXIT; END IF;
-    END LOOP;
-    dist := replace(dist, src, 0);
-    count := 0;
-    LOOP
-      u := min_distance(dist, spt_set);
-      spt_set := replace(spt_set, u, 1);
-      i := 0;
-      LOOP
-        IF
-          spt_set[i+1] = 0 AND
-          graph(u, i) > 0 AND
-          dist[u+1] <> max_int() AND
-          dist[u+1] + graph(u, i) < dist[i+1]
-        THEN
-          dist := replace(dist, i, dist[u+1] + graph(u, i));
-        END IF;
-      i := i + 1;
-      IF i >= n THEN EXIT; END IF;
-      END LOOP;
-    count := count + 1;
-    IF count >= n THEN EXIT; END IF;
-    END LOOP;
-    RETURN dist;
-  END
-$$ LANGUAGE PLPGSQL;
-
-# Run dijkstra's algorithm using node 0 as the source.
-query II nosort,colnames
-SELECT i AS "Vertex", dist[i+1] AS "Distance From Source"
-FROM generate_series(0, vertexes() - 1) f(i), dijkstra(0) g(dist);
-----
-Vertex  Distance From Source
-0       0
-1       4
-2       12
-3       19
-4       21
-5       11
-6       9
-7       8
-8       14
-
-statement ok
+statement error pgcode 2F005 control reached end of function without RETURN
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
   END
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
-SELECT f(1, 2);
-
-statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   DECLARE
     i INT;
@@ -500,9 +344,6 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
-SELECT f(1, 2);
-
-statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     IF a < b THEN
@@ -512,9 +353,6 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
-SELECT f(1, 2);
-
-statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   DECLARE
     i INT;
@@ -528,9 +366,6 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
-SELECT f(1, 2);
-
-statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
@@ -540,9 +375,6 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
-SELECT f(1, 2);
-
-statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
@@ -553,9 +385,6 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
     END IF;
   END
 $$ LANGUAGE PLpgSQL;
-
-statement error pgcode 2F005 control reached end of function without RETURN
-SELECT f(1, 2);
 
 statement error pgcode 0A000 PL/pgSQL functions with RECORD input arguments are not yet supported
 CREATE FUNCTION f_err(p1 RECORD) RETURNS RECORD AS $$
@@ -831,3 +660,151 @@ $$ LANGUAGE PLpgSQL;
 
 query error pgcode P0001 pq: foo
 SELECT f();
+
+statement error pgcode 42601 pq: too few parameters specified for RAISE
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo% % %', 1, 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: too many parameters specified for RAISE
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo%', 1, 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: RAISE option already specified: ERRCODE
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = '22012', ERRCODE = '22013';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: \"i\" is not a known variable
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    i := 0;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 CONTINUE cannot be used outside a loop
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    CONTINUE;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 EXIT cannot be used outside a loop, unless it has a label
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    EXIT;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT;
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+NULL
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := (SELECT x FROM xy ORDER BY x LIMIT 1);
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := n;
+  BEGIN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIII
+SELECT f(-100), f(-1), f(0), f(1), f(100), f(NULL);
+----
+-100  -1  0  1  100  NULL
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT;
+  BEGIN
+    i := i + 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    i := i + 1;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    IF n > 0 THEN
+      i := i + 1;
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22005 pq: variable \"i\" is declared CONSTANT
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i CONSTANT INT := 0;
+  BEGIN
+    LOOP IF i >= 10 THEN EXIT; END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
