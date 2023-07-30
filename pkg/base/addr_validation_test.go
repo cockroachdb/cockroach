@@ -156,12 +156,12 @@ func TestValidateAddrs(t *testing.T) {
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d/%s", i, test.in), func(t *testing.T) {
 			cfg := base.Config{
-				Addr:              test.in.listen,
-				AdvertiseAddr:     test.in.adv,
-				HTTPAddr:          test.in.http,
-				HTTPAdvertiseAddr: test.in.advhttp,
-				SQLAddr:           test.in.sql,
-				SQLAdvertiseAddr:  test.in.advsql,
+				Addr:               test.in.listen,
+				HTTPAddr:           test.in.http,
+				SQLAddr:            test.in.sql,
+				AdvertiseAddrH:     base.AdvertiseAddrH{AdvertiseAddr: test.in.adv},
+				HTTPAdvertiseAddrH: base.HTTPAdvertiseAddrH{HTTPAdvertiseAddr: test.in.advhttp},
+				SQLAdvertiseAddrH:  base.SQLAdvertiseAddrH{SQLAdvertiseAddr: test.in.advsql},
 			}
 
 			if err := cfg.ValidateAddrs(context.Background()); err != nil {

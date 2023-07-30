@@ -110,8 +110,7 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 // Start constructs and starts the local test server and creates a
 // time series DB.
 func (tm *testModelRunner) Start() {
-	tm.LocalTestCluster.Start(tm.t, testutils.NewNodeTestBaseContext(),
-		kvcoord.InitFactoryForLocalTestCluster)
+	tm.LocalTestCluster.Start(tm.t, kvcoord.InitFactoryForLocalTestCluster)
 	tm.DB = NewDB(tm.LocalTestCluster.DB, tm.Cfg.Settings)
 }
 

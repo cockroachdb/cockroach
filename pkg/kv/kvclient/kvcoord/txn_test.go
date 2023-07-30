@@ -111,7 +111,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 		b.Run(fmt.Sprintf("latency=%s", latency), func(b *testing.B) {
 			var s localtestcluster.LocalTestCluster
 			s.Latency = latency
-			s.Start(b, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
+			s.Start(b, kvcoord.InitFactoryForLocalTestCluster)
 			defer s.Stop()
 			defer b.StopTimer()
 			key := roachpb.Key("key")

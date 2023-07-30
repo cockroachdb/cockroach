@@ -33,7 +33,6 @@ go_test(
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:resource",
-        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
