@@ -527,17 +527,19 @@ func (r *SpanRegistry) testingAll() []*crdbSpan {
 // concurrently with this call. swap takes ownership of the spanRefs, and will
 // release() them.
 func (r *SpanRegistry) swap(parentID tracingpb.SpanID, children []spanRef) {
-	r.mu.Lock()
-	r.removeSpanLocked(parentID)
-	for _, c := range children {
-		sp := c.Span.i.crdb
-		sp.withLock(func() {
-			if !sp.mu.finished {
-				r.addSpanLocked(sp)
-			}
-		})
-	}
-	r.mu.Unlock()
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.removeSpanLocked(parentID)
+		for _, c := range children {
+			sp := c.Span.i.crdb
+			sp.withLock(func() {
+				if !sp.mu.finished {
+					r.addSpanLocked(sp)
+				}
+			})
+		}
+	}()
 	for _, c := range children {
 		c.release()
 	}

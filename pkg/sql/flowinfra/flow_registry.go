@@ -366,13 +366,13 @@ func (fr *FlowRegistry) cancelPendingStreams(
 // ConnectInboundStream calls for the flow will fail to find it and time out.
 func (fr *FlowRegistry) UnregisterFlow(id execinfrapb.FlowID) {
 	fr.Lock()
+	defer fr.Unlock()
 	entry := fr.flows[id]
 	if entry.streamTimer != nil {
 		entry.streamTimer.Stop()
 		entry.streamTimer = nil
 	}
 	fr.releaseEntryLocked(id)
-	fr.Unlock()
 }
 
 // waitForFlow waits until the flow with the given id gets registered - up to
