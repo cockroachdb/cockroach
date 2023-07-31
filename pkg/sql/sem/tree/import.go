@@ -58,7 +58,8 @@ func (node *Import) Format(ctx *FmtCtx) {
 	}
 
 	if node.Options != nil {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }

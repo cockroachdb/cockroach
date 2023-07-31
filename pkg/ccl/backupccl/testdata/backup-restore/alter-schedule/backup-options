@@ -14,8 +14,8 @@ with schedules as (show schedules for backup) select id from schedules where lab
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH detached
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (detached)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (detached)
 
 # Can't use the same command twice.
 
@@ -42,8 +42,8 @@ alter backup schedule $incID set with execution locality = 'region=us-east-1'
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = false, detached, execution locality = 'region=us-east-1'
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = false, detached, execution locality = 'region=us-east-1'
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = false, detached, execution locality = 'region=us-east-1')
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = false, detached, execution locality = 'region=us-east-1')
 
 # Change an option and set another.
 
@@ -54,8 +54,8 @@ alter backup schedule $incID set with revision_history = true, set with executio
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, encryption_passphrase = '*****', detached
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, encryption_passphrase = '*****', detached
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', detached)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', detached)
 
 # Add an incompatible option
 
@@ -74,8 +74,8 @@ alter backup schedule $incID set with kms = ('aws:///key1?region=r1', 'aws:///ke
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc'
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc'
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc')
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc')
 
 # Set options to empty (unset).
 
@@ -86,8 +86,8 @@ alter backup schedule $incID set with kms = '', set with incremental_location = 
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached)
 
 # Setting DETACHED throws an error.
 
@@ -104,8 +104,8 @@ regex matches error
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached)
 
 exec-sql
 alter backup schedule $incID set with include_all_virtual_clusters = true
@@ -114,9 +114,8 @@ alter backup schedule $incID set with include_all_virtual_clusters = true
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached, include_all_virtual_clusters = true
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached, include_all_virtual_clusters = true
-
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, include_all_virtual_clusters = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, include_all_virtual_clusters = true)
 
 exec-sql
 create schedule 'with-secondary' for backup into 'nodelocal://1/example-schedule-with-secondary' WITH include_all_virtual_clusters recurring '@daily' full backup '@weekly';
@@ -129,8 +128,8 @@ with schedules as (show schedules for backup) select id from schedules where lab
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='with-secondary' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule-with-secondary' WITH detached, include_all_virtual_clusters = true
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-with-secondary' WITH detached, include_all_virtual_clusters = true
+BACKUP INTO 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = true)
 
 exec-sql
 alter backup schedule $withSecondaryIncID set with include_all_virtual_clusters = false
@@ -139,5 +138,5 @@ alter backup schedule $withSecondaryIncID set with include_all_virtual_clusters 
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='with-secondary' order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule-with-secondary' WITH detached, include_all_virtual_clusters = false
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-with-secondary' WITH detached, include_all_virtual_clusters = false
+BACKUP INTO 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = false)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = false)

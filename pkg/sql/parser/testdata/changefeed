@@ -62,10 +62,10 @@ CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
 parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
 ----
-CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH bar = '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH _ = 'baz' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH OPTIONS (bar = 'baz') -- normalized!
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH OPTIONS (bar = ('baz')) -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH OPTIONS (bar = '_') -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH OPTIONS (_ = 'baz') -- identifiers removed
 
 parse
 CREATE CHANGEFEED AS SELECT * FROM foo

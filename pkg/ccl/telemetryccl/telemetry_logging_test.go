@@ -234,7 +234,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s') WITH detached`, srv.URL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
-				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH detached`, srv.URL),
+				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH OPTIONS (detached)`, srv.URL),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -258,7 +258,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "backup",
-				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -282,7 +282,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "restore",
-				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH OPTIONS (detached)`, nodelocal.MakeLocalStorageURI("test1")),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,

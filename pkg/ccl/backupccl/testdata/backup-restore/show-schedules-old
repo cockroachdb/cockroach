@@ -20,4 +20,4 @@ query-sql
 SELECT crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args' from scratch;
 ----
 {"@type": "type.googleapis.com/cockroach.sql.ScheduledSQLStatsCompactorExecutionArgs"}
-{"@type": "type.googleapis.com/cockroach.ccl.backupccl.ScheduledBackupExecutionArgs", "backup_statement": "BACKUP INTO 'nodelocal://1/foo' WITH detached"}
+{"@type": "type.googleapis.com/cockroach.ccl.backupccl.ScheduledBackupExecutionArgs", "backup_statement": "BACKUP INTO 'nodelocal://1/foo' WITH OPTIONS (detached)"}

@@ -133,8 +133,8 @@ INSERT INTO t1 values (1), (10), (100);
 	require.Equal(t, []string{"PAUSED: Waiting for initial backup to complete", "ACTIVE"}, statuses)
 	require.Equal(t, []string{"@daily", "@weekly"}, schedules)
 	require.Equal(t, []string{
-		"BACKUP TABLE mydb.public.t1 INTO LATEST IN 'nodelocal://1/backup/alter-schedule' WITH detached",
-		"BACKUP TABLE mydb.public.t1 INTO 'nodelocal://1/backup/alter-schedule' WITH detached",
+		"BACKUP TABLE mydb.public.t1 INTO LATEST IN 'nodelocal://1/backup/alter-schedule' WITH OPTIONS (detached)",
+		"BACKUP TABLE mydb.public.t1 INTO 'nodelocal://1/backup/alter-schedule' WITH OPTIONS (detached)",
 	},
 		backupStmts)
 
