@@ -26,6 +26,7 @@ import { fromHexString, withTimeout } from "./util";
 import { Format, Identifier, Join, SQL } from "./safesql";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
+import { getLogger } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -314,8 +315,10 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
         );
         resp.zoneConfigResp.zone_config_level = configLevel;
       } catch (e) {
-        console.error(
+        getLogger().error(
           `Table Details API - encountered an error decoding zone config string: ${hexString}`,
+          /* additional context */ undefined,
+          e,
         );
         // Catch and assign the error if we encounter one decoding.
         resp.zoneConfigResp.error = e;
