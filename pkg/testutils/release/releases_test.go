@@ -112,6 +112,7 @@ func TestLatestPredecessorHistory(t *testing.T) {
 		name           string
 		v              string
 		k              int
+		minVersion     string
 		expectedErr    string
 		expectedLatest []string
 		expectedRandom []string
@@ -130,6 +131,14 @@ func TestLatestPredecessorHistory(t *testing.T) {
 			expectedRandom: []string{"19.2.0", "22.1.8", "22.2.8"},
 		},
 		{
+			name:           "valid history with min version",
+			v:              "v23.1.1",
+			k:              3,
+			minVersion:     "v22.1.0",
+			expectedLatest: []string{"22.1.12", "22.2.8"},
+			expectedRandom: []string{"19.2.0", "22.1.8", "22.2.8"},
+		},
+		{
 			name:           "with pre-release",
 			v:              "v23.1.1-beta.1",
 			k:              2,
@@ -145,7 +154,11 @@ func TestLatestPredecessorHistory(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resetRNG() // deterministic results
-			latestHistory, latestErr := LatestPredecessorHistory(version.MustParse(tc.v), tc.k)
+			var minV *version.Version
+			if tc.minVersion != "" {
+				minV = version.MustParse(tc.minVersion)
+			}
+			latestHistory, latestErr := LatestPredecessorHistory(version.MustParse(tc.v), tc.k, minV)
 			randomHistory, randomErr := RandomPredecessorHistory(rng, version.MustParse(tc.v), tc.k)
 			if tc.expectedErr == "" {
 				require.NoError(t, latestErr)
