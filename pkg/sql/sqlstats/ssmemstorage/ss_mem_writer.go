@@ -335,17 +335,21 @@ func (s *Container) RecordTransaction(
 	if created {
 		estimatedMemAllocBytes :=
 			stats.sizeUnsafe() + key.Size() + 8 /* hash of transaction key */
-		s.mu.Lock()
+		if err := func() error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
 
-		// If the monitor is nil, we do not track memory usage.
-		if s.mu.acc.Monitor() != nil {
-			if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
-				delete(s.mu.txns, key)
-				s.mu.Unlock()
-				return ErrMemoryPressure
+			// If the monitor is nil, we do not track memory usage.
+			if s.mu.acc.Monitor() != nil {
+				if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
+					delete(s.mu.txns, key)
+					return ErrMemoryPressure
+				}
 			}
+			return nil
+		}(); err != nil {
+			return err
 		}
-		s.mu.Unlock()
 	}
 
 	stats.mu.data.Count++
