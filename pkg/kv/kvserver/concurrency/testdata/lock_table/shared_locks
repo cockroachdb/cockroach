@@ -101,3 +101,44 @@ num=1
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 5, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
+
+# ------------------------------------------------------------------------------
+# Ensure scanning requests are able to acquire joint claims on the initial
+# scan path.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req7 txn=txn1 ts=10 spans=shared@a
+----
+
+acquire r=req1 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req8 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req8
+----
+start-waiting: false
+
+new-request r=req9 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req9
+----
+start-waiting: false
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+   queued writers:
+    active: false req: 6, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000002

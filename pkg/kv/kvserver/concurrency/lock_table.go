@@ -919,7 +919,26 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) {
 // and non-transactional requests.
 type queuedGuard struct {
 	guard  *lockTableGuardImpl
+	str    lock.Strength
 	active bool // protected by lockState.mu
+}
+
+// getLockMode returns the lock mode of the queued request. Once a request is
+// queued at a lock, the returned lock mode by this function is immutable.
+func (qg *queuedGuard) getLockMode() lock.Mode {
+	switch qg.str {
+	case lock.None:
+		panic("non-locking requests should not have an associated queuedGuard")
+	case lock.Shared:
+		return lock.MakeModeShared()
+	case lock.Exclusive:
+		assert(qg.guard.txn != nil, "only transactional requests can acquire exclusive locks")
+		return lock.MakeModeExclusive(qg.guard.ts, qg.guard.txn.IsoLevel)
+	case lock.Intent:
+		return lock.MakeModeIntent(qg.guard.ts)
+	default:
+		panic(fmt.Sprintf("unhandled request strength: %s", qg.str))
+	}
 }
 
 // Information about a lock holder for unreplicated locks.
@@ -2201,6 +2220,7 @@ func (l *lockState) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 	}
 	qg := &queuedGuard{
 		guard:  g,
+		str:    g.curStrength(),
 		active: true,
 	}
 	// The request isn't in the queue. Add it in the correct position, based on
@@ -2281,12 +2301,7 @@ func (l *lockState) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 			// conflicting waiters; no need to actively wait here.
 			return false
 		}
-		// TODO(arul): Inactive waiters will need to capture the strength at which
-		// they're trying to acquire a lock in their queuedGuard. We can't simply
-		// use the guard's curStrength (or curLockMode) -- inactive waiters may have
-		// mutated these values as they scan. For now, we can just use the intent
-		// lock mode as that's the only lock strength supported by the lock table.
-		waiterLockMode := lock.MakeModeIntent(qqg.guard.ts)
+		waiterLockMode := qqg.getLockMode()
 		if lock.Conflicts(waiterLockMode, g.curLockMode(), &g.lt.settings.SV) {
 			return true
 		}
@@ -2691,6 +2706,7 @@ func (l *lockState) discoveredLock(
 			// Put self in queue as inactive waiter.
 			qg := &queuedGuard{
 				guard:  g,
+				str:    g.curStrength(),
 				active: false,
 			}
 			// g is not necessarily first in the queue in the (rare) case (a) above.
