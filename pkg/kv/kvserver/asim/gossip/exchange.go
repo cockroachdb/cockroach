@@ -44,7 +44,12 @@ func (u *fixedDelayExchange) put(tick time.Time, descs ...roachpb.StoreDescripto
 // updates returns back exchanged infos, wrapped as store details that have
 // completed between the last tick update was called and the tick given.
 func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
-	sort.Slice(u.pending, func(i, j int) bool { return u.pending[i].created.Before(u.pending[j].created) })
+	sort.Slice(u.pending, func(i, j int) bool {
+		if u.pending[i].created == u.pending[j].created {
+			return i < j
+		}
+		return u.pending[i].created.Before(u.pending[j].created)
+	})
 	ready := []*storepool.StoreDetail{}
 	i := 0
 	for ; i < len(u.pending) && !tick.Before(u.pending[i].created.Add(u.settings.StateExchangeDelay)); i++ {
