@@ -5515,6 +5515,16 @@ func TestImportDelimited(t *testing.T) {
 				sqlDB.Exec(t, intoCmd, opts...)
 				checkQueryResults(fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
 			})
+			t.Run("import-into-collated", func(t *testing.T) {
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (i INT8 PRIMARY KEY, s text COLLATE "en_US", b bytea)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) DELIMITED DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				checkQueryResults(t, fmt.Sprintf(`SELECT i, s, b FROM into%d ORDER BY i`, i))
+			})
 			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (b bytea, i INT8 PRIMARY KEY, s text)`, i))
