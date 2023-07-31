@@ -750,10 +750,67 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}(ctx)
 
+	// If adminAuditLogging is enabled, we want to check for HasAdminRole
+	// before maybeLogStatement.
+	// We must check prior to execution in the case the txn is aborted due to
+	// an error. HasAdminRole can only be checked in a valid txn.
+	if adminAuditLog := adminAuditLogEnabled.Get(
+		&ex.planner.execCfg.Settings.SV,
+	); adminAuditLog {
+		if !ex.extraTxnState.hasAdminRoleCache.IsSet {
+			hasAdminRole, err := ex.planner.HasAdminRole(ctx)
+			if err != nil {
+				return makeErrEvent(err)
+			}
+			ex.extraTxnState.hasAdminRoleCache.HasAdminRole = hasAdminRole
+			ex.extraTxnState.hasAdminRoleCache.IsSet = true
+		}
+	}
+
+	shouldLog := true
+	defer func() {
+		if !shouldLog {
+			// We don't want to log this statement, since another layer of the
+			// conn_executor will handle the logging for this statement.
+			return
+		}
+		var execErr error
+		if p, ok := retPayload.(payloadWithError); ok {
+			execErr = p.errorCause()
+		}
+		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		f.FormatNode(ast)
+		stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
+			f.CloseAndGetString(),
+			execErr != nil,
+			ex.implicitTxn(),
+			ex.planner.CurrentDatabase(),
+		)
+
+		p.maybeLogStatement(
+			ctx,
+			ex.executorType,
+			false, /* isCopy */
+			int(ex.state.mu.autoRetryCounter),
+			ex.extraTxnState.txnCounter,
+			0, /* rowsAffected */
+			ex.state.mu.stmtCount,
+			0, /* bulkJobId */
+			execErr,
+			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			&ex.extraTxnState.hasAdminRoleCache,
+			ex.server.TelemetryLoggingMetrics,
+			stmtFingerprintID,
+			&topLevelQueryStats{},
+			ex.statsCollector,
+		)
+	}()
+
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
 		if os.ImplicitTxn.Get() {
+			shouldLog = false
 			// When executing the BEGIN, we also need to set any transaction modes
 			// that were specified on the BEGIN statement.
 			if _, err := ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: s.Modes}); err != nil {
@@ -765,6 +822,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		return makeErrEvent(errTransactionInProgress)
 
 	case *tree.CommitTransaction:
+		if os.ImplicitTxn.Get() {
+			shouldLog = false
+		}
 		// CommitTransaction is executed fully here; there's no plan for it.
 		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
 		return ev, payload, nil
@@ -838,6 +898,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		return nil, nil, nil
 	}
 
+	// Don't write to the exec/audit logs here; it will be handled in
+	// dispatchToExecutionEngine.
+	shouldLog = false
+
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 
 	// For regular statements (the ones that get to this point), we
@@ -887,6 +951,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// placed. There are also sequencing point after every stage of
 	// constraint checks and cascading actions at the _end_ of a
 	// statement's execution.
+	// todo don't step for internal exec?
 	if err := ex.state.mu.txn.Step(ctx); err != nil {
 		return makeErrEvent(err)
 	}
@@ -1447,23 +1512,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		if server := ex.server.cfg.DistSQLSrv; server != nil {
 			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
 			ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
-		}
-	}
-
-	// If adminAuditLogging is enabled, we want to check for HasAdminRole
-	// before the deferred maybeLogStatement.
-	// We must check prior to execution in the case the txn is aborted due to
-	// an error. HasAdminRole can only be checked in a valid txn.
-	if adminAuditLog := adminAuditLogEnabled.Get(
-		&ex.planner.execCfg.Settings.SV,
-	); adminAuditLog {
-		if !ex.extraTxnState.hasAdminRoleCache.IsSet {
-			hasAdminRole, err := ex.planner.HasAdminRole(ctx)
-			if err != nil {
-				return err
-			}
-			ex.extraTxnState.hasAdminRoleCache.HasAdminRole = hasAdminRole
-			ex.extraTxnState.hasAdminRoleCache.IsSet = true
 		}
 	}
 
