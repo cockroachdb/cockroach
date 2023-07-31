@@ -178,7 +178,13 @@ func (s *state) ClusterInfo() ClusterInfo {
 // Stores returns all stores that exist in this state.
 func (s *state) Stores() []Store {
 	stores := make([]Store, 0, len(s.stores))
-	for _, store := range s.stores {
+	keys := make([]StoreID, 0, len(s.stores))
+	for key := range s.stores {
+		keys = append(keys, key)
+	}
+
+	for _, key := range keys {
+		store := s.stores[key]
 		stores = append(stores, store)
 	}
 	sort.Slice(stores, func(i, j int) bool { return stores[i].StoreID() < stores[j].StoreID() })
@@ -344,7 +350,12 @@ func (s *state) Replicas(storeID StoreID) []Replica {
 	}
 
 	repls := make(replicaList, 0, len(store.replicas))
+	var rangeIDs RangeIDSlice
 	for rangeID := range store.replicas {
+		rangeIDs = append(rangeIDs, rangeID)
+	}
+	sort.Sort(rangeIDs)
+	for _, rangeID := range rangeIDs {
 		rng := s.ranges.rangeMap[rangeID]
 		if replica := rng.replicas[storeID]; replica != nil {
 			repls = append(repls, replica)
@@ -1017,7 +1028,13 @@ func (s *state) TickClock(tick time.Time) {
 func (s *state) UpdateStorePool(
 	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetail,
 ) {
-	for gossipStoreID, detail := range storeDescriptors {
+	var storeIDs roachpb.StoreIDSlice
+	for storeIDA := range storeDescriptors {
+		storeIDs = append(storeIDs, storeIDA)
+	}
+	sort.Sort(storeIDs)
+	for _, gossipStoreID := range storeIDs {
+		detail := storeDescriptors[gossipStoreID]
 		copiedDetail := *detail
 		copiedDesc := *detail.Desc
 		copiedDetail.Desc = &copiedDesc
