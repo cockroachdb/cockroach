@@ -27,8 +27,9 @@ func (node *Export) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.FormatNode(node.File)
 	if node.Options != nil {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS(")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(node.Query)
