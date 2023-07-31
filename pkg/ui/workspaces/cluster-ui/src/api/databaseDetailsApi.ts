@@ -354,19 +354,19 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
     createStmt: dbName => {
       return {
         sql: Format(
-          `WITH
-          replicasAndregions as (
-              SELECT
-                r.replicas,
-                ARRAY(SELECT DISTINCT split_part(split_part(unnest(replica_localities),',',1),'=',2)) as regions
-              FROM crdb_internal.tables as t
-                     JOIN %1.crdb_internal.table_spans as s ON s.descriptor_id = t.table_id
-             JOIN crdb_internal.ranges_no_leases as r ON s.start_key < r.end_key AND s.end_key > r.start_key
-           WHERE t.database_name = $1
-          ),
-          unique_replicas AS (SELECT array_agg(distinct(unnest(replicas))) as replicas FROM replicasAndRegions),
-          unique_regions AS (SELECT array_agg(distinct(unnest(regions))) as regions FROM replicasAndRegions)
-          SELECT replicas, regions FROM unique_replicas CROSS JOIN unique_regions`,
+          `WITH replicasAndRegionsPerDbRange AS (
+            SELECT
+              r.replicas,
+              ARRAY(SELECT DISTINCT split_part(split_part(unnest(replica_localities), ',', 1), '=', 2)) AS regions
+            FROM crdb_internal.tables AS t
+                   JOIN %1.crdb_internal.table_spans AS s ON s.descriptor_id = t.table_id
+                   JOIN crdb_internal.ranges_no_leases AS r ON s.start_key < r.end_key AND s.end_key > r.start_key
+            WHERE t.database_name = $1
+          )
+           SELECT
+             array_agg(DISTINCT replica_val) AS replicas,
+             array_agg(DISTINCT region_val) AS regions
+           FROM replicasAndRegionsPerDbRange, unnest(replicas) AS replica_val, unnest(regions) AS region_val`,
           [new Identifier(dbName)],
         ),
         arguments: [dbName],
