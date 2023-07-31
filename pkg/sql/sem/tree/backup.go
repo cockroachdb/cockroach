@@ -111,8 +111,9 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -198,8 +199,15 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.AsOf)
 	}
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
-		ctx.FormatNode(&node.Options)
+		if ctx.HasFlags(FmtHideConstants) {
+			ctx.WriteString(" WITH OPTIONS (")
+			ctx.FormatNode(&node.Options)
+			ctx.WriteString(")")
+		} else {
+			ctx.WriteString(" WITH OPTIONS (")
+			ctx.FormatNode(&node.Options)
+			ctx.WriteString(")")
+		}
 	}
 }
 
@@ -496,9 +504,15 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	}
 
 	if o.ExecutionLocality != nil {
-		maybeAddSep()
-		ctx.WriteString("execution locality = ")
-		ctx.FormatNode(o.ExecutionLocality)
+		if ctx.HasFlags(FmtHideConstants) {
+			maybeAddSep()
+			ctx.WriteString("execution locality = ")
+			ctx.FormatNode(o.ExecutionLocality)
+		} else {
+			maybeAddSep()
+			ctx.WriteString("execution locality = ")
+			ctx.FormatNode(o.ExecutionLocality)
+		}
 	}
 
 	if o.ExperimentalOnline {

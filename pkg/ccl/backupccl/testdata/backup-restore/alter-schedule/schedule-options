@@ -34,8 +34,8 @@ alter backup schedule $fullID set into 'nodelocal://1/example-schedule-2'
 query-sql
 with schedules as (show schedules for backup) select command, backup_type from schedules where id in ($fullID, $incID) order by backup_type asc;
 ----
-BACKUP INTO 'nodelocal://1/example-schedule-2' WITH detached FULL
-BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-2' WITH detached INCREMENTAL
+BACKUP INTO 'nodelocal://1/example-schedule-2' WITH OPTIONS (detached) FULL
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-2' WITH OPTIONS (detached) INCREMENTAL
 
 # Alter the `on_previous_running` schedule option to test that incremental
 # schedules always have their configuration set to wait.
