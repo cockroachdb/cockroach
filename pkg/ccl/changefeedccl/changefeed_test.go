@@ -5155,15 +5155,15 @@ func TestChangefeedDescription(t *testing.T) {
 	}{
 		{
 			create: "CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2",
-			descr:  `CREATE CHANGEFEED FOR TABLE foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
+			descr:  `CREATE CHANGEFEED FOR TABLE foo INTO '` + redactedSink + `' WITH OPTIONS (envelope = 'wrapped', updated)`,
 		},
 		{
 			create: "CREATE CHANGEFEED FOR public.foo INTO $1 WITH updated, envelope = $2",
-			descr:  `CREATE CHANGEFEED FOR TABLE public.foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
+			descr:  `CREATE CHANGEFEED FOR TABLE public.foo INTO '` + redactedSink + `' WITH OPTIONS (envelope = 'wrapped', updated)`,
 		},
 		{
 			create: "CREATE CHANGEFEED FOR d.public.foo INTO $1 WITH updated, envelope = $2",
-			descr:  `CREATE CHANGEFEED FOR TABLE d.public.foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
+			descr:  `CREATE CHANGEFEED FOR TABLE d.public.foo INTO '` + redactedSink + `' WITH OPTIONS (envelope = 'wrapped', updated)`,
 		},
 		{
 			// TODO(#85143): remove schema_change_policy='stop' from this test.

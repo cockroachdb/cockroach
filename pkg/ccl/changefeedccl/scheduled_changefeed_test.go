@@ -194,8 +194,8 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			query: "CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH initial_scan='only' RECURRING '@hourly'",
 			es: expectedSchedule{
 				nameRe:         "CHANGEFEED .+",
-				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH initial_scan = 'only'",
-				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH initial_scan = 'only'",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only')",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (initial_scan = 'only')",
 				period:         time.Hour,
 			},
 		},
@@ -204,7 +204,7 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			query: "CREATE SCHEDULE FOR CHANGEFEED foo INTO 'webhook-https://0/changefeed' WITH initial_scan = 'only' RECURRING '@hourly'",
 			es: expectedSchedule{
 				nameRe:         "CHANGEFEED .+",
-				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed' WITH initial_scan = 'only'",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed' WITH OPTIONS (initial_scan = 'only')",
 				period:         time.Hour,
 			},
 		},
@@ -220,8 +220,8 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			queryArgs: []interface{}{th.env.Now()},
 			es: expectedSchedule{
 				nameRe:         "foo-changefeed",
-				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH format = 'JSON', initial_scan = 'only'",
-				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH format = 'JSON', initial_scan = 'only'",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (format = 'JSON', initial_scan = 'only')",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (format = 'JSON', initial_scan = 'only')",
 				period:         time.Hour,
 				runsNow:        true,
 			},
