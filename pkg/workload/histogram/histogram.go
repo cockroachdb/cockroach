@@ -74,6 +74,8 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 func (w *NamedHistogram) Record(elapsed time.Duration) {
 	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
 		elapsed = minLatency
@@ -81,10 +83,7 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 		elapsed = maxLatency
 	}
 
-	err := w.mu.current.RecordValue(elapsed.Nanoseconds())
-	w.mu.Unlock()
-
-	if err != nil {
+	if err := w.mu.current.RecordValue(elapsed.Nanoseconds()); err != nil {
 		// Note that a histogram only drops recorded values that are out of range,
 		// but we clamp the latency value to the configured range to prevent such
 		// drops. This code path should never happen.
