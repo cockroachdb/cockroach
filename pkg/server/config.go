@@ -689,7 +689,7 @@ func (e *Engines) Close() {
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(
-	ctx context.Context, nodeIDContainer *base.NodeIDContainer,
+	ctx context.Context, nodeIDContainer *base.NodeIDContainer, statsLoaded *atomic.Bool,
 ) (Engines, error) {
 	var engines Engines
 	defer engines.Close()
@@ -759,6 +759,7 @@ func (cfg *Config) CreateEngines(
 					time.Sleep(time.Second)
 				}
 				log.Infof(ctx, "finished loading table stats for all stores")
+				statsLoaded.Store(true)
 			}()
 		}
 	}
