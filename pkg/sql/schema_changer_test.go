@@ -7006,6 +7006,7 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 				jobControlMu.Lock()
 				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 				if err != nil {
+					jobControlMu.Unlock()
 					return err
 				}
 				pl := scJob.Payload()
