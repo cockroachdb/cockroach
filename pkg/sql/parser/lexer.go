@@ -224,7 +224,10 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 		case AS:
 			switch nextToken.id {
 			case OF:
-				lval.id = AS_LA
+				switch secondToken.id {
+				case SYSTEM:
+					lval.id = AS_LA
+				}
 			}
 		case NOT:
 			switch nextToken.id {

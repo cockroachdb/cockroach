@@ -489,6 +489,7 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SELECT 1 ??`, `SELECT`},
 		{`SELECT * FROM ??`, `<SOURCE>`},
+		{`SELECT 1 AS OF ??`, `SELECT`},
 		{`SELECT 1 FROM foo ??`, `SELECT`},
 		{`SELECT 1 FROM foo WHERE ??`, `SELECT`},
 		{`SELECT 1 FROM (SELECT ??`, `SELECT`},
@@ -552,7 +553,7 @@ func TestContextualHelp(t *testing.T) {
 
 		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
 		{`BACKUP DATABASE ??`, `BACKUP`},
-		{`BACKUP foo TO 'bar' AS OF ??`, `BACKUP`},
+		{`BACKUP foo TO 'bar' AS OF SYSTEM ??`, `BACKUP`},
 
 		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
