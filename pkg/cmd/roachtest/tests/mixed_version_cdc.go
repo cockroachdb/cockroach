@@ -36,11 +36,11 @@ import (
 const (
 	// how many resolved timestamps to wait for before considering the
 	// system to be working as intended at a specific version state
-	resolvedTimestampsPerState = 5
+	resolvedTimestampsPerState = 3
 
 	// resolvedInterval is the value passed to the `resolved` option
 	// when creating the changefeed
-	resolvedInterval = "10s"
+	resolvedInterval = "5s"
 )
 
 var (
