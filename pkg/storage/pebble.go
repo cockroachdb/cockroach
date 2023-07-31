@@ -1138,7 +1138,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		p.async(func() { oldDiskSlow(info) })
 	}
 	el := pebble.TeeEventListener(
-		p.makeMetricEtcEventListener(ctx),
+		p.makeMetricEtcEventListener(logCtx),
 		lel,
 	)
 
