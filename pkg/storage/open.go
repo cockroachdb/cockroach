@@ -245,6 +245,13 @@ func If(enable bool, opt ConfigOption) ConfigOption {
 	return func(cfg *engineConfig) error { return nil }
 }
 
+func StatsLoadedFunc(statsLoadedFunc func()) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.StatsLoadedFunc = statsLoadedFunc
+		return nil
+	}
+}
+
 // A Location describes where the storage engine's data will be written. A
 // Location may be in-memory or on the filesystem.
 type Location struct {

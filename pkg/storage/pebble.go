@@ -1138,7 +1138,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		p.async(func() { oldDiskSlow(info) })
 	}
 	el := pebble.TeeEventListener(
-		p.makeMetricEtcEventListener(logCtx),
+		p.makeMetricEtcEventListener(logCtx, cfg.StatsLoadedFunc),
 		lel,
 	)
 
@@ -1268,7 +1268,9 @@ func (p *Pebble) async(fn func()) {
 	}()
 }
 
-func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventListener {
+func (p *Pebble) makeMetricEtcEventListener(
+	ctx context.Context, statsLoadedFunc func(),
+) pebble.EventListener {
 	return pebble.EventListener{
 		BackgroundError: func(err error) {
 			if errors.Is(err, pebble.ErrCorruption) {
@@ -1333,6 +1335,11 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			p.mu.Unlock()
 			if cb != nil {
 				cb()
+			}
+		},
+		TableStatsLoaded: func(_ pebble.TableStatsInfo) {
+			if statsLoadedFunc != nil {
+				statsLoadedFunc()
 			}
 		},
 	}

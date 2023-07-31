@@ -774,6 +774,8 @@ type StorageConfig struct {
 	// through to C CCL code to set up encryption-at-rest.  Must be set if and
 	// only if encryption is enabled, otherwise left empty.
 	EncryptionOptions []byte
+
+	StatsLoadedFunc func()
 }
 
 // IsEncrypted returns whether the StorageConfig has encryption enabled.

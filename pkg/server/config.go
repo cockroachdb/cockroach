@@ -688,7 +688,9 @@ func (e *Engines) Close() {
 }
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
-func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
+func (cfg *Config) CreateEngines(
+	ctx context.Context, nodeIDContainer *base.NodeIDContainer,
+) (Engines, error) {
 	var engines Engines
 	defer engines.Close()
 
@@ -744,6 +746,23 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		storeKnobs = *s.(*kvserver.StoreTestingKnobs)
 	}
 
+	var numStoresWaitingForStats atomic.Int32
+	numStoresWaitingForStats.Store(int32(len(cfg.Stores.Specs)))
+	statsLoadedFunc := func() {
+		remaining := numStoresWaitingForStats.Add(-1)
+		if remaining < 0 {
+			log.Error(ctx, "miscounted number of stores")
+		}
+		if remaining <= 0 {
+			go func() {
+				for nodeIDContainer.Get() == 0 {
+					time.Sleep(time.Second)
+				}
+				log.Infof(ctx, "finished loading table stats for all stores")
+			}()
+		}
+	}
+
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
@@ -773,6 +792,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storage.Attributes(spec.Attributes),
 			storage.EncryptionAtRest(spec.EncryptionOptions),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
+			storage.StatsLoadedFunc(statsLoadedFunc),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
