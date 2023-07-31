@@ -26,6 +26,7 @@ import { Format, Identifier, QualifiedIdentifier } from "./safesql";
 import moment from "moment-timezone";
 import { fromHexString, withTimeout } from "./util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { getLogger } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -264,8 +265,10 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
         );
         resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.DATABASE;
       } catch (e) {
-        console.error(
+        getLogger().error(
           `Database Details API - encountered an error decoding zone config string: ${zoneConfigHexString}`,
+          /* additional context */ undefined,
+          e,
         );
         // Catch and assign the error if we encounter one decoding.
         resp.zoneConfigResp.error = e;
