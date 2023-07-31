@@ -39,6 +39,14 @@ type InstanceInfo struct {
 	BinaryVersion   roachpb.Version
 }
 
+func (ii InstanceInfo) GetInstanceID() base.SQLInstanceID {
+	return ii.InstanceID
+}
+
+func (ii InstanceInfo) GetLocality() roachpb.Locality {
+	return ii.Locality
+}
+
 // SafeFormat implements redact.SafeFormatter.
 func (ii InstanceInfo) SafeFormat(s interfaces.SafePrinter, verb rune) {
 	s.Printf(
