@@ -1025,6 +1025,30 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	return nil
 }
 
+// findOtherServer returns an admin RPC client to another
+// server than the one referred to by the node ID.
+func (c *transientCluster) findOtherServer(
+	ctx context.Context, nodeID int32, op string,
+) (serverpb.AdminClient, func(), error) {
+	// Find a node to use as the sender.
+	var adminClient serverpb.AdminClient
+	var finish func()
+	for _, s := range c.servers {
+		if s.TestServer != nil && s.nodeID != roachpb.NodeID(nodeID) {
+			var err error
+			adminClient, finish, err = c.getAdminClient(ctx, *(s.TestServer.Cfg))
+			if err != nil {
+				return nil, nil, err
+			}
+			break
+		}
+	}
+	if adminClient == nil {
+		return nil, nil, errors.Newf("no other nodes available to send a %s request", op)
+	}
+	return adminClient, finish, nil
+}
+
 // Recommission recommissions a given node.
 func (c *transientCluster) Recommission(ctx context.Context, nodeID int32) error {
 	nodeIndex := int(nodeID - 1)
@@ -1041,14 +1065,14 @@ func (c *transientCluster) Recommission(ctx context.Context, nodeID int32) error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.firstServer.Cfg))
+	// Find a node to use as the sender.
+	adminClient, finish, err := c.findOtherServer(ctx, nodeID, "recommission")
 	if err != nil {
 		return err
 	}
-
 	defer finish()
-	_, err = adminClient.Decommission(ctx, req)
-	if err != nil {
+
+	if _, err = adminClient.Decommission(ctx, req); err != nil {
 		return errors.Wrap(err, "while trying to mark as decommissioning")
 	}
 
@@ -1066,7 +1090,8 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.firstServer.Cfg))
+	// Find a node to use as the sender.
+	adminClient, finish, err := c.findOtherServer(ctx, nodeID, "decommission")
 	if err != nil {
 		return err
 	}
@@ -1080,8 +1105,7 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 			NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 		}
-		_, err = adminClient.Decommission(ctx, req)
-		if err != nil {
+		if _, err := adminClient.Decommission(ctx, req); err != nil {
 			return errors.Wrap(err, "while trying to mark as decommissioning")
 		}
 	}
@@ -1091,8 +1115,7 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 			NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 		}
-		_, err = adminClient.Decommission(ctx, req)
-		if err != nil {
+		if _, err := adminClient.Decommission(ctx, req); err != nil {
 			return errors.Wrap(err, "while trying to mark as decommissioned")
 		}
 	}
