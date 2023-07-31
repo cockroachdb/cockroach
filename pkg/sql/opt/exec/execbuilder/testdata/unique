@@ -5032,4 +5032,79 @@ vectorized: true
                   label: buffer 1
 
 statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT,
+  UNIQUE (r, a),
+  UNIQUE WITHOUT INDEX (a) WHERE k != 1,
+  CHECK (r IN ('east', 'west'))
+)
+
+# This case could theoretically use insert fast path , but we currently don't
+# out of an abundance of caution because there's a SelectExpr with a filter
+# which isn't the internally-generated primary key inequality check.
+query T
+EXPLAIN
+INSERT INTO t VALUES (3, 'east', 10, 100)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: t(k, r, a, b)
+│   │
+│   └── • values
+│         size: 5 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • cross join
+            │
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • limit
+                │ count: 1
+                │
+                └── • filter
+                    │ filter: (k != 1) AND (k != 3)
+                    │
+                    └── • scan
+                          missing stats
+                          table: t@t_r_a_key
+                          spans: [/'east'/10 - /'east'/10] [/'west'/10 - /'west'/10]
+
+statement ok
+CREATE TABLE tt (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT,
+  UNIQUE (r, a) WHERE k != 1,
+  UNIQUE WITHOUT INDEX (a) WHERE k != 1,
+  CHECK (r IN ('east', 'west'))
+)
+
+# This case can use insert fast path because the k != 2 predicate used in the
+# uniqueness check is an internally-generated primary key inequality check.
+query T
+EXPLAIN
+INSERT INTO tt VALUES (2, 'east', 10, 100)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: tt(k, r, a, b)
+  auto commit
+  uniqueness check: tt@tt_r_a_key
+  size: 6 columns, 1 row
+
+statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = false
