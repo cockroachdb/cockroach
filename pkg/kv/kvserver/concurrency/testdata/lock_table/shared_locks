@@ -38,6 +38,15 @@ scan r=req3
 ----
 start-waiting: false
 
+# Another shared locking request should be able to acquire a joint claim as
+# well.
+new-request r=req4 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req4
+----
+start-waiting: false
+
 print
 ----
 num=1
@@ -45,6 +54,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
    queued writers:
     active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000002
 
 # TODO(arul): This is currently a limitation of the lock table, as it doesn't
 # allow multiple locks on a single key from different transactions.
@@ -52,38 +62,14 @@ acquire r=req3 k=a durability=u strength=shared
 ----
 existing lock cannot be acquired by different transaction
 
-new-request r=req4 txn=txn2 ts=10 spans=exclusive@a
-----
-
-scan r=req4
-----
-start-waiting: true
-
-new-request r=req5 txn=txn2 ts=10 spans=intent@a
+new-request r=req5 txn=txn2 ts=10 spans=exclusive@a
 ----
 
 scan r=req5
 ----
 start-waiting: true
 
-print
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
-
-# ------------------------------------------------------------------------------
-# Ensure requests with locking strength shared actively wait if there are active
-# waiters with conflicting lock strengths (even though the lock itself is
-# compatible with the shared lock request).
-# ------------------------------------------------------------------------------
-
-new-request r=req6 txn=txn2 ts=10 spans=shared@a
+new-request r=req6 txn=txn2 ts=10 spans=intent@a
 ----
 
 scan r=req6
@@ -97,7 +83,33 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
    queued writers:
     active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 5, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
+   distinguished req: 4
+
+# ------------------------------------------------------------------------------
+# Ensure requests with locking strength shared actively wait if there are active
+# waiters with conflicting lock strengths (even though the lock itself is
+# compatible with the shared lock request).
+# ------------------------------------------------------------------------------
+
+new-request r=req7 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req7
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+   queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4

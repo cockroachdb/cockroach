@@ -919,6 +919,7 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) {
 // and non-transactional requests.
 type queuedGuard struct {
 	guard  *lockTableGuardImpl
+	mode   lock.Mode
 	active bool // protected by lockState.mu
 }
 
@@ -2201,6 +2202,7 @@ func (l *lockState) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 	}
 	qg := &queuedGuard{
 		guard:  g,
+		mode:   g.curLockMode(),
 		active: true,
 	}
 	// The request isn't in the queue. Add it in the correct position, based on
@@ -2281,13 +2283,7 @@ func (l *lockState) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 			// conflicting waiters; no need to actively wait here.
 			return false
 		}
-		// TODO(arul): Inactive waiters will need to capture the strength at which
-		// they're trying to acquire a lock in their queuedGuard. We can't simply
-		// use the guard's curStrength (or curLockMode) -- inactive waiters may have
-		// mutated these values as they scan. For now, we can just use the intent
-		// lock mode as that's the only lock strength supported by the lock table.
-		waiterLockMode := lock.MakeModeIntent(qqg.guard.ts)
-		if lock.Conflicts(waiterLockMode, g.curLockMode(), &g.lt.settings.SV) {
+		if lock.Conflicts(qqg.mode, g.curLockMode(), &g.lt.settings.SV) {
 			return true
 		}
 	}
@@ -2688,9 +2684,23 @@ func (l *lockState) discoveredLock(
 		g.mu.Unlock()
 
 		if !presentHere {
+			var m lock.Mode
+			switch accessStrength {
+			case lock.None:
+				panic("cannot add non-locking request to the list of queuedWriters")
+			case lock.Shared:
+				m = lock.MakeModeShared()
+			case lock.Exclusive:
+				m = lock.MakeModeExclusive(g.ts, g.txn.IsoLevel)
+			case lock.Intent:
+				m = lock.MakeModeIntent(g.ts)
+			default:
+				panic(fmt.Sprintf("unhandled request strength: %s", g.curStrength()))
+			}
 			// Put self in queue as inactive waiter.
 			qg := &queuedGuard{
 				guard:  g,
+				mode:   m,
 				active: false,
 			}
 			// g is not necessarily first in the queue in the (rare) case (a) above.
