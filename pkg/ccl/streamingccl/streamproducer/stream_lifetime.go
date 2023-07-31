@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -189,7 +188,7 @@ func heartbeatReplicationStream(
 	// job progress.
 	if frontier == hlc.MaxTimestamp {
 		var status streampb.StreamReplicationStatus
-		pj, err := execConfig.JobRegistry.LoadJob(ctx, jobspb.JobID(streamID))
+		pj, err := execConfig.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 		if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
 			status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
 			return status, nil
@@ -220,11 +219,11 @@ func heartbeatReplicationStream(
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
 func getReplicationStreamSpec(
-	ctx context.Context, evalCtx *eval.Context, streamID streampb.StreamID,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
-	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(ctx, jobspb.JobID(streamID))
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 	if err != nil {
 		return nil, errors.Wrapf(err, "replication stream %d has error", streamID)
 	}
@@ -335,11 +334,10 @@ func setupSpanConfigsStream(
 	if err != nil {
 		return nil, err
 	}
-
 	tenantID := roachpb.MustMakeTenantID(tenantRecord.ID)
-
 	var spanConfigID descpb.ID
 	execConfig := eval.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+
 	if err := sql.DescsTxn(ctx, execConfig, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		g := col.ByName(txn.KV()).Get()
 		_, imm, err := descs.PrefixAndTable(ctx, g, systemschema.SpanConfigurationsTableName)
@@ -351,8 +349,7 @@ func setupSpanConfigsStream(
 	}); err != nil {
 		return nil, err
 	}
-	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
-	spanConfigKey := codec.TablePrefix(uint32(spanConfigID))
+	spanConfigKey := eval.Codec.TablePrefix(uint32(spanConfigID))
 
 	// TODO(msbutler): crop this span to the keyspan within the span config
 	// table relevant to this specific tenant once I teach the client.Subscribe()

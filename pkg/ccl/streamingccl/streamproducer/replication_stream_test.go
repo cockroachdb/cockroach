@@ -235,10 +235,7 @@ func TestSpanConfigReplicationStreamSetup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	serverArgs := base.TestServerArgs{
-		// This test fails when run from within a test tenant. This is likely
-		// due to the lack of support for tenant streaming, but more
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -247,8 +244,7 @@ func TestSpanConfigReplicationStreamSetup(t *testing.T) {
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
-	_, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
-	defer cleanupTenant()
+	h.SysSQL.Exec(t, "CREATE TENANT $1", testTenantName)
 	specs := h.SetupSpanConfigsReplicationStream(t, testTenantName)
 
 	var spanConfigTableID uint32

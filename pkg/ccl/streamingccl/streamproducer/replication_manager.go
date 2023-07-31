@@ -55,7 +55,7 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
 	ctx context.Context, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
-	return getReplicationStreamSpec(ctx, r.evalCtx, streamID)
+	return getReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
 }
 
 // CompleteReplicationStream implements ReplicationStreamManager interface.

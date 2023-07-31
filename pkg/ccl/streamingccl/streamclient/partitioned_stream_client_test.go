@@ -65,9 +65,7 @@ func TestPartitionedSpanConfigReplicationClient(t *testing.T) {
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
-			// Need to disable the test tenant until tenant-level restore is
-			// supported. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
