@@ -843,3 +843,22 @@ RESET large_full_scan_rows;
 # Regression test for #58104.
 statement ok
 SELECT * FROM pg_catalog.pg_attrdef WHERE (adnum = 1 AND adrelid = 1) OR (adbin = 'foo' AND adrelid = 2)
+
+# Tests with SELECT AS clause.
+statement ok
+CREATE TABLE t(a INT, b INT);
+
+statement ok
+INSERT INTO t values(10, 20);
+
+query I colnames
+SELECT -488 AS OF FROM t;
+----
+of
+-488
+
+query I colnames
+SELECT -488 OF FROM t;
+----
+of
+-488

@@ -27,6 +27,7 @@ func TestLexer(t *testing.T) {
 		{`NOT IN`, []int{NOT_LA, IN}},
 		{`NOT SIMILAR`, []int{NOT_LA, SIMILAR}},
 		{`AS OF SYSTEM TIME`, []int{AS_LA, OF, SYSTEM, TIME}},
+		{`AS OF`, []int{AS, OF}},
 	}
 	for i, d := range testData {
 		s := makeSQLScanner(d.sql)
