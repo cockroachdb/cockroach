@@ -152,3 +152,54 @@ func TestLatestPredecessorHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestLatestPredecessorHistoryAfterVersion(t *testing.T) {
+	testCases := []struct {
+		name            string
+		v               string
+		major           int
+		minor           int
+		expectedErr     string
+		expectedHistory []string
+	}{
+		{
+			name:        "not enough history",
+			v:           "v22.1.8",
+			major:       19,
+			minor:       1,
+			expectedErr: `no known predecessor for "v19.2.0" ("19.2" series)`,
+		},
+		{
+			name:            "valid history",
+			v:               "v23.1.1",
+			major:           19,
+			minor:           2,
+			expectedHistory: []string{"19.2.0", "22.1.12", "22.2.8"},
+		},
+		{
+			name:            "with pre-release",
+			v:               "v23.1.1-beta.1",
+			major:           22,
+			minor:           1,
+			expectedHistory: []string{"22.1.12", "22.2.8"},
+		},
+	}
+
+	for _, tc := range testCases {
+		oldReleaseData := releaseData
+		releaseData = testReleaseData
+		defer func() { releaseData = oldReleaseData }()
+
+		t.Run(tc.name, func(t *testing.T) {
+			latestHistory, latestErr := LatestPredecessorHistoryAfterVersion(version.MustParse(tc.v), tc.major, tc.minor)
+			if tc.expectedErr == "" {
+				require.NoError(t, latestErr)
+			} else {
+				require.Contains(t, latestErr.Error(), tc.expectedErr)
+				return
+			}
+
+			require.Equal(t, tc.expectedHistory, latestHistory)
+		})
+	}
+}
