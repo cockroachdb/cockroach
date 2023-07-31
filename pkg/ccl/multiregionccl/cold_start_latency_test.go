@@ -78,7 +78,8 @@ func TestColdStartLatency(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		args := base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// This test creates a tenant explicitly below.
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Locality:          localities[i],
 		}
 		signalAfter[i] = make(chan struct{})

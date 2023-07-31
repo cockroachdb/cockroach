@@ -152,12 +152,6 @@ func TestMultiRegionDataDriven(t *testing.T) {
 					}
 					serverArgs[i] = base.TestServerArgs{
 						Locality: localityCfg,
-						// We need to disable the default test tenant here
-						// because it appears as though operations like
-						// "wait-for-zone-config-changes" only work correctly
-						// when called from the system tenant. More
-						// investigation is required (tracked with #76378).
-						DefaultTestTenant: base.TODOTestTenantDisabled,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
@@ -185,13 +179,28 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				// we can use follower_read_timestamp(). follower_read_timestamp() uses
 				// sum of the following settings.
 				for _, stmt := range strings.Split(`
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';
-SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms';
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms';
 SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 `,
 					";") {
 					_, err = sqlConn.Exec(stmt)
 					if err != nil {
+						return err.Error()
+					}
+				}
+
+				// Set the cluster setting to enable secondary tenants to use
+				// the multi-region SQL abstractions.
+				scConn := tc.StorageClusterConn()
+				for _, tenantStmt := range strings.Split(`
+ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true;
+ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms';
+ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms';
+ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
+`,
+					";") {
+					if _, err := scConn.Exec(tenantStmt); err != nil {
 						return err.Error()
 					}
 				}
@@ -295,7 +304,8 @@ SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 					return err.Error()
 				}
 				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
+				codec := ds.tc.Server(idx).TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).Codec
+				tablePrefix := keys.MustAddr(codec.TablePrefix(tableID))
 				entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
 				if entry == nil {
 					return errors.Newf("no entry found for %s in cache", tbName).Error()
@@ -737,7 +747,7 @@ func getRangeKeyForInput(
 	var db string
 	d.ScanArgs(t, dbName, &db)
 
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.Server(0).TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
 
 	tableDesc, err := lookupTable(&execCfg, db, tbName)
 	if err != nil {
@@ -745,7 +755,7 @@ func getRangeKeyForInput(
 	}
 
 	if !d.HasArg(partitionName) {
-		return tableDesc.TableSpan(keys.SystemSQLCodec).Key, nil
+		return tableDesc.TableSpan(execCfg.Codec).Key, nil
 	}
 
 	var partition string
@@ -775,7 +785,8 @@ func getRangeKeyForInput(
 
 	_, keyPrefix, err := rowenc.DecodePartitionTuple(
 		&tree.DatumAlloc{},
-		keys.SystemSQLCodec,
+		//keys.SystemSQLCodec,
+		execCfg.Codec,
 		tableDesc,
 		primaryInd,
 		part,
