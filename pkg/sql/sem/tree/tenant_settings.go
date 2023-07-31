@@ -47,7 +47,14 @@ type ShowTenantClusterSetting struct {
 func (node *ShowTenantClusterSetting) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ShowClusterSetting)
 	ctx.WriteString(" FOR TENANT ")
+	_, canOmitParentheses := node.TenantID.(alreadyDelimitedAsSyntacticDExpr)
+	if !canOmitParentheses {
+		ctx.WriteByte('(')
+	}
 	ctx.FormatNode(node.TenantID)
+	if !canOmitParentheses {
+		ctx.WriteByte(')')
+	}
 }
 
 // ShowTenantClusterSettingList represents a SHOW CLUSTER SETTINGS FOR TENANT statement.
