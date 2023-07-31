@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 	mysql "vitess.io/vitess/go/vt/sqlparser"
 )
 
@@ -356,6 +357,8 @@ func TestMysqlValueToDatum(t *testing.T) {
 		}
 		return d
 	}
+	asdfCS, err := tree.NewDCollatedString("Asdf", "en_US", &tree.CollationEnvironment{})
+	require.NoError(t, err)
 	tests := []struct {
 		raw  mysql.Expr
 		typ  *types.T
@@ -363,6 +366,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	}{
 		{raw: mysql.NewStrLiteral([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},
 		{raw: mysql.NewStrLiteral([]byte("2010-01-01")), typ: types.Date, want: date("2010-01-01")},
+		{raw: mysql.NewStrLiteral([]byte("Asdf")), typ: types.MakeCollatedString(types.String, "en_US"), want: asdfCS},
 		{raw: mysql.NewStrLiteral([]byte("0000-00-00 00:00:00")), typ: types.Timestamp, want: tree.DNull},
 		{raw: mysql.NewStrLiteral([]byte("2010-01-01 00:00:00")), typ: types.Timestamp, want: ts("2010-01-01 00:00:00")},
 	}
