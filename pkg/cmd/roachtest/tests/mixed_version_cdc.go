@@ -49,8 +49,6 @@ var (
 	targetDB    = "bank"
 	targetTable = "bank"
 
-	timeout = 30 * time.Minute
-
 	// teamcityAgentZone is the zone used in this test. Since this test
 	// runs a lot of queries from the TeamCity agent to CRDB nodes, we
 	// make sure to create roachprod nodes that are in the same region
@@ -67,14 +65,25 @@ func registerCDCMixedVersions(r registry.Registry) {
 		zones = teamcityAgentZone
 	}
 	r.Add(registry.TestSpec{
-		Name:  "cdc/mixed-versions",
+		Name:  "cdc/mixed-versions-single-upgrade",
 		Owner: registry.OwnerTestEng,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
 		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
-		Timeout:         timeout,
+		Timeout:         30 * time.Minute,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCMixedVersions(ctx, t, c, t.BuildVersion())
+			runCDCMixedVersions(ctx, t, c, t.BuildVersion(), true)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:  "cdc/mixed-versions-multiple-upgrades",
+		Owner: registry.OwnerTestEng,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
+		Timeout:         90 * time.Minute,
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCMixedVersions(ctx, t, c, t.BuildVersion(), false)
 		},
 	})
 }
@@ -352,12 +361,34 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(node int) versionStep {
 	}
 }
 
+// runCDCMixedVersions creates a cluster with a changefeed and upgrades it
+// to the current version. While doing so, it asserts that the changefeed is
+// running the entire time.
+//
+// If singlePredecessor is true, this will perform one upgrade starting from the
+// preceding major version before buildVersion. Otherwise, it will start from
+// 4 versions in the past (or v22.2 - taking whichever starting point is more recent)
+// and perform as many upgrades as needed to reach the current version.
 func runCDCMixedVersions(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion *version.Version,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	buildVersion *version.Version,
+	singlePredecessor bool,
 ) {
-	predecessorVersion, err := release.LatestPredecessor(buildVersion)
-	if err != nil {
-		t.Fatal(err)
+	var predecessorVersions []string
+	var err error
+	if singlePredecessor {
+		predecessorVersion, err := release.LatestPredecessor(buildVersion)
+		if err != nil {
+			t.Fatal(err)
+		}
+		predecessorVersions = append(predecessorVersions, predecessorVersion)
+	} else {
+		predecessorVersions, err = release.LatestPredecessorHistory(buildVersion, 4, version.MustParse("v22.2.0"))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tester := newCDCMixedVersionTester(ctx, t, c)
@@ -374,41 +405,71 @@ func runCDCMixedVersions(
 		return tester.crdbNodes[rng.Intn(len(tester.crdbNodes))]
 	}
 
-	newVersionUpgradeTest(c,
-		uploadAndStartFromCheckpointFixture(tester.crdbNodes, predecessorVersion),
+	// This returns an array of steps which do the following:
+	// - start a rolling upgrade to nextVersion
+	// - rollback the upgrade to curVersion
+	// - restart the rolling upgrade to nextVersion
+	// - finalize the upgrade to nextVersion
+	// NB: This does not check if the two versions are valid for an upgrade
+	// to take place.
+	simpleUpgradeStep := func(curVersion, nextVersion string) []versionStep {
+		return []versionStep{
+			preventAutoUpgradeStep(sqlNode()),
+
+			// Roll the nodes into the new version one by one in random order.
+			tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, nextVersion)),
+
+			// Let the workload run for a while.
+			tester.waitForResolvedTimestamps(),
+			tester.assertValid(),
+
+			// Roll back again, which ought to be fine because the cluster upgrade was
+			// not finalized.
+			tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, curVersion)),
+
+			tester.waitForResolvedTimestamps(),
+			tester.assertValid(),
+
+			// Roll the nodes into the new version one by one in random order.
+			tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, nextVersion)),
+
+			// Let the workload run for a while.
+			tester.waitForResolvedTimestamps(),
+			tester.assertValid(),
+
+			// Allow cluster version to update completely.
+			allowAutoUpgradeStep(sqlNode()),
+			waitForUpgradeStep(tester.crdbNodes),
+
+			// Let the workload run for a while.
+			tester.waitForResolvedTimestamps(),
+			tester.assertValid(),
+		}
+	}
+
+	// Initialize the cluster, workload, and changefeed.
+	steps := []versionStep{
+		uploadAndStartFromCheckpointFixture(tester.crdbNodes, predecessorVersions[0]),
 		tester.setupVerifier(sqlNode()),
 		tester.installAndStartWorkload(),
 		waitForUpgradeStep(tester.crdbNodes),
 
 		// NB: at this point, cluster and binary version equal predecessorVersion,
 		// and auto-upgrades are on.
-		preventAutoUpgradeStep(sqlNode()),
+
+		// Create the changefeed and wait for it to start.
 		tester.createChangeFeed(sqlNode()),
-
 		tester.waitForResolvedTimestamps(),
-		// Roll the nodes into the new version one by one in random order
-		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, clusterupgrade.MainVersion)),
-		// let the workload run in the new version for a while
-		tester.waitForResolvedTimestamps(),
+	}
+	// Perform rolling upgrades.
+	for i := 1; i < len(predecessorVersions); i++ {
+		steps = append(steps, simpleUpgradeStep(predecessorVersions[i-1], predecessorVersions[i])...)
+	}
+	// Upgrade to the current version.
+	steps = append(steps, simpleUpgradeStep(predecessorVersions[len(predecessorVersions)-1], clusterupgrade.MainVersion)...)
+	// Finish the test.
+	steps = append(steps, tester.finishTest())
+	steps = append(steps, tester.assertValid())
 
-		tester.assertValid(),
-
-		// Roll back again, which ought to be fine because the cluster upgrade was
-		// not finalized.
-		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, predecessorVersion)),
-		tester.waitForResolvedTimestamps(),
-
-		tester.assertValid(),
-
-		// Roll nodes forward and finalize upgrade.
-		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, clusterupgrade.MainVersion)),
-
-		// allow cluster version to update
-		allowAutoUpgradeStep(sqlNode()),
-		waitForUpgradeStep(tester.crdbNodes),
-
-		tester.waitForResolvedTimestamps(),
-		tester.finishTest(),
-		tester.assertValid(),
-	).run(ctx, t)
+	newVersionUpgradeTest(c, steps...).run(ctx, t)
 }
