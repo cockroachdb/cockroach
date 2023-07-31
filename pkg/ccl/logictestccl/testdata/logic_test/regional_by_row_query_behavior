@@ -1528,112 +1528,14 @@ query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
 ·
-• root
-│
-├── • insert
-│   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
-│   │
-│   └── • values
-│         size: 8 columns, 1 row
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • cross join
-│           │
-│           ├── • values
-│           │     size: 1 column, 1 row
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: regional_by_row_table@regional_by_row_table_pkey
-│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
-│                 limit: 1
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • cross join
-│           │
-│           ├── • values
-│           │     size: 1 column, 1 row
-│           │
-│           └── • limit
-│               │ count: 1
-│               │
-│               └── • filter
-│                   │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-│                   │
-│                   └── • union all
-│                       │ limit: 3
-│                       │
-│                       ├── • scan
-│                       │     missing stats
-│                       │     table: regional_by_row_table@regional_by_row_table_b_key
-│                       │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
-│                       │
-│                       └── • scan
-│                             missing stats
-│                             table: regional_by_row_table@regional_by_row_table_b_key
-│                             spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • cross join
-│           │
-│           ├── • values
-│           │     size: 1 column, 1 row
-│           │
-│           └── • index join
-│               │ table: regional_by_row_table@regional_by_row_table_pkey
-│               │
-│               └── • limit
-│                   │ count: 1
-│                   │
-│                   └── • filter
-│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-│                       │
-│                       └── • union all
-│                           │ limit: 3
-│                           │
-│                           ├── • scan
-│                           │     missing stats
-│                           │     table: regional_by_row_table@uniq_idx (partial index)
-│                           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
-│                           │
-│                           └── • scan
-│                                 missing stats
-│                                 table: regional_by_row_table@uniq_idx (partial index)
-│                                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • cross join (semi)
-            │
-            ├── • values
-            │     size: 2 columns, 1 row
-            │
-            └── • filter
-                │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-                │
-                └── • union all
-                    │ limit: 3
-                    │
-                    ├── • scan
-                    │     missing stats
-                    │     table: regional_by_row_table@new_idx
-                    │     spans: [/'ap-southeast-2'/1/1 - /'ap-southeast-2'/1/1]
-                    │
-                    └── • scan
-                          missing stats
-                          table: regional_by_row_table@new_idx
-                          spans: [/'ca-central-1'/1/1 - /'ca-central-1'/1/1] [/'us-east-1'/1/1 - /'us-east-1'/1/1]
+• insert fast path
+  into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+  auto commit
+  uniqueness check: regional_by_row_table@regional_by_row_table_pkey
+  uniqueness check: regional_by_row_table@regional_by_row_table_b_key
+  uniqueness check: regional_by_row_table@uniq_idx
+  uniqueness check: regional_by_row_table@new_idx
+  size: 8 columns, 1 row
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(3\) already exists\.
 INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)
@@ -1896,41 +1798,11 @@ query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
-• root
-│
-├── • insert
-│   │ into: regional_by_row_table_as(pk, a, b, crdb_region_col)
-│   │
-│   └── • values
-│         size: 5 columns, 1 row
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • cross join
-            │
-            ├── • values
-            │     size: 1 column, 1 row
-            │
-            └── • limit
-                │ count: 1
-                │
-                └── • filter
-                    │ filter: (pk != 1) OR (crdb_region_col != 'us-east-1')
-                    │
-                    └── • union all
-                        │ limit: 3
-                        │
-                        ├── • scan
-                        │     missing stats
-                        │     table: regional_by_row_table_as@regional_by_row_table_as_b_key
-                        │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
-                        │
-                        └── • scan
-                              missing stats
-                              table: regional_by_row_table_as@regional_by_row_table_as_b_key
-                              spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+• insert fast path
+  into: regional_by_row_table_as(pk, a, b, crdb_region_col)
+  auto commit
+  uniqueness check: regional_by_row_table_as@regional_by_row_table_as_b_key
+  size: 5 columns, 1 row
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_pkey"\nDETAIL: Key \(pk\)=\(1\) already exists\.
 INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
