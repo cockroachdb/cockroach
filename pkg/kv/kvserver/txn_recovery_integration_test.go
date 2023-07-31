@@ -372,20 +372,6 @@ func TestTxnRecoveryFromStagingWithoutHighPriority(t *testing.T) {
 			pErrC <- pErr
 		}))
 
-		// If the pushee is not serializable and the pusher is reading, we
-		// currently expect the conflicting operation to immediately succeed,
-		// sometimes with an error, sometimes not. See #105330.
-		if pusheeIsoLevel.ToleratesWriteSkew() && !pusherWriting {
-			pErr = <-pErrC
-			if pusheeCommits {
-				require.Nil(t, pErr, "error: %s", pErr)
-			} else {
-				require.NotNil(t, pErr)
-				require.Regexp(t, "failed to push", pErr)
-			}
-			return
-		}
-
 		// Wait for the conflict to push and be queued in the txn wait queue.
 		testutils.SucceedsSoon(t, func() error {
 			select {
