@@ -6954,6 +6954,8 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+
+	// jobControlMu guards changes to the shared delayJobChannels array.
 	var jobControlMu syncutil.Mutex
 	var delayJobList []string
 	var delayJobChannels []chan struct{}
@@ -6965,10 +6967,14 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
+				// We cannot use defer jobControlMu.Unlock within this routine
+				// as we need to unlock the jobControlMu conditionally prior to waiting on
+				// `channel` below.
 				lockHeld := true
 				jobControlMu.Lock()
 				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 				if err != nil {
+					jobControlMu.Unlock()
 					return err
 				}
 				pl := scJob.Payload()
