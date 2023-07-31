@@ -747,10 +747,11 @@ func (c *cluster) PushTransaction(
 		pusheeTxn, pusheeRecordSig := pusheeRecord.asTxn()
 		pusheeIso := pusheeTxn.IsoLevel
 		pusheePri := pusheeTxn.Priority
+		pusheeStatus := pusheeTxn.Status
 		// NOTE: this logic is adapted from cmd_push_txn.go.
 		var pusherWins bool
 		switch {
-		case pusheeTxn.Status.IsFinalized():
+		case pusheeStatus.IsFinalized():
 			// Already finalized.
 			return pusheeTxn, nil
 		case pushType == kvpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
@@ -758,7 +759,7 @@ func (c *cluster) PushTransaction(
 			return pusheeTxn, nil
 		case pushType == kvpb.PUSH_TOUCH:
 			pusherWins = false
-		case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri):
+		case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri, pusheeStatus):
 			pusherWins = true
 		default:
 			pusherWins = false

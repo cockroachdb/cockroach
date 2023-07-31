@@ -773,7 +773,7 @@ func (r *Replica) handleTransactionPushError(
 	dontRetry := r.store.cfg.TestingKnobs.DontRetryPushTxnFailures
 	if !dontRetry && ba.IsSinglePushTxnRequest() {
 		pushReq := ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
-		dontRetry = txnwait.ShouldPushImmediately(pushReq)
+		dontRetry = txnwait.ShouldPushImmediately(pushReq, t.PusheeTxn.Status)
 	}
 	if dontRetry {
 		return g, pErr
