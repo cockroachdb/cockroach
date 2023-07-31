@@ -263,6 +263,14 @@ SHOW PUBLIC CLUSTER SETTINGS FOR TENANT $1 -- literals removed
 SHOW PUBLIC CLUSTER SETTINGS FOR TENANT $1 -- identifiers removed
 
 parse
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT INTERVAL 'string' DAY TO HOUR
+----
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT ('string'::INTERVAL DAY TO HOUR) -- normalized!
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT ((('string')::INTERVAL DAY TO HOUR)) -- fully parenthesized
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT ('_'::INTERVAL DAY TO HOUR) -- literals removed
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT ('string'::INTERVAL DAY TO HOUR) -- identifiers removed
+
+parse
 SHOW CLUSTER SETTING a FOR TENANT INTERVAL 'string' MONTH
 ----
 SHOW CLUSTER SETTING a FOR TENANT ('string'::INTERVAL MONTH) -- normalized!
@@ -977,6 +985,14 @@ SHOW STATISTICS FOR TABLE d.t
 SHOW STATISTICS FOR TABLE d.t -- fully parenthesized
 SHOW STATISTICS FOR TABLE d.t -- literals removed
 SHOW STATISTICS FOR TABLE _._ -- identifiers removed
+
+parse
+SHOW STATISTICS FOR TABLE d.t WITH OPTIONS (BUCKET_COUNT, SETTING, 'string', 'string' = LOW)
+----
+SHOW STATISTICS FOR TABLE d.t WITH OPTIONS (bucket_count, setting, "string", "string" = 'low') -- normalized!
+SHOW STATISTICS FOR TABLE d.t WITH OPTIONS (bucket_count, setting, "string", "string" = ('low')) -- fully parenthesized
+SHOW STATISTICS FOR TABLE d.t WITH OPTIONS (bucket_count, setting, "string", "string" = '_') -- literals removed
+SHOW STATISTICS FOR TABLE _._ WITH OPTIONS (_, _, _, _ = 'low') -- identifiers removed
 
 parse
 SHOW HISTOGRAM 123

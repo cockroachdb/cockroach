@@ -2281,7 +2281,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			// This returns different errors for `make test` and `make testrace` but
 			// field is in both error messages.
 			`field`,
@@ -2291,7 +2291,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.files,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"gzip: invalid header",
 		},
 		{
@@ -3123,7 +3123,7 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-no-decompress-gzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			// This returns different errors for `make test` and `make testrace` but
 			// field is in both error messages.
 			"field",
@@ -3132,21 +3132,21 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-no-decompress-gzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.files,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"gzip: invalid header",
 		},
 		{
 			"import-no-files-match-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			[]string{`'nodelocal://0/data-[0-9][0-9]*'`},
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			`pq: no files matched`,
 		},
 		{
 			"import-into-no-glob-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH disable_glob_matching`,
 			testFiles.filesUsingWildcard,
-			` WITH disable_glob_matching`,
+			` WITH OPTIONS (disable_glob_matching)`,
 			"pq: (.+)no such file or directory: nodelocal storage file does not exist:",
 		},
 	} {

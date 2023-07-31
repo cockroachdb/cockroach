@@ -23,6 +23,14 @@ EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO '_' -- literals removed
 EXPLAIN CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
 
 parse
+EXPERIMENTAL CHANGEFEED FOR TABLE foo WITH OPTIONS (BUCKET_COUNT = 'string', 'string')
+----
+EXPERIMENTAL CHANGEFEED FOR TABLE foo WITH OPTIONS (bucket_count = 'string', "string") -- normalized!
+EXPERIMENTAL CHANGEFEED FOR TABLE (foo) WITH OPTIONS (bucket_count = ('string'), "string") -- fully parenthesized
+EXPERIMENTAL CHANGEFEED FOR TABLE foo WITH OPTIONS (bucket_count = '_', "string") -- literals removed
+EXPERIMENTAL CHANGEFEED FOR TABLE _ WITH OPTIONS (_ = 'string', _) -- identifiers removed
+
+parse
 CREATE CHANGEFEED FOR foo INTO 'sink'
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- normalized!
@@ -62,10 +70,10 @@ CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
 parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
 ----
-CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthesized
-CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH bar = '_' -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH _ = 'baz' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH OPTIONS (bar = 'baz') -- normalized!
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH OPTIONS (bar = ('baz')) -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH OPTIONS (bar = '_') -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH OPTIONS (_ = 'baz') -- identifiers removed
 
 parse
 CREATE CHANGEFEED AS SELECT * FROM foo

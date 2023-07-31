@@ -766,8 +766,9 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 	ctx.WriteString("FOR TABLE ")
 	ctx.FormatNode(node.Table)
 	if len(node.Options) > 0 {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
