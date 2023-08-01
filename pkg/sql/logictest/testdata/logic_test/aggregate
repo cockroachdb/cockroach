@@ -1266,12 +1266,10 @@ CREATE TABLE ab (
   b INT,
   FAMILY (a),
   FAMILY (b)
-)
-
-statement ok
+);
 INSERT INTO ab(a,b) VALUES (1,2), (3,4);
-  CREATE TABLE xy(x STRING, y STRING);
-  INSERT INTO xy(x, y) VALUES ('a', 'b'), ('c', 'd')
+CREATE TABLE xy(x STRING, y STRING);
+INSERT INTO xy(x, y) VALUES ('a', 'b'), ('c', 'd')
 
 # Grouping and rendering tuples.
 query T rowsort

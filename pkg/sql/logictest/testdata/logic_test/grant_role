@@ -69,6 +69,8 @@ parent1    child1  false
 
 statement ok
 SET ROLE grantor;
+
+statement ok
 REVOKE parent1 FROM child1;
 RESET ROLE
 
@@ -99,6 +101,8 @@ parent2    grantor  true
 
 statement ok
 SET ROLE grantor;
+
+statement ok
 REVOKE parent2 FROM child2;
 RESET ROLE
 
@@ -113,6 +117,8 @@ GRANT transitiveadmin TO child2
 
 statement ok
 RESET ROLE;
+
+statement ok
 GRANT transitiveadmin TO grantor;
 SET ROLE grantor
 
@@ -121,6 +127,8 @@ GRANT transitiveadmin TO child2
 
 statement ok
 RESET ROLE;
+
+statement ok
 GRANT transitiveadmin TO grantor WITH ADMIN OPTION;
 SET ROLE grantor
 
@@ -130,6 +138,8 @@ GRANT transitiveadmin TO child2
 
 statement ok
 RESET ROLE;
+
+statement ok
 REVOKE transitiveadmin FROM grantor;
 REVOKE transitiveadmin FROM child2;
 GRANT admin TO grantor WITH ADMIN OPTION
@@ -140,6 +150,8 @@ GRANT transitiveadmin TO child2
 
 statement ok
 RESET ROLE;
+
+statement ok
 REVOKE admin FROM grantor;
 REVOKE transitiveadmin FROM child2
 

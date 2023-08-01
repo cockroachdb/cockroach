@@ -39,7 +39,7 @@ statement ok
 SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
@@ -151,7 +151,7 @@ statement ok
 SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE foo ADD COLUMN a INT
@@ -554,7 +554,7 @@ statement ok
 CREATE TABLE defaultdb.ttyp (id INT PRIMARY KEY, name varchar(256), x defaultdb.typ);
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok;
 DROP TABLE defaultdb.ttyp;
@@ -686,6 +686,8 @@ CREATE INDEX tmp_idx ON db1.sc1.t1(name)
 
 statement ok
 use db1;
+
+statement ok
 COMMENT ON DATABASE db1 IS 'BLAH';
 COMMENT ON SCHEMA sc1 IS 'BLAH2';
 COMMENT ON TABLE db1.sc1.t1 IS 'BLAH3';
@@ -745,7 +747,7 @@ SET use_declarative_schema_changer = 'unsafe_always'
 # Sanity check: Things are properly executed in post rollback. We should
 # be able to select from tables/views/sequences still
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 DROP DATABASE db1 CASCADE
@@ -1440,7 +1442,7 @@ statement ok
 SET use_declarative_schema_changer = 'unsafe_always';
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER TABLE t ADD COLUMN k INT AS (i + 3) STORED NOT NULL UNIQUE;
@@ -1470,7 +1472,7 @@ SELECT * FROM t
 subtest create-schema
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 skipif config local-mixed-23.1
 statement ok

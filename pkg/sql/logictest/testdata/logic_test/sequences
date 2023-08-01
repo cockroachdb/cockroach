@@ -1533,7 +1533,7 @@ SELECT last_value FROM cache_test
 10
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 ALTER SEQUENCE cache_test INCREMENT 5

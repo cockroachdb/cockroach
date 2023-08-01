@@ -339,6 +339,8 @@ ALTER TABLE t12 ALTER COLUMN x TYPE STRING
 
 statement ok
 SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
 CREATE TABLE uniq (x INT, y INT, UNIQUE WITHOUT INDEX (x, y))
 
 statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
@@ -428,7 +430,7 @@ statement ok
 CREATE TABLE t20 (x INT);
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
 ALTER TABLE t20 ALTER COLUMN x TYPE STRING

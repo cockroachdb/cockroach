@@ -19,7 +19,7 @@ INSERT INTO supermarket (person, aisle)
 
 # Use SELECT FOR UPDATE under serializable isolation.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 query I
 SELECT aisle FROM supermarket WHERE person = 'gideon' FOR UPDATE

@@ -222,7 +222,7 @@ statement ok
 CREATE INDEX idx on sharded_secondary (a) USING HASH WITH (bucket_count=3)
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 SELECT crdb_internal_a_shard_3 FROM sharded_secondary
@@ -1048,13 +1048,13 @@ statement ok
 ALTER TABLE products DROP COLUMN description;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE products ADD COLUMN description STRING NOT NULL DEFAULT '';
 COMMIT;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE products DROP COLUMN description;
 COMMIT;

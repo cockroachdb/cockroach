@@ -1,3 +1,7 @@
+# This test is skipped under local-read-committed, since it uses the
+# autocommit_before_ddl setting, which makes it impossible to test schema
+# changes in transactions.
+
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
@@ -1964,7 +1968,7 @@ CREATE TABLE t2 (id STRING PRIMARY KEY);
 ALTER TABLE t1 ADD CONSTRAINT fk FOREIGN KEY (other_id) REFERENCES t2(id) NOT VALID;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET TRANSACTION PRIORITY HIGH;
 ALTER TABLE t2 RENAME TO t3;
 ALTER TABLE t1 VALIDATE CONSTRAINT fk;
@@ -1979,7 +1983,7 @@ CREATE TABLE t2 (id STRING PRIMARY KEY);
 ALTER TABLE t1 ADD CONSTRAINT fk FOREIGN KEY (other_id) REFERENCES t2(id) NOT VALID;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET TRANSACTION PRIORITY HIGH;
 ALTER TABLE t1 RENAME TO t3;
 ALTER TABLE t3 VALIDATE CONSTRAINT fk;
@@ -1989,7 +1993,7 @@ statement ok
 DROP TABLE t2, t3 CASCADE
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET TRANSACTION PRIORITY HIGH;
 CREATE TABLE t1 (id STRING PRIMARY KEY, other_id STRING NOT NULL);
 CREATE TABLE t2 (id STRING PRIMARY KEY);
@@ -2010,10 +2014,18 @@ statement ok
 BEGIN;
 SELECT 1;
 
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE t1 ADD COLUMN c INT DEFAULT 1
 ----
 NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+
+onlyif config local-read-committed
+query T noticetrace
+ALTER TABLE t1 ADD COLUMN c INT DEFAULT 1
+----
+NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
 query T noticetrace
 COMMIT
