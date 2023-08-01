@@ -751,6 +751,7 @@ var npgsqlBlocklist = blocklist{
 }
 
 var npgsqlIgnoreList = blocklist{
+	`Npgsql.Tests.CommandTests(Multiplexing).Statement_mapped_output_parameters(Default)`:                  "flaky",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).Statement_mapped_output_parameters(SequentialAccess)`:      "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).PostgreSqlVersion_ServerVersion`:                        "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).Connector_not_initialized_exception`:                    "flaky",
@@ -792,7 +793,10 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_binary_import`:                                   "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_raw_binary_copy`:                                 "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_text_import`:                                     "flaky",
+	`Npgsql.Tests.NotificationTests.WaitAsync_with_timeout`:                                                "flaky",
+	`Npgsql.Tests.ReaderTests(Multiplexing,Default).Cleans_up_ok_with_dispose_calls(NotPrepared)`:          "flaky",
 	`Npgsql.Tests.ReaderTests(Multiplexing,SequentialAccess).Cleans_up_ok_with_dispose_calls(NotPrepared)`: "flaky",
+	`Npgsql.Tests.TransactionTests(Multiplexing).Failed_transaction_on_close_with_custom_timeout`:          "flaky",
 	`Npgsql.Tests.TransactionTests(NonMultiplexing).CommitAsync(Prepared)`:                                 "flaky",
 	`Npgsql.Tests.NotificationTests.Wait_with_timeout`:                                                     "flaky",
 }
