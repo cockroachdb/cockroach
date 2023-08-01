@@ -337,14 +337,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="cardinality"></a><code>cardinality(input: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of elements contained in <code>input</code></p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_aggregated_stmt_metadata"></a><code>crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of AggregatedStatementMetadata into a single JSONB object</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.StatementStatistics into a single JSONB object</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_stats_metadata"></a><code>crdb_internal.merge_stats_metadata(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of StmtStatsMetadata into a single JSONB object</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_transaction_stats"></a><code>crdb_internal.merge_transaction_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.TransactionStatistics into a single JSONB object</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="string_to_array"></a><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="string_to_array"></a><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, null: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter with a specified string to consider NULL.</p>
@@ -1063,16 +1055,6 @@ available replica will error.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="array_to_json"></a><code>array_to_json(array: anyelement[], pretty_bool: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.job_payload_type"></a><code>crdb_internal.job_payload_type(data: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Reads the type from the jobspb.Payload protocol message.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.json_to_pb"></a><code>crdb_internal.json_to_pb(pbname: <a href="string.html">string</a>, json: jsonb) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Convert JSONB data to protocol message bytes</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>, emit_redacted: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
@@ -1166,24 +1148,6 @@ available replica will error.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
-<tr><td><a name="crdb_internal.filter_multiregion_fields_from_zone_config_sql"></a><code>crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Takes in a CONFIGURE ZONE SQL statement and returns a modified
-SQL statement omitting multi-region related zone configuration fields.
-If the CONFIGURE ZONE statement can be inferred by the database’s or
-table’s zone configuration this will return NULL.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.reset_multi_region_zone_configs_for_database"></a><code>crdb_internal.reset_multi_region_zone_configs_for_database(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Resets the zone configuration for a multi-region database to
-match its original state. No-ops if the given database ID is not multi-region
-enabled.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_multi_region_zone_configs_for_table"></a><code>crdb_internal.reset_multi_region_zone_configs_for_table(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Resets the zone configuration for a multi-region table to
-match its original state. No-ops if the given table ID is not a multi-region
-table.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.validate_multi_region_zone_configs"></a><code>crdb_internal.validate_multi_region_zone_configs() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validates all multi-region zone configurations are correctly setup
-for the current database, including all tables, indexes and partitions underneath.
-Returns an error if validation fails. This builtin uses un-leased versions of the
-each descriptor, requiring extra round trips.</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="default_to_database_primary_region"></a><code>default_to_database_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region has been added to the current database.
 Otherwise, this will return the primary region of the current database.
 This will error if the current database is not a multi-region database.</p>
@@ -1309,23 +1273,6 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tbody>
 <tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(span: <a href="bytes.html">bytes</a>[]) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values from the specified span</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values with their timestamp from the specified span</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats() &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for all of the tenant’s tables.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(database_id: <a href="int.html">int</a>) &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for tables of the provided database id.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(database_id: <a href="int.html">int</a>, table_id: <a href="int.html">int</a>) &rarr; tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_<a href="bytes.html">bytes</a>, int AS live_<a href="bytes.html">bytes</a>, int AS total_<a href="bytes.html">bytes</a>, float AS live_percentage}</code></td><td><span class="funcdesc"><p>Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.tenant_span_stats"></a><code>crdb_internal.tenant_span_stats(spans: tuple[]) &rarr; tuple{bytes AS start_key, bytes AS end_key, jsonb AS stats}</code></td><td><span class="funcdesc"><p>Returns SpanStats for the provided spans.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.testing_callback"></a><code>crdb_internal.testing_callback(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>For internal CRDB testing only. The function calls a callback identified by <code>name</code> registered with the server by the test.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.unary_table"></a><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
-<p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
@@ -2768,52 +2715,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="convert_to"></a><code>convert_to(str: <a href="string.html">string</a>, enc: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encode the string <code>str</code> as a byte array using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.decode_external_plan_gist"></a><code>crdb_internal.decode_external_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table without attempting to resolve tables or indexes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.decode_plan_gist"></a><code>crdb_internal.decode_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns random SQL identifiers.</p>
-<p>gen_rand_ident(pattern, count) is an alias for gen_rand_ident(pattern, count, ‘’).
-See the documentation of the other gen_rand_ident overload for details.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>, parameters: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns count random SQL identifiers that resemble the name_pattern.</p>
-<p>The last argument is a JSONB object containing the following optional fields:</p>
-<ul>
-<li>“seed”: the seed to use for the pseudo-random generator (default: random).</li>
-<li>“number”: whether to add a number to the generated names (default true).
-When enabled, occurrences of the character ‘#’ in the name pattern are
-replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
-<li>“noise”: whether to add noise to the generated names (default true).
-It adds a non-zero probability for each of the probability options below left to zero.
-(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
-<li>“punctuate”: probability of adding punctuation.</li>
-<li>“fmt”: probability of adding random Go/C formatting directives.</li>
-<li>“escapes”: probability of adding random escape sequences.</li>
-<li>“quote”: probabiltiy of adding single or double quotes.</li>
-<li>“emote”: probability of adding emojis.</li>
-<li>“space”: probability of adding simple spaces.</li>
-<li>“whitespace”: probability of adding complex whitespace.</li>
-<li>“capitals”: probability of using capital letters.
-Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
-<li>“diacritics”: probability of adding diacritics.</li>
-<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
-<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
-</ul>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.show_create_all_schemas"></a><code>crdb_internal.show_create_all_schemas(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE schema statements.
-The output can be used to recreate a database.’</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE table statements followed by
-ALTER table statements that add table constraints. The rows are ordered
-by dependencies. All foreign keys are added after the creation of the table
-in the alter statements.
-It is not recommended to perform this operation on a database with many
-tables.
-The output can be used to recreate a database.’</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.show_create_all_types"></a><code>crdb_internal.show_create_all_types(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE type statements.
-The output can be used to recreate a database.’</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="decode"></a><code>decode(text: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="decompress"></a><code>decompress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decompress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>, ‘lz4’, ‘snappy’, 'zstd).</p>
@@ -3126,215 +3027,6 @@ a CockroachDB HLC in decimal form.</p>
 may increase either contention or retry errors, or both.</p>
 <p>Returns an error if run in a transaction with an isolation level weaker than SERIALIZABLE.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.active_version"></a><code>crdb_internal.active_version() &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the current active cluster version.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.approximate_timestamp"></a><code>crdb_internal.approximate_timestamp(timestamp: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Converts the crdb_internal_mvcc_timestamp column into an approximate timestamp.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
-<p>Example usage:</p>
-<p><code>SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')</code></p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.check_password_hash_format"></a><code>crdb_internal.check_password_hash_format(password: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function checks whether a string is a precomputed password hash. Returns the hash algorithm.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.cluster_id"></a><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the logical cluster ID for this tenant.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.cluster_name"></a><code>crdb_internal.cluster_name() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the cluster name.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.cluster_setting_encoded_default"></a><code>crdb_internal.cluster_setting_encoded_default(setting: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the encoded default value of the given cluster setting.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.create_join_token"></a><code>crdb_internal.create_join_token() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Creates a join token for use when adding a new node to a secure cluster.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.create_session_revival_token"></a><code>crdb_internal.create_session_revival_token() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate a token that can be used to create a new session for the current user.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.create_sql_schema_telemetry_job"></a><code>crdb_internal.create_sql_schema_telemetry_job() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to create a schema telemetry job instance.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.decode_cluster_setting"></a><code>crdb_internal.decode_cluster_setting(setting: <a href="string.html">string</a>, value: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decodes the given encoded value for a cluster setting.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.deserialize_session"></a><code>crdb_internal.deserialize_session(session: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function deserializes the serialized variables into the current session.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.encode_key"></a><code>crdb_internal.encode_key(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, row_tuple: anyelement) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate the key for a row on a particular table and index.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.fingerprint"></a><code>crdb_internal.fingerprint(span: <a href="bytes.html">bytes</a>[], start_time: <a href="decimal.html">decimal</a>, all_revisions: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.fingerprint"></a><code>crdb_internal.fingerprint(span: <a href="bytes.html">bytes</a>[], start_time: <a href="timestamp.html">timestamptz</a>, all_revisions: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.fingerprint"></a><code>crdb_internal.fingerprint(span: <a href="bytes.html">bytes</a>[], stripped: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.force_assertion_error"></a><code>crdb_internal.force_assertion_error(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_error"></a><code>crdb_internal.force_error(errorCode: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_log_fatal"></a><code>crdb_internal.force_log_fatal(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_panic"></a><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.force_retry"></a><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, counts: <a href="int.html">int</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
-<p>generate_test_objects(pat, counts) is an alias for
-generate_test_objects(’{“names”:pat, “counts”:counts}’::jsonb)</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, number: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
-<p>generate_test_objects(pat, num) is an alias for
-generate_test_objects(’{“names”:pat, “counts”:[num]}’::jsonb)</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(parameters: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
-<p>Parameters:</p>
-<ul>
-<li>“names”: pattern to use to name the generated objects (default:
-“test”).</li>
-<li>“counts”: counts of generated objects (default: [10]).</li>
-<li>“dry_run”: prepare the schema but do not actually write it
-(default: false).</li>
-<li>“seed”: random seed to use (default: auto).</li>
-<li>“randomize_columns”: whether to randomize the column names on tables
-(default: true).</li>
-<li>“table_templates”: table templates to use.
-If the last part of “names” is “_”, the name of the template
-will be used as base pattern during name generation for tables.
-Otherwise, the last part of “names” will be used as pattern.
-If no table templates are specified, a simple template is used.</li>
-<li>“name_gen”: configuration for the name generation, see below.</li>
-</ul>
-<p>Name generation options:</p>
-<ul>
-<li>“number”: whether to add a number to the generated names (default true).
-When enabled, occurrences of the character ‘#’ in the name pattern are
-replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
-<li>“noise”: whether to add noise to the generated names (default true).
-It adds a non-zero probability for each of the probability options below left to zero.
-(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
-<li>“punctuate”: probability of adding punctuation.</li>
-<li>“fmt”: probability of adding random Go/C formatting directives.</li>
-<li>“escapes”: probability of adding random escape sequences.</li>
-<li>“quote”: probabiltiy of adding single or double quotes.</li>
-<li>“emote”: probability of adding emojis.</li>
-<li>“space”: probability of adding simple spaces.</li>
-<li>“whitespace”: probability of adding complex whitespace.</li>
-<li>“capitals”: probability of using capital letters.
-Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
-<li>“diacritics”: probability of adding diacritics.</li>
-<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
-<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
-</ul>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.get_database_id"></a><code>crdb_internal.get_database_id(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, parent_schema_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.get_vmodule"></a><code>crdb_internal.get_vmodule() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the vmodule configuration on the gateway node processing this request.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.get_zone_config"></a><code>crdb_internal.get_zone_config(namespace_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.has_role_option"></a><code>crdb_internal.has_role_option(option: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the current user has the specified role option</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.index_span"></a><code>crdb_internal.index_span(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given index.</p>
-</span></td><td>Leakproof</td></tr>
-<tr><td><a name="crdb_internal.is_admin"></a><code>crdb_internal.is_admin() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Retrieves the current user’s admin status.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.is_at_least_version"></a><code>crdb_internal.is_at_least_version(version: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the cluster version is not older than the argument.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.is_constraint_active"></a><code>crdb_internal.is_constraint_active(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to determine if a given constraint is currently.
-active for the current transaction.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.job_execution_details"></a><code>crdb_internal.job_execution_details(job_id: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Output a JSONB version of the specified job’s execution details. The execution details are collectedand persisted during the lifetime of the job and provide more observability into the job’s execution</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.lease_holder"></a><code>crdb_internal.lease_holder(key: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to fetch the leaseholder corresponding to a request key</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.list_sql_keys_in_range"></a><code>crdb_internal.list_sql_keys_in_range(range_id: <a href="int.html">int</a>) &rarr; tuple{string AS key, string AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns all SQL K/V pairs within the requested range.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.locality_value"></a><code>crdb_internal.locality_value(key: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the value of the specified locality key.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.node_executable_version"></a><code>crdb_internal.node_executable_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the version of CockroachDB this node is running.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.node_id"></a><code>crdb_internal.node_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the node ID.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.notice"></a><code>crdb_internal.notice(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.notice"></a><code>crdb_internal.notice(severity: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.num_geo_inverted_index_entries"></a><code>crdb_internal.num_geo_inverted_index_entries(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, val: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_geo_inverted_index_entries"></a><code>crdb_internal.num_geo_inverted_index_entries(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, val: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: <a href="string.html">string</a>, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[], version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: tsvector, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.payloads_for_span"></a><code>crdb_internal.payloads_for_span(span_id: <a href="int.html">int</a>) &rarr; tuple{string AS payload_type, jsonb AS payload_jsonb}</code></td><td><span class="funcdesc"><p>Returns the payload(s) of the requested span and all its children.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.payloads_for_trace"></a><code>crdb_internal.payloads_for_trace(trace_id: <a href="int.html">int</a>) &rarr; tuple{int AS span_id, string AS payload_type, jsonb AS payload_jsonb}</code></td><td><span class="funcdesc"><p>Returns the payload(s) of the requested trace.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.pretty_key"></a><code>crdb_internal.pretty_key(raw_key: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pretty_span"></a><code>crdb_internal.pretty_span(raw_key_start: <a href="bytes.html">bytes</a>, raw_key_end: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.pretty_value"></a><code>crdb_internal.pretty_value(raw_value: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.repair_ttl_table_scheduled_job"></a><code>crdb_internal.repair_ttl_table_scheduled_job(oid: oid) &rarr; void</code></td><td><span class="funcdesc"><p>Repairs the scheduled job for a TTL table if it is missing.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.request_job_execution_details"></a><code>crdb_internal.request_job_execution_details(jobID: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request the collection of execution details for a given job ID</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.request_statement_bundle"></a><code>crdb_internal.request_statement_bundle(stmtFingerprint: <a href="string.html">string</a>, samplingProbability: <a href="float.html">float</a>, minExecutionLatency: <a href="interval.html">interval</a>, expiresAfter: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request statement bundle for a given statement fingerprint
-that has execution latency greater than the ‘minExecutionLatency’. If the
-‘expiresAfter’ argument is empty, then the statement bundle request never
-expires until the statement bundle is collected</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_activity_tables"></a><code>crdb_internal.reset_activity_tables() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the {statement|transaction} activity system tables.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_index_usage_stats"></a><code>crdb_internal.reset_index_usage_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected index usage statistics.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.reset_sql_stats"></a><code>crdb_internal.reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.revalidate_unique_constraint"></a><code>crdb_internal.revalidate_unique_constraint(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; void</code></td><td><span class="funcdesc"><p>This function is used to revalidate the given unique constraint in the given
-table. Returns an error if validation fails.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.revalidate_unique_constraints_in_all_tables"></a><code>crdb_internal.revalidate_unique_constraints_in_all_tables() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used to revalidate all unique constraints in tables
-in the current database. Returns an error if validation fails.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.revalidate_unique_constraints_in_table"></a><code>crdb_internal.revalidate_unique_constraints_in_table(table_name: <a href="string.html">string</a>) &rarr; void</code></td><td><span class="funcdesc"><p>This function is used to revalidate all unique constraints in the given
-table. Returns an error if validation fails.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>, scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>This function is used internally to round decimal values during mutations.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.schedule_sql_stats_compaction"></a><code>crdb_internal.schedule_sql_stats_compaction() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to start a SQL stats compaction job.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.serialize_session"></a><code>crdb_internal.serialize_session() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function serializes the variables in the current session.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.set_trace_verbose"></a><code>crdb_internal.set_trace_verbose(trace_id: <a href="int.html">int</a>, verbosity: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if root span was found and verbosity was set, false otherwise.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.set_vmodule"></a><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the equivalent of the <code>--vmodule</code> flag on the gateway node processing this request; it affords control over the logging verbosity of different files. Example syntax: <code>crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')</code>. Reset with: <code>crdb_internal.set_vmodule('')</code>. Raising the verbosity can severely affect performance.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.sstable_metrics"></a><code>crdb_internal.sstable_metrics(node_id: <a href="int.html">int</a>, store_id: <a href="int.html">int</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS node_id, int AS store_id, int AS level, int AS file_num, int AS approximate_span_<a href="bytes.html">bytes</a>, jsonb AS metrics}</code></td><td><span class="funcdesc"><p>Returns statistics for the sstables containing keys in the range start_key and end_key for the provided node id.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.table_span"></a><code>crdb_internal.table_span(table_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given table.</p>
-</span></td><td>Leakproof</td></tr>
-<tr><td><a name="crdb_internal.trace_id"></a><code>crdb_internal.trace_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current trace ID or an error if no trace is open.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.unsafe_clear_gossip_info"></a><code>crdb_internal.unsafe_clear_gossip_info(key: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.validate_session_revival_token"></a><code>crdb_internal.validate_session_revival_token(token: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validate a token that was created by create_session_revival_token. Intended for testing.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.validate_ttl_scheduled_jobs"></a><code>crdb_internal.validate_ttl_scheduled_jobs() &rarr; void</code></td><td><span class="funcdesc"><p>Validate all TTL tables have a valid scheduled job attached.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.void_func"></a><code>crdb_internal.void_func() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_schema"></a><code>current_schema() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current schema.</p>
@@ -3358,17 +3050,6 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="to_regtype"></a><code>to_regtype(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual type name to its OID</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="version"></a><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
-</span></td><td>Volatile</td></tr></tbody>
-</table>
-
-### System repair functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.force_delete_table_data"></a><code>crdb_internal.force_delete_table_data(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function can be used to clear the data belonging to a table, when the table cannot be dropped.</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.repair_catalog_corruption"></a><code>crdb_internal.repair_catalog_corruption(descriptor_id: <a href="int.html">int</a>, corruption: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>repair_catalog_corruption(descriptor_id,corruption) attempts to repair corrupt records in system tables associated with that descriptor id</p>
 </span></td><td>Volatile</td></tr></tbody>
 </table>
 
