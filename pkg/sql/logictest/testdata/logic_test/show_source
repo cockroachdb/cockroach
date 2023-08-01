@@ -686,3 +686,23 @@ t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  1  NULL
 t2  t2_pkey  false  2  x      x      N/A  true   false  true  1  NULL
 t2  t2_pkey  false  3  y      y      N/A  true   false  true  1  NULL
 t2  t2_pkey  false  4  z      z      N/A  true   false  true  1  NULL
+
+subtest show_timezones
+
+statement ok
+SET TIME ZONE 'EST'
+
+query B
+SELECT session_start::STRING LIKE '%-05' FROM [SHOW SESSIONS] WHERE status = 'ACTIVE'
+----
+true
+
+query B
+SELECT start::STRING LIKE '%-05' FROM [SHOW QUERIES] WHERE phase = 'executing'
+----
+true
+
+statement ok
+RESET TIME ZONE
+
+subtest end

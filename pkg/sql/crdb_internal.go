@@ -2282,7 +2282,7 @@ CREATE TABLE crdb_internal.%s (
   node_id          INT NOT NULL,   -- the node on which the query is running
   session_id       STRING,         -- the ID of the session
   user_name        STRING,         -- the user running the query
-  start            TIMESTAMP,      -- the start time of the query
+  start            TIMESTAMPTZ,    -- the start time of the query
   query            STRING,         -- the SQL code of the query
   client_address   STRING,         -- the address of the client that issued the query
   application_name STRING,         -- the name of the application as per SET application_name
@@ -2439,7 +2439,7 @@ func populateQueriesTable(
 				txnID = tree.NewDUuid(tree.DUuid{UUID: query.TxnID})
 			}
 
-			ts, err := tree.MakeDTimestamp(query.Start, time.Microsecond)
+			ts, err := tree.MakeDTimestampTZ(query.Start, time.Microsecond)
 			if err != nil {
 				return err
 			}
@@ -2541,13 +2541,13 @@ CREATE TABLE crdb_internal.%s (
   active_queries     STRING,         -- the currently running queries as SQL
   last_active_query  STRING,         -- the query that finished last on this session as SQL
   num_txns_executed  INT,            -- the number of transactions that were executed so far on this session
-  session_start      TIMESTAMP,      -- the time when the session was opened
-  active_query_start TIMESTAMP,      -- the time when the current active query in the session was started
+  session_start      TIMESTAMPTZ,    -- the time when the session was opened
+  active_query_start TIMESTAMPTZ,    -- the time when the current active query in the session was started
   kv_txn             STRING,         -- the ID of the current KV transaction
   alloc_bytes        INT,            -- the number of bytes allocated by the session
   max_alloc_bytes    INT,            -- the high water mark of bytes allocated by the session
   status             STRING,         -- the status of the session (open, closed)
-  session_end        TIMESTAMP       -- the time when the session was closed
+  session_end        TIMESTAMPTZ     -- the time when the session was closed
 )
 `
 
@@ -2609,7 +2609,7 @@ func populateSessionsTable(
 		if activeQueryStart.IsZero() {
 			activeQueryStartDatum = tree.DNull
 		} else {
-			activeQueryStartDatum, err = tree.MakeDTimestamp(activeQueryStart, time.Microsecond)
+			activeQueryStartDatum, err = tree.MakeDTimestampTZ(activeQueryStart, time.Microsecond)
 			if err != nil {
 				return err
 			}
@@ -2621,13 +2621,13 @@ func populateSessionsTable(
 		}
 
 		sessionID := getSessionID(session)
-		startTSDatum, err := tree.MakeDTimestamp(session.Start, time.Microsecond)
+		startTSDatum, err := tree.MakeDTimestampTZ(session.Start, time.Microsecond)
 		if err != nil {
 			return err
 		}
 		endTSDatum := tree.DNull
 		if session.End != nil {
-			endTSDatum, err = tree.MakeDTimestamp(*session.End, time.Microsecond)
+			endTSDatum, err = tree.MakeDTimestampTZ(*session.End, time.Microsecond)
 			if err != nil {
 				return err
 			}
