@@ -189,7 +189,7 @@ func TestAsyncIntentResolution_ByteSizePagination(t *testing.T) {
 	}
 
 	// Set the max raft command size to 5MB.
-	st := tc.Servers[0].ClusterSettings()
+	st := tc.Server(0).ClusterSettings()
 	st.Manual.Store(true)
 	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 5<<20)
 
@@ -284,7 +284,7 @@ func TestSyncIntentResolution_ByteSizePagination(t *testing.T) {
 	}
 
 	// Set the max raft command size to 5MB.
-	st := tc.Servers[0].ClusterSettings()
+	st := tc.Server(0).ClusterSettings()
 	st.Manual.Store(true)
 	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 5<<20)
 
@@ -334,7 +334,8 @@ func TestSyncIntentResolution_ByteSizePagination(t *testing.T) {
 }
 
 func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
-	for _, s := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
+		s := tc.Server(i)
 		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceReplicationScanAndProcess()
 		})

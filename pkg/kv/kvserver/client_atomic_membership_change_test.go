@@ -59,7 +59,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	runChange := func(expDesc roachpb.RangeDescriptor, chgs []kvpb.ReplicationChange) roachpb.RangeDescriptor {
 		t.Helper()
-		desc, err := tc.Servers[0].DB().AdminChangeReplicas(ctx, k, expDesc, chgs)
+		desc, err := tc.Server(0).DB().AdminChangeReplicas(ctx, k, expDesc, chgs)
 		require.NoError(t, err)
 
 		return *desc
@@ -68,7 +68,8 @@ func TestAtomicReplicationChange(t *testing.T) {
 	checkDesc := func(desc roachpb.RangeDescriptor, expStores ...roachpb.StoreID) {
 		testutils.SucceedsSoon(t, func() error {
 			var sawStores []roachpb.StoreID
-			for _, s := range tc.Servers {
+			for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+				s := tc.Server(serverIdx)
 				r, _, _ := s.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 				if r == nil {
 					continue

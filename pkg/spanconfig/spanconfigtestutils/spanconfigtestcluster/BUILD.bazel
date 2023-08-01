@@ -32,7 +32,6 @@ go_library(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",

@@ -912,7 +912,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 	// no user data.
 	splitKey := keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0))
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), splitArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(kv.Sender), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -932,7 +932,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 			messageRecorder.headers = append(messageRecorder.headers, header)
 		},
 	}
-	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.GetFirstStoreFromServer(t, 1).StoreID(), messageHandler)
+	tc.Server(1).RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.GetFirstStoreFromServer(t, 1).StoreID(), messageHandler)
 
 	// Replicate the newly-split range to trigger a snapshot request from store 0
 	// to store 1.
@@ -1472,7 +1472,7 @@ func runSetupSplitSnapshotRace(
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(roachpb.Key("m"))
-	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1505,7 +1505,7 @@ func runSetupSplitSnapshotRace(
 	// failure and render the range unable to achieve quorum after
 	// restart (in the SnapshotWins branch).
 	incArgs = incrementArgs(rightKey, 3)
-	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1513,7 +1513,7 @@ func runSetupSplitSnapshotRace(
 	tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 2, 5, 5})
 
 	// Scan the meta ranges to resolve all intents
-	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender),
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender),
 		&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key:    keys.MetaMin,
@@ -1552,7 +1552,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 		// Perform a write on the left range and wait for it to propagate.
 		incArgs := incrementArgs(leftKey, 10)
-		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		tc.WaitForValues(t, leftKey, []int64{0, 11, 11, 11, 0, 0})
@@ -1563,7 +1563,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 		// Write to the right range.
 		incArgs = incrementArgs(rightKey, 20)
-		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 25, 25, 25})
@@ -1589,7 +1589,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 
 		// Perform a write on the right range.
 		incArgs := incrementArgs(rightKey, 20)
-		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1613,13 +1613,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 		// it helps wake up dormant ranges that would otherwise have to wait
 		// for retry timeouts.
 		incArgs = incrementArgs(leftKey, 10)
-		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		tc.WaitForValues(t, leftKey, []int64{0, 11, 11, 11, 0, 0})
 
 		incArgs = incrementArgs(rightKey, 200)
-		if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 225, 225, 225})
@@ -1682,7 +1682,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db := tc.Servers[0].DB() // irrelevant which one we use
+	db := tc.Server(0).DB() // irrelevant which one we use
 
 	// Make a context tied to the Stopper. The test works without, but this
 	// is cleaner since we won't properly terminate the transaction below.
@@ -2124,7 +2124,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// range).
 			splitKey := roachpb.Key(encoding.EncodeVarintDescending([]byte("a"), int64(i)))
 			splitArgs := adminSplitArgs(splitKey)
-			_, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender), splitArgs)
+			_, pErr := kv.SendWrapped(context.Background(), tc.Server(0).DistSenderI().(kv.Sender), splitArgs)
 			errChan <- pErr
 		}(i)
 		go func() {
@@ -2145,7 +2145,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// side in the split trigger was racing with the uninitialized
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
-				if sent := tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
+				if sent := tc.Server(1).RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
 					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],
@@ -2212,7 +2212,7 @@ func TestLeaderAfterSplit(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	store := tc.GetFirstStoreFromServer(t, 0)
-	sender := tc.Servers[0].DistSenderI().(kv.Sender)
+	sender := tc.Server(0).DistSenderI().(kv.Sender)
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("m")
@@ -3383,14 +3383,14 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// second node).
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+		_, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, k, tc.LookupRangeOrFatal(t, k), kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		return err
 	})
 
 	store, _ := getFirstStoreReplica(t, tc.Server(1), k)
-	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+	tc.Server(1).RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
 		rangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: store,
 	})
@@ -3405,7 +3405,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		//
 		// We avoid sending a snapshot because that snapshot would include the
 		// split trigger and we want that to be processed via the log.
-		d, err := tc.Servers[0].DB().AdminChangeReplicas(
+		d, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, descLHS.StartKey.AsRawKey(), descLHS, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.NoError(t, err)
@@ -3420,7 +3420,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// Now repeatedly re-add the learner on the rhs, so it has a
 	// different replicaID than the split trigger expects.
 	add := func() {
-		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+		_, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, kRHS, tc.LookupRangeOrFatal(t, kRHS), kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		// The "snapshot intersects existing range" error is expected if the store
@@ -3468,7 +3468,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 	// Re-enable raft and wait for the lhs to catch up to the post-split
 	// descriptor. This used to panic with "raft group deleted".
-	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), store)
+	tc.Server(1).RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), store)
 	testutils.SucceedsSoon(t, func() error {
 		repl, err := store.GetReplica(descLHS.RangeID)
 		if err != nil {

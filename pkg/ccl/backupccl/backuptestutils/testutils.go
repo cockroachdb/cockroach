@@ -122,7 +122,7 @@ func StartBackupRestoreTestCluster(
 	tc := testcluster.StartTestCluster(t, clusterSize, opts.testClusterArgs)
 	opts.initFunc(tc)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	if opts.bankArgs != nil {
 		const payloadSize = 100
@@ -157,7 +157,7 @@ func StartBackupRestoreTestCluster(
 	}
 
 	return tc, sqlDB, opts.dataDir, func() {
-		CheckForInvalidDescriptors(t, tc.Conns[0])
+		CheckForInvalidDescriptors(t, tc.ServerConn(0))
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFunc()
 	}

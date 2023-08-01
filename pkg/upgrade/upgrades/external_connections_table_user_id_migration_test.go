@@ -84,10 +84,10 @@ func runTestExternalConnectionsUserIDMigration(t *testing.T, numUsers int) {
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.external_connections", [][]string{{strconv.Itoa(numUsers)}})
 
 	// Run migrations.
-	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn).String())
 	require.NoError(t, err)
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1ExternalConnectionsTableOwnerIDColumnBackfilled).String())
 	require.NoError(t, err)
 

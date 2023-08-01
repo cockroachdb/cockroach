@@ -128,7 +128,8 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 
 	// Turn off liveness heartbeats on all nodes to ensure that updates to node
 	// liveness are not triggering gossiping.
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		pErr := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.GetStoreConfig().NodeLiveness.PauseHeartbeatLoopForTest()
 			return nil
@@ -141,7 +142,8 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	nodeLivenessKey := gossip.MakeNodeLivenessKey(1)
 
 	initialServerId := -1
-	for i, s := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
+		s := tc.Server(i)
 		pErr := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			if store.Gossip().InfoOriginatedHere(nodeLivenessKey) {
 				initialServerId = i
@@ -617,11 +619,11 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		manualClock.Pause()
 
 		// Write a key.
-		_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), incrementArgs(key, 1))
+		_, pErr := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(kv.Sender), incrementArgs(key, 1))
 		require.Nil(t, pErr)
 
 		// Determine when to read.
-		readTS := tc.Servers[0].Clock().Now()
+		readTS := tc.Server(0).Clock().Now()
 		if futureRead {
 			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
 		}
@@ -631,7 +633,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(getArgs(key))
-		br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
+		br, pErr := tc.Server(0).DistSenderI().(kv.Sender).Send(ctx, ba)
 		require.Nil(t, pErr)
 		require.Equal(t, readTS, br.Timestamp)
 		v, err := br.Responses[0].GetGet().Value.GetInt()
@@ -649,7 +651,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		ba = &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(incrementArgs(key, 1))
-		br, pErr = tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
+		br, pErr = tc.Server(0).DistSenderI().(kv.Sender).Send(ctx, ba)
 		require.Nil(t, pErr)
 		require.NotEqual(t, readTS, br.Timestamp)
 		require.True(t, readTS.Less(br.Timestamp))
@@ -676,7 +678,7 @@ func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 
 	// Start a txn and perform a write, so that a txn record has to be created by
 	// the EndTxn.
-	txn := tc.Servers[0].DB().NewTxn(ctx, "test")
+	txn := tc.Server(0).DB().NewTxn(ctx, "test")
 	require.NoError(t, txn.Put(ctx, "a", "val"))
 	// After starting the transaction, transfer the lease. This will wipe the
 	// timestamp cache, which means that the txn record will not be able to be
@@ -845,7 +847,7 @@ func TestLeaseholderRelocate(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		// Relocate range 3 -> 4.
-		err = tc.Servers[2].DB().
+		err = tc.Server(2).DB().
 			AdminRelocateRange(
 				context.Background(), rhsDesc.StartKey.AsRawKey(),
 				tc.Targets(0, 1, 3), nil, false)
@@ -888,13 +890,13 @@ func TestLeaseholderRelocate(t *testing.T) {
 }
 
 func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
-	for i := range tc.Servers {
-		testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+	for i := 0; i < tc.NumServers(); i++ {
+		testutils.SucceedsSoon(t, tc.Server(i).HeartbeatNodeLiveness)
 	}
 	// Make sure that all store pools have seen liveness heartbeats from everyone.
 	testutils.SucceedsSoon(t, func() error {
-		for i := range tc.Servers {
-			for j := range tc.Servers {
+		for i := 0; i < tc.NumServers(); i++ {
+			for j := 0; j < tc.NumServers(); j++ {
 				live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().
 					StorePool.IsLive(tc.Target(j).StoreID)
 				if err != nil {
@@ -997,7 +999,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		// allocator on server 0 may see everyone as temporarily dead due to the
 		// clock move above.
 		for _, i := range []int{0, 3, 4} {
-			require.NoError(t, tc.Servers[i].HeartbeatNodeLiveness())
+			require.NoError(t, tc.Server(i).HeartbeatNodeLiveness())
 			require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
 		}
 	}
@@ -1180,7 +1182,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		var repl *kvserver.Replica
 		for _, i := range []int{2, 3} {
 			repl = tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
-			if repl.OwnsValidLease(ctx, tc.Servers[i].Clock().NowAsClockTimestamp()) {
+			if repl.OwnsValidLease(ctx, tc.Server(i).Clock().NowAsClockTimestamp()) {
 				return nil
 			}
 		}
@@ -1198,8 +1200,8 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 
 	// Make sure that all store pools have seen liveness heartbeats from everyone.
 	testutils.SucceedsSoon(t, func() error {
-		for i := range tc.Servers {
-			for j := range tc.Servers {
+		for i := 0; i < tc.NumServers(); i++ {
+			for j := 0; j < tc.NumServers(); j++ {
 				live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsLive(tc.Target(j).StoreID)
 				if err != nil {
 					return err
@@ -1216,7 +1218,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
 		tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
 		testutils.SucceedsSoon(t, func() error {
-			if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
+			if !repl.OwnsValidLease(ctx, tc.Server(1).Clock().NowAsClockTimestamp()) {
 				return errors.Errorf("Expected lease to transfer to server 1 for replica %s", repl)
 			}
 			return nil
@@ -1225,7 +1227,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 
 	heartbeat := func(servers ...int) {
 		for _, i := range servers {
-			testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+			testutils.SucceedsSoon(t, tc.Server(i).HeartbeatNodeLiveness)
 		}
 	}
 
@@ -1297,7 +1299,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		}
 		for _, key := range startKeys {
 			repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
-			if repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
+			if repl.OwnsValidLease(ctx, tc.Server(1).Clock().NowAsClockTimestamp()) {
 				return nil
 			}
 		}
@@ -1333,7 +1335,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		repl := tc.GetFirstStoreFromServer(t, 3).LookupReplica(rhsDesc.StartKey)
-		if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
+		if !repl.OwnsValidLease(ctx, tc.Server(0).Clock().NowAsClockTimestamp()) {
 			return errors.Errorf("Expected lease to transfer to node 4")
 		}
 		// Do this to avoid snapshot problems below when we do another replica move.
@@ -1585,7 +1587,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 	})
 
 	// Enable the version gate.
-	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade).String())
 	require.NoError(t, err)
 

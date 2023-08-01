@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -40,7 +41,7 @@ import (
 
 type testClusterWithHelpers struct {
 	*testing.T
-	*testcluster.TestCluster
+	serverutils.TestClusterInterface
 	args func() map[int]base.TestServerArgs
 }
 
@@ -110,7 +111,7 @@ func setupMixedCluster(
 			return serverArgsPerNode
 		}}
 
-	tc := testcluster.StartTestCluster(t, len(versions), base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, len(versions), base.TestClusterArgs{
 		ReplicationMode:   base.ReplicationManual, // speeds up test
 		ServerArgsPerNode: twh.args(),
 	})
@@ -121,7 +122,7 @@ func setupMixedCluster(
 		t.Fatal(err)
 	}
 
-	twh.TestCluster = tc
+	twh.TestClusterInterface = tc
 	return twh
 }
 
@@ -192,8 +193,8 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	tc := setupMixedCluster(t, knobs, versions, dir)
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
-	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		for _, engine := range tc.TestCluster.Servers[i].Engines() {
+	for i := 0; i < tc.TestCluster.NumServers(); i++ {
+		for _, engine := range tc.TestCluster.Server(i).Engines() {
 			cv := engine.MinVersion()
 			if cv != newVersion {
 				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
@@ -273,7 +274,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	testutils.SucceedsWithin(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			st := tc.Servers[i].ClusterSettings()
+			st := tc.Server(i).ClusterSettings()
 			v := st.Version.ActiveVersion(ctx)
 			wantActive := isNoopUpdate
 			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
@@ -310,7 +311,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// already in the table.
 	testutils.SucceedsWithin(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			vers := tc.Servers[i].ClusterSettings().Version.ActiveVersion(ctx)
+			vers := tc.Server(i).ClusterSettings().Version.ActiveVersion(ctx)
 			if v := vers.String(); v == curVersion {
 				if isNoopUpdate {
 					continue
@@ -325,7 +326,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
-	if err := tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	if err := tc.Server(1).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		cv := s.TODOEngine().MinVersion()
 		if act := cv.String(); act != exp {
 			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
@@ -358,7 +359,7 @@ func TestAllVersionsAgree(t *testing.T) {
 	// comes.
 	testutils.SucceedsSoon(tc, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			if version := tc.Servers[i].ClusterSettings().Version.ActiveVersion(ctx); version.String() != exp {
+			if version := tc.Server(i).ClusterSettings().Version.ActiveVersion(ctx); version.String() != exp {
 				return fmt.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
 			if version := tc.getVersionFromShow(i); version != exp {
@@ -477,7 +478,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
 		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.Servers[i].ClusterSettings().Version.ActiveVersion(ctx).String(); version != v0s {
+			if version := tc.Server(i).ClusterSettings().Version.ActiveVersion(ctx).String(); version != v0s {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, v0s)
 			}
 			if version := tc.getVersionFromShow(i); version != v0s {

@@ -91,7 +91,7 @@ func TestRaftLogQueue(t *testing.T) {
 	var afterTruncationIndex kvpb.RaftIndex
 	testutils.SucceedsSoon(t, func() error {
 		// Force a truncation check.
-		for i := range tc.Servers {
+		for i := 0; i < tc.NumServers(); i++ {
 			tc.GetFirstStoreFromServer(t, i).MustForceRaftLogScanAndProcess()
 		}
 		// Flush the engine to advance durability, which triggers truncation.
@@ -113,7 +113,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// GetFirstIndex, giving a false negative. Fixing this requires additional
 	// instrumentation of the queues, which was deemed to require too much work
 	// at the time of this writing.
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		tc.GetFirstStoreFromServer(t, i).MustForceRaftLogScanAndProcess()
 	}
 

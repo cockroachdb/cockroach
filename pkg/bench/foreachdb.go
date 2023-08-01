@@ -145,12 +145,12 @@ func benchmarkMultinodeCockroach(b *testing.B, f BenchmarkFn) {
 				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 			},
 		})
-	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
+	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE bench`); err != nil {
 		b.Fatal(err)
 	}
 	defer tc.Stopper().Stop(context.TODO())
 
-	f(b, sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2]))
+	f(b, sqlutils.MakeRoundRobinSQLRunner(tc.ServerConn(0), tc.ServerConn(1), tc.ServerConn(2)))
 }
 
 func benchmarkPostgres(b *testing.B, f BenchmarkFn) {

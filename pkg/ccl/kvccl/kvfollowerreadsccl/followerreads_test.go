@@ -743,7 +743,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
+	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	n1.Exec(t, `CREATE DATABASE t`)
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,2], 1)`)
@@ -761,7 +761,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	log.Infof(ctx, "test sleeping... done")
 
 	// Run a query on n4 to populate its cache.
-	n4 := sqlutils.MakeSQLRunner(tc.Conns[3])
+	n4 := sqlutils.MakeSQLRunner(tc.ServerConn(3))
 	n4.Exec(t, "SELECT * from test WHERE k=1")
 	// Check that the cache was indeed populated.
 	var tableID uint32
@@ -803,7 +803,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Make a note of the follower reads metric on n3. We'll check that it was
 	// incremented.
 	var followerReadsCountBefore int64
-	err := tc.Servers[2].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	err := tc.Server(2).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		followerReadsCountBefore = s.Metrics().FollowerReadsCount.Count()
 		return nil
 	})
@@ -820,7 +820,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 
 	// Check that the follower read metric was incremented.
 	var followerReadsCountAfter int64
-	err = tc.Servers[2].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	err = tc.Server(2).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		followerReadsCountAfter = s.Metrics().FollowerReadsCount.Count()
 		return nil
 	})
@@ -831,7 +831,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// ranges" (#61313).
 
 	// First, run a query on n3 to populate its cache.
-	n3 := sqlutils.MakeSQLRunner(tc.Conns[2])
+	n3 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
 	n3.Exec(t, "SELECT * from test WHERE k=1")
 	n3Cache := tc.Server(2).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 	entry = n3Cache.GetCached(ctx, tablePrefix, false /* inverted */)
@@ -958,7 +958,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		// Speed up closing of timestamps in order to sleep less below before we can
 		// use follower_read_timestamp(). Note that we need to override the setting
 		// for the tenant as well, because the builtin is run in the tenant's sql pod.
-		systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
+		systemSQL := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
 		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
 		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
@@ -1024,8 +1024,8 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 
 		getFollowerReadCounts := func() [numNodes]int64 {
 			var counts [numNodes]int64
-			for i := range tc.Servers {
-				err := tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			for i := 0; i < tc.NumServers(); i++ {
+				err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 					counts[i] = s.Metrics().FollowerReadsCount.Count()
 					return nil
 				})

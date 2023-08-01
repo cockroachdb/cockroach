@@ -180,7 +180,7 @@ RETURNING id;`, firstID).Scan(&secondID))
 	fakeJobBlockChan := <-ch
 
 	// Ensure that we see the assertion error.
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`, endCV.String())
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`, endCV.String())
 	require.Regexp(t, "found multiple non-terminal jobs for version", err)
 
 	// Let the fake, erroneous job finish with an error.
@@ -188,7 +188,7 @@ RETURNING id;`, firstID).Scan(&secondID))
 	require.Regexp(t, "boom", <-runErr)
 
 	// See the TODO below for why we need this.
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0`)
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0`)
 	require.NoError(t, err)
 
 	// Launch a second upgrade which later we'll ensure does not kick off
@@ -305,7 +305,8 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	// Wait until all nodes have are considered live.
 	nl := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
 	testutils.SucceedsSoon(t, func() error {
-		for _, s := range tc.Servers {
+		for i := 0; i < tc.NumServers(); i++ {
+			s := tc.Server(i)
 			id := s.NodeID()
 			if !nl.GetNodeVitalityFromCache(id).IsLive(livenesspb.Upgrade) {
 				return errors.Newf("n%s not live yet", id)
@@ -315,7 +316,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	})
 
 	// Kick off the upgrade process.
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`, endCV.String())
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`, endCV.String())
 	require.NoError(t, err)
 
 	if got := repl.Version(); got != endCV {

@@ -922,7 +922,7 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 	tdb.Exec(t, `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`)
 
 	fetchIndexes := func(tableName string) []catalog.Index {
-		kvDB := c.Servers[0].DB()
+		kvDB := c.Server(0).DB()
 		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		return desc.NonDropIndexes()
 	}

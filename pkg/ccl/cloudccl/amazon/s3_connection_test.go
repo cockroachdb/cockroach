@@ -45,7 +45,7 @@ func TestS3ExternalConnection(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -198,7 +198,7 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -307,7 +307,7 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)

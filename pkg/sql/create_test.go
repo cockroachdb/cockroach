@@ -44,7 +44,6 @@ import (
 // it successful or not) it signals a done on the end waitgroup.
 func createTestTable(
 	t *testing.T,
-	tc *testcluster.TestCluster,
 	id int,
 	db *gosql.DB,
 	wgStart *sync.WaitGroup,
@@ -157,7 +156,7 @@ func TestParallelCreateTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get the id descriptor generator count.
-	s := tc.Servers[0].ApplicationLayer()
+	s := tc.Server(0).ApplicationLayer()
 	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
@@ -172,7 +171,7 @@ func TestParallelCreateTables(t *testing.T) {
 	completed := make(chan int, numberOfTables)
 	for i := 0; i < numberOfTables; i++ {
 		db := tc.ServerConn(i % numberOfNodes)
-		go createTestTable(t, tc, i, db, &wgStart, &wgEnd, signal, completed)
+		go createTestTable(t, i, db, &wgStart, &wgEnd, signal, completed)
 	}
 
 	// Wait until all goroutines are ready.
@@ -212,7 +211,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	}
 
 	// Get the id descriptor generator count.
-	s := tc.Servers[0].ApplicationLayer()
+	s := tc.Server(0).ApplicationLayer()
 	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
@@ -227,7 +226,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	completed := make(chan int, numberOfTables)
 	for i := 0; i < numberOfTables; i++ {
 		db := tc.ServerConn(i % numberOfNodes)
-		go createTestTable(t, tc, 0, db, &wgStart, &wgEnd, signal, completed)
+		go createTestTable(t, 0, db, &wgStart, &wgEnd, signal, completed)
 	}
 
 	// Wait until all goroutines are ready.

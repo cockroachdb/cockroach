@@ -54,9 +54,9 @@ func TestManualReplication(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(context.Background())
 
-	s0 := sqlutils.MakeSQLRunner(tc.Conns[0])
-	s1 := sqlutils.MakeSQLRunner(tc.Conns[1])
-	s2 := sqlutils.MakeSQLRunner(tc.Conns[2])
+	s0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	s1 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
+	s2 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
 
 	s0.Exec(t, `CREATE DATABASE t`)
 	s0.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
@@ -71,7 +71,7 @@ func TestManualReplication(t *testing.T) {
 	s2.ExecRowsAffected(t, 3, `DELETE FROM test`)
 
 	// Split the table to a new range.
-	kvDB := tc.Servers[0].DB()
+	kvDB := tc.Server(0).DB()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
@@ -101,9 +101,9 @@ func TestManualReplication(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		if _, ok := tableRangeDesc.GetReplicaDescriptor(
-			tc.Servers[i].GetFirstStoreID()); !ok {
+			tc.Server(i).GetFirstStoreID()); !ok {
 			t.Fatalf("expected replica on store %d, got %+v",
-				tc.Servers[i].GetFirstStoreID(), tableRangeDesc.InternalReplicas)
+				tc.Server(i).GetFirstStoreID(), tableRangeDesc.InternalReplicas)
 		}
 	}
 
@@ -113,7 +113,7 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leaseHolder.StoreID != tc.Servers[0].GetFirstStoreID() {
+	if leaseHolder.StoreID != tc.Server(0).GetFirstStoreID() {
 		t.Fatalf("expected initial lease on server idx 0, but is on node: %+v",
 			leaseHolder)
 	}
@@ -131,7 +131,7 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leaseHolder.StoreID != tc.Servers[1].GetFirstStoreID() {
+	if leaseHolder.StoreID != tc.Server(1).GetFirstStoreID() {
 		t.Fatalf("expected lease on server idx 1 (node: %d store: %d), but is on node: %+v",
 			tc.Server(1).NodeID(),
 			tc.Server(1).GetFirstStoreID(),
@@ -297,7 +297,7 @@ func TestRestart(t *testing.T) {
 	require.NoError(t, tc.WaitForFullReplication())
 
 	ids := make([]roachpb.ReplicationTarget, numServers)
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		ids[i] = tc.Target(i)
 	}
 
@@ -322,7 +322,7 @@ func TestRestart(t *testing.T) {
 	require.NoError(t, tc.Restart())
 
 	// Validates that the NodeID and StoreID remain the same after a restart.
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		require.Equal(t, ids[i], tc.Target(i))
 	}
 

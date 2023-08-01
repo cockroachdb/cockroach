@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -66,7 +65,7 @@ func TestResetQuorum(t *testing.T) {
 	// range on n2, n3, and n4 with n5 as a non-voting replica.
 	setup := func(
 		t *testing.T,
-	) (tc *testcluster.TestCluster, k roachpb.Key, id roachpb.RangeID) {
+	) (tc serverutils.TestClusterInterface, k roachpb.Key, id roachpb.RangeID) {
 		clusterArgs := base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -78,7 +77,7 @@ func TestResetQuorum(t *testing.T) {
 				},
 			},
 		}
-		tc = testcluster.StartTestCluster(t, 5, clusterArgs)
+		tc = serverutils.StartNewTestCluster(t, 5, clusterArgs)
 
 		n1, n2, n3, n4, n5 := 0, 1, 2, 3, 4
 

@@ -204,7 +204,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, params)
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	allowResponse = make(chan struct{})
 	receivedRevertRequest = make(chan struct{})

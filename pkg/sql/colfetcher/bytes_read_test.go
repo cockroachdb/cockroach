@@ -34,7 +34,7 @@ func TestBytesRead(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	// Create the table with disabled automatic table stats collection. The
 	// stats collection is disabled so that the ColBatchScan would read the

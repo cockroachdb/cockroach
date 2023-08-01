@@ -132,8 +132,8 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	traceCollector := collector.New(
 		localTracer,
 		func(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
-			instanceIDs := make([]sqlinstance.InstanceInfo, len(tc.Servers))
-			for i := range tc.Servers {
+			instanceIDs := make([]sqlinstance.InstanceInfo, tc.NumServers())
+			for i := 0; i < tc.NumServers(); i++ {
 				instanceIDs[i].InstanceID = tc.Server(i).SQLInstanceID()
 			}
 			return instanceIDs, nil
@@ -231,8 +231,9 @@ func TestClusterInflightTraces(t *testing.T) {
 				tc.SystemLayer(0),
 				tc.SystemLayer(1),
 			}
-			systemDBs := make([]*gosql.DB, len(tc.Servers))
-			for i, s := range tc.Servers {
+			systemDBs := make([]*gosql.DB, tc.NumServers())
+			for i := 0; i < tc.NumServers(); i++ {
+				s := tc.Server(i)
 				systemDBs[i] = s.SQLConn(t, "")
 			}
 
@@ -248,14 +249,15 @@ func TestClusterInflightTraces(t *testing.T) {
 			switch config {
 			case "single-tenant":
 				testCases = []testCase{{
-					servers: []serverutils.ApplicationLayerInterface{tc.Servers[0], tc.Servers[1]},
+					servers: []serverutils.ApplicationLayerInterface{tc.Server(0), tc.Server(1)},
 					dbs:     systemDBs,
 				}}
 
 			case "shared-process":
-				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
-				dbs := make([]*gosql.DB, len(tc.Servers))
-				for i, s := range tc.Servers {
+				tenants := make([]serverutils.ApplicationLayerInterface, tc.NumServers())
+				dbs := make([]*gosql.DB, tc.NumServers())
+				for i := 0; i < tc.NumServers(); i++ {
+					s := tc.Server(i)
 					tenant, db, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
 					require.NoError(t, err)
 					tenants[i] = tenant
@@ -276,10 +278,10 @@ func TestClusterInflightTraces(t *testing.T) {
 
 			case "separate-process":
 				tenantID := roachpb.MustMakeTenantID(10)
-				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
-				dbs := make([]*gosql.DB, len(tc.Servers))
-				for i := range tc.Servers {
-					tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+				tenants := make([]serverutils.ApplicationLayerInterface, tc.NumServers())
+				dbs := make([]*gosql.DB, tc.NumServers())
+				for i := 0; i < tc.NumServers(); i++ {
+					tenant, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
 					require.NoError(t, err)
 					tenants[i] = tenant
 					dbs[i] = tenant.SQLConn(t, "")

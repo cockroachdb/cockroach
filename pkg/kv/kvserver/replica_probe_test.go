@@ -119,7 +119,8 @@ func TestReplicaProbeRequest(t *testing.T) {
 	}
 	// Sanity check that ProbeRequest is fit for sending through the entire KV
 	// stack, with both routing policies.
-	for _, srv := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		srv := tc.Server(serverIdx)
 		db := srv.DB()
 		for _, policy := range []kvpb.RoutingPolicy{
 			kvpb.RoutingPolicy_LEASEHOLDER,
@@ -153,10 +154,10 @@ func TestReplicaProbeRequest(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		seen.Lock()
 		defer seen.Unlock()
-		if exp, act := len(seen.m), len(tc.Servers); exp != act {
+		if exp, act := len(seen.m), tc.NumServers(); exp != act {
 			return errors.Errorf("waiting for stores to apply command: %d/%d", act, exp)
 		}
-		// We'll usually see 2 * len(tc.Servers) probes since we sent two probes, but see
+		// We'll usually see 2 * tc.NumServers() probes since we sent two probes, but see
 		// the comment about errant snapshots above. We just want this test to be reliable
 		// so expect at least one probe in command application.
 		n := 1
@@ -170,7 +171,8 @@ func TestReplicaProbeRequest(t *testing.T) {
 
 	// We can also probe directly at each Replica. This is the intended use case
 	// for Replica-level circuit breakers (#33007).
-	for _, srv := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		srv := tc.Server(serverIdx)
 		repl, _, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
 		ba := &kvpb.BatchRequest{}
@@ -188,7 +190,8 @@ func TestReplicaProbeRequest(t *testing.T) {
 	seen.Lock()
 	seen.injectedErr = injErr
 	seen.Unlock()
-	for _, srv := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		srv := tc.Server(serverIdx)
 		repl, _, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
 		ba := &kvpb.BatchRequest{}

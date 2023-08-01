@@ -154,13 +154,14 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		// Avoid distSQL so we can reliably hydrate the intended dist
 		// sender's cache below.
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			st := server.ClusterSettings()
 			st.Manual.Store(true)
 			sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(sessiondatapb.DistSQLOff))
 		}
 
-		sqlDB := tc.Conns[0]
+		sqlDB := tc.ServerConn(0)
 
 		if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 			t.Fatal(err)

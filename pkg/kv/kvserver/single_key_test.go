@@ -45,7 +45,7 @@ func TestSingleKey(t *testing.T) {
 
 	// Initialize the value for our test key to zero.
 	const key = "test-key"
-	initDB := tc.Servers[0].DB()
+	initDB := tc.Server(0).DB()
 	if err := initDB.Put(ctx, key, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestSingleKey(t *testing.T) {
 	// key. Each worker is configured to talk to a different node in the
 	// cluster.
 	for i := 0; i < num; i++ {
-		db := tc.Servers[i].DB()
+		db := tc.Server(i).DB()
 		go func() {
 			var r result
 			for timeutil.Now().Before(deadline) {

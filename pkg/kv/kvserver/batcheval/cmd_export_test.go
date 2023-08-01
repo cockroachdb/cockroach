@@ -172,7 +172,7 @@ func TestExportCmd(t *testing.T) {
 			"unexpected ResumeReason in latest export")
 	}
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `CREATE DATABASE mvcclatest`)
 	sqlDB.Exec(t, `CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
 	tableID := descpb.ID(sqlutils.QueryTableID(
@@ -455,7 +455,7 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	s := tc.ApplicationLayer(0)
-	sqlDB := tc.Conns[0]
+	sqlDB := tc.ServerConn(0)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	kvDB := s.DB()

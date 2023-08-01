@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -33,14 +33,14 @@ import (
 // span config primitives. It's not safe for concurrent use.
 type Handle struct {
 	t       *testing.T
-	tc      *testcluster.TestCluster
+	tc      serverutils.TestClusterInterface
 	ts      map[roachpb.TenantID]*Tenant
 	scKnobs *spanconfig.TestingKnobs
 }
 
 // NewHandle returns a new Handle.
 func NewHandle(
-	t *testing.T, tc *testcluster.TestCluster, scKnobs *spanconfig.TestingKnobs,
+	t *testing.T, tc serverutils.TestClusterInterface, scKnobs *spanconfig.TestingKnobs,
 ) *Handle {
 	return &Handle{
 		t:       t,

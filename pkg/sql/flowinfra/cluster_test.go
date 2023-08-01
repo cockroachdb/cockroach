@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -263,8 +262,7 @@ func TestClusterFlow(t *testing.T) {
 	const numNodes = 3
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tci := serverutils.StartNewTestCluster(t, numNodes, args)
-	tc := tci.(*testcluster.TestCluster)
+	tc := serverutils.StartNewTestCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
@@ -289,8 +287,7 @@ func TestTenantClusterFlow(t *testing.T) {
 
 	serverParams, _ := tests.CreateTestServerParams()
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual, ServerArgs: serverParams}
-	tci := serverutils.StartNewTestCluster(t, 1, args)
-	tc := tci.(*testcluster.TestCluster)
+	tc := serverutils.StartNewTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	testingKnobs := base.TestingKnobs{

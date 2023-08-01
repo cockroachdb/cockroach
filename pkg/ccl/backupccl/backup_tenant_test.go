@@ -45,7 +45,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	tenantID := roachpb.MustMakeTenantID(10)
 	tSrv, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{

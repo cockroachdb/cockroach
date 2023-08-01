@@ -506,7 +506,7 @@ func BenchmarkTracing(b *testing.B) {
 							Tracer:      tr,
 						},
 					})
-				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2])
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.ServerConn(0), tc.ServerConn(1), tc.ServerConn(2))
 				return sqlRunner, tc.Stopper()
 			},
 		},

@@ -424,7 +424,7 @@ func TestImportInTenant(t *testing.T) {
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Setup a few tenants, each with a different table.

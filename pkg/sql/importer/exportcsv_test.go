@@ -160,7 +160,7 @@ func TestExportNullWithEmptyNullAs(t *testing.T) {
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	db := sqlutils.MakeSQLRunner(conn)
 
 	// Set up dummy accounts table with NULL value
@@ -327,7 +327,7 @@ func TestExportUserDefinedTypes(t *testing.T) {
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Set up some initial state for the tests.
@@ -516,7 +516,7 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/foo' WITH chunk_size='10KB' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)

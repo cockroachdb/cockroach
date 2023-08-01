@@ -64,7 +64,7 @@ func TestAdminScatterWithDrainingNodes(t *testing.T) {
 	drainingStore := tc.GetFirstStoreFromServer(t, drainingServerIdx)
 
 	// Wait until the non-draining node is aware of the draining node.
-	testutils.SucceedsSoon(t, tc.Servers[drainingServerIdx].HeartbeatNodeLiveness)
+	testutils.SucceedsSoon(t, tc.Server(drainingServerIdx).HeartbeatNodeLiveness)
 	testutils.SucceedsSoon(t, func() error {
 		isDraining, err := nonDrainingStore.GetStoreConfig().StorePool.IsDraining(drainingStore.StoreID())
 		if err != nil {

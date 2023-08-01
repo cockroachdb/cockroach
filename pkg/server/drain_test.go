@@ -166,7 +166,7 @@ INSERT INTO t.test VALUES (3);
 
 type testDrainContext struct {
 	*testing.T
-	tc         *testcluster.TestCluster
+	tc         serverutils.TestClusterInterface
 	c          serverpb.AdminClient
 	connCloser func()
 }

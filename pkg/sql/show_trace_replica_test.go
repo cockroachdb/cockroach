@@ -65,7 +65,7 @@ func TestShowTraceReplica(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `ALTER RANGE "default" CONFIGURE ZONE USING constraints = '[+n4]'`)
 	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING constraints = '[+n4]'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
