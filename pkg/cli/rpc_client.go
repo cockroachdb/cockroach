@@ -69,9 +69,12 @@ func getClientGRPCConn(ctx context.Context, cfg server.Config) (*grpc.ClientConn
 		_ = conn.Close() // nolint:grpcconnclose
 	}))
 
-	// Tie the lifetime of the stopper to that of the context.
 	closer := func() {
-		stopper.Stop(ctx)
+		// We use context.Background() here and not ctx because we
+		// want to ensure that the closers always run to completion
+		// even if the context used to create the client conn is
+		// canceled.
+		stopper.Stop(context.Background())
 	}
 	return conn, closer, nil
 }
