@@ -1872,6 +1872,14 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	return ch
 }
 
+func (c *clusterImpl) addLabels(labels map[string]string) error {
+	return roachprod.AddLabels(c.l, c.name, labels)
+}
+
+func (c *clusterImpl) removeLabels(labels []string) error {
+	return roachprod.RemoveLabels(c.l, c.name, labels)
+}
+
 func (c *clusterImpl) ListSnapshots(
 	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
