@@ -276,7 +276,7 @@ clear
 rand_cluster cluster_gen_type=single_region
 ----
 
-rand_ranges placement_type=random replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1,0.2,0.7)
+rand_ranges placement_type=random replication_factor=3 placement_type=weighted_random weighted_rand=(0.01,0.02,0.03,0.04,0.05,0.06,0.01,0.02,0.03,0.04,0.05,0.06,0.01,0.02,0.03,0.04,0.05,0.06,0.37)
 ----
 
 eval duration=20m num_iterations=3

@@ -205,7 +205,7 @@ func (p PlacementType) String() string {
 	case Random:
 		return "random"
 	case WeightedRandom:
-		return "weighted_random"
+		return "weighted_rand"
 	default:
 		panic("unknown placement type")
 	}
@@ -219,7 +219,7 @@ func (p PlacementType) GetGeneratorType(s string) PlacementType {
 		return Skewed
 	case "random":
 		return Random
-	case "weighted_random":
+	case "weighted_rand":
 		return WeightedRandom
 	default:
 		panic(fmt.Sprintf("unknown placement type %s", s))
