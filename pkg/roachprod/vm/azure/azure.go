@@ -127,6 +127,16 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 	return m
 }
 
+func (p *Provider) AddLabels(vms vm.List, labels map[string]string) error {
+	fmt.Println("adding labels to Azure VMs not yet supported")
+	return nil
+}
+
+func (p *Provider) RemoveLabels(vms vm.List, labels []string) error {
+	fmt.Println("removing labels from Azure VMs not yet supported")
+	return nil
+}
+
 // Create implements vm.Provider.
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,

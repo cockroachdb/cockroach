@@ -1850,6 +1850,14 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	return ch
 }
 
+func (c *clusterImpl) addLabels(labels map[string]string) error {
+	return roachprod.AddLabels(c.l, c.name, labels)
+}
+
+func (c *clusterImpl) removeLabels(labels []string) error {
+	return roachprod.RemoveLabels(c.l, c.name, labels)
+}
+
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
 func (c *clusterImpl) Put(ctx context.Context, src, dest string, nodes ...option.Option) {

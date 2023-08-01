@@ -1229,6 +1229,34 @@ func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
 	return cloud.DestroyCluster(c)
 }
 
+func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+		return p.AddLabels(vms, labels)
+	})
+}
+
+func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+		return p.RemoveLabels(vms, labels)
+	})
+}
+
 // Create TODO
 func Create(
 	ctx context.Context,

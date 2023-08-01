@@ -42,6 +42,14 @@ func (p *provider) ConfigSSH(zones []string) error {
 	return nil
 }
 
+func (p *provider) AddLabels(vms vm.List, labels map[string]string) error {
+	return nil
+}
+
+func (p *provider) RemoveLabels(vms vm.List, labels []string) error {
+	return nil
+}
+
 // Create implements vm.Provider and returns Unimplemented.
 func (p *provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, providerOpts vm.ProviderOpts,
