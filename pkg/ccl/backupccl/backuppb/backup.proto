@@ -221,6 +221,8 @@ message BackupProgressTraceEvent {
 // ExportStats is a message containing information about each
 // Export{Request,Response}.
 message ExportStats {
+  option (gogoproto.goproto_stringer) = false;
+
   // NumFiles is the number of SST files produced by the ExportRequest.
   int64 num_files = 1;
   // DataSize is the byte size of all the SST files produced by the

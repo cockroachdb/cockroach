@@ -5200,7 +5200,7 @@ Support status: [reserved](#support-status)
 
 ## GetJobProfilerExecutionDetails
 
-`GET /_status/job_profiler_execution_details/{job_id}/{filename}`
+`GET /_status/job_profiler_execution_details/{job_id}`
 
 
 
