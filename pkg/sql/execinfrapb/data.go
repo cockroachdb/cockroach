@@ -277,6 +277,8 @@ func RemoteProducerMetaToLocalMeta(
 		meta.Metrics = v.Metrics
 	case *RemoteProducerMetadata_Changefeed:
 		meta.Changefeed = v.Changefeed
+	case *RemoteProducerMetadata_TracingAggregatorEvents:
+		meta.AggregatorEvents = v.TracingAggregatorEvents
 	default:
 		return *meta, false
 	}

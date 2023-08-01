@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,7 +61,8 @@ func TestAggregator(t *testing.T) {
 
 	// We only expect to see the aggregated stats from the local children since we
 	// have not imported the remote children's Recording.
-	exportStatsTag, found := aggSp.GetLazyTag("ExportStats")
+	exportStats := &backuppb.ExportStats{}
+	exportStatsTag, found := aggSp.GetLazyTag(proto.MessageName(exportStats))
 	require.True(t, found)
 	var es *backuppb.ExportStats
 	var ok bool
@@ -79,7 +81,7 @@ func TestAggregator(t *testing.T) {
 
 	// Now, we expect the ExportStats from the remote child to show up in the
 	// aggregator.
-	exportStatsTag, found = aggSp.GetLazyTag("ExportStats")
+	exportStatsTag, found = aggSp.GetLazyTag(proto.MessageName(exportStats))
 	require.True(t, found)
 	if es, ok = exportStatsTag.(*backuppb.ExportStats); !ok {
 		t.Fatal("failed to cast LazyTag to expected type")
