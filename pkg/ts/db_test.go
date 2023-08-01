@@ -313,7 +313,6 @@ func (tm *testModelRunner) rollup(nowNanos int64, timeSeries ...timeSeriesResolu
 		BudgetBytes:             math.MaxInt64,
 		EstimatedSources:        1, // Not needed for rollups
 		InterpolationLimitNanos: 0,
-		Columnar:                tm.DB.WriteColumnar(),
 	})
 	tm.rollupWithMemoryContext(qmc, nowNanos, timeSeries...)
 }
@@ -417,7 +416,7 @@ func (tm *testModelRunner) maintain(nowNanos int64) {
 				return data, false
 			}
 			targetResolution, hasRollup := res.TargetRollupResolution()
-			if hasRollup && tm.DB.WriteRollups() {
+			if hasRollup {
 				pruned := data.TimeSlice(thresholds[res], math.MaxInt64)
 				if len(pruned) != len(data) {
 					toRecord = append(toRecord, rollupRecordingData{
@@ -428,7 +427,7 @@ func (tm *testModelRunner) maintain(nowNanos int64) {
 					})
 					return pruned, true
 				}
-			} else if !hasRollup || !tm.DB.WriteRollups() {
+			} else {
 				pruned := data.TimeSlice(thresholds[res], math.MaxInt64)
 				if len(pruned) != len(data) {
 					return pruned, true
@@ -487,7 +486,6 @@ func (tm *testModelRunner) makeQuery(
 			BudgetBytes:             math.MaxInt64,
 			EstimatedSources:        currentEstimatedSources,
 			InterpolationLimitNanos: 0,
-			Columnar:                tm.DB.WriteColumnar(),
 		},
 		diskResolution:   diskResolution,
 		workerMemMonitor: tm.workerMemMonitor,
@@ -839,12 +837,7 @@ func TestPruneThreshold(t *testing.T) {
 	defer tm.Stop()
 
 	db := NewDB(nil, tm.Cfg.Settings)
-	var expected int64
-	if db.WriteRollups() {
-		expected = resolution10sDefaultRollupThreshold.Nanoseconds()
-	} else {
-		expected = deprecatedResolution10sDefaultPruneThreshold.Nanoseconds()
-	}
+	expected := resolution10sDefaultRollupThreshold.Nanoseconds()
 	result := db.PruneThreshold(Resolution10s)
 	if expected != result {
 		t.Errorf("prune threshold did not match expected value: %d != %d", expected, result)

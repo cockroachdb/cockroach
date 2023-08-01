@@ -1079,9 +1079,8 @@ func runMVCCBatchTimeSeries(ctx context.Context, b *testing.B, emk engineMaker, 
 	if err := value.SetProto(&roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: 0,
 		SampleDurationNanos: 1000,
-		Samples: []roachpb.InternalTimeSeriesSample{
-			{Offset: 0, Count: 1, Sum: 5.0},
-		},
+		Offset:              []int32{0},
+		Last:                []float64{5.0},
 	}); err != nil {
 		b.Fatal(err)
 	}
@@ -1131,9 +1130,8 @@ func runMVCCGetMergedValue(
 			timeseries := &roachpb.InternalTimeSeriesData{
 				StartTimestampNanos: 0,
 				SampleDurationNanos: 1000,
-				Samples: []roachpb.InternalTimeSeriesSample{
-					{Offset: int32(j), Count: 1, Sum: 5.0},
-				},
+				Offset:              []int32{int32(j)},
+				Last:                []float64{5.0},
 			}
 			var value roachpb.Value
 			if err := value.SetProto(timeseries); err != nil {

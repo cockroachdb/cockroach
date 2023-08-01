@@ -6499,21 +6499,17 @@ func TestMerge(t *testing.T) {
 	expected := roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: 0,
 		SampleDurationNanos: 1000,
-		Samples:             make([]roachpb.InternalTimeSeriesSample, len(args)),
 	}
 
 	for i := 0; i < len(args); i++ {
-		sample := roachpb.InternalTimeSeriesSample{
-			Offset: int32(i),
-			Count:  1,
-			Sum:    float64(i),
-		}
 		args[i] = roachpb.InternalTimeSeriesData{
 			StartTimestampNanos: expected.StartTimestampNanos,
 			SampleDurationNanos: expected.SampleDurationNanos,
-			Samples:             []roachpb.InternalTimeSeriesSample{sample},
+			Offset:              []int32{int32(i)},
+			Last:                []float64{float64(i)},
 		}
-		expected.Samples[i] = sample
+		expected.Offset = append(expected.Offset, int32(i))
+		expected.Last = append(expected.Last, float64(i))
 	}
 
 	for _, arg := range args {

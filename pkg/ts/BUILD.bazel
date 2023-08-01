@@ -97,7 +97,6 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//require",
     ],

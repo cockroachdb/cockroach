@@ -23,6 +23,8 @@ import (
 func TestGetMaxTimespan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	sizeOfSample := sizeOfInt32 + sizeOfFloat64
+
 	for _, tc := range []struct {
 		r                   Resolution
 		opts                QueryMemoryOptions

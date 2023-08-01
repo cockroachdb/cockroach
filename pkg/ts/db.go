@@ -28,15 +28,10 @@ import (
 
 var (
 	resolution1nsDefaultRollupThreshold = time.Second
-	// The deprecated prune threshold for the 10s resolution was created before
-	// time series rollups were enabled. It is still used in the transition period
-	// during an upgrade before the cluster version is finalized. After the
-	// version upgrade, the rollup threshold is used instead.
-	deprecatedResolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
-	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
-	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
-	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
-	storeDataTimeout                             = 1 * time.Minute
+	resolution10sDefaultRollupThreshold = 10 * 24 * time.Hour
+	resolution30mDefaultPruneThreshold  = 90 * 24 * time.Hour
+	resolution50nsDefaultPruneThreshold = 1 * time.Millisecond
+	storeDataTimeout                    = 1 * time.Minute
 )
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
@@ -331,16 +326,4 @@ func (db *DB) PruneThreshold(r Resolution) int64 {
 // Metrics gets the TimeSeriesMetrics structure used by this DB instance.
 func (db *DB) Metrics() *TimeSeriesMetrics {
 	return db.metrics
-}
-
-// WriteColumnar returns true if this DB should write data in the newer columnar
-// format.
-func (db *DB) WriteColumnar() bool {
-	return true
-}
-
-// WriteRollups returns true if this DB should write rollups for resolutions
-// targeted for a rollup resolution.
-func (db *DB) WriteRollups() bool {
-	return true
 }

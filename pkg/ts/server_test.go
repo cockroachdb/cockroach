@@ -540,7 +540,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 
 	// MemoryBudget is a function of slab size and source count.
 	samplesPerSlab := ts.Resolution10s.SlabDuration() / ts.Resolution10s.SampleDuration()
-	sizeOfSlab := int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{})) + (int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{})) * samplesPerSlab)
+	sizeOfSlab := int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{})) + (int64(unsafe.Sizeof(int32(0))+unsafe.Sizeof(float64(0))) * samplesPerSlab)
 	budget := 3 * sizeOfSlab * int64(sourceCount) * int64(workerCount)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{

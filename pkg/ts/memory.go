@@ -25,7 +25,6 @@ import (
 // Compute the size of various structures to use when tracking memory usage.
 var (
 	sizeOfTimeSeriesData = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
-	sizeOfSample         = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
 	sizeOfDataPoint      = int64(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
 	sizeOfInt32          = int64(unsafe.Sizeof(int32(0)))
 	sizeOfUint32         = int64(unsafe.Sizeof(uint32(0)))
@@ -47,8 +46,6 @@ type QueryMemoryOptions struct {
 	// hard limit on the timespan that needs to be read from disk to satisfy
 	// a query.
 	InterpolationLimitNanos int64
-	// If true, memory will be computed assuming the columnar layout.
-	Columnar bool
 }
 
 // QueryMemoryContext encapsulates the memory-related parameters of a time
@@ -148,19 +145,12 @@ func (qmc QueryMemoryContext) GetMaxRollupSlabs(r Resolution) int64 {
 func (qmc QueryMemoryContext) computeSizeOfSlab(r Resolution) int64 {
 	slabDuration := r.SlabDuration()
 
-	var sizeOfSlab int64
-	if qmc.Columnar {
-		// Contains an Offset (int32) and Last (float64) for each sample.
-		sizeOfColumns := (sizeOfInt32 + sizeOfFloat64)
-		if r.IsRollup() {
-			// Five additional float64 (First, Min, Max, Sum, Variance) and one uint32
-			// (count) per sample
-			sizeOfColumns += 5*sizeOfFloat64 + sizeOfUint32
-		}
-		sizeOfSlab = sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*sizeOfColumns
-	} else {
-		// Contains a sample structure for each sample.
-		sizeOfSlab = sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*sizeOfSample
+	// Contains an Offset (int32) and Last (float64) for each sample.
+	sizeOfColumns := (sizeOfInt32 + sizeOfFloat64)
+	if r.IsRollup() {
+		// Five additional float64 (First, Min, Max, Sum, Variance) and one uint32
+		// (count) per sample
+		sizeOfColumns += 5*sizeOfFloat64 + sizeOfUint32
 	}
-	return sizeOfSlab
+	return sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*sizeOfColumns
 }

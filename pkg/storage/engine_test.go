@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
 func ensureRangeEqual(
@@ -408,37 +407,25 @@ var testtime = int64(-446061360000000000)
 
 type tsSample struct {
 	offset int32
-	count  uint32
 	sum    float64
-	max    float64
-	min    float64
 }
 
-// timeSeriesRow generates a simple InternalTimeSeriesData object which starts
-// at the given timestamp and has samples of the given duration. The time series
-// is written using the older sample-row data format. The object is stored in an
-// MVCCMetadata object and marshaled to bytes.
-func timeSeriesRow(start int64, duration int64, samples ...tsSample) []byte {
-	tsv := timeSeriesRowAsValue(start, duration, samples...)
+// timeSeries generates a simple InternalTimeSeriesData object which starts
+// at the given timestamp and has samples of the given duration. The object is
+// stored in an MVCCMetadata object and marshaled to bytes.
+func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
+	tsv := timeSeriesAsValue(start, duration, samples...)
 	return mustMarshal(&enginepb.MVCCMetadataSubsetForMergeSerialization{RawBytes: tsv.RawBytes})
 }
 
-func timeSeriesRowAsValue(start int64, duration int64, samples ...tsSample) roachpb.Value {
+func timeSeriesAsValue(start int64, duration int64, samples ...tsSample) roachpb.Value {
 	ts := &roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: start,
 		SampleDurationNanos: duration,
 	}
 	for _, sample := range samples {
-		newSample := roachpb.InternalTimeSeriesSample{
-			Offset: sample.offset,
-			Count:  sample.count,
-			Sum:    sample.sum,
-		}
-		if sample.count > 1 {
-			newSample.Max = proto.Float64(sample.max)
-			newSample.Min = proto.Float64(sample.min)
-		}
-		ts.Samples = append(ts.Samples, newSample)
+		ts.Offset = append(ts.Offset, sample.offset)
+		ts.Last = append(ts.Last, sample.sum)
 	}
 	var v roachpb.Value
 	if err := v.SetProto(ts); err != nil {
@@ -476,27 +463,27 @@ func TestEngineMerge(t *testing.T) {
 			// Test case with RawBytes and MergeTimestamp.
 			mvccKey("timeseriesmerged"),
 			[][]byte{
-				addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
-					{1, 1, 5, 5, 5},
+				addMergeTimestamp(t, timeSeries(testtime, 1000, []tsSample{
+					{1, 5},
 				}...), 27),
-				timeSeriesRow(testtime, 1000, []tsSample{
-					{2, 1, 5, 5, 5},
-					{1, 2, 10, 7, 3},
+				timeSeries(testtime, 1000, []tsSample{
+					{2, 5},
+					{1, 10},
 				}...),
-				addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
-					{10, 1, 5, 5, 5},
+				addMergeTimestamp(t, timeSeries(testtime, 1000, []tsSample{
+					{10, 5},
 				}...), 53),
-				timeSeriesRow(testtime, 1000, []tsSample{
-					{5, 1, 5, 5, 5},
-					{3, 1, 5, 5, 5},
+				timeSeries(testtime, 1000, []tsSample{
+					{5, 5},
+					{3, 5},
 				}...),
 			},
-			addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
-				{1, 2, 10, 7, 3},
-				{2, 1, 5, 5, 5},
-				{3, 1, 5, 5, 5},
-				{5, 1, 5, 5, 5},
-				{10, 1, 5, 5, 5},
+			addMergeTimestamp(t, timeSeries(testtime, 1000, []tsSample{
+				{1, 10},
+				{2, 5},
+				{3, 5},
+				{5, 5},
+				{10, 5},
 			}...), 27),
 		},
 	}
