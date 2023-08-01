@@ -2166,6 +2166,10 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return grpcstatus.Errorf(codes.Unavailable, "node is not accepting SQL clients")
 	}
 
+	if s.server != nil && !s.server.statsLoaded.Load() {
+		return grpcstatus.Errorf(codes.Unavailable, "store stats are not yet loaded")
+	}
+
 	return nil
 }
 

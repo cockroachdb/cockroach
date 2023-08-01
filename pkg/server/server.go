@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -219,6 +220,8 @@ type Server struct {
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
+
+	statsLoaded *atomic.Bool
 }
 
 // NewServer creates a Server from a server.Config.
@@ -280,7 +283,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admissionOptions.Override(opts)
 	}
 
-	engines, err := cfg.CreateEngines(ctx)
+	var statsLoaded atomic.Bool
+	engines, err := cfg.CreateEngines(ctx, nodeIDContainer, &statsLoaded)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create engines")
 	}
@@ -1313,6 +1317,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		kvMemoryMonitor:           kvMemoryMonitor,
 		keyVisualizerServer:       keyVisualizerServer,
 		inspectzServer:            inspectzServer,
+		statsLoaded:               &statsLoaded,
 	}
 
 	return lateBoundServer, err
