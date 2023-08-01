@@ -13,13 +13,18 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	_ "github.com/lib/pq"
 )
 
-func updateRegserver(dbURL string, version *semver.Version) error {
+func updateRegserver(dbURL string, version *semver.Version, dryRun bool) error {
+	if dryRun {
+		log.Printf("not updating regserver in dry-run mode")
+		return nil
+	}
 	// The format of the entry looks like this:
 	// select * from registration.versions;
 	//     version     |                             details

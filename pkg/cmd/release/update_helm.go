@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 
 	"github.com/Masterminds/semver/v3"
@@ -20,7 +21,7 @@ import (
 func updateHelm(workDir string, version *semver.Version) error {
 	commands := []*exec.Cmd{
 		exec.Command("bazel", "build", "//build"),
-		exec.Command("sh", "-c", fmt.Sprintf("$(bazel info bazel-bin)/build/build_/build %s", version.String())),
+		exec.Command("sh", "-c", fmt.Sprintf("$(bazel info bazel-bin)/build/build_/build bump %s", version.String())),
 	}
 	for _, cmd := range commands {
 		cmd.Dir = workDir
@@ -28,7 +29,7 @@ func updateHelm(workDir string, version *semver.Version) error {
 		if err != nil {
 			return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
 		}
-		fmt.Printf("ran '%s': %s\n", cmd.String(), string(out))
+		log.Printf("ran '%s': %s\n", cmd.String(), string(out))
 	}
 	return nil
 }

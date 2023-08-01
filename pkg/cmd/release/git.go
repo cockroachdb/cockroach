@@ -142,7 +142,6 @@ func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, 
 		versions = filteredVersions
 	}
 	sort.Sort(semver.Collection(versions))
-	fmt.Printf("Found these versions: %+v\n", versions)
 	return versions[len(versions)-1].Original(), nil
 }
 
@@ -249,7 +248,7 @@ func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 	return buildInfo{}, fmt.Errorf("no ref found")
 }
 
-func branchExists(branch string) (bool, error) {
+func remoteBranchExists(branch string) (bool, error) {
 	cmd := exec.Command("git", "ls-remote", "--refs", "origin", "refs/heads/"+branch)
 	out, err := cmd.Output()
 	if err != nil {
@@ -261,7 +260,7 @@ func branchExists(branch string) (bool, error) {
 	return true, nil
 }
 
-func fileExists(branch string, f string) (bool, error) {
+func fileExistsInGit(branch string, f string) (bool, error) {
 	cmd := exec.Command("git", "ls-tree", "origin/"+branch, f)
 	out, err := cmd.Output()
 	if err != nil {

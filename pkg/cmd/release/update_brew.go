@@ -10,17 +10,35 @@
 
 package main
 
-import "github.com/Masterminds/semver/v3"
+import (
+	"fmt"
+	"log"
+	"os/exec"
 
-func updateBrew(workDir string, version *semver.Version, latestMajor bool) error {
+	"github.com/Masterminds/semver/v3"
+)
+
+func updateBrew(workDir string, version *semver.Version, latestMajor bool, dryRun bool) error {
+	if dryRun {
+		log.Printf("brew fetches and verifies the binaries, so it's likely it'll fail in dry-run mode. Skipping..")
+		return nil
+	}
 	// cockroach@major.minor is supported for all releases
-	//commands := []*exec.Cmd{
-	//	exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), fmt.Sprintf("PRODUCT=cockroach@%d.%d", version.Major(), version.Minor())),
-	//}
-	//// limited to the latest release only
-	//if latestMajor {
-	//	commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach"))
-	//	commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach-sql"))
-	//}
+	commands := []*exec.Cmd{
+		exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), fmt.Sprintf("PRODUCT=cockroach@%d.%d", version.Major(), version.Minor())),
+	}
+	// limited to the latest release only
+	if latestMajor {
+		commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach"))
+		commands = append(commands, exec.Command("make", fmt.Sprintf("VERSION=%s", version.String()), "PRODUCT=cockroach-sql"))
+	}
+	for _, cmd := range commands {
+		cmd.Dir = workDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
+		}
+		log.Printf("ran '%s': %s\n", cmd.String(), string(out))
+	}
 	return nil
 }
