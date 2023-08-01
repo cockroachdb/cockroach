@@ -65,6 +65,7 @@ export type StmtInsightsResponseRow = {
   plan_gist: string;
   cpu_sql_nanos: number;
   error_code: string;
+  error_msg: string;
   status: StatementStatus;
 };
 
@@ -95,6 +96,7 @@ index_recommendations,
 plan_gist,
 cpu_sql_nanos,
 error_code,
+error_msg,
 status
 `;
 
@@ -242,6 +244,7 @@ export function formatStmtInsights(
       planGist: row.plan_gist,
       cpuSQLNanos: row.cpu_sql_nanos,
       errorCode: row.error_code,
+      errorMsg: row.error_msg,
       status: row.status,
     } as StmtInsightEvent;
   });
