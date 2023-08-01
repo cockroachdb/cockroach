@@ -77,6 +77,7 @@ go_test(
     embed = [":lease"],
     deps = [
         "//pkg/base",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
@@ -105,7 +106,6 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
@@ -114,7 +114,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
