@@ -19,6 +19,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -959,24 +961,46 @@ func registerKVRangeLookups(r registry.Registry) {
 }
 
 // measureQPS will measure the approx QPS at the time this command is run. The
-// duration is how long of an interval to wait while measuring. Setting too
-// short of an interval can mean inaccuracy in results. Setting too long of an
-// interval may mean the impact is blurred out.
-func measureQPS(ctx context.Context, t test.Test, db *gosql.DB, duration time.Duration) float64 {
-	numInserts := func() float64 {
-		var v float64
-		if err := db.QueryRowContext(
-			ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
-		).Scan(&v); err != nil {
-			t.Fatal(err)
+// duration is the interval to measure over. Setting too short of an interval
+// can mean inaccuracy in results. Setting too long of an interval may mean the
+// impact is blurred out.
+func measureQPS(
+	ctx context.Context, t test.Test, duration time.Duration, dbs ...*gosql.DB,
+) float64 {
+
+	currentQPS := func() uint64 {
+		var value uint64
+		var wg sync.WaitGroup
+		wg.Add(len(dbs))
+
+		// Count the inserts before sleeping.
+		for _, db := range dbs {
+			db := db
+			go func() {
+				defer wg.Done()
+				var v uint64
+				if err := db.QueryRowContext(
+					ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
+				).Scan(&v); err != nil {
+					t.Fatal(err)
+				}
+				atomic.AddUint64(&value, v)
+			}()
 		}
-		return v
+		wg.Wait()
+		return value
 	}
 
-	before := numInserts()
-	time.Sleep(duration)
-	after := numInserts()
-	return (after - before) / duration.Seconds()
+	// Measure the current time and the QPS now.
+	startTime := timeutil.Now()
+	beforeQPS := currentQPS()
+	// Wait for the duration minus the first query time.
+	select {
+	case <-ctx.Done():
+		return 0
+	case <-time.After(duration - timeutil.Since(startTime)):
+		return float64(currentQPS()-beforeQPS) / duration.Seconds()
+	}
 }
 
 // registerKVRestartImpact measures the impact of stopping and then restarting a
@@ -1035,7 +1059,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			// Let some data be written to all nodes in the cluster.
 			t.Status(fmt.Sprintf("waiting %s to establish a base QPS", duration))
 			time.Sleep(duration)
-			qpsInitial := measureQPS(ctx, t, db, 5*time.Second)
+			qpsInitial := measureQPS(ctx, t, 5*time.Second, db)
 			t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
 			// Disable replicate queue on all nodes. This allows the test to reproduce
@@ -1075,7 +1099,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			if !c.IsLocal() {
 				time.Sleep(3 * time.Minute)
 			}
-			qpsFinal := measureQPS(ctx, t, db, 5*time.Second)
+			qpsFinal := measureQPS(ctx, t, 5*time.Second, db)
 			t.Status(fmt.Sprintf("post outage qps: %.0f", qpsFinal))
 
 			// Pass the test if the QPS is within a factor of 2. Often the qpsFinal is
