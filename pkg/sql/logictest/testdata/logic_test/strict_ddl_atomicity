@@ -1,3 +1,7 @@
+# LogicTest: !local-read-committed
+# The local-read-committed configuration enables autocommit_before_ddl, which
+# there's no point in testing at the same time as strict_ddl_atomicity.
+
 # Default behavior, where atomicity violations are allowed
 
 statement ok

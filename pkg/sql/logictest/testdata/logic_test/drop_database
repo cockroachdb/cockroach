@@ -263,7 +263,10 @@ statement error DROP DATABASE on non-empty database without explicit CASCADE
 DROP DATABASE foo
 
 statement ok
-SET sql_safe_updates = FALSE; DROP DATABASE foo
+SET sql_safe_updates = FALSE
+
+statement ok
+DROP DATABASE foo
 
 # Check that the default databases can be dropped and re-created like any other.
 statement OK

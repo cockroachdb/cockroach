@@ -1211,6 +1211,8 @@ false
 
 statement ok
 SET experimental_enable_temp_tables = 'on';
+
+statement ok
 CREATE TEMPORARY TABLE temp()
 
 query B

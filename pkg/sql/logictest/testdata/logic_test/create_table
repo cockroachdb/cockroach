@@ -47,6 +47,8 @@ CREATE TABLE t (x INT, y INT)
 # Regression for #45496.
 statement ok
 reset require_explicit_primary_keys;
+
+statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (rowid INT, rowid_1 INT, FAMILY (rowid, rowid_1))
 
