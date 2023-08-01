@@ -18,6 +18,7 @@ generating cluster configurations using randomized option
 generating ranges configurations using randomized option
 	placement_type=weighted_rand, range_gen_type=uniform, key_space=uniform, replication_factor=3, weightedRand=[0.01 0.04 0.2 0.75]
 generating load configurations using static option
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------

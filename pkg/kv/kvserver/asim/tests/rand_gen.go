@@ -250,10 +250,10 @@ type clusterGenSettings struct {
 	clusterGenType clusterConfigType
 }
 
-func (c clusterGenSettings) String() string {
-	return fmt.Sprintf("cluster_gen_type=%v", c.clusterGenType)
-}
-
 const (
 	defaultClusterGenType = multiRegion
 )
+
+func (c clusterGenSettings) String() string {
+	return fmt.Sprintf("cluster_gen_type=%v", c.clusterGenType)
+}
