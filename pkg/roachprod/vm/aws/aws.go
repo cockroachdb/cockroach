@@ -421,6 +421,61 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	return g.Wait()
 }
 
+// editLabels is a helper that adds or removes labels from the given VMs.
+func (p *Provider) editLabels(
+	l *logger.Logger, vms vm.List, labels map[string]string, remove bool,
+) error {
+	args := []string{"ec2"}
+	if remove {
+		args = append(args, "delete-tags")
+	} else {
+		args = append(args, "create-tags")
+	}
+
+	args = append(args, "--tags")
+	tagArgs := make([]string, 0, len(labels))
+	for key, value := range labels {
+		if remove {
+			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s", key))
+		} else {
+			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s,Value=%s", key, vm.SanitizeLabel(value)))
+		}
+	}
+	args = append(args, tagArgs...)
+
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return err
+	}
+	g := errgroup.Group{}
+	for region, list := range byRegion {
+		// Capture loop vars here
+		regionArgs := append(args, "--region", region)
+		regionArgs = append(regionArgs, "--resources")
+		regionArgs = append(regionArgs, list.ProviderIDs()...)
+
+		g.Go(func() error {
+			_, err := p.runCommand(l, regionArgs)
+			return err
+		})
+	}
+	return g.Wait()
+}
+
+// AddLabels adds the given labels to the given VMs.
+func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
+	return p.editLabels(l, vms, labels, false)
+}
+
+// RemoveLabels removes the given labels from the given VMs.
+func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
+	labelMap := make(map[string]string, len(labels))
+	for _, label := range labels {
+		labelMap[label] = ""
+	}
+	return p.editLabels(l, vms, labelMap, true)
+}
+
 // Create is part of the vm.Provider interface.
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
@@ -594,27 +649,9 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 // Extend is part of the vm.Provider interface.
 // This will update the Lifetime tag on the instances.
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
-	byRegion, err := regionMap(vms)
-	if err != nil {
-		return err
-	}
-	g := errgroup.Group{}
-	for region, list := range byRegion {
-		// Capture loop vars here
-		args := []string{
-			"ec2", "create-tags",
-			"--region", region,
-			"--tags", "Key=Lifetime,Value=" + lifetime.String(),
-			"--resources",
-		}
-		args = append(args, list.ProviderIDs()...)
-
-		g.Go(func() error {
-			_, err := p.runCommand(l, args)
-			return err
-		})
-	}
-	return g.Wait()
+	return p.AddLabels(l, vms, map[string]string{
+		"Lifetime": lifetime.String(),
+	})
 }
 
 // cachedActiveAccount memoizes the return value from FindActiveAccount

@@ -883,6 +883,52 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	return nil
 }
 
+func (p *Provider) editLabels(
+	l *logger.Logger, vms vm.List, labels map[string]string, remove bool,
+) error {
+	cmdArgs := []string{"compute", "instances"}
+	if remove {
+		cmdArgs = append(cmdArgs, "remove-labels")
+	} else {
+		cmdArgs = append(cmdArgs, "add-labels")
+	}
+
+	tagArgs := make([]string, 0, len(labels))
+	for key, value := range labels {
+		if remove {
+			tagArgs = append(tagArgs, key)
+		} else {
+			tagArgs = append(tagArgs, fmt.Sprintf("%s=%s", key, vm.SanitizeLabel(value)))
+		}
+	}
+	tagArgsString := strings.Join(tagArgs, ",")
+	commonArgs := []string{"--project", p.GetProject(), fmt.Sprintf("--labels=%s", tagArgsString)}
+
+	for _, v := range vms {
+		vmArgs := append(cmdArgs, v.Name, "--zone", v.Zone)
+		vmArgs = append(vmArgs, commonArgs...)
+		//fmt.Printf("gcloud %s\n", strings.Join(vmArgs, " "))
+		cmd := exec.Command("gcloud", vmArgs...)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", vmArgs, string(b))
+		}
+	}
+	return nil
+}
+
+// AddLabels adds the given labels to the given VMs.
+func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
+	return p.editLabels(l, vms, labels, false /* remove */)
+}
+
+func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
+	labelsMap := make(map[string]string, len(labels))
+	for _, label := range labels {
+		labelsMap[label] = ""
+	}
+	return p.editLabels(l, vms, labelsMap, true /* remove */)
+}
+
 // Create TODO(peter): document
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
@@ -1292,24 +1338,9 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 
 // Extend TODO(peter): document
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
-	// The gcloud command only takes a single instance.  Unlike Delete() above, we have to
-	// perform the iteration here.
-	for _, v := range vms {
-		args := []string{"compute", "instances", "add-labels"}
-
-		args = append(args, "--project", v.Project)
-		args = append(args, "--zone", v.Zone)
-		args = append(args, "--labels", fmt.Sprintf("lifetime=%s", lifetime))
-		args = append(args, v.Name)
-
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-		}
-	}
-	return nil
+	return p.AddLabels(l, vms, map[string]string{
+		"lifetime": lifetime.String(),
+	})
 }
 
 // FindActiveAccount TODO(peter): document
