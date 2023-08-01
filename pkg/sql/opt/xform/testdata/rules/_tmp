@@ -1,0 +1,75 @@
+exec-ddl
+CREATE TYPE c AS ENUM ('c0', 'c1', 'c2', 'c3', 'c4')
+----
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c c, PRIMARY KEY (c, b), UNIQUE WITHOUT INDEX (b))
+----
+
+opt
+INSERT INTO abc VALUES (1, 1, 'c2')
+----
+insert abc
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => abc.a:1
+ │    ├── column2:7 => abc.b:2
+ │    └── column3:8 => abc.c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null column3:8!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-8)
+ │    └── (1, 1, 'c2')
+ └── unique-checks
+      └── unique-checks-item: abc(b)
+           └── project
+                ├── columns: b:15!null
+                ├── cardinality: [0 - 1]
+                ├── immutable
+                ├── key: ()
+                ├── fd: ()-->(15)
+                └── project
+                     ├── columns: b:15!null
+                     ├── cardinality: [0 - 1]
+                     ├── immutable
+                     ├── key: ()
+                     ├── fd: ()-->(15)
+                     └── inner-join (cross)
+                          ├── columns: abc.b:10!null abc.c:11!null b:15!null
+                          ├── cardinality: [0 - 1]
+                          ├── multiplicity: left-rows(zero-or-one), right-rows(exactly-one)
+                          ├── immutable
+                          ├── key: ()
+                          ├── fd: ()-->(10,11,15)
+                          ├── values
+                          │    ├── columns: b:15!null
+                          │    ├── cardinality: [1 - 1]
+                          │    ├── key: ()
+                          │    ├── fd: ()-->(15)
+                          │    └── (1,)
+                          ├── limit
+                          │    ├── columns: abc.b:10!null abc.c:11!null
+                          │    ├── cardinality: [0 - 1]
+                          │    ├── immutable
+                          │    ├── key: ()
+                          │    ├── fd: ()-->(10,11)
+                          │    ├── select
+                          │    │    ├── columns: abc.b:10!null abc.c:11!null
+                          │    │    ├── immutable
+                          │    │    ├── key: (11)
+                          │    │    ├── fd: ()-->(10)
+                          │    │    ├── limit hint: 1.00
+                          │    │    ├── scan abc
+                          │    │    │    ├── columns: abc.b:10!null abc.c:11!null
+                          │    │    │    ├── constraint: /11/10
+                          │    │    │    │    ├── [ - /'c1'/1]
+                          │    │    │    │    └── [/'c3'/1 - ]
+                          │    │    │    ├── key: (10,11)
+                          │    │    │    └── limit hint: 35.71
+                          │    │    └── filters
+                          │    │         └── abc.b:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                          │    └── 1
+                          └── filters (true)
