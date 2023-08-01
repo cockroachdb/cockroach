@@ -92,6 +92,8 @@ var supportedExternalConnectionTypes = map[string]connectionpb.ConnectionProvide
 	GcpScheme:                                      connectionpb.ConnectionProvider_gcpubsub,
 	changefeedbase.SinkSchemeCloudStorageHTTP:      connectionpb.ConnectionProvider_http,
 	changefeedbase.SinkSchemeCloudStorageHTTPS:     connectionpb.ConnectionProvider_https,
+	changefeedbase.DeprecatedSinkSchemeHTTP:        connectionpb.ConnectionProvider_http,
+	changefeedbase.DeprecatedSinkSchemeHTTPS:       connectionpb.ConnectionProvider_https,
 	changefeedbase.SinkSchemeCloudStorageNodelocal: connectionpb.ConnectionProvider_nodelocal,
 	changefeedbase.SinkSchemeCloudStorageS3:        connectionpb.ConnectionProvider_s3,
 	changefeedbase.SinkSchemeKafka:                 connectionpb.ConnectionProvider_kafka,
