@@ -82,6 +82,8 @@ func TestRandomized(t *testing.T) {
 					clusterGenType: clusterGenType,
 				}
 				return ""
+			case "load_cluster":
+
 			case "rand_ranges":
 				randOptions.ranges = true
 				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultPlacementType, defaultReplicationFactor, defaultRangeGenType, defaultKeySpaceGenType
