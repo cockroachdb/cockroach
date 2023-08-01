@@ -253,7 +253,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		}
 		err := opc.runExecBuilder(
 			ctx,
-			&p.curPlan,
+			p.curPlan,
 			&p.stmt,
 			newDistSQLSpecExecFactory(ctx, p, planningMode),
 			execMemo,
@@ -288,7 +288,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// execFactory.
 				err = opc.runExecBuilder(
 					ctx,
-					&p.curPlan,
+					p.curPlan,
 					&p.stmt,
 					newDistSQLSpecExecFactory(ctx, p, distSQLLocalOnlyPlanning),
 					execMemo,
@@ -309,7 +309,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// If we got here, we did not create a plan above.
 	return opc.runExecBuilder(
 		ctx,
-		&p.curPlan,
+		p.curPlan,
 		&p.stmt,
 		newExecFactory(ctx, p),
 		execMemo,

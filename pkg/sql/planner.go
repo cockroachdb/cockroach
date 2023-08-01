@@ -250,7 +250,7 @@ type planner struct {
 	// curPlan collects the properties of the current plan being prepared. This state
 	// is undefined at the beginning of the planning of each new statement, and cannot
 	// be reused for an old prepared statement after a new statement has been prepared.
-	curPlan planTop
+	curPlan *planTop
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	txCtx                 transform.ExprTransformContext
@@ -399,6 +399,7 @@ func newInternalPlanner(
 	p.txn = txn
 	p.stmt = Statement{}
 	p.cancelChecker.Reset(ctx)
+	p.curPlan = &planTop{}
 	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()

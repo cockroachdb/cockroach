@@ -425,7 +425,7 @@ func (ih *instrumentationHelper) Finish(
 				payloadErr = pwe.errorCause()
 			}
 			bundle = buildStatementBundle(
-				ctx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan,
+				ctx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, p.curPlan,
 				ob.BuildString(), trace, placeholders, res.Err(), payloadErr, retErr,
 				&p.extendedEvalCtx.Settings.SV,
 			)

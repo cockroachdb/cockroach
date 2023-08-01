@@ -3608,6 +3608,7 @@ func (ex *connExecutor) implicitTxn() bool {
 // query in the context of this session.
 func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.cancelChecker.Reset(ctx)
+	p.curPlan = &planTop{}
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 

@@ -369,7 +369,7 @@ type portalPauseInfo struct {
 		// We reuse it when re-executing the portal.
 		// TODO(yuzefovich): consider refactoring distSQLFlowInfos from planTop to
 		// avoid storing the planTop here.
-		planTop planTop
+		planTop *planTop
 		// queryStats stores statistics on query execution. It is incremented for
 		// each execution of the portal.
 		queryStats *topLevelQueryStats
