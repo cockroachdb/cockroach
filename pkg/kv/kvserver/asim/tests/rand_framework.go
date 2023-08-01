@@ -43,9 +43,10 @@ type testSettings struct {
 }
 
 type randTestingFramework struct {
-	s                 testSettings
-	rangeGenerator    generator
-	keySpaceGenerator generator
+	s                     testSettings
+	defaultStaticSettings staticOptionSettings
+	rangeGenerator        generator
+	keySpaceGenerator     generator
 }
 
 // newRandTestingFramework constructs a new testing framework with the given
@@ -54,53 +55,56 @@ type randTestingFramework struct {
 // distribution as ranges are generated. Additionally, it initializes a buffer
 // that persists across all iterations, recording outputs and states of each
 // iteration.
-func newRandTestingFramework(settings testSettings) randTestingFramework {
+func newRandTestingFramework(
+	s testSettings, staticOptionSettings staticOptionSettings,
+) randTestingFramework {
 	if int64(defaultMaxRange) > defaultMinKeySpace {
 		panic(fmt.Sprintf(
 			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
 			defaultMaxRange, defaultMinKeySpace))
 	}
-	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeGenType)
-	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
+	rangeGenerator := newGenerator(s.randSource, defaultMinRange, defaultMaxRange, s.rangeGen.rangeGenType)
+	keySpaceGenerator := newGenerator(s.randSource, defaultMinKeySpace, defaultMaxKeySpace, s.rangeGen.keySpaceGenType)
 
 	return randTestingFramework{
-		s:                 settings,
-		rangeGenerator:    rangeGenerator,
-		keySpaceGenerator: keySpaceGenerator,
+		defaultStaticSettings: staticOptionSettings,
+		s:                     s,
+		rangeGenerator:        rangeGenerator,
+		keySpaceGenerator:     keySpaceGenerator,
 	}
 }
 
 func (f randTestingFramework) getCluster() gen.ClusterGen {
 	if !f.s.randOptions.cluster {
-		return defaultBasicClusterGen()
+		return f.defaultBasicClusterGen()
 	}
 	return f.randomClusterInfoGen(f.s.randSource)
 }
 
 func (f randTestingFramework) getRanges() gen.RangeGen {
 	if !f.s.randOptions.ranges {
-		return defaultBasicRangesGen()
+		return f.defaultBasicRangesGen()
 	}
 	return f.randomBasicRangesGen()
 }
 
 func (f randTestingFramework) getLoad() gen.LoadGen {
 	if !f.s.randOptions.load {
-		return defaultLoadGen()
+		return f.defaultLoadGen()
 	}
 	return gen.BasicLoad{}
 }
 
 func (f randTestingFramework) getStaticSettings() gen.StaticSettings {
 	if !f.s.randOptions.staticSettings {
-		return defaultStaticSettingsGen()
+		return f.defaultStaticSettingsGen()
 	}
 	return gen.StaticSettings{}
 }
 
 func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	if !f.s.randOptions.staticEvents {
-		return defaultStaticEventsGen()
+		return f.defaultStaticEventsGen()
 	}
 	return gen.StaticEvents{}
 }
@@ -143,9 +147,10 @@ func (f randTestingFramework) runRandTestRepeated() testResultsReport {
 		outputs[i] = f.runRandTest()
 	}
 	return testResultsReport{
-		flags:       f.s.verbose,
-		settings:    f.s,
-		outputSlice: outputs,
+		flags:          f.s.verbose,
+		settings:       f.s,
+		staticSettings: f.defaultStaticSettings,
+		outputSlice:    outputs,
 	}
 }
 
