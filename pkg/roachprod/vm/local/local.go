@@ -173,6 +173,14 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	return nil
 }
 
+func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
+	return nil
+}
+
+func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
+	return nil
+}
+
 // Create just creates fake host-info entries in the local filesystem
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,

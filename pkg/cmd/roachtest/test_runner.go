@@ -911,7 +911,11 @@ func (r *testRunner) runTest(
 	t.runnerID = goid.Get()
 
 	s := t.Spec().(*registry.TestSpec)
+	_ = c.addLabels(map[string]string{
+		"test_name": s.Name,
+	})
 	defer func() {
+		_ = c.removeLabels([]string{"test_name"})
 		t.end = timeutil.Now()
 
 		// We only have to record panics if the panic'd value is not the sentinel
