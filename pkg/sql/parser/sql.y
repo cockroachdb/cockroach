@@ -935,7 +935,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
-%token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
+%token <str> GLOBAL GOAL GRANT GRANTEE GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
@@ -7824,11 +7824,19 @@ show_databases_stmt:
 // %Help: SHOW DEFAULT PRIVILEGES - list default privileges
 // %Category: DDL
 // %Text: SHOW DEFAULT PRIVILEGES
+// %SeeAlso: WEBDOCS/show-default-privileges
 show_default_privileges_stmt:
   SHOW DEFAULT PRIVILEGES opt_for_roles opt_in_schema {
     $$.val = &tree.ShowDefaultPrivileges{
       Roles: $4.roleSpecList(),
       Schema: tree.Name($5),
+    }
+  }
+| SHOW DEFAULT PRIVILEGES FOR GRANTEE role_spec_list opt_in_schema {
+    $$.val = &tree.ShowDefaultPrivileges{
+      Roles: $6.roleSpecList(),
+      ForGrantee: true,
+      Schema: tree.Name($7),
     }
   }
 | SHOW DEFAULT PRIVILEGES FOR ALL ROLES opt_in_schema {
@@ -9116,7 +9124,6 @@ for_grantee_clause:
   {
     $$.val = tree.RoleSpecList(nil)
   }
-
 
 // %Help: PAUSE - pause background tasks
 // %Category: Group
@@ -16655,6 +16662,7 @@ unreserved_keyword:
 | GEOMETRYCOLLECTIONZM
 | GLOBAL
 | GOAL
+| GRANTEE
 | GRANTS
 | GROUPS
 | HASH
@@ -17166,6 +17174,7 @@ bare_label_keywords:
 | GEOMETRYZM
 | GLOBAL
 | GOAL
+| GRANTEE
 | GRANTS
 | GREATEST
 | GROUPING
