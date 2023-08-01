@@ -92,7 +92,7 @@ func newWeighted(weightedStores []float64) weighted {
 		cumulativeWeights[i] = prefixSumWeight
 	}
 	if cumulativeWeights[len(weightedStores)-1] != float64(1) {
-		panic(fmt.Sprintf("total cumulative weights for all stores should sum up to one but got %.2f\n",
+		panic(fmt.Sprintf("total cumulative weights for all stores should sum up to 1 but got %.2f\n",
 			cumulativeWeights[len(weightedStores)-1]))
 	}
 	return weighted{cumulativeWeights: cumulativeWeights}

@@ -156,7 +156,7 @@ import (
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
-	dir := datapathutils.TestDataPath(t, ".")
+	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		const defaultKeyspace = 10000
 		loadGen := gen.BasicLoad{}

@@ -16,7 +16,6 @@ import (
 	"math"
 	"math/rand"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
@@ -41,15 +40,79 @@ type testSettings struct {
 	randSource    *rand.Rand
 	assertions    []SimulationAssertion
 	randOptions   testRandOptions
+	clusterGen    clusterGenSettings
 	rangeGen      rangeGenSettings
 }
 
+// String converts the test setting to string for output.
+// For example,
+// test settings
+// num_iterations=10 duration=5m0s
+// ----------------------------------
+// generating cluster configurations using randomized option
+// clusterGenType=multi_region
+// generating ranges configurations using static option
+// generating load configurations using static option
+// generating events configurations using static option
+// generating settings configurations using static option
+func (t testSettings) String() string {
+	buf := strings.Builder{}
+	buf.WriteString(fmt.Sprintln("test settings"))
+	buf.WriteString(fmt.Sprintf("\tnum_iterations=%v duration=%s\n", t.numIterations, t.duration.Round(time.Second)))
+	divider := fmt.Sprintln("----------------------------------")
+	buf.WriteString(divider)
+
+	configStr := func(configType string, optionType string) string {
+		return fmt.Sprintf("generating %s configurations using %s option\n", configType, optionType)
+	}
+
+	if t.randOptions.cluster {
+		buf.WriteString(configStr("cluster", "randomized"))
+		buf.WriteString(fmt.Sprintf("\t%v\n", t.clusterGen))
+	} else {
+		buf.WriteString(configStr("cluster", "static"))
+	}
+
+	if t.randOptions.ranges {
+		buf.WriteString(configStr("ranges", "randomized"))
+		buf.WriteString(fmt.Sprintf("\t%v\n", t.rangeGen))
+	} else {
+		buf.WriteString(configStr("ranges", "static"))
+	}
+
+	if t.randOptions.load {
+		buf.WriteString(configStr("load", "randomized"))
+	} else {
+		buf.WriteString(configStr("load", "static"))
+	}
+
+	if t.randOptions.staticEvents {
+		buf.WriteString(configStr("events", "randomized"))
+	} else {
+		buf.WriteString(configStr("events", "static"))
+	}
+
+	if t.randOptions.staticSettings {
+		buf.WriteString(configStr("settings", "randomized"))
+	} else {
+		buf.WriteString(configStr("settings", "static"))
+	}
+	return buf.String()
+}
+
 type randTestingFramework struct {
+	recordBuf         *strings.Builder
 	s                 testSettings
 	rangeGenerator    generator
 	keySpaceGenerator generator
 }
 
+// newRandTestingFramework constructs a new testing framework with the given
+// testSettings. It also initializes generators for randomized range generation.
+// Since generators persist across iterations, this leads to the formation of a
+// distribution as ranges are generated. Additionally, it initializes a buffer
+// that persists across all iterations, recording outputs and states of each
+// iteration.
 func newRandTestingFramework(settings testSettings) randTestingFramework {
 	if int64(defaultMaxRange) > defaultMinKeySpace {
 		panic(fmt.Sprintf(
@@ -58,7 +121,10 @@ func newRandTestingFramework(settings testSettings) randTestingFramework {
 	}
 	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeGenType)
 	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
+	var buf strings.Builder
+
 	return randTestingFramework{
+		recordBuf:         &buf,
 		s:                 settings,
 		rangeGenerator:    rangeGenerator,
 		keySpaceGenerator: keySpaceGenerator,
@@ -100,7 +166,15 @@ func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	return gen.StaticEvents{}
 }
 
-func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
+// runRandTest creates randomized configurations based on the specified test
+// settings and runs one test using those configurations.
+func (f randTestingFramework) runRandTest(nthSample int) (asim.History, string) {
+	buf := strings.Builder{}
+	divider := fmt.Sprintln("----------------------------------")
+	if nthSample == 1 {
+		buf.WriteString(divider)
+	}
+	buf.WriteString(fmt.Sprintf("sample%d: start running\n", nthSample))
 	ctx := context.Background()
 	cluster := f.getCluster()
 	ranges := f.getRanges()
@@ -111,30 +185,36 @@ func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
-	return history, failed, reason
+	if failed {
+		buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s", nthSample, reason))
+	} else {
+		buf.WriteString(fmt.Sprintf("sample%d: pass\n", nthSample))
+	}
+	buf.WriteString(divider)
+	return history, buf.String()
 }
 
-func (f randTestingFramework) runRandTestRepeated(t *testing.T) {
+// runRandTestRepeated runs the test multiple times, each time with a new
+// randomly generated configuration. The result of each iteration is recorded in
+// f.recordBuf.
+func (f randTestingFramework) runRandTestRepeated() {
 	numIterations := f.s.numIterations
 	runs := make([]asim.History, numIterations)
-	failureExists := false
-	var buf strings.Builder
+	f.recordBuf.WriteString(f.s.String())
 	for i := 0; i < numIterations; i++ {
-		history, failed, reason := f.runRandTest()
+		history, output := f.runRandTest(i + 1)
 		runs[i] = history
-		if failed {
-			failureExists = true
-			fmt.Fprintf(&buf, "failed assertion sample %d\n%s", i+1, reason)
-		}
+		f.recordBuf.WriteString(output)
 	}
-
 	if f.s.verbose {
-		plotAllHistory(runs, &buf)
+		plotAllHistory(runs, f.recordBuf)
 	}
+}
 
-	if failureExists {
-		t.Fatal(buf.String())
-	}
+// printResults outputs the following information: 1. test settings used for
+// generating the tests 2. results of each randomized test
+func (f randTestingFramework) printResults() string {
+	return f.recordBuf.String()
 }
 
 // loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
@@ -156,7 +236,7 @@ func plotAllHistory(runs []asim.History, buf *strings.Builder) {
 		history := runs[i]
 		ts := metrics.MakeTS(history.Recorded)
 		statTS := ts[stat]
-		buf.WriteString("\n")
+		buf.WriteString(fmt.Sprintf("sample%d\n", i+1))
 		buf.WriteString(asciigraph.PlotMany(
 			statTS,
 			asciigraph.Caption(stat),
@@ -202,6 +282,10 @@ func convertInt64ToInt(num int64) int {
 	return int(num)
 }
 
+// randomBasicRangesGen returns range_gen, capable of creating an updated state
+// with updated range information. Range_gen is created using the range,
+// keyspace generator (initialized in rand testing framework) with the specified
+// replication factor and placement type (set in rangeGenSettings).
 func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 	switch placementType := f.s.rangeGen.placementType; placementType {
 	case gen.Even, gen.Skewed:
