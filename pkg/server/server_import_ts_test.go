@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
@@ -49,26 +49,26 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 
 	var bytesDumped int64
 	func() {
-		srv := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-		defer srv.Stopper().Stop(ctx)
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
 
-		cc := srv.Server(0).RPCClientConn(t, username.RootUserName())
+		cc := s.RPCClientConn(t, username.RootUserName())
 		bytesDumped = dumpTSNonempty(t, cc, path)
 		t.Logf("dumped %s bytes", humanizeutil.IBytes(bytesDumped))
 	}()
 
 	// Start a new server that will not write time series, and instruct it to
 	// ingest the dump we just wrote.
-	args := base.TestClusterArgs{}
-	args.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
-	ts.TimeseriesStorageEnabled.Override(ctx, &args.ServerArgs.Settings.SV, false)
-	args.ServerArgs.Knobs.Server = &server.TestingKnobs{
+	args := base.TestServerArgs{}
+	args.Settings = cluster.MakeTestingClusterSettings()
+	ts.TimeseriesStorageEnabled.Override(ctx, &args.Settings.SV, false)
+	args.Knobs.Server = &server.TestingKnobs{
 		ImportTimeseriesFile:        path,
 		ImportTimeseriesMappingFile: path + ".yaml",
 	}
-	srv := testcluster.StartTestCluster(t, 1, args)
-	defer srv.Stopper().Stop(ctx)
-	cc := srv.Server(0).RPCClientConn(t, username.RootUserName())
+	s := serverutils.StartServerOnly(t, args)
+	defer s.Stopper().Stop(ctx)
+	cc := s.RPCClientConn(t, username.RootUserName())
 	// This would fail if we didn't supply a dump. Just the fact that it returns
 	// successfully proves that we ingested at least some time series (or that we
 	// failed to disable time series).

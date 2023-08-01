@@ -80,7 +80,7 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				_, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
+				_, err := tc.ServerConn(0).QueryContext(ctx, testCase.query, testCase.args...)
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "use of bounded staleness requires an enterprise license")
 			})
@@ -91,7 +91,7 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 		defer ccl.TestingEnableEnterprise()()
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				r, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
+				r, err := tc.ServerConn(0).QueryContext(ctx, testCase.query, testCase.args...)
 				require.NoError(t, err)
 				require.NoError(t, r.Close())
 			})

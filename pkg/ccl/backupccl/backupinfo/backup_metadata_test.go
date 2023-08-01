@@ -77,7 +77,7 @@ func TestMetadataSST(t *testing.T) {
 
 	// Check for correct backup metadata on tenant backups.
 	userfile2 := "userfile:///2"
-	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+	_, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
 	sqlDB.Exec(t, `BACKUP TENANT 10 TO $1`, userfile2)
 	checkMetadata(ctx, t, tc, userfile2)
@@ -90,10 +90,10 @@ func checkMetadata(
 		ctx,
 		backupLoc,
 		base.ExternalIODirConfig{},
-		tc.Servers[0].ClusterSettings(),
+		tc.Server(0).ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Servers[0].InternalDB().(isql.DB),
+		tc.Server(0).InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -105,7 +105,7 @@ func checkMetadata(
 		t.Fatal(err)
 	}
 
-	srv := tc.Servers[0]
+	srv := tc.Server(0)
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	kmsEnv := backupencryption.MakeBackupKMSEnv(srv.ClusterSettings(), &base.ExternalIODirConfig{},
 		execCfg.InternalDB, username.RootUserName())

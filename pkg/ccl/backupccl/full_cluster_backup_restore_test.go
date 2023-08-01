@@ -87,7 +87,8 @@ func TestFullClusterBackup(t *testing.T) {
 	allowProgressAfterPreRestore := make(chan struct{})
 	// Closed to signal the zones have been restored.
 	restoredZones := make(chan struct{})
-	for _, server := range tcRestore.Servers {
+	for i := 0; i < tcRestore.NumServers(); i++ {
+		server := tcRestore.Server(i)
 		registry := server.JobRegistry().(*jobs.Registry)
 		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -495,7 +496,8 @@ func TestClusterRestoreSystemTableOrdering(t *testing.T) {
 	defer cleanupEmptyCluster()
 
 	restoredSystemTables := make([]string, 0)
-	for _, server := range tcRestore.Servers {
+	for i := 0; i < tcRestore.NumServers(); i++ {
+		server := tcRestore.Server(i)
 		registry := server.JobRegistry().(*jobs.Registry)
 		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -712,7 +714,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 				// Inject a retry error, that returns once.
 				alreadyErrored := false
-				for _, server := range tcRestore.Servers {
+				for i := 0; i < tcRestore.NumServers(); i++ {
+					server := tcRestore.Server(i)
 					registry := server.JobRegistry().(*jobs.Registry)
 					registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 						func(raw jobs.Resumer) jobs.Resumer {
@@ -744,7 +747,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		defer cleanupEmptyCluster()
 
 		// Bugger the backup by injecting a failure while restoring the system data.
-		for _, server := range tcRestore.Servers {
+		for i := 0; i < tcRestore.NumServers(); i++ {
+			server := tcRestore.Server(i)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -787,7 +791,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		defer cleanupEmptyCluster()
 
 		// Bugger the backup by injecting a failure while restoring the system data.
-		for _, server := range tcRestore.Servers {
+		for i := 0; i < tcRestore.NumServers(); i++ {
+			server := tcRestore.Server(i)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -1065,7 +1070,7 @@ func TestClusterRevisionDoesNotBackupOptOutSystemTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tc, _, _, cleanup := backupRestoreTestSetup(t, singleNode, 10, InitManualReplication)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	defer cleanup()
 

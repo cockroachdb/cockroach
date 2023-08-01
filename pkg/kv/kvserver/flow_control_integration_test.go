@@ -100,7 +100,7 @@ func TestFlowControlBasic(t *testing.T) {
 		for i := 0; i < numNodes; i++ {
 			si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
 			require.NoError(t, err)
-			tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
+			tc.Server(i).RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
 				&unreliableRaftHandler{
 					rangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: si,
@@ -1548,7 +1548,7 @@ ORDER BY name ASC;
 		h.comment(`-- (Replacing current raft leader on n1 in raft group with new n4 replica.)`)
 		testutils.SucceedsSoon(t, func() error {
 			// Relocate range from n1 -> n4.
-			if err := tc.Servers[2].DB().
+			if err := tc.Server(2).DB().
 				AdminRelocateRange(
 					context.Background(), desc.StartKey.AsRawKey(),
 					tc.Targets(1, 2, 3), nil, transferLeaseFirst); err != nil {
@@ -1779,7 +1779,7 @@ ORDER BY name ASC;
 	// Wait for the range to quiesce.
 	h.comment(`-- (Wait for range to quiesce.)`)
 	testutils.SucceedsSoon(t, func() error {
-		for i := range tc.Servers {
+		for i := 0; i < tc.NumServers(); i++ {
 			rep := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(k))
 			require.NotNil(t, rep)
 			if !rep.IsQuiescent() {
@@ -1907,7 +1907,7 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
 		require.NoError(t, err)
-		tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
+		tc.Server(i).RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
 			&unreliableRaftHandler{
 				rangeID:                    desc.RangeID,
 				IncomingRaftMessageHandler: si,
@@ -2333,10 +2333,10 @@ func newFlowControlTestHelper(t *testing.T, tc *testcluster.TestCluster) *flowCo
 }
 
 func (h *flowControlTestHelper) init() {
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.enabled = true`); err != nil {
+	if _, err := h.tc.ServerConn(0).Exec(`SET CLUSTER SETTING kvadmission.flow_control.enabled = true`); err != nil {
 		h.t.Fatal(err)
 	}
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'`); err != nil {
+	if _, err := h.tc.ServerConn(0).Exec(`SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'`); err != nil {
 		h.t.Fatal(err)
 	}
 }

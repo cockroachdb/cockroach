@@ -115,7 +115,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(ctx)
 
-	ts := tc.Servers[0]
+	ts := tc.Server(0)
 	firstStore, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -148,7 +148,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		stream := newTestStream()
 		streams[i] = stream
-		srv := tc.Servers[i]
+		srv := tc.Server(i)
 		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
@@ -297,7 +297,7 @@ func TestReplicaRangefeed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server1 := tc.Servers[1]
+	server1 := tc.Server(1)
 	store1, pErr := server1.GetStores().(*kvserver.Stores).GetStore(server1.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -469,7 +469,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < numNodes; i++ {
-			ts := tc.Servers[i]
+			ts := tc.Server(i)
 			store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 			if pErr != nil {
 				t.Fatal(pErr)
@@ -528,7 +528,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			},
 		)
 
-		ts := tc.Servers[0]
+		ts := tc.Server(0)
 		store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -621,7 +621,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		stream := newTestStream()
 		streamErrC := make(chan error, 1)
 		rangefeedSpan := mkSpan("a", "z")
-		ts := tc.Servers[removeStore]
+		ts := tc.Server(removeStore)
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
@@ -656,7 +656,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		stream := newTestStream()
 		streamErrC := make(chan error, 1)
 		rangefeedSpan := mkSpan("a", "z")
-		ts := tc.Servers[0]
+		ts := tc.Server(0)
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
@@ -687,7 +687,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		tc, rangeID := setup(t, base.TestingKnobs{})
 		defer tc.Stopper().Stop(ctx)
 
-		ts := tc.Servers[0]
+		ts := tc.Server(0)
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
@@ -753,22 +753,23 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		tc, rangeID := setup(t, base.TestingKnobs{})
 		defer tc.Stopper().Stop(ctx)
 
-		ts2 := tc.Servers[2]
+		ts2 := tc.Server(2)
 		partitionStore, err := ts2.GetStores().(*kvserver.Stores).GetStore(ts2.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
-		ts := tc.Servers[0]
+		ts := tc.Server(0)
 		firstStore, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
-		secondStore, err := tc.Servers[1].GetStores().(*kvserver.Stores).GetStore(tc.Servers[1].GetFirstStoreID())
+		secondStore, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			store, err := server.GetStores().(*kvserver.Stores).GetStore(server.GetFirstStoreID())
 			if err != nil {
 				t.Fatal(err)
@@ -890,7 +891,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		tc, _ := setup(t, knobs)
 		defer tc.Stopper().Stop(ctx)
 
-		ts := tc.Servers[0]
+		ts := tc.Server(0)
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
@@ -959,7 +960,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		tc, _ := setup(t, knobs)
 		defer tc.Stopper().Stop(ctx)
 
-		ts := tc.Servers[0]
+		ts := tc.Server(0)
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
@@ -1033,7 +1034,7 @@ func TestReplicaRangefeedMVCCHistoryMutationError(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	ts := tc.Servers[0]
+	ts := tc.Server(0)
 	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 	tc.SplitRangeOrFatal(t, splitKey)

@@ -81,10 +81,10 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers + 1)}})
 
 	// Run migrations.
-	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn).String())
 	require.NoError(t, err)
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1DatabaseRoleSettingsRoleIDColumnBackfilled).String())
 	require.NoError(t, err)
 

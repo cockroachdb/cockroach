@@ -148,7 +148,7 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 				ExternalIODir:     externalDir,
 			},
 		})
-		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		defer func() {
 			tc.Stopper().Stop(ctx)
 			dirCleanup()

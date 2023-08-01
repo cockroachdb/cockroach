@@ -47,7 +47,7 @@ func relocateAndCheck(
 	t.Helper()
 	every := log.Every(1 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
-		err := tc.Servers[0].DB().
+		err := tc.Server(0).DB().
 			AdminRelocateRange(
 				context.Background(),
 				startKey.AsRawKey(),
@@ -63,7 +63,7 @@ func relocateAndCheck(
 		}
 		return err
 	})
-	desc, err := tc.Servers[0].LookupRange(startKey.AsRawKey())
+	desc, err := tc.Server(0).LookupRange(startKey.AsRawKey())
 	require.NoError(t, err)
 	requireDescMembers(t, desc, append(voterTargets, nonVoterTargets...))
 	if len(voterTargets) > 0 {
@@ -82,7 +82,7 @@ func requireRelocationFailure(
 	errRegExp string,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		err := tc.Servers[0].DB().AdminRelocateRange(
+		err := tc.Server(0).DB().AdminRelocateRange(
 			ctx,
 			startKey.AsRawKey(),
 			voterTargets,
@@ -331,7 +331,7 @@ func TestAdminRelocateRangeWithoutLeaseTransfer(t *testing.T) {
 	relocateAndCheck(t, tc, k, tc.Targets(0, 1, 2), nil /* nonVoterTargets */)
 
 	// Move the last voter without asking for the lease to move.
-	err := tc.Servers[0].DB().AdminRelocateRange(
+	err := tc.Server(0).DB().AdminRelocateRange(
 		context.Background(),
 		k.AsRawKey(),
 		tc.Targets(3, 1, 0),
@@ -387,7 +387,7 @@ func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
 		},
 	}
 	for _, subtest := range tests {
-		err := tc.Servers[0].DB().AdminRelocateRange(
+		err := tc.Server(0).DB().AdminRelocateRange(
 			context.Background(),
 			k.AsRawKey(),
 			tc.Targets(subtest.voterTargets...),
@@ -462,7 +462,7 @@ func TestReplicaRemovalDuringGet(t *testing.T) {
 
 	// Perform write.
 	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), pArgs)
+	_, pErr := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(kv.Sender), pArgs)
 	require.Nil(t, pErr)
 
 	// Perform delayed read during replica removal.
@@ -488,7 +488,7 @@ func TestReplicaRemovalDuringCPut(t *testing.T) {
 
 	// Perform write.
 	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), pArgs)
+	_, pErr := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(kv.Sender), pArgs)
 	require.Nil(t, pErr)
 
 	// Perform delayed conditional put during replica removal. This will cause
@@ -561,7 +561,7 @@ func setupReplicaRemovalTest(
 			err  *kvpb.Error
 		}
 		resultC := make(chan result)
-		srv := tc.Servers[0]
+		srv := tc.Server(0)
 		err := srv.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
 			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
 			resp, pErr := kv.SendWrapped(reqCtx, srv.DistSenderI().(kv.Sender), req)

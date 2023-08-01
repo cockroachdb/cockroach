@@ -90,7 +90,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	tc.AddVotersOrFatal(t, k, tc.Target(1), tc.Target(2))
 	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
 
-	ts := tc.Servers[1]
+	ts := tc.Server(1)
 	store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -170,7 +170,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(context.Background())
 
-	ts := tc.Servers[1]
+	ts := tc.Server(1)
 	store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)

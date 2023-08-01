@@ -87,7 +87,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	uri := localFoo + "/" + backups[0][0]
 
 	codec := keys.MakeSQLCodec(s0.RPCContext().TenantID)
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), codec, "data", "bank")
 	backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
 
 	spec := makeTestingGenerativeSplitAndScatterSpec(
@@ -171,7 +171,7 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 	uri := localFoo + "/" + backups[0][0]
 
 	codec := keys.MakeSQLCodec(s0.RPCContext().TenantID)
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), codec, "data", "bank")
 	backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
 
 	spec := makeTestingGenerativeSplitAndScatterSpec(

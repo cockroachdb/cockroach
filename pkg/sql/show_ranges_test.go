@@ -39,7 +39,7 @@ func TestShowRangesWithLocality(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE t SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
 
@@ -124,7 +124,7 @@ func TestShowRangesMultipleStores(t *testing.T) {
 	assert.NoError(t, tc.WaitForFullReplication())
 
 	// Scatter a system table so that the lease is unlike to be on node 1.
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, "ALTER TABLE system.jobs SCATTER")
 	// Ensure that the localities line up.
 	for _, q := range []string{
@@ -184,7 +184,7 @@ func TestShowRangesWithDetails(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, "CREATE DATABASE test")
 	sqlDB.Exec(t, "USE test")
 	sqlDB.Exec(t, `

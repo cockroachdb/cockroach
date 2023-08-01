@@ -88,7 +88,7 @@ func TestScanBatchSize(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Until we propagate the estimated row count hint in the KV projection
@@ -160,7 +160,7 @@ func TestCFetcherLimitsOutputBatch(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	// Until we propagate the estimated row count hint in the KV projection
 	// pushdown case, this test is expected to fail if the direct scans are

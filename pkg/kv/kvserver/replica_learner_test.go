@@ -279,7 +279,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = tc.Servers[0].DB().AdminChangeReplicas(ctx, scratch, desc,
+			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx, scratch, desc,
 				kvpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, tc.Target(2)),
 			)
 			replicationChange <- err
@@ -303,7 +303,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			_, err = tc.Server(0).DB().AdminChangeReplicas(
 				ctx, scratch, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 			)
 			replicationChange <- err
@@ -437,7 +437,7 @@ func TestDelegateSnapshot(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			var desc roachpb.RangeDescriptor
 			rKey := keys.MustAddr(scratchKey)
-			require.NoError(t, tc.Servers[2].DB().GetProto(ctx, keys.RangeDescriptorKey(rKey), &desc))
+			require.NoError(t, tc.Server(2).DB().GetProto(ctx, keys.RangeDescriptorKey(rKey), &desc))
 			if desc.Generation != leaderDesc.Generation {
 				return errors.Newf("Generation mismatch %d != %d", desc.Generation, leaderDesc.Generation)
 			}
@@ -536,7 +536,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		_, err = setupPartitionedRange(tc, desc.RangeID, 0, 0, true, unreliableRaftHandlerFuncs{})
 		require.NoError(t, err)
 
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+		_, err = tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 
@@ -569,7 +569,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		_, err := setupPartitionedRange(tc, desc.RangeID, 0, 2, true, unreliableRaftHandlerFuncs{})
 		require.NoError(t, err)
 
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+		_, err = tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		// The delegate can not send this request since it does not have the latest
@@ -602,7 +602,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		_, err := setupPartitionedRange(tc, desc.RangeID, 0, 2, true, unreliableRaftHandlerFuncs{})
 		require.NoError(t, err)
 
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+		_, err = tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.NoError(t, err)
@@ -644,7 +644,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Unlock()
 
 		block.Store(2)
-		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+		_, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.ErrorContains(t, err, "BAM: receive error")
@@ -670,7 +670,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1})
 		senders.mu.Unlock()
 
-		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+		_, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.NoError(t, err)
@@ -704,7 +704,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 
 		// Don't allow store 4 to see the new descriptor through Raft.
 		block.Store(true)
-		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+		_, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.ErrorContains(t, err, "generation has changed")
@@ -737,7 +737,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 		// This will truncate the log on the first store.
 		truncateLog = func() {
-			server := tc.Servers[0]
+			server := tc.Server(0)
 			store, _ := server.GetStores().(*kvserver.Stores).GetStore(server.GetFirstStoreID())
 			store.MustForceRaftLogScanAndProcess()
 		}
@@ -753,7 +753,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 
 		// Don't allow the new store to see Raft updates.
 		blockRaft.Store(true)
-		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+		_, err := tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.NoError(t, err)
@@ -1458,7 +1458,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+		_, err = tc.Server(0).DB().AdminChangeReplicas(
 			ctx, scratchStartKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		return err
@@ -1842,7 +1842,7 @@ func TestDemotedLearnerRemovalHandlesRace(t *testing.T) {
 	var finishAndGetRecording func() tracingpb.Recording
 	err := tc.Stopper().RunAsyncTask(ctx, "test", func(ctx context.Context) {
 		ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(
-			ctx, tc.Servers[0].Tracer(), "rebalance",
+			ctx, tc.Server(0).Tracer(), "rebalance",
 		)
 		_, err := tc.RebalanceVoter(
 			ctx,
@@ -1872,7 +1872,7 @@ func TestDemotedLearnerRemovalHandlesRace(t *testing.T) {
 
 	// Manually remove the learner replica from the range, and expect that to not
 	// affect the previous rebalance anymore.
-	_, leaseRepl := getFirstStoreReplica(t, tc.Servers[0], scratchKey)
+	_, leaseRepl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
 	require.NotNil(t, leaseRepl)
 	beforeDesc := tc.LookupRangeOrFatal(t, scratchKey)
 	_, err = leaseRepl.TestingRemoveLearner(

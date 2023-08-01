@@ -501,7 +501,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
 		defer tc.Stopper().Stop(context.Background())
 
-		db0 := tc.Servers[0].DB()
+		db0 := tc.Server(0).DB()
 
 		// Split off a range so that we get away from the timeseries writes, which
 		// pollute the stats with ContainsEstimates=true. Note that the split clears
@@ -561,7 +561,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	tc := testcluster.StartTestCluster(t, numNodes, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 
-	srv0 := tc.Servers[0]
+	srv0 := tc.Server(0)
 	db0 := srv0.DB()
 
 	// Run a goroutine that writes to the range in a tight loop. This tests that
@@ -611,7 +611,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	// The stats should magically repair themselves. We'll first do a quick check
 	// and then a full recomputation.
-	repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
+	repl, _, err := tc.Server(0).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
 	require.NoError(t, err)
 	ms := repl.GetMVCCStats()
 	if ms.SysCount >= sysCountGarbage {

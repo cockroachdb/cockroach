@@ -122,7 +122,7 @@ func TestNewExternalSSTReader(t *testing.T) {
 			clusterSettings,
 			blobs.TestBlobServiceClient(tempDir),
 			username.RootUserName(),
-			tc.Servers[0].InternalDB().(isql.DB),
+			tc.Server(0).InternalDB().(isql.DB),
 			nil, /* limiters */
 			cloud.NilMetrics,
 		)

@@ -157,7 +157,7 @@ func TestParallelCreateTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get the id descriptor generator count.
-	s := tc.Servers[0].ApplicationLayer()
+	s := tc.Server(0).ApplicationLayer()
 	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {
@@ -212,7 +212,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	}
 
 	// Get the id descriptor generator count.
-	s := tc.Servers[0].ApplicationLayer()
+	s := tc.Server(0).ApplicationLayer()
 	idgen := descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	descIDStart, err := idgen.PeekNextUniqueDescID(context.Background())
 	if err != nil {

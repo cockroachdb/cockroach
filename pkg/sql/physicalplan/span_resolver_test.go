@@ -51,7 +51,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	rowRanges, _ := setupRanges(
-		tc.Conns[0], tc.Servers[0], tc.Servers[0].DB(), t)
+		tc.ServerConn(0), tc.Server(0), tc.Server(0).DB(), t)
 
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
 	// a pristine state, with empty caches.
@@ -83,7 +83,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	}
 
 	// Create a SpanResolver using the 4th node, with empty caches.
-	s3 := tc.Servers[3]
+	s3 := tc.Server(3)
 
 	lr := physicalplan.NewSpanResolver(
 		s3.ClusterSettings(),
@@ -117,7 +117,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	if len(replicas) != 3 {
 		t.Fatalf("expected replies for 3 spans, got %d", len(replicas))
 	}
-	si := tc.Servers[0]
+	si := tc.Server(0)
 
 	storeID := si.GetFirstStoreID()
 	for i := 0; i < 3; i++ {
@@ -134,7 +134,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	// Now populate the cached on node 4 and query again. This time, we expect to see
 	// each span on its own range.
-	if err := populateCache(tc.Conns[3], 3 /* expectedNumRows */); err != nil {
+	if err := populateCache(tc.ServerConn(3), 3 /* expectedNumRows */); err != nil {
 		t.Fatal(err)
 	}
 	replicas, err = resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil, nil), spans...)
@@ -144,7 +144,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	var expected [][]rngInfo
 	for i := 0; i < 3; i++ {
-		expected = append(expected, []rngInfo{selectReplica(tc.Servers[i].NodeID(), rowRanges[i])})
+		expected = append(expected, []rngInfo{selectReplica(tc.Server(i).NodeID(), rowRanges[i])})
 	}
 	if err = expectResolved(replicas, expected...); err != nil {
 		t.Fatal(err)

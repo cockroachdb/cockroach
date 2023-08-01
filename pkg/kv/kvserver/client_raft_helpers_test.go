@@ -180,7 +180,7 @@ type testClusterStoreRaftMessageHandler struct {
 }
 
 func (h *testClusterStoreRaftMessageHandler) getStore() (*kvserver.Store, error) {
-	ts := h.tc.Servers[h.storeIdx]
+	ts := h.tc.Server(h.storeIdx)
 	return ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 }
 
@@ -275,8 +275,8 @@ func setupPartitionedRange(
 	activated bool,
 	funcs unreliableRaftHandlerFuncs,
 ) (*testClusterPartitionedRange, error) {
-	handlers := make([]kvserver.IncomingRaftMessageHandler, 0, len(tc.Servers))
-	for i := range tc.Servers {
+	handlers := make([]kvserver.IncomingRaftMessageHandler, 0, tc.NumServers())
+	for i := 0; i < tc.NumServers(); i++ {
 		handlers = append(handlers, &testClusterStoreRaftMessageHandler{
 			tc:       tc,
 			storeIdx: i,
@@ -301,7 +301,7 @@ func setupPartitionedRangeWithHandlers(
 	pr.mu.partitioned = activated
 	pr.mu.partitionedNodeIdx = partitionedNodeIdx
 	if replicaID == 0 {
-		ts := tc.Servers[partitionedNodeIdx]
+		ts := tc.Server(partitionedNodeIdx)
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 		if err != nil {
 			return nil, err
@@ -319,7 +319,7 @@ func setupPartitionedRangeWithHandlers(
 	pr.mu.partitionedReplicas = map[roachpb.ReplicaID]bool{
 		replicaID: true,
 	}
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		s := i
 		h := &unreliableRaftHandler{
 			rangeID:                    rangeID,
@@ -383,7 +383,7 @@ func setupPartitionedRangeWithHandlers(
 			}
 		}
 		pr.handlers = append(pr.handlers, h)
-		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+		tc.Server(s).RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
 	}
 	return pr, nil
 }

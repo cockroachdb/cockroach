@@ -54,7 +54,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
-	tdb := sqlutils.MakeSQLRunner(tc.Conns[0])
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
 

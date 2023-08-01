@@ -132,7 +132,7 @@ func TestMaxDiskSpillUsage(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	_, err := conn.ExecContext(ctx, `
 CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)
@@ -183,7 +183,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	runQuery := func(query string, hideCPU bool) {
 		rows := db.QueryStr(t, "EXPLAIN ANALYZE "+query)
@@ -247,7 +247,7 @@ func TestContentionTimeOnWrites(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
+	runner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	runner.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY, v INT)")
 
 	// The test involves three goroutines:
@@ -276,7 +276,7 @@ func TestContentionTimeOnWrites(t *testing.T) {
 				close(sem)
 			}
 		}()
-		txn, err := tc.Conns[0].Begin()
+		txn, err := tc.ServerConn(0).Begin()
 		if err != nil {
 			errCh <- err
 			return

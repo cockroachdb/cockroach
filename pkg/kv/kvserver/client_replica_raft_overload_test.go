@@ -81,7 +81,7 @@ func TestReplicaRaftOverload(t *testing.T) {
 		// so it may or may not contribute here (depending on when it quiesces).
 		//
 		// See: https://github.com/cockroachdb/cockroach/issues/84252
-		require.NoError(t, tc.Servers[0].DB().Put(ctx, tc.ScratchRange(t), "foo"))
+		require.NoError(t, tc.Server(0).DB().Put(ctx, tc.ScratchRange(t), "foo"))
 		s1 := tc.GetFirstStoreFromServer(t, 0)
 		require.NoError(t, s1.ComputeMetrics(ctx))
 		if n := s1.Metrics().RaftPausedFollowerCount.Value(); n == 0 {

@@ -860,10 +860,10 @@ func fileSSTSinkTestSetUp(
 ) (*fileSSTSink, cloud.ExternalStorage) {
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
 		base.ExternalIODirConfig{},
-		tc.Servers[0].ClusterSettings(),
+		tc.Server(0).ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Servers[0].InternalDB().(isql.DB),
+		tc.Server(0).InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -876,7 +876,7 @@ func fileSSTSinkTestSetUp(
 		id:       1,
 		enc:      nil,
 		progCh:   progCh,
-		settings: &tc.Servers[0].ClusterSettings().SV,
+		settings: &tc.Server(0).ClusterSettings().SV,
 	}
 
 	sink := makeFileSSTSink(sinkConf, store)

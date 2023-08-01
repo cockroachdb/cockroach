@@ -2514,14 +2514,14 @@ func TestOutstandingLeasesMetric(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
-	_, err := tc.Conns[0].ExecContext(ctx, "CREATE TABLE a (a INT PRIMARY KEY)")
+	_, err := tc.ServerConn(0).ExecContext(ctx, "CREATE TABLE a (a INT PRIMARY KEY)")
 	assert.NoError(t, err)
-	_, err = tc.Conns[0].ExecContext(ctx, "CREATE TABLE b (a INT PRIMARY KEY)")
+	_, err = tc.ServerConn(0).ExecContext(ctx, "CREATE TABLE b (a INT PRIMARY KEY)")
 	assert.NoError(t, err)
-	gauge := tc.Servers[0].LeaseManager().(*lease.Manager).TestingOutstandingLeasesGauge()
+	gauge := tc.Server(0).LeaseManager().(*lease.Manager).TestingOutstandingLeasesGauge()
 	outstandingLeases := gauge.Value()
 
-	_, err = tc.Conns[0].ExecContext(ctx, "SELECT * FROM a")
+	_, err = tc.ServerConn(0).ExecContext(ctx, "SELECT * FROM a")
 	assert.NoError(t, err)
 
 	afterQuery := gauge.Value()
@@ -2535,7 +2535,7 @@ func TestOutstandingLeasesMetric(t *testing.T) {
 	}
 
 	// Expect at least 3 leases: one for a, one for the default database, and one for b.
-	_, err = tc.Conns[0].ExecContext(ctx, "SELECT * FROM b")
+	_, err = tc.ServerConn(0).ExecContext(ctx, "SELECT * FROM b")
 	assert.NoError(t, err)
 
 	afterQuery = gauge.Value()
@@ -3145,7 +3145,7 @@ ALTER TABLE t1 SPLIT AT VALUES (1);
 	require.NoError(t, err)
 	// Get the lease manager and table ID for acquiring a lease on.
 	beforeExecute.Lock()
-	leaseManager = tc.Servers[0].LeaseManager().(*lease.Manager)
+	leaseManager = tc.Server(0).LeaseManager().(*lease.Manager)
 	beforeExecute.Unlock()
 	tempTableID := uint64(0)
 	err = conn.QueryRow("SELECT table_id FROM crdb_internal.tables WHERE name = $1 AND database_name = current_database()",

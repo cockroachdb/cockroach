@@ -190,7 +190,7 @@ func TestRevertSpansFanout(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.Background())
 	s := tc.ApplicationLayer(0)
-	sqlDB := tc.Conns[0]
+	sqlDB := tc.ServerConn(0)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 

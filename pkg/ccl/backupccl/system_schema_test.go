@@ -35,7 +35,7 @@ func TestAllSystemTablesHaveBackupConfig(t *testing.T) {
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			}})
 	defer tc.Stopper().Stop(ctx)
-	systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
+	systemSQL := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantID:     roachpb.MustMakeTenantID(10),

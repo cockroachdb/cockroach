@@ -45,7 +45,7 @@ func TestSystemPrivilegesIndexMigration(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Run migration.
-	_, err := tc.Conns[0].ExecContext(
+	_, err := tc.ServerConn(0).ExecContext(
 		ctx,
 		`SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername).String(),

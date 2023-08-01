@@ -107,7 +107,8 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMod
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	for _, server := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
+		server := tc.Server(i)
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(distSQLMode))
@@ -118,8 +119,8 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMod
 	}
 
 	var clients []mtClient
-	for i := range tc.Conns {
-		clients = append(clients, mtClient{ID: i, DB: tc.Conns[i]})
+	for i := 0; i < tc.NumServers(); i++ {
+		clients = append(clients, mtClient{ID: i, DB: tc.ServerConn(i)})
 	}
 	// We will insert into this table by selecting MAX(val) and increasing by
 	// one and expect that val and sts (the commit timestamp) are both
@@ -225,7 +226,7 @@ RETURNING val, sts, node, tb`,
 		}
 	}
 
-	sem := make(chan struct{}, 2*len(tc.Conns))
+	sem := make(chan struct{}, 2*tc.NumServers())
 	timer := time.After(5 * time.Second)
 
 	defer verify()

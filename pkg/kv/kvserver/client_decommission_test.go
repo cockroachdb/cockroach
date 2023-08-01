@@ -71,7 +71,7 @@ func TestDecommission(t *testing.T) {
 			attempt++
 			desc := tc.LookupRangeOrFatal(t, k)
 			for _, rDesc := range desc.Replicas().VoterDescriptors() {
-				store, err := tc.Servers[int(rDesc.NodeID-1)].GetStores().(*kvserver.Stores).GetStore(rDesc.StoreID)
+				store, err := tc.Server(int(rDesc.NodeID-1)).GetStores().(*kvserver.Stores).GetStore(rDesc.StoreID)
 				require.NoError(t, err)
 				if err := store.ForceReplicationScanAndProcess(); err != nil {
 					return err

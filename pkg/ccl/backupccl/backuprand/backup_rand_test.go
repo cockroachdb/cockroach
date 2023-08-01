@@ -61,12 +61,12 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 	tc.ToggleReplicateQueues(false)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, "CREATE DATABASE rand")
 
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rng)
 	for _, stmt := range setup {
-		if _, err := tc.Conns[0].Exec(stmt); err != nil {
+		if _, err := tc.ServerConn(0).Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -91,7 +91,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		}
 		// Note: we do not care how many rows successfully populate
 		// the given table
-		if _, err := randgen.PopulateTableWithRandData(rng, tc.Conns[0], tableName,
+		if _, err := randgen.PopulateTableWithRandData(rng, tc.ServerConn(0), tableName,
 			numInserts); err != nil {
 			t.Fatal(err)
 		}
@@ -106,7 +106,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		if runSchemaOnlyExtension == "" {
 			var err error
 			tableID := sqlutils.QueryTableID(t, sqlDB.DB, "rand", "public", tableName)
-			expectedData[tableName], err = fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
+			expectedData[tableName], err = fingerprintutils.FingerprintTable(ctx, tc.ServerConn(0), tableID,
 				fingerprintutils.Stripped())
 			require.NoError(t, err)
 		}
@@ -142,7 +142,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 				"SHOW CREATE %s not equal after RESTORE", tableName)
 			if runSchemaOnlyExtension == "" {
 				tableID := sqlutils.QueryTableID(t, sqlDB.DB, "restoredb", "public", tableName)
-				fingerpint, err := fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
+				fingerpint, err := fingerprintutils.FingerprintTable(ctx, tc.ServerConn(0), tableID,
 					fingerprintutils.Stripped())
 				require.NoError(t, err)
 				require.Equal(t, expectedData[tableName], fingerpint)
@@ -194,7 +194,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		tables := buf.String()
 		t.Logf("Testing subset backup/restore %s", tables)
 		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
-		_, err := tc.Conns[0].Exec(
+		_, err := tc.ServerConn(0).Exec(
 			fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb' %s)", tables, runSchemaOnlyExtension),
 			backupTarget)
 		if err != nil {

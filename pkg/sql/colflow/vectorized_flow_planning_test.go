@@ -31,7 +31,7 @@ func TestVectorizedPlanning(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	t.Run("no columnarizer-materializer", func(t *testing.T) {
 		if !buildutil.CrdbTestBuild {

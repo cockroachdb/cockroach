@@ -8000,7 +8000,7 @@ func TestChangefeedExecLocality(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	tc.ToggleReplicateQueues(false)
 
-	n2 := sqlutils.MakeSQLRunner(tc.Conns[1])
+	n2 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
 	// Setup a table with at least one range on each node to be sure we will see a
 	// file from that node if it isn't excluded by filter. Relocate can fail with

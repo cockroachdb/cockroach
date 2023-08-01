@@ -162,7 +162,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "in test", nil)
 
 	log.Infof(ctx, "setting zone config to disable replication")
-	if _, err := tc.Conns[0].Exec(`ALTER RANGE meta CONFIGURE ZONE using num_replicas = 1`); err != nil {
+	if _, err := tc.ServerConn(0).Exec(`ALTER RANGE meta CONFIGURE ZONE using num_replicas = 1`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -284,7 +284,7 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stopper().Stop(ctx)
 
-	nl1 := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
+	nl1 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
 
 	// Make sure the callback doesn't fire willy-nilly...
 	func() {
@@ -340,7 +340,7 @@ func TestGetActiveNodes(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	// At this point StartTestCluster has waited for all nodes to become live.
-	nl1 := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
+	nl1 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
 	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4, 5}, getActiveNodes(nl1))
 
 	// Mark n5 as decommissioning, which should reduce node count.
