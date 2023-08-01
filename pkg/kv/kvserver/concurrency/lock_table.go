@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -949,8 +950,8 @@ var unreplicatedHolderStrengths = [...]lock.Strength{lock.Exclusive, lock.Shared
 // Trying to use a lock strength that isn't supported with unreplicated locks to
 // index into the unreplicatedLockHolderInfo.strengths array will cause a
 // runtime error.
-var unreplicatedLockHolderStrengthToIndexMap = func() [lock.MaxStrength + 1]int {
-	var m [lock.MaxStrength + 1]int
+var unreplicatedLockHolderStrengthToIndexMap = func() [lock.NumLockStrength]int {
+	var m [lock.NumLockStrength]int
 	// Initialize all to -1.
 	for str := range m {
 		m[str] = -1
@@ -2006,7 +2007,7 @@ func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(g *lockTableGuardImpl)
 	// is trying to promote a lock it previously acquired. In such cases, the
 	// existence of a lock with weaker strength doesn't do much for this request.
 	// It's no different than the case where its trying to acquire a fresh lock.
-	return g.curStrength() <= heldMode.Strength ||
+	return g.curStrength().LessEq(heldMode.Strength) ||
 		// TODO(arul): We want to allow requests that are writing to keys that they
 		// hold exclusive locks on to "jump ahead" of any potential waiters. This
 		// prevents deadlocks. The logic here is a bandaid until we implement a
@@ -3534,7 +3535,9 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 func findHighestLockStrengthInSpans(
 	key roachpb.Key, spans *lockspanset.LockSpanSet,
 ) (lock.Strength, error) {
-	for str := lock.MaxStrength; str >= 0; str-- {
+	var highestLockStrength lock.Strength
+	var found bool
+	if err := lock.ForEachLockStrengthDescending(func(str lock.Strength) error {
 		s := spans.GetSpans(str)
 		// First span that starts after key
 		i := sort.Search(len(s), func(i int) bool {
@@ -3542,10 +3545,18 @@ func findHighestLockStrengthInSpans(
 		})
 		if i > 0 &&
 			((len(s[i-1].EndKey) > 0 && key.Compare(s[i-1].EndKey) < 0) || key.Equal(s[i-1].Key)) {
-			return str, nil
+			highestLockStrength = str
+			found = true
+			return iterutil.StopIteration()
 		}
+		return nil
+	}, lock.MaxStrength); err != nil {
+		return 0, err
 	}
-	return 0, errors.AssertionFailedf("could not find access in spans")
+	if !found {
+		return 0, errors.AssertionFailedf("could not find access in spans")
+	}
+	return highestLockStrength, nil
 }
 
 // Tries to GC locks that were previously known to have become empty.
@@ -3622,14 +3633,23 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 // REQUIRES: g.mu is locked.
 func stepToNextSpan(g *lockTableGuardImpl) *roachpb.Span {
 	g.index++
-	for ; g.str >= 0; g.str-- {
-		spans := g.spans.GetSpans(g.str)
+	var nextSpan *roachpb.Span
+	if err := lock.ForEachLockStrengthDescending(func(str lock.Strength) error {
+		spans := g.spans.GetSpans(str)
 		if g.index < len(spans) {
 			span := &spans[g.index]
 			g.key = span.Key
-			return span
+			g.str = str
+			nextSpan = span
+			return iterutil.StopIteration()
 		}
 		g.index = 0
+		return nil
+	}, g.str); err != nil {
+		panic(err)
+	}
+	if nextSpan != nil {
+		return nextSpan
 	}
 	g.str = lock.MaxStrength
 	return nil

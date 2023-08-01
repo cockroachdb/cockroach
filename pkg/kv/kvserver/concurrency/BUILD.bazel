@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",

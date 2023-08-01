@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,7 +55,7 @@ var ExclusiveLocksBlockNonLockingReads = settings.RegisterBoolSetting(
 const MaxStrength = Intent
 
 // NumLockStrength is the total number of lock strengths in the Strength enum.
-const NumLockStrength = MaxStrength + 1
+const NumLockStrength = 5
 
 // MaxDurability is the maximum value in the Durability enum.
 const MaxDurability = Unreplicated
@@ -65,9 +66,15 @@ func init() {
 			panic(fmt.Sprintf("Strength (%s) with value larger than MaxDurability", st))
 		}
 	}
-	if int(NumLockStrength) != len(Strength_name) {
+	if NumLockStrength != len(Strength_name) {
 		panic(fmt.Sprintf("mismatched numer of lock strengths: NumLockStrength %d, lock strengths %d",
-			int(NumLockStrength), len(Strength_name)))
+			NumLockStrength, len(Strength_name)))
+	}
+	if NumLockStrength != len(lockStrengthDescendingOrder) {
+		panic(fmt.Sprintf(
+			"mismatched numer of lock strengths: NumLockStrength %d, lock strength descending order %d",
+			NumLockStrength, len(Strength_name)),
+		)
 	}
 	for v := range Durability_name {
 		if d := Durability(v); d > MaxDurability {
@@ -82,7 +89,7 @@ func Conflicts(m1, m2 Mode, sv *settings.Values) bool {
 	if m1.Empty() || m2.Empty() {
 		panic("cannot check conflict for uninitialized locks")
 	}
-	if m1.Strength > m2.Strength {
+	if !m1.Strength.LessEq(m2.Strength) {
 		// Conflict rules are symmetric, so reduce the number of cases we need to
 		// handle.
 		m1, m2 = m2, m1
@@ -165,6 +172,51 @@ func MakeModeIntent(ts hlc.Timestamp) Mode {
 		Strength:  Intent,
 		Timestamp: ts,
 	}
+}
+
+// lockStrengthDescendingOrder is a fixed length slice that establishes a
+// descending order over all lock strengths.
+var lockStrengthDescendingOrder = [...]Strength{Intent, Exclusive, Update, Shared, None}
+
+// ForEachLockStrengthDescending loops over all lock strengths (in descending
+// order) and invokes the supplied function.
+//
+// The iteration begins from the supplied lock strengths; all lock strengths >
+// the supplied lock strength will be ignored. Callers may use
+// iterutils.StopIteration() to bail early.
+func ForEachLockStrengthDescending(f func(Strength) error, start Strength) error {
+	found := false
+	for _, str := range lockStrengthDescendingOrder {
+		if str == start {
+			found = true
+		}
+		if !found {
+			continue
+		}
+		if err := f(str); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
+// LessEq returns true if the receiver is less than or equal to the supplied
+// Strength.
+func (str Strength) LessEq(o Strength) bool {
+	strIdx := -1
+	oIdx := -1
+	for i, lockStr := range lockStrengthDescendingOrder {
+		if lockStr == str {
+			strIdx = i
+		}
+		if lockStr == o {
+			oIdx = i
+		}
+		if strIdx != -1 && oIdx != -1 {
+			break
+		}
+	}
+	return strIdx >= oIdx
 }
 
 // SafeValue implements redact.SafeValue.
