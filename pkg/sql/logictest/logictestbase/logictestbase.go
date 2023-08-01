@@ -82,6 +82,9 @@ type TestClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	DisableLocalityOptimizedSearch bool
+	// EnableDefaultReadCommitted uses READ COMMITTED for all transactions
+	// by default.
+	EnableDefaultReadCommitted bool
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
@@ -295,6 +298,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:            1,
 		OverrideDistSQLMode: "off",
 		OverrideVectorize:   "off",
+	},
+	{
+		Name:                       "local-read-committed",
+		NumNodes:                   1,
+		OverrideDistSQLMode:        "off",
+		EnableDefaultReadCommitted: true,
 	},
 	{
 		Name:                "fakedist",
@@ -545,6 +554,7 @@ var (
 		"local",
 		"local-legacy-schema-changer",
 		"local-vec-off",
+		"local-read-committed",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
