@@ -52,7 +52,8 @@ DROP PROCEDURE p_not_existing
 
 # Dropping a procedure twice should fail.
 statement error pgcode 42883 pq: procedure p_test_drop\(\) does not exist
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 DROP PROCEDURE p_test_drop();
 DROP PROCEDURE p_test_drop();
 COMMIT;

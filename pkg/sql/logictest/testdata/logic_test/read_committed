@@ -1,4 +1,7 @@
-# LogicTest: !local-mixed-23.1
+# LogicTest: !local-mixed-23.1 !local-read-committed
+# Don't run this test under local-read-committed, since that automatically
+# sets autocommit_before_ddl and default_transaction_isolation, which we
+# want to control.
 
 subtest select_for_update
 

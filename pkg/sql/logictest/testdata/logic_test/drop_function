@@ -62,7 +62,8 @@ DROP FUNCTION f_not_existing;
 
 # drop a function twice should fail.
 statement error pgcode 42883 pq: function f_test_drop\(\) does not exist
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
 COMMIT;

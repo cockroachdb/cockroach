@@ -84,10 +84,15 @@ user root
 statement ok
 CREATE DATABASE test2
 
+skipif config local-read-committed
 query T noticetrace
 GRANT SELECT ON TABLE test2.information_schema.columns TO testuser
 ----
 NOTICE: virtual table privileges are not database specific
+
+onlyif config local-read-committed
+statement ok
+GRANT SELECT ON TABLE test2.information_schema.columns TO testuser
 
 query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges

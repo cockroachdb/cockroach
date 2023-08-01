@@ -213,6 +213,7 @@ SAVEPOINT before_invalid_grant
 statement error testuser must have CREATEROLE or have admin option on role \"role_bar\"
 GRANT role_bar TO testuser;
 
+skipif config local-read-committed
 statement ok
 ROLLBACK TO SAVEPOINT before_invalid_grant
 

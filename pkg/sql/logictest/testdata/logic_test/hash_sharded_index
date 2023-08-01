@@ -236,6 +236,7 @@ SELECT crdb_internal_a_shard_3 FROM sharded_secondary
 statement ok
 ROLLBACK
 
+skipif config local-read-committed
 statement ok
 DROP INDEX sharded_secondary@idx
 

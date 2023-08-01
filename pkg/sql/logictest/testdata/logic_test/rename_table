@@ -164,7 +164,8 @@ INSERT INTO d.kv (k,v) VALUES ('c', 'd')
 
 # Check that on a rollback a database name cannot be used.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 CREATE DATABASE dd; CREATE TABLE dd.kv (k CHAR PRIMARY KEY, v CHAR)
@@ -180,7 +181,8 @@ INSERT INTO dd.kv (k,v) VALUES ('c', 'd')
 
 # Check that on a rollback a table name cannot be used.
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 CREATE TABLE d.kv2 (k CHAR PRIMARY KEY, v CHAR)

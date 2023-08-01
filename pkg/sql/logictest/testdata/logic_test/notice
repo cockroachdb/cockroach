@@ -26,6 +26,7 @@ statement ok
 CREATE DATABASE d;
 CREATE TABLE d.t (x int)
 
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE d.t RENAME TO d.t2
 ----
@@ -39,6 +40,7 @@ CREATE TYPE color AS ENUM ()
 statement ok
 ALTER TYPE color ADD VALUE 'black'
 
+skipif config local-read-committed
 query T noticetrace
 ALTER TYPE color ADD VALUE IF NOT EXISTS 'black'
 ----
@@ -47,6 +49,7 @@ NOTICE: enum value "black" already exists, skipping
 statement ok
 CREATE MATERIALIZED VIEW v AS SELECT 1
 
+skipif config local-read-committed
 query T noticetrace
 REFRESH MATERIALIZED VIEW CONCURRENTLY v
 ----

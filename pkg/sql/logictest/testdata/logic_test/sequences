@@ -1533,7 +1533,8 @@ SELECT last_value FROM cache_test
 10
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER SEQUENCE cache_test INCREMENT 5

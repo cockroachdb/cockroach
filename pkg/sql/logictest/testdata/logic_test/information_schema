@@ -5453,7 +5453,8 @@ subtest variables
 ## commit/session.; , experimental_distsql_planning and vectorize as they
 ## depend on distsql and vectorization turned on/off. Also excluding distsql,
 ## vectorize, experimental_distsql_planning, use_declarative_schema_changer,
-## and distsql_workmem which can be adjusted based on the logic test mode.
+## autocommit_before_ddl, default_transaction_isolation, and distsql_workmem
+## which can be adjusted based on the logic test mode.
 query TT colnames
 SELECT
   *
@@ -5471,7 +5472,10 @@ WHERE
       'distsql_workmem',
       'copy_fast_path_enabled',
       'direct_columnar_scans_enabled',
-      'multiple_active_portals_enabled'
+      'multiple_active_portals_enabled',
+      'autocommit_before_ddl',
+      'default_transaction_isolation',
+      'transaction_isolation'
     )
 ORDER BY variable
 ----
@@ -5480,7 +5484,6 @@ allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off
 application_name                                           ·
-autocommit_before_ddl                                      off
 avoid_buffering                                            off
 backslash_quote                                            safe_encoding
 bytea_output                                               hex
@@ -5500,7 +5503,6 @@ default_int_size                                           8
 default_table_access_method                                heap
 default_tablespace                                         ·
 default_text_search_config                                 pg_catalog.english
-default_transaction_isolation                              serializable
 default_transaction_priority                               normal
 default_transaction_quality_of_service                     regular
 default_transaction_read_only                              off
@@ -5623,7 +5625,6 @@ testing_optimizer_random_seed                              0
 testing_vectorize_inject_panics                            off
 timezone                                                   UTC
 tracing                                                    off
-transaction_isolation                                      serializable
 transaction_priority                                       normal
 transaction_read_only                                      off
 transaction_rows_read_err                                  0

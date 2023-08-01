@@ -8,7 +8,8 @@ statement ok
 SET experimental_enable_temp_tables=true
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TEMP TABLE tbl (a int primary key);
 INSERT INTO tbl VALUES (1);
 SELECT crdb_internal.force_retry('1s');

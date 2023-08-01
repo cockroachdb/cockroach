@@ -51,7 +51,8 @@ statement error pq: "schema_locked" can only be set/reset on its own without oth
 ALTER TABLE t SET (schema_locked=f); CREATE TABLE t2 (i INT PRIMARY KEY);
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
 ALTER TABLE t SET (schema_locked=f);
