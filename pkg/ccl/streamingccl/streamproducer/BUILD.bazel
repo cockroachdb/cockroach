@@ -47,6 +47,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",

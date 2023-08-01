@@ -996,3 +996,63 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(c.T, showCutover)
 	require.Equal(c.T, futureTime, cutoverOutput)
 }
+
+// TestTenantStreamingRetryLoadJob verifies the resumer retries loading the job
+// if that fails, otherwise we might fail when, for example, the node is busy.
+func TestTenantStreamingRetryLoadJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var knobLoadErr error
+	var mu syncutil.Mutex
+	knobDoneCh := make(chan struct{})
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		AfterResumerJobLoad: func(err error) error {
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			// We only need to see the error once, and then we can clear it.
+			if knobLoadErr != nil {
+				close(knobDoneCh)
+				defer func() { knobLoadErr = nil }()
+			}
+			return knobLoadErr
+		},
+	}
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", producerJobID))
+	jobutils.WaitForJobToPause(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Write a bit more to be verified at the end.
+	c.SrcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
+
+	// Inject an error to fail the resumer.
+	mu.Lock()
+	knobLoadErr = errors.Newf("test error")
+	mu.Unlock()
+
+	// Resume ingestion.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", producerJobID))
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Wait for the resumer to see the error.
+	<-knobDoneCh
+
+	// Verify the job succeeds now.
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
+}

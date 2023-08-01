@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -84,6 +85,13 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 
+	ro := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
+		MaxRetries:     8,
+	}
+
 	// Fire the timer immediately to start an initial progress check
 	p.timer.Reset(0)
 	for {
@@ -93,9 +101,24 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 		case <-p.timer.Ch():
 			p.timer.MarkRead()
 			p.timer.Reset(streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
-			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
+			var err error
+			var j *jobs.Job
+			for r := retry.Start(ro); r.Next(); {
+				j, err = execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
+
+				if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterResumerJobLoad != nil {
+					err = knobs.AfterResumerJobLoad(err)
+				}
+
+				// No need to retry if there is no job record.
+				if err == nil || jobs.HasJobNotFoundError(err) {
+					break
+				}
+
+				log.Warningf(ctx, "replication stream %d failed, may retry: %v", p.job.ID(), err)
+			}
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "replication stream %d cannot resume", p.job.ID())
 			}
 
 			prog := j.Progress()
