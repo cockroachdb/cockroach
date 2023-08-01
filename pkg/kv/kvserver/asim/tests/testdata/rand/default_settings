@@ -1,0 +1,51 @@
+eval verbose=true duration=5m
+----
+settings      num_iterations=3  duration=5m0s
+rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false
+rand_cluster=false
+rand_cluster=false
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample1
+ 1.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                           replicas
+sample2
+ 1.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                           replicas
+sample3
+ 1.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                           replicas
+
+clear
+----
+
+eval
+----
+settings      num_iterations=3  duration=10m0s
+rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false
+rand_cluster=false
+rand_cluster=false
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------

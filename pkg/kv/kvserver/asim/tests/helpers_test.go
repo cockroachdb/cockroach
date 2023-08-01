@@ -14,14 +14,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
 func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
+	var tmp string
 	switch dest := dest.(type) {
 	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64:
 		d.ScanArgs(t, key, dest)
+	case *gen.PlacementType:
+		d.ScanArgs(t, key, &tmp)
+		*dest = dest.GetGeneratorType(tmp)
+	case *generatorType:
+		d.ScanArgs(t, key, &tmp)
+		*dest = dest.getGeneratorType(tmp)
+	case *clusterConfigType:
+		d.ScanArgs(t, key, &tmp)
+		*dest = dest.getClusterConfigType(tmp)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
 	}
