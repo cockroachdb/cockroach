@@ -22,7 +22,7 @@ import (
 // TestRandomized is a randomized testing framework designed to validate
 // allocator by creating randomized configurations, generating corresponding
 // allocator simulations, and validating assertions on the final state.
-//
+
 // Input of the framework (fields in the testSetting struct):
 //
 // 1. numIterations (int, default: 3): specifies number of test iterations to be
@@ -61,9 +61,7 @@ import (
 // 1. Generates a random configuration based on whether the aspect of the test
 // configuration is set to be randomized in randOptions
 // 2. Executes a simulation and store any assertion failures in a buffer
-// TODO(wenyihu6): change input structure to datadriven + print more useful info
-// for test output + add more tests to cover cases that are not tested by
-// default
+// TODO(wenyihu6): change the comment above
 func TestRandomized(t *testing.T) {
 	dir := datapathutils.TestDataPath(t, "rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {

@@ -19,8 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(kvoli): Upstream the scan implementations for the float64 and
-// time.Duration types to the datadriven testing repository.
 func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
 	var tmp string
 	switch dest := dest.(type) {
