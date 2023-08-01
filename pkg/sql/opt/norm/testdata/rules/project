@@ -266,6 +266,14 @@ project
  └── projections
       └── child.parent_id:2 [as=parent_id:9, outer=(2)]
 
+exec-ddl
+DROP TABLE child
+----
+
+exec-ddl
+DROP TABLE parent
+----
+
 # The join can be eliminated as long as it doesn't require remapping with
 # OptimizerUseImprovedJoinElimination disabled.
 norm set=optimizer_use_improved_join_elimination=false expect=EliminateJoinUnderProjectLeft
@@ -394,6 +402,87 @@ project
                      │         └── column1:4 = 0 [outer=(4), constraints=(/4: [/0 - /0]; tight), fd=()-->(4)]
                      └── projections
                           └── NULL [as="?column?":5]
+
+# Regression test for #107850 - columns should not be mapped if their types are
+# not identical.
+exec-ddl
+CREATE TABLE parent (
+  id DECIMAL(10, 2) PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE child (
+  id INT PRIMARY KEY,
+  parent_id DECIMAL(10, 0) NOT NULL REFERENCES parent(id),
+  parent_id2 DECIMAL(10, 2) NOT NULL REFERENCES parent(id)
+)
+----
+
+norm expect-not=EliminateJoinUnderProjectRight
+SELECT parent.id FROM parent JOIN child ON parent.id = child.parent_id
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ └── inner-join (hash)
+      ├── columns: parent.id:1!null parent_id:5!null
+      ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
+      ├── immutable
+      ├── fd: (1)==(5), (5)==(1)
+      ├── scan parent
+      │    ├── columns: parent.id:1!null
+      │    └── key: (1)
+      ├── scan child
+      │    └── columns: parent_id:5!null
+      └── filters
+           └── parent.id:1 = parent_id:5 [outer=(1,5), immutable, constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# The projected column with the identical type, child.parent_id2, should be
+# remapped if there are multiple equivalent columns.
+norm
+SELECT parent.id FROM parent JOIN child ON parent.id = child.parent_id AND child.parent_id = child.parent_id2
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── select
+ │    ├── columns: parent_id:5!null parent_id2:6!null
+ │    ├── immutable
+ │    ├── fd: (5)==(6), (6)==(5)
+ │    ├── scan child
+ │    │    └── columns: parent_id:5!null parent_id2:6!null
+ │    └── filters
+ │         └── parent_id:5 = parent_id2:6 [outer=(5,6), immutable, constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+ └── projections
+      └── parent_id2:6 [as=parent.id:1, outer=(6)]
+
+# In a projection expression the column with the identical type,
+# child.parent_id2, should be remapped if there are multiple equivalent columns.
+norm
+SELECT 1 + parent.id FROM parent JOIN child ON parent.id = child.parent_id AND child.parent_id = child.parent_id2
+----
+project
+ ├── columns: "?column?":9!null
+ ├── immutable
+ ├── select
+ │    ├── columns: parent_id:5!null parent_id2:6!null
+ │    ├── immutable
+ │    ├── fd: (5)==(6), (6)==(5)
+ │    ├── scan child
+ │    │    └── columns: parent_id:5!null parent_id2:6!null
+ │    └── filters
+ │         └── parent_id:5 = parent_id2:6 [outer=(5,6), immutable, constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+ └── projections
+      └── parent_id2:6 + 1 [as="?column?":9, outer=(6), immutable]
+
+exec-ddl
+DROP TABLE child
+----
+
+exec-ddl
+DROP TABLE parent
+----
 
 # --------------------------------------------------
 # EliminateProject
