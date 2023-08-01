@@ -1233,15 +1233,9 @@ func (ex *connExecutor) commitSQLTransaction(
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	if err := commitFn(ctx); err != nil {
-		if descs.IsTwoVersionInvariantViolationError(err) {
-			if resetErr := ex.resetTransactionOnSchemaChangeRetry(ctx); resetErr != nil {
-				return ex.makeErrEvent(err, ast)
-			}
-			// Generating a forced retry error here, right after resetting the
-			// transaction is not exactly necessary, but it's a sound way to
-			// generate the only type of ClientVisibleRetryError we have.
-			err = ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(err))
-		}
+		// For certain retryable errors, we should turn them into client visible
+		// errors, since the client needs to retry now.
+		_, err = ex.convertRetriableErrorIntoUserVisibleError(ctx, err)
 		return ex.makeErrEvent(err, ast)
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())

@@ -3285,6 +3285,23 @@ func errIsRetriable(err error) bool {
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
+// convertRetriableErrorIntoUserVisibleError converts internal retriable
+// errors into external ones when it is feasible.
+func (ex *connExecutor) convertRetriableErrorIntoUserVisibleError(
+	ctx context.Context, err error,
+) (converted bool, newErr error) {
+	if descs.IsTwoVersionInvariantViolationError(err) {
+		if resetErr := ex.resetTransactionOnSchemaChangeRetry(ctx); resetErr != nil {
+			return false, resetErr
+		}
+		// Generating a forced retry error here, right after resetting the
+		// transaction is not exactly necessary, but it's a sound way to
+		// generate the only type of ClientVisibleRetryError we have.
+		return true, ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(err))
+	}
+	return true, err
+}
+
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
 // eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
