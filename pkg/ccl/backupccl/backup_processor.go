@@ -92,13 +92,6 @@ var (
 		"send each export request with a verbose tracing span",
 		util.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
 	)
-
-	flushTracingAggregatorFrequency = settings.RegisterDurationSetting(
-		settings.TenantWritable,
-		"bulkio.backup.tracing_aggregator_flush_after",
-		"frequency at which backup tracing aggregator stats are flushed",
-		time.Second*1,
-	)
 )
 
 const (
@@ -194,7 +187,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx, bp.agg = bulk.MakeTracingAggregatorWithSpan(ctx,
 		fmt.Sprintf("%s-aggregator", backupProcessorName), bp.EvalCtx.Tracer)
 	bp.aggTimer = timeutil.NewTimer()
-	bp.aggTimer.Reset(flushTracingAggregatorFrequency.Get(&bp.EvalCtx.Settings.SV))
+	bp.aggTimer.Reset(15 * time.Second)
 
 	bp.cancelAndWaitForWorker = func() {
 		cancel()
@@ -247,14 +240,12 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 func (bp *backupDataProcessor) constructTracingAggregatorProducerMeta(
 	ctx context.Context,
 ) *execinfrapb.ProducerMetadata {
-	// Take a copy so that we can send the progress address to the output
-	// processor.
 	aggEvents := &execinfrapb.TracingAggregatorEvents{
 		SQLInstanceID: bp.flowCtx.NodeID.SQLInstanceID(),
 		FlowID:        bp.flowCtx.ID,
 		Events:        make(map[string][]byte),
 	}
-	bp.agg.ForEachAggregatedEvent(func(tag string, event bulk.TracingAggregatorEvent) {
+	bp.agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
 		msg, ok := event.(protoutil.Message)
 		if !ok {
 			// This should never happen but if it does skip the aggregated event.
@@ -267,7 +258,7 @@ func (bp *backupDataProcessor) constructTracingAggregatorProducerMeta(
 			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
 			return
 		}
-		aggEvents.Events[tag] = data
+		aggEvents.Events[name] = data
 	})
 
 	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
@@ -282,18 +273,13 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	select {
 	case prog, ok := <-bp.progCh:
 		if !ok {
-			if bp.backupErr != nil {
-				bp.MoveToDraining(bp.backupErr)
-				return nil, bp.DrainHelper()
-			}
-
-			bp.MoveToDraining(nil /* error */)
+			bp.MoveToDraining(bp.backupErr)
 			return nil, bp.DrainHelper()
 		}
 		return nil, bp.constructProgressProducerMeta(prog)
 	case <-bp.aggTimer.C:
 		bp.aggTimer.Read = true
-		bp.aggTimer.Reset(flushTracingAggregatorFrequency.Get(&bp.EvalCtx.Settings.SV))
+		bp.aggTimer.Reset(15 * time.Second)
 		return nil, bp.constructTracingAggregatorProducerMeta(bp.Ctx())
 	}
 }

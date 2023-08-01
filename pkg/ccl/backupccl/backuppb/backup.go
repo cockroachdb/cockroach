@@ -12,8 +12,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -23,6 +25,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // required for backup.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -226,9 +229,37 @@ func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 }
 
-// Tag implements the TracingAggregatorEvent interface.
-func (e *ExportStats) Tag() string {
-	return "ExportStats"
+// String implements the AggregatorEvent and stringer interfaces.
+func (e *ExportStats) String() string {
+	const mb = 1 << 20
+	var b strings.Builder
+	if e.NumFiles > 0 {
+		b.WriteString(fmt.Sprintf("num_files: %d\n", e.NumFiles))
+	}
+	if e.DataSize > 0 {
+		dataSizeMB := float64(e.DataSize) / mb
+		b.WriteString(fmt.Sprintf("data_size: %.2f MB\n", dataSizeMB))
+
+		if !e.StartTime.IsEmpty() && !e.EndTime.IsEmpty() {
+			duration := e.EndTime.GoTime().Sub(e.StartTime.GoTime())
+			throughput := dataSizeMB / duration.Seconds()
+			b.WriteString(fmt.Sprintf("throughput: %.2f MB/s\n", throughput))
+		}
+	}
+
+	return b.String()
+}
+
+// ProtoName implements the TracingAggregatorEvent interface.
+func (e *ExportStats) ProtoName() string {
+	return proto.MessageName(e)
+}
+
+var _ jobs.ProtobinExecutionDetailFile = &ExportStats{}
+
+// ToText implements the ProtobinExecutionDetailFile interface.
+func (e *ExportStats) ToText() []byte {
+	return []byte(e.String())
 }
 
 func init() {

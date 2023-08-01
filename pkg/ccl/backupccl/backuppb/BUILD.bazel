@@ -45,6 +45,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
+        "//pkg/jobs",
         "//pkg/multitenant/mtinfopb",
         "//pkg/sql/parser",
         "//pkg/sql/protoreflect",
@@ -54,6 +55,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
         "@io_opentelemetry_go_otel//attribute",
     ],
 )

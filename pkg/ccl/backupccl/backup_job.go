@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -307,8 +308,19 @@ func backup(
 		}
 		return nil
 	}
+	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
+	tracingAggLoop := func(ctx context.Context) error {
+		if err := bulk.AggregateTracingStats(ctx, job.ID(),
+			execCtx.ExecCfg().Settings, execCtx.ExecCfg().InternalDB, tracingAggCh); err != nil {
+			log.Warningf(ctx, "failed to aggregate tracing stats: %v", err)
+			// Drain the channel if the loop to aggregate tracing stats has returned
+			// an error.
+			for range tracingAggCh {
+			}
+		}
+		return nil
+	}
 
-	resumerSpan.RecordStructured(&types.StringValue{Value: "starting DistSQL backup execution"})
 	runBackup := func(ctx context.Context) error {
 		return distBackup(
 			ctx,
@@ -316,11 +328,19 @@ func backup(
 			planCtx,
 			dsp,
 			progCh,
+			tracingAggCh,
 			backupSpecs,
 		)
 	}
 
-	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, storePerNodeProgressLoop, runBackup); err != nil {
+	if err := ctxgroup.GoAndWait(
+		ctx,
+		jobProgressLoop,
+		checkpointLoop,
+		storePerNodeProgressLoop,
+		tracingAggLoop,
+		runBackup,
+	); err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 

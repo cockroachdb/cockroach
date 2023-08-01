@@ -20,9 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/klauspost/compress/gzip"
 )
 
@@ -39,6 +40,20 @@ func compressChunk(chunkBuf []byte) ([]byte, error) {
 		return nil, err
 	}
 	return gzipBuf.Bytes(), nil
+}
+
+// WriteProtobinExecutionDetailFile writes a `binpb` file of the form
+// `filename~<proto.MessageName>.binpb` to the system.job_info table, with the
+// contents of the passed in protobuf message.
+func WriteProtobinExecutionDetailFile(
+	ctx context.Context, filename string, msg protoutil.Message, db isql.DB, jobID jobspb.JobID,
+) error {
+	name := fmt.Sprintf("%s~%s.binpb", filename, proto.MessageName(msg))
+	b, err := protoutil.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return WriteExecutionDetailFile(ctx, name, b, db, jobID)
 }
 
 // WriteExecutionDetailFile will break up data into chunks of a fixed size, and
@@ -84,17 +99,29 @@ func WriteExecutionDetailFile(
 	})
 }
 
-func stringifyProtobinFile(filename string, fileContents *bytes.Buffer) ([]byte, error) {
-	if strings.HasPrefix(filename, "resumer-trace") {
-		td := &jobspb.TraceData{}
-		if err := protoutil.Unmarshal(fileContents.Bytes(), td); err != nil {
-			return nil, err
-		}
-		rec := tracingpb.Recording(td.CollectedSpans)
-		return []byte(rec.String()), nil
-	} else {
-		return nil, errors.AssertionFailedf("unknown file %s", filename)
+// ProtobinExecutionDetailFile interface encapsulates the methods that must be
+// implemented by protobuf messages that are collected as part of a job's
+// execution details.
+type ProtobinExecutionDetailFile interface {
+	// ToText returns the human-readable text representation of the protobuf
+	// execution detail file.
+	ToText() []byte
+}
+
+func stringifyProtobinFile(filename string, fileContents []byte) ([]byte, error) {
+	// A `binpb` execution detail file is expected to have its fully qualified
+	// proto name after the last `~` in the filename. See
+	// `WriteProtobinExecutionDetailFile` for details.
+	msg, err := protoreflect.DecodeMessage(strings.TrimSuffix(
+		filename[strings.LastIndex(filename, "~")+1:], ".binpb"), fileContents)
+	if err != nil {
+		return nil, err
 	}
+	f, ok := msg.(ProtobinExecutionDetailFile)
+	if !ok {
+		return nil, errors.Newf("protobuf in file %s is not a ProtobinExecutionDetailFile", filename)
+	}
+	return f.ToText(), err
 }
 
 // ReadExecutionDetailFile will stitch together all the chunks corresponding to the
@@ -148,7 +175,7 @@ func ReadExecutionDetailFile(
 		if err := fetchFileContent(trimmedFilename); err != nil {
 			return nil, err
 		}
-		return stringifyProtobinFile(filename, buf)
+		return stringifyProtobinFile(trimmedFilename, buf.Bytes())
 	}
 
 	if err := fetchFileContent(filename); err != nil {

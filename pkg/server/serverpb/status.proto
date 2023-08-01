@@ -2545,7 +2545,7 @@ service Status {
 
   rpc GetJobProfilerExecutionDetails(GetJobProfilerExecutionDetailRequest) returns (GetJobProfilerExecutionDetailResponse) {
     option (google.api.http) = {
-      get: "/_status/job_profiler_execution_details/{job_id}/{filename}"
+      get: "/_status/job_profiler_execution_details/{job_id}"
     };
   }
 
