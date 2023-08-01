@@ -3284,6 +3284,28 @@ func errIsRetriable(err error) bool {
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
+// convertRetriableErrorIntoUserVisibleError converts internal retriable
+// errors into external, so that the client goes and retries this
+// transaction. One example of this is two version invariant errors, which
+// happens when a schema change is waiting for a schema change transition to
+// propagate. When this happens, we either need to retry externally or internally,
+// depending on if we are in an explicit transaction.
+func (ex *connExecutor) convertRetriableErrorIntoUserVisibleError(
+	ctx context.Context, origErr error,
+) (modifiedErr error, err error) {
+	if descs.IsTwoVersionInvariantViolationError(origErr) {
+		if resetErr := ex.resetTransactionOnSchemaChangeRetry(ctx); resetErr != nil {
+			return nil, resetErr
+		}
+		// Generating a forced retry error here, right after resetting the
+		// transaction is not exactly necessary, but it's a sound way to
+		// generate the only type of ClientVisibleRetryError we have.
+		return ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(origErr)), nil
+	}
+	// Return the original error, this error will not be surfaced to the user.
+	return origErr, nil
+}
+
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
 // eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
