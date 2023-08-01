@@ -661,12 +661,16 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				}
 
 				unsafeValue := it.UnsafeValue()
-				if unsafeValue == nil {
+				if len(unsafeValue) == 0 {
+					if isType {
+						return errors.Wrapf(catalog.ErrDescriptorDropped, "type descriptor %d dropped", id)
+					}
+
 					name := origName
 					if name == "" {
 						name = fmt.Sprintf("desc(%d)", id)
 					}
-					return errors.Errorf(`"%v" was dropped or truncated`, name)
+					return errors.Wrapf(catalog.ErrDescriptorDropped, `table "%v"[%d] was dropped or truncated`, name, id)
 				}
 
 				// Unmarshal the descriptor.

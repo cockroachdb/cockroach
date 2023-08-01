@@ -12,11 +12,18 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -142,4 +149,47 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.NoError(t, m.ingestDescriptors(ctx, ts(7), ts(8), nil, validateFn))
 	require.Equal(t, ts(8), m.highWater())
 	require.NoError(t, <-errCh8)
+}
+
+func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	beforeCreate := s.Clock().Now()
+
+	// Create a database, containing user defined type along with table using that type.
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+	sqlDB.Exec(t, `USE test`)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+	sqlDB.Exec(t, `CREATE TABLE foo(a INT, t status DEFAULT 'open')`)
+	sqlDB.Exec(t, `USE defaultdb`)
+
+	var tableID descpb.ID
+	sqlDB.QueryRow(t, "SELECT 'test.foo'::regclass::int").Scan(&tableID)
+	targets := []jobspb.ChangefeedTargetSpecification{{TableID: tableID}}
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	sf := New(ctx, &execCfg.DistSQLSrv.ServerConfig,
+		changefeedbase.OptSchemaChangeEventClassDefault, targets, s.Clock().Now(),
+		nil, nil).(*schemaFeed)
+
+	// initialize type dependencies in schema feed.
+	require.NoError(t, sf.primeInitialTableDescs(ctx))
+
+	// DROP database with cascade to cause the type along with the table to be dropped.
+	// Dropped tables are marked as being dropped (i.e. there is an MVCC version of the
+	// descriptor that has a state indicating that the table is being dropped).
+	// However, dependent UDTs are simply deleted so, there is an MVCC tombstone for that type.
+	sqlDB.Exec(t, `DROP DATABASE test CASCADE;`)
+
+	// Fetching descriptor versions from before the initial create statement
+	// up until the current time should result in a catalog.ErrDescriptorDropped error.
+	_, err := sf.fetchDescriptorVersions(ctx, execCfg.Codec, kvDB, beforeCreate, s.Clock().Now())
+	require.True(t, errors.Is(err, catalog.ErrDescriptorDropped),
+		"expected dropped descriptor error, found: %v", err)
 }
