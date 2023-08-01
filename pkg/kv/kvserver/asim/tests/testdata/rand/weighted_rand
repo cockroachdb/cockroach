@@ -2,7 +2,7 @@
 # option.  Note that due to the limited sample size, these may not be observed
 # accurately. But we expect the distribution of ranges across stores should be
 # roughly proportional to the weight.
-rand_cluster cluster_gen_type=single_region
+change_static_option stores_per_node=3 nodes=1
 ----
 
 # Due to replication factor of 3, it is impossible to satisfy the weighted rand
@@ -13,14 +13,64 @@ rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1
 
 eval duration=20m num_iterations=3
 ----
+----
+settings      num_iterations=3  duration=20m0s
+rand_options  cluster=false     ranges=true  load=false  staticSettings=false  staticEvents=false
+rand_cluster=false
+rand_ranges=true  range_gen_settings ->  placementType=weighted_rand  replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
+rand_load=false
+rand_events=false
+rand_settings=false
 ----------------------------------
 sample1: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[basic_cluster: nodes=1, stores=3]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=563, key_space=160411, replication_factor=3, bytes=0, weighted_rand=[0.1 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[5571782338101878760]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(563)),s2n1=(replicas(563)),s3n1=(replicas(563))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[basic_cluster: nodes=1, stores=3]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=299, key_space=9542, replication_factor=3, bytes=0, weighted_rand=[0.1 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[4299969443970870044]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(299)),s2n1=(replicas(299)),s3n1=(replicas(299))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[basic_cluster: nodes=1, stores=3]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=521, key_space=82660, replication_factor=3, bytes=0, weighted_rand=[0.1 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[4157513341729910236]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(521)),s2n1=(replicas(521)),s3n1=(replicas(521))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1]
+
 sample3: pass
 ----------------------------------
 
@@ -28,23 +78,73 @@ clear
 ____
 ----
 
-rand_cluster cluster_gen_type=multi_region
+change_static_option stores_per_node=2 nodes=3
 ----
 
-# We expect ranges distributed to the third and fourth stores to be larger than
-# the first two stores.
-rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.01, 0.04, 0.2, 0.75)
+# We expect ranges distributed to the last two stores to be larger than the
+# first four stores.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.01,0.01,0.02,0.06,0.2,0.7)
 ----
 
 eval duration=5m num_iterations=3
 ----
+----
+settings      num_iterations=3  duration=5m0s
+rand_options  cluster=false     ranges=true  load=false  staticSettings=false  staticEvents=false
+rand_cluster=false
+rand_ranges=true  range_gen_settings ->  placementType=weighted_rand  replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.01 0.01 0.02 0.06 0.2 0.7]
+rand_load=false
+rand_events=false
+rand_settings=false
 ----------------------------------
 sample1: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[basic_cluster: nodes=3, stores=2]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=563, key_space=160411, replication_factor=3, bytes=0, weighted_rand=[0.01 0.01 0.02 0.06 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[5571782338101878760]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(6)=[s1n1=(replicas(124)),s2n1=(replicas(124)),s3n2=(replicas(124)),s4n2=(replicas(293)),s5n3=(replicas(461)),s6n3=(replicas(563))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[basic_cluster: nodes=3, stores=2]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=299, key_space=9542, replication_factor=3, bytes=0, weighted_rand=[0.01 0.01 0.02 0.06 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[4299969443970870044]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(6)=[s1n1=(replicas(53)),s2n1=(replicas(52)),s3n2=(replicas(52)),s4n2=(replicas(142)),s5n3=(replicas(299)),s6n3=(replicas(299))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[basic_cluster: nodes=3, stores=2]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=521, key_space=82660, replication_factor=3, bytes=0, weighted_rand=[0.01 0.01 0.02 0.06 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[4157513341729910236]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(6)=[s1n1=(replicas(114)),s2n1=(replicas(115)),s3n2=(replicas(115)),s4n2=(replicas(271)),s5n3=(replicas(427)),s6n3=(replicas(521))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample3: pass
 ----------------------------------

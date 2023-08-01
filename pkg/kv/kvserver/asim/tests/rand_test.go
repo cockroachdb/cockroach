@@ -72,11 +72,15 @@ const (
 //    keyspace parameter as ranges are generated across iterations
 //    (keyspace ∈[1000,200000])
 //	- weighted_rand: specifies the weighted random distribution among stores.
-//	  Requirements (will panic otherwise): 1. weighted_rand should only be
-//    used with placement_type=weighted_rand and vice versa. 2. Must specify a
-//    weight between [0.0, 1.0] for each element in the array, with each element
-//    corresponding to a store 3. len(weighted_rand) cannot be greater than
-//    number of stores 4. sum of weights in the array should be equal to 1
+//	  Requirements (will panic otherwise): 1. use static option for cluster
+//	  generation, specify nodes(default:3) and stores_per_node(default:1)
+//	  through change_static_option, and ensure len(weighted_rand) == number of
+//	  stores == nodes * stores_per_node
+//	  2. weighted_rand should only be used with placement_type=weighted_rand and
+//	  vice versa.
+//	  3. must specify a weight between [0.0, 1.0] for each element in the array,
+//	  with each element corresponding to a store
+//	  4. sum of weights in the array should be equal to 1
 
 // 3. "eval" [seed=<int64>] [num_iterations=<int>] [duration=<time.Duration>]
 // [verbose=(<[]("nothing","test_settings","initial_state","config_gen":,"plot_history","all")>)]

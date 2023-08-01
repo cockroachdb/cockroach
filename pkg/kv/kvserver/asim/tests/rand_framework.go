@@ -357,6 +357,12 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		}
 
 	case gen.WeightedRandom:
+		if f.s.randOptions.cluster {
+			panic("randomized cluster with weighted rand stores is not supported")
+		}
+		if stores, length := f.staticOptionSettings.storesPerNode*f.staticOptionSettings.nodes, len(f.s.rangeGen.weightedRand); stores != length {
+			panic(fmt.Sprintf("number of stores %d does not match length of weighted_rand %d: ", stores, length))
+		}
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),

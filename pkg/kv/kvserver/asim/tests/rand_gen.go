@@ -86,6 +86,9 @@ func (wr WeightedRandomizedBasicRanges) Generate(
 	if wr.placementType != gen.WeightedRandom || len(wr.weightedRand) == 0 {
 		panic("RandomizedBasicRanges generate only weighted randomized distributions with non-empty weightedRand")
 	}
+	if len(s.Stores()) != len(wr.weightedRand) {
+		panic(" stores doesnt match")
+	}
 	rangesInfo := wr.GetRangesInfo(wr.placementType, len(s.Stores()), wr.randSource, wr.weightedRand)
 	wr.LoadRangeInfo(s, rangesInfo)
 	return s
