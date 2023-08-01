@@ -11,12 +11,13 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"strings"
-	"testing"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
@@ -34,6 +35,13 @@ type testRandOptions struct {
 	staticEvents   bool
 }
 
+func (t testRandOptions) printRandOptions(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"rand_options\tcluster=%t\tranges=%t\tload=%t\tstaticSettings=%t\tstaticEvents=%t\n", t.cluster, t.ranges, t.load, t.staticSettings, t.staticEvents); err != nil {
+		panic(err)
+	}
+}
+
 type testSettings struct {
 	numIterations int
 	duration      time.Duration
@@ -41,10 +49,38 @@ type testSettings struct {
 	randSource    *rand.Rand
 	assertions    []SimulationAssertion
 	randOptions   testRandOptions
+	clusterGen    clusterGenSettings
 	rangeGen      rangeGenSettings
 }
 
+func (t testSettings) printTestSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"settings\tnum_iterations=%v\tduration=%s\n", t.numIterations, t.duration.Round(time.Second)); err != nil {
+		panic(err)
+	}
+
+	t.randOptions.printRandOptions(w)
+	if t.randOptions.cluster {
+		_, _ = fmt.Fprint(w, "rand_cluster=true\t")
+		t.clusterGen.printClusterGenSettings(w)
+	} else {
+		_, _ = fmt.Fprintln(w, "rand_cluster=false")
+	}
+
+	if t.randOptions.ranges {
+		_, _ = fmt.Fprint(w, "rand_ranges=true\t")
+		t.rangeGen.printRangeGenSettings(w)
+	} else {
+		_, _ = fmt.Fprintln(w, "rand_cluster=false")
+	}
+
+	_, _ = fmt.Fprintf(w, "rand_load=%t\n", t.randOptions.load)
+	_, _ = fmt.Fprintf(w, "rand_events=%t\n", t.randOptions.staticEvents)
+	_, _ = fmt.Fprintf(w, "rand_settings=%t\n", t.randOptions.staticSettings)
+}
+
 type randTestingFramework struct {
+	recordBuf         *strings.Builder
 	s                 testSettings
 	rangeGenerator    generator
 	keySpaceGenerator generator
@@ -56,9 +92,12 @@ func newRandTestingFramework(settings testSettings) randTestingFramework {
 			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
 			defaultMaxRange, defaultMinKeySpace))
 	}
-	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeKeyGenType)
+	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeGenType)
 	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
+	var buf strings.Builder
+
 	return randTestingFramework{
+		recordBuf:         &buf,
 		s:                 settings,
 		rangeGenerator:    rangeGenerator,
 		keySpaceGenerator: keySpaceGenerator,
@@ -114,27 +153,36 @@ func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
 	return history, failed, reason
 }
 
-func (f randTestingFramework) runRandTestRepeated(t *testing.T) {
+func (f randTestingFramework) runRandTestRepeated() {
 	numIterations := f.s.numIterations
 	runs := make([]asim.History, numIterations)
-	failureExists := false
-	var buf strings.Builder
 	for i := 0; i < numIterations; i++ {
+		if i == 0 {
+			_, _ = fmt.Fprintln(f.recordBuf, "----------------------------------")
+		}
+		_, _ = fmt.Fprintf(f.recordBuf, "sample%d: start running\n", i+1)
 		history, failed, reason := f.runRandTest()
 		runs[i] = history
 		if failed {
-			failureExists = true
-			fmt.Fprintf(&buf, "failed assertion sample %d\n%s", i+1, reason)
+			_, _ = fmt.Fprintf(f.recordBuf, "sample%d: failed assertion\n%s", i+1, reason)
+		} else {
+			_, _ = fmt.Fprintf(f.recordBuf, "sample%d: pass\n", i+1)
 		}
+		_, _ = fmt.Fprintln(f.recordBuf, "----------------------------------")
 	}
 
 	if f.s.verbose {
-		plotAllHistory(runs, &buf)
+		plotAllHistory(runs, f.recordBuf)
 	}
+}
 
-	if failureExists {
-		t.Fatal(buf.String())
-	}
+func (f randTestingFramework) printResults() string {
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
+	f.s.printTestSettings(w)
+	_, _ = fmt.Fprintf(w, "%s", f.recordBuf.String())
+	_ = w.Flush()
+	return buf.String()
 }
 
 // loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
@@ -156,7 +204,7 @@ func plotAllHistory(runs []asim.History, buf *strings.Builder) {
 		history := runs[i]
 		ts := metrics.MakeTS(history.Recorded)
 		statTS := ts[stat]
-		buf.WriteString("\n")
+		buf.WriteString(fmt.Sprintf("sample%d\n", i+1))
 		buf.WriteString(asciigraph.PlotMany(
 			statTS,
 			asciigraph.Caption(stat),
@@ -203,28 +251,51 @@ func convertInt64ToInt(num int64) int {
 }
 
 func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
-	if len(f.s.rangeGen.weightedRand) == 0 {
+	switch placementType := f.s.rangeGen.placementType; placementType {
+	case gen.Uniform, gen.Skewed:
+		if len(f.s.rangeGen.weightedRand) != 0 {
+			panic("set placement_type to weighted_rand to use weightedRand")
+		}
+		return gen.BasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
+				ReplicationFactor: f.s.rangeGen.replicationFactor,
+				Bytes:             defaultBytes,
+			},
+			PlacementType: placementType,
+		}
+	case gen.Random:
+		if len(f.s.rangeGen.weightedRand) != 0 {
+			panic("set placement_type to weighted_rand to use weightedRand")
+		}
 		return RandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
 				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
-				ReplicationFactor: defaultReplicationFactor,
+				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},
 			placementType: gen.Random,
 			randSource:    f.s.randSource,
 		}
-	} else {
+
+	case gen.WeightedRandom:
+		if len(f.s.rangeGen.weightedRand) == 0 {
+			panic("set weightedRand array for stores properly to use the weighted_rand placementType")
+		}
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
 				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
-				ReplicationFactor: defaultReplicationFactor,
+				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},
 			placementType: gen.WeightedRandom,
 			randSource:    f.s.randSource,
 			weightedRand:  f.s.rangeGen.weightedRand,
 		}
+	default:
+		panic("unknown ranges placementType")
 	}
 }

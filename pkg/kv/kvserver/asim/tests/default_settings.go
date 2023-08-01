@@ -11,6 +11,10 @@
 package tests
 
 import (
+	"fmt"
+	"text/tabwriter"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
@@ -19,6 +23,12 @@ import (
 // This file defines the default parameters for allocator simulator testing,
 // including configurations for the cluster, ranges, load, static settings,
 // static events, assertions, and plot settings.
+const (
+	defaultNumIterations = 3
+	defaultSeed          = int64(42)
+	defaultDuration      = 10 * time.Minute
+	defaultVerbosity     = false
+)
 
 const (
 	defaultNodes         = 3
@@ -64,7 +74,7 @@ func defaultLoadGen() gen.BasicLoad {
 const (
 	defaultRanges            = 1
 	defaultPlacementType     = gen.Uniform
-	defaultReplicationFactor = 1
+	defaultReplicationFactor = 3
 	defaultBytes             = 0
 )
 
@@ -110,13 +120,23 @@ func defaultPlotSettings() plotSettings {
 }
 
 type rangeGenSettings struct {
-	rangeKeyGenType generatorType
-	keySpaceGenType generatorType
-	weightedRand    []float64
+	placementType     gen.PlacementType
+	replicationFactor int
+	rangeGenType      generatorType
+	keySpaceGenType   generatorType
+	weightedRand      []float64
+}
+
+func (t rangeGenSettings) printRangeGenSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"range_gen_settings ->\tplacementType=%v\treplicationFactor=%v\trangeGenType=%v\tkeySpaceGenType=%v\tweightedRand=%v\n",
+		t.placementType, t.replicationFactor, t.rangeGenType, t.keySpaceGenType, t.weightedRand); err != nil {
+		panic(err)
+	}
 }
 
 const (
-	defaultRangeKeyGenType = uniformGenerator
+	defaultRangeGenType    = uniformGenerator
 	defaultKeySpaceGenType = uniformGenerator
 )
 
@@ -124,8 +144,31 @@ var defaultWeightedRand []float64
 
 func defaultRangeGenSettings() rangeGenSettings {
 	return rangeGenSettings{
-		rangeKeyGenType: defaultRangeKeyGenType,
-		keySpaceGenType: defaultKeySpaceGenType,
-		weightedRand:    defaultWeightedRand,
+		placementType:     defaultPlacementType,
+		replicationFactor: defaultReplicationFactor,
+		rangeGenType:      defaultRangeGenType,
+		keySpaceGenType:   defaultKeySpaceGenType,
+		weightedRand:      defaultWeightedRand,
+	}
+}
+
+type clusterGenSettings struct {
+	clusterGenType clusterConfigType
+}
+
+func (c clusterGenSettings) printClusterGenSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"cluster_gen_settings ->\tclusterGenType=%v\t\n", c.clusterGenType); err != nil {
+		panic(err)
+	}
+}
+
+const (
+	defaultClusterGenType = multiRegion
+)
+
+func defaultClusterGenSettings() clusterGenSettings {
+	return clusterGenSettings{
+		clusterGenType: defaultClusterGenType,
 	}
 }
