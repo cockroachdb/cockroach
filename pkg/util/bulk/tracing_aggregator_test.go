@@ -122,7 +122,7 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	}
 
 	requireStatsTag := func(aggSp *tracing.Span, expected *bulkpb.IngestionPerformanceStats) {
-		exportStatsTag, found := aggSp.GetLazyTag(expected.Tag())
+		exportStatsTag, found := aggSp.GetLazyTag(expected.ProtoName())
 		require.True(t, found)
 		var actual *bulkpb.IngestionPerformanceStats
 		var ok bool
