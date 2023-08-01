@@ -1055,6 +1055,7 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
+skipif config local-read-committed
 query TTTTIT rowsort
 SHOW TABLES FROM test
 ----
@@ -2729,6 +2730,7 @@ CREATE TABLE childid (
 statement ok
 INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
 
+skipif config local-read-committed
 statement error column \"id\" does not exist
 BEGIN; ALTER TABLE parentid ADD id INT NOT NULL AS (k + 2) STORED; ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES parentid (id);
 
@@ -3958,6 +3960,7 @@ statement ok
 ALTER TABLE t65890_c ADD CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES t65890_p(a, b)
 
 # Ensure that a fast path on ba_idx is used.
+skipif config local-read-committed
 query T
 SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
 ----
@@ -3965,6 +3968,18 @@ SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
   into: t65890_c(k, b, a)
   auto commit
   FK check: t65890_p@ba_idx
+  size: 3 columns, 1 row
+
+onlyif config local-read-committed
+query T
+SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
+----
+• insert fast path
+  into: t65890_c(k, b, a)
+  auto commit
+  FK check: t65890_p@ba_idx
+  FK check locking strength: for share
+  FK check locking durability: guaranteed
   size: 3 columns, 1 row
 
 statement error insert on table "t65890_c" violates foreign key constraint "fk"\nDETAIL: Key \(a, b\)=\(3, 2\) is not present in table "t65890_p"\.
@@ -4053,18 +4068,28 @@ CREATE DATABASE db_type_test
 statement ok
 CREATE TABLE db_type_test.public.parent (id INT8 PRIMARY KEY, name STRING NULL)
 
+skipif config local-read-committed
 query T noticetrace
 CREATE TABLE db_type_test.public.child_1 (id INT8 PRIMARY KEY, parent_id INT4 NULL REFERENCES db_type_test.public.parent(id), name STRING NULL)
 ----
 NOTICE: type of foreign key column "parent_id" (int4) is not identical to referenced column "parent"."id" (int)
 
+onlyif config local-read-committed
+statement ok
+CREATE TABLE db_type_test.public.child_1 (id INT8 PRIMARY KEY, parent_id INT4 NULL REFERENCES db_type_test.public.parent(id), name STRING NULL)
+
 statement ok
 CREATE TABLE db_type_test.public.child_2 (id INT8 PRIMARY KEY, parent_id INT4 NULL, name STRING NULL)
 
+skipif config local-read-committed
 query T noticetrace
 ALTER TABLE db_type_test.public.child_2 ADD CONSTRAINT child_2_fk_parent_id FOREIGN KEY (parent_id) REFERENCES db_type_test.public.parent(id)
 ----
 NOTICE: type of foreign key column "parent_id" (int4) is not identical to referenced column "parent"."id" (int)
+
+onlyif config local-read-committed
+statement ok
+ALTER TABLE db_type_test.public.child_2 ADD CONSTRAINT child_2_fk_parent_id FOREIGN KEY (parent_id) REFERENCES db_type_test.public.parent(id)
 
 statement ok
 DROP DATABASE db_type_test
@@ -4113,7 +4138,8 @@ CREATE TABLE drop_fk_during_addition (name INT8);
 CREATE TABLE drop_fk_during_addition_ref (name INT8 PRIMARY KEY);
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE drop_fk_during_addition
 	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
 DROP TABLE drop_fk_during_addition_ref;
@@ -4126,10 +4152,13 @@ COMMIT;
 subtest 80828
 
 statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE parent80828 (id int primary key);
 CREATE TABLE child80828 (id INT PRIMARY KEY, pid INT NOT NULL REFERENCES parent80828(id) ON DELETE CASCADE, UNIQUE INDEX (pid));
 INSERT INTO parent80828 VALUES (1);
 INSERT INTO child80828 VALUES (1, 1);
+COMMIT;
 
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.base = .00001;

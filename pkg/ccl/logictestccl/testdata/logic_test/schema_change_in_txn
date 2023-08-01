@@ -23,6 +23,7 @@ ALTER INDEX db.t@idx_i PARTITION BY LIST (i) (
 COMMIT;
 
 # Before the change which introduced this test, it would erroneously return 2.
+skipif config local-read-committed
 query I
 SELECT (crdb_internal.pb_to_json('desc', descriptor)->'table'->>'version')::INT8
   FROM system.descriptor

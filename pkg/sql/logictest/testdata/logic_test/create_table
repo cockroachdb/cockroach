@@ -33,6 +33,7 @@ statement ok
 CREATE TABLE sec_col_fam(x INT, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY (z), INDEX (x) STORING (y, z));
 CREATE INDEX ON sec_col_fam (x) STORING (y, z)
 
+skipif config local-read-committed
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.secondary_index_column_families' AND usage_count >= 2
 ----

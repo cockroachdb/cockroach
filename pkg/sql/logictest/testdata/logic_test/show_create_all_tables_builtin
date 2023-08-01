@@ -142,6 +142,8 @@ SELECT crdb_internal.show_create_all_tables('temp_test')
 
 # Test that a database with foreign keys has the right order.
 statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE DATABASE test_fk_order;
 USE test_fk_order;
 -- B -> A
@@ -160,6 +162,7 @@ CREATE TABLE c (i int REFERENCES d);
 -- Test a table that uses a sequence to make sure the sequence is dumped first.
 CREATE SEQUENCE s;
 CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
+COMMIT;
 
 # Table order should be B, A, E, G, F, D, C, sequence s, s_tbl.
 query T nosort

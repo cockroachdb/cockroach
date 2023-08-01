@@ -811,12 +811,14 @@ SELECT f_unnamed();
 ----
 <unnamed portal 10>
 
+skipif config local-read-committed
 query T rowsort
 SELECT name FROM pg_cursors;
 ----
 <unnamed portal 10>
 foo
 
+skipif config local-read-committed
 query I
 FETCH FORWARD 3 FROM "<unnamed portal 10>";
 ----
@@ -847,6 +849,7 @@ FETCH FORWARD 3 FROM "<unnamed portal 11>";
 # Testing CLOSE statements.
 #
 # Test CLOSE within the scope of a routine.
+skipif config local-read-committed
 statement ok
 ABORT;
 DROP FUNCTION f();
@@ -871,6 +874,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+skipif config local-read-committed
 query T noticetrace
 SELECT f();
 ----
@@ -1025,6 +1029,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+skipif config local-read-committed
 query I
 SELECT f();
 ----
@@ -1032,11 +1037,13 @@ SELECT f();
 
 # The first cursor should have been rolled back, but the original 'dup' cursor
 # should still be open.
+skipif config local-read-committed
 query T
 SELECT name FROM pg_cursors;
 ----
 dup
 
+skipif config local-read-committed
 query I
 FETCH 3 FROM dup;
 ----
@@ -1117,6 +1124,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+skipif config local-read-committed
 statement error pgcode 42P03 pq: cursor \"dup\" already exists
 SELECT f();
 

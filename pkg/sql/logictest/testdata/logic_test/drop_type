@@ -21,7 +21,8 @@ statement ok
 CREATE TYPE t AS ENUM ('hello');
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 DROP TYPE t;
 
 statement error pq: type \"t\" does not exist
@@ -209,7 +210,8 @@ CREATE TYPE t4 AS ENUM ('cheers')
 # the dependencies are picked up.
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1)
 
 statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
@@ -219,7 +221,8 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED
 
 statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
@@ -229,7 +232,8 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3::string = 'hi')
 
 statement error pq: cannot drop type "t3" because other objects \(\[test.public.expr\]\) still depend on it
@@ -239,7 +243,8 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE INDEX i ON expr (rowid) WHERE ('cheers'::t4 = 'cheers'::t4)
 
 statement error pq: cannot drop type "t4" because other objects \(\[test.public.expr\]\) still depend on it

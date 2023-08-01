@@ -170,7 +170,8 @@ statement ok
 CREATE SCHEMA myschema2
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER SCHEMA myschema2 RENAME TO another_schema
@@ -228,8 +229,11 @@ SELECT * FROM system.descriptor WHERE id = $schema_id
 
 # We can't resolve a schema dropped in the same transaction.
 statement ok
-CREATE SCHEMA dropped;
-BEGIN
+CREATE SCHEMA dropped
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 DROP SCHEMA dropped
@@ -902,7 +906,8 @@ statement ok
 DROP SCHEMA sc
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE SCHEMA sc;
 COMMIT
 

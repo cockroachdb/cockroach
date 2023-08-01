@@ -1499,7 +1499,9 @@ CREATE TABLE t52318 (
 )
 
 statement ok
-BEGIN; CREATE INDEX i ON t52318 (a) WHERE b > 5
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+CREATE INDEX i ON t52318 (a) WHERE b > 5
 
 statement ok
 INSERT INTO t52318 (a, b) VALUES (1, 1), (6, 6)
@@ -1808,6 +1810,7 @@ CREATE TABLE t61414_c (
   FAMILY (k, a, c)
 )
 
+skipif config local-read-committed 110873
 statement ok
 UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 
@@ -1867,7 +1870,8 @@ statement ok
 CREATE TABLE t79613 (i INT PRIMARY KEY);
 
 statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
    CREATE INDEX idx ON t79613(i) WHERE (k > 1);
 
@@ -1875,7 +1879,8 @@ statement ok
 ROLLBACK
 
 statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
    CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
 
@@ -1883,7 +1888,8 @@ statement ok
 ROLLBACK
 
 statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
    ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
 
@@ -1898,7 +1904,8 @@ DROP TABLE t79613
 # synchronously.
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    CREATE TABLE t79613 (i INT PRIMARY KEY);
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
    CREATE INDEX idx ON t79613(i) WHERE (k > 1);
@@ -1907,7 +1914,8 @@ SELECT * FROM t79613;
 DROP TABLE t79613;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    CREATE TABLE t79613 (i INT PRIMARY KEY);
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
    CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
@@ -1916,7 +1924,8 @@ SELECT * FROM t79613;
 DROP TABLE t79613;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    CREATE TABLE t79613 (i INT PRIMARY KEY);
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
    ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
@@ -1925,7 +1934,8 @@ SELECT * FROM t79613;
 DROP TABLE t79613;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
    CREATE TABLE t79613 (i INT PRIMARY KEY);
    ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1,
        ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);

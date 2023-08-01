@@ -428,7 +428,8 @@ statement ok
 CREATE TABLE t20 (x INT);
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
 ALTER TABLE t20 ALTER COLUMN x TYPE STRING

@@ -579,6 +579,7 @@ BEGIN;
 DECLARE foo CURSOR FOR SELECT 1;
 FETCH foo
 
+skipif config local-read-committed
 statement error cannot run schema change in a transaction with open DECLARE cursors
 ALTER TABLE a ADD COLUMN c INT
 

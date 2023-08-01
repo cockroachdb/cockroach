@@ -5,7 +5,8 @@ statement ok
 CREATE TABLE t (x INT); INSERT INTO t (x) VALUES (0);
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE t ADD COLUMN z INT DEFAULT 123
