@@ -1,63 +1,98 @@
-rand_cluster cluster_gen_type=multi_region
+# In this test, we run the randomized testing framework with the weighted_rand
+# option.  Note that due to the limited sample size, these may not be observed
+# accurately. But we expect the distribution of ranges across stores should be
+# roughly proportional to the weight.
+change_static_option stores_per_node=3 nodes=1
 ----
 
-# We expect ranges distributed to the third and fourth stores to be larger than
-# the first two stores. Ranges on other stores are significantly smaller, but
-# they are not zero due to the best-effort nature of the range information
-# distribution.
-rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.01, 0.04, 0.2, 0.75)
+# Due to replication factor of 3, it is impossible to satisfy the weighted rand
+# distribution. So number of ranges across the stores remains the same.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
 ----
 
-eval duration=5m num_iterations=3 verbose=(test_settings,config_gen,initial_state)
+eval duration=5m num_iterations=3 verbose=(test_settings,initial_state)
 ----
 test settings
 	num_iterations=3 duration=5m0s
 ----------------------------------
-generating cluster configurations using randomized option
-	cluster_gen_type=multi_region
+generating cluster configurations using static option
+	nodes=1, stores_per_node=3
 generating ranges configurations using randomized option
-	placement_type=weighted_rand, range_gen_type=uniform, key_space=uniform, replication_factor=3, weightedRand=[0.01 0.04 0.2 0.75]
+	placement_type=weighted_rand, range_gen_type=uniform, key_space=uniform, replication_factor=3, weightedRand=[0.1 0.2 0.7]
 generating load configurations using static option
 	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
 sample1: start running
-configurations generated using seed 1926012586526624009
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=0), zone=US_East_2(nodes=2,stores=0), zone=US_East_3(nodes=3,stores=0), zone=US_East_3(nodes=10,stores=0)]
-		region:US_West [zone=US_West_1(nodes=2,stores=0)]
-		region:EU [zone=EU_1(nodes=3,stores=0), zone=EU_2(nodes=3,stores=0), zone=EU_3(nodes=4,stores=0)]
-	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0.01 0.04 0.2 0.75], ranges=305, key_space=96760, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
 initial state at 2022-03-21 11:00:00 +0000 UTC:
-	stores(28)=[s1n1=(replicas(59)),s2n2=(replicas(74)),s3n3=(replicas(75)),s4n4=(replicas(77)),s5n5=(replicas(25)),s6n6=(replicas(27)),s7n7=(replicas(26)),s8n8=(replicas(28)),s9n9=(replicas(27)),s10n10=(replicas(26)),s11n11=(replicas(27)),s12n12=(replicas(25)),s13n13=(replicas(25)),s14n14=(replicas(27)),s15n15=(replicas(26)),s16n16=(replicas(26)),s17n17=(replicas(25)),s18n18=(replicas(26)),s19n19=(replicas(25)),s20n20=(replicas(28)),s21n21=(replicas(25)),s22n22=(replicas(26)),s23n23=(replicas(27)),s24n24=(replicas(27)),s25n25=(replicas(27)),s26n26=(replicas(27)),s27n27=(replicas(26)),s28n28=(replicas(26))]
+	stores(3)=[s1n1=(replicas(563)),s2n1=(replicas(563)),s3n1=(replicas(563))]
 sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 6603068123710785442
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=4,stores=0), zone=US_East_2(nodes=4,stores=0), zone=US_East_3(nodes=4,stores=0)]
-		region:US_West [zone=US_West_1(nodes=4,stores=0), zone=US_West_2(nodes=4,stores=0), zone=US_West_3(nodes=4,stores=0)]
-		region:EU [zone=EU_1(nodes=4,stores=0), zone=EU_2(nodes=4,stores=0), zone=EU_3(nodes=4,stores=0)]
-	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0.01 0.04 0.2 0.75], ranges=603, key_space=99075, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
 initial state at 2022-03-21 11:00:00 +0000 UTC:
-	stores(36)=[s1n1=(replicas(159)),s2n2=(replicas(306)),s3n3=(replicas(372)),s4n4=(replicas(374)),s5n5=(replicas(19)),s6n6=(replicas(20)),s7n7=(replicas(18)),s8n8=(replicas(17)),s9n9=(replicas(18)),s10n10=(replicas(18)),s11n11=(replicas(19)),s12n12=(replicas(18)),s13n13=(replicas(18)),s14n14=(replicas(20)),s15n15=(replicas(19)),s16n16=(replicas(19)),s17n17=(replicas(18)),s18n18=(replicas(17)),s19n19=(replicas(19)),s20n20=(replicas(21)),s21n21=(replicas(21)),s22n22=(replicas(19)),s23n23=(replicas(20)),s24n24=(replicas(19)),s25n25=(replicas(18)),s26n26=(replicas(18)),s27n27=(replicas(18)),s28n28=(replicas(17)),s29n29=(replicas(19)),s30n30=(replicas(18)),s31n31=(replicas(20)),s32n32=(replicas(18)),s33n33=(replicas(19)),s34n34=(replicas(18)),s35n35=(replicas(18)),s36n36=(replicas(20))]
+	stores(3)=[s1n1=(replicas(299)),s2n1=(replicas(299)),s3n1=(replicas(299))]
 sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 6656619927997724782
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=0), zone=US_East_2(nodes=2,stores=0), zone=US_East_3(nodes=3,stores=0), zone=US_East_3(nodes=10,stores=0)]
-		region:US_West [zone=US_West_1(nodes=2,stores=0)]
-		region:EU [zone=EU_1(nodes=3,stores=0), zone=EU_2(nodes=3,stores=0), zone=EU_3(nodes=4,stores=0)]
-	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0.01 0.04 0.2 0.75], ranges=394, key_space=89281, replication_factor=3, bytes=0
+initial state at 2022-03-21 11:00:00 +0000 UTC:
+	stores(3)=[s1n1=(replicas(521)),s2n1=(replicas(521)),s3n1=(replicas(521))]
+sample3: pass
+----------------------------------
+
+clear
+----
+
+change_static_option stores_per_node=2 nodes=3
+----
+
+# We expect ranges distributed to the last three stores to be larger than the
+# first few stores. The ratio is not exact due to the best-effort nature of the
+# range information distribution.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0,0,0,0.3,0.3,0.4)
+----
+
+eval duration=5m num_iterations=3 verbose=(test_settings,initial_state,config_gen)
+----
+test settings
+	num_iterations=3 duration=5m0s
+----------------------------------
+generating cluster configurations using static option
+	nodes=3, stores_per_node=2
+generating ranges configurations using randomized option
+	placement_type=weighted_rand, range_gen_type=uniform, key_space=uniform, replication_factor=3, weightedRand=[0 0 0 0.3 0.3 0.4]
+generating load configurations using static option
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
+generating events configurations using static option
+generating settings configurations using static option
+----------------------------------
+sample1: start running
+configurations generated using seed 5571782338101878760
+	basic cluster with nodes=3, stores_per_node=2
+	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=563, key_space=160411, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
 initial state at 2022-03-21 11:00:00 +0000 UTC:
-	stores(28)=[s1n1=(replicas(116)),s2n2=(replicas(117)),s3n3=(replicas(156)),s4n4=(replicas(162)),s5n5=(replicas(26)),s6n6=(replicas(28)),s7n7=(replicas(26)),s8n8=(replicas(26)),s9n9=(replicas(26)),s10n10=(replicas(26)),s11n11=(replicas(26)),s12n12=(replicas(27)),s13n13=(replicas(25)),s14n14=(replicas(27)),s15n15=(replicas(25)),s16n16=(replicas(26)),s17n17=(replicas(28)),s18n18=(replicas(26)),s19n19=(replicas(27)),s20n20=(replicas(26)),s21n21=(replicas(26)),s22n22=(replicas(26)),s23n23=(replicas(26)),s24n24=(replicas(25)),s25n25=(replicas(28)),s26n26=(replicas(26)),s27n27=(replicas(26)),s28n28=(replicas(27))]
+	stores(6)=[s1n1=(replicas(132)),s2n1=(replicas(130)),s3n2=(replicas(131)),s4n2=(replicas(437)),s5n3=(replicas(428)),s6n3=(replicas(431))]
+sample1: pass
+----------------------------------
+sample2: start running
+configurations generated using seed 4299969443970870044
+	basic cluster with nodes=3, stores_per_node=2
+	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=299, key_space=9542, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	number of static events generated=0
+initial state at 2022-03-21 11:00:00 +0000 UTC:
+	stores(6)=[s1n1=(replicas(140)),s2n1=(replicas(136)),s3n2=(replicas(139)),s4n2=(replicas(169)),s5n3=(replicas(142)),s6n3=(replicas(171))]
+sample2: pass
+----------------------------------
+sample3: start running
+configurations generated using seed 4157513341729910236
+	basic cluster with nodes=3, stores_per_node=2
+	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=521, key_space=82660, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	number of static events generated=0
+initial state at 2022-03-21 11:00:00 +0000 UTC:
+	stores(6)=[s1n1=(replicas(180)),s2n1=(replicas(181)),s3n2=(replicas(183)),s4n2=(replicas(386)),s5n3=(replicas(247)),s6n3=(replicas(386))]
 sample3: pass
 ----------------------------------
