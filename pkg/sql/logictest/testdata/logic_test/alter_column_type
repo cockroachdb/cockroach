@@ -430,6 +430,7 @@ CREATE TABLE t20 (x INT);
 statement ok
 BEGIN
 
+skipif config local-read-committed
 statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
 ALTER TABLE t20 ALTER COLUMN x TYPE STRING
 

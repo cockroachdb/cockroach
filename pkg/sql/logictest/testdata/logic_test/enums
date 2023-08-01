@@ -632,7 +632,8 @@ statement ok
 DROP TABLE enum_checks;
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 ALTER TABLE enum_checks ADD CHECK (x > 'hello')
@@ -644,7 +645,8 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 
@@ -732,7 +734,8 @@ statement ok
 DROP TABLE sc
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
 INSERT INTO sc VALUES ('hello', 0), ('howdy', 1), ('hi', 2);
 CREATE INDEX i1 ON sc (x);
@@ -762,7 +765,8 @@ COMMIT
 # Ensure that we can create an index on a table and type created in
 # the same transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE in_txn AS ENUM ('in', 'txn');
 CREATE TABLE tbl_in_txn (x in_txn);
 INSERT INTO tbl_in_txn VALUES ('txn');
@@ -792,14 +796,16 @@ DROP TABLE enum_pk
 
 # Repeat the above tests, but in a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
 INSERT INTO enum_not_pk VALUES (1, 'howdy');
 ALTER TABLE enum_not_pk ALTER PRIMARY KEY USING COLUMNS (y);
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_pk (x GREETING PRIMARY KEY, y INT NOT NULL);
 INSERT INTO enum_pk VALUES ('howdy', 1);
 ALTER TABLE enum_pk ALTER PRIMARY KEY USING COLUMNS (y);
@@ -821,7 +827,8 @@ DROP TABLE enum_ctas
 
 # Test basic CTAS in a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_ctas AS TABLE enum_ctas_base
 
 query TTT
@@ -846,7 +853,8 @@ DROP TABLE enum_ctas;
 
 # Test CTAS with a SELECT query in a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
 
 query TTTT
@@ -871,7 +879,8 @@ DROP TABLE enum_ctas;
 
 # Test CTAS from a VALUES clause in a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
 
 query TT
@@ -929,7 +938,8 @@ statement ok
 DROP TABLE column_add
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE column_add (x greeting);
 INSERT INTO column_add VALUES ('hello');
 ALTER TABLE column_add ADD COLUMN y INT DEFAULT 1;
@@ -948,7 +958,8 @@ COMMIT
 # Lastly, ensure that we can create a column using a type created in the
 # same transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE in_txn AS ENUM ('in', 'txn');
 CREATE TABLE tbl_in_txn (x INT);
 INSERT INTO tbl_in_txn VALUES (1);
@@ -979,7 +990,8 @@ DROP TABLE enum_referenced, enum_origin;
 
 # Try the above, but in a transaction.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_origin (x greeting PRIMARY KEY);
 CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
 INSERT INTO enum_origin VALUES ('hello');
@@ -1119,7 +1131,8 @@ howdy
 # Transactions which create or modify types must not distribute their
 # plans to remote nodes.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE local_type AS ENUM ('local');
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
@@ -1133,7 +1146,8 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TYPE greeting RENAME TO greeting_local;
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
@@ -1150,7 +1164,8 @@ ROLLBACK
 # manager to access type data once the current transaction has already modified
 # or created a type.
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE local_type AS ENUM ('local');
 CREATE TABLE local_table (x local_type);
 INSERT INTO local_table VALUES ('local')
@@ -1232,7 +1247,8 @@ statement ok
 CREATE TABLE table_with_not_null_enum (i INT PRIMARY KEY, v enum_with_vals NOT NULL);
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE table_with_not_null_enum DROP COLUMN v;
@@ -1250,7 +1266,8 @@ statement ok
 CREATE TABLE table_with_not_null_enum_no_vals (i INT PRIMARY KEY, v enum_with_no_vals NOT NULL);
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE table_with_not_null_enum_no_vals DROP COLUMN v;
@@ -1724,7 +1741,8 @@ statement ok
 INSERT INTO tab2 VALUES ('hello')
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE tab2 ADD COLUMN j INT

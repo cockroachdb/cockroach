@@ -763,6 +763,7 @@ BEGIN
 statement ok
 ALTER TABLE bf ADD COLUMN b INT DEFAULT 10
 
+skipif config local-read-committed
 statement error pgcode 0A000 index element expression referencing columns \("b"\) added in the current transaction
 CREATE INDEX a_plus_b ON bf ((a + b))
 
@@ -1159,6 +1160,7 @@ CREATE TABLE t74216 (
 )
 
 # create index using an expression works even when retried
+skipif config local-read-committed
 statement ok
 BEGIN;
 CREATE INDEX t_a_times_three_idx ON t ((a * 3));

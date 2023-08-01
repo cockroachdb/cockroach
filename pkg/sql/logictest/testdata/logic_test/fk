@@ -1055,6 +1055,7 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
+skipif config local-read-committed
 query TTTTIT rowsort
 SHOW TABLES FROM test
 ----
@@ -2729,6 +2730,7 @@ CREATE TABLE childid (
 statement ok
 INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
 
+skipif config local-read-committed
 statement error column \"id\" does not exist
 BEGIN; ALTER TABLE parentid ADD id INT NOT NULL AS (k + 2) STORED; ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES parentid (id);
 

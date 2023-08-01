@@ -4,10 +4,14 @@ subtest OptDriven
 # Single delete cascade.
 statement ok
 CREATE TABLE parent (p INT PRIMARY KEY);
+
+statement ok
 CREATE TABLE child (
   c INT PRIMARY KEY,
   p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE
 );
+
+statement ok
 INSERT INTO parent VALUES (1), (2);
 INSERT INTO child VALUES (1, 1), (2, 2), (10, 1), (20, 2);
 

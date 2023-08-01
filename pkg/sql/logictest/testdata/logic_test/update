@@ -455,10 +455,16 @@ subtest fk_contraint_check_validation_ordering
 # foreign key validation.
 statement ok
 CREATE TABLE src(x VARCHAR PRIMARY KEY);
-  INSERT INTO src(x) VALUES ('abc');
-  CREATE TABLE derived(x CHAR(3) REFERENCES src(x),
-                       y VARCHAR CHECK(length(y) < 4) REFERENCES src(x));
-  INSERT INTO derived(x, y) VALUES ('abc', 'abc')
+
+statement ok
+INSERT INTO src(x) VALUES ('abc');
+
+statement ok
+CREATE TABLE derived(x CHAR(3) REFERENCES src(x),
+                     y VARCHAR CHECK(length(y) < 4) REFERENCES src(x));
+
+statement ok
+INSERT INTO derived(x, y) VALUES ('abc', 'abc')
 
 # Sanity check that the FK constraints gets actually validated
 statement error foreign key
@@ -476,7 +482,9 @@ statement ok
 CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
 
 statement ok
-BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
 query T
@@ -494,7 +502,10 @@ UPDATE t29494 SET x = 123 RETURNING y
 # Check the new column is not assignable. We need to restart
 # the txn because the error above trashed it.
 statement ok
-ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+ROLLBACK;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Returning * doesn't return y
 query I
@@ -508,7 +519,10 @@ UPDATE t29494 SET y = 123
 # Check the new column is not usable in assignments. We need to
 # restart the txn because the error above trashed it.
 statement ok
-ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+ROLLBACK;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" is being backfilled
 UPDATE t29494 SET x = y
@@ -524,7 +538,9 @@ statement ok
 INSERT INTO mutation VALUES (1, 1)
 
 statement ok
-BEGIN; ALTER TABLE mutation add COLUMN o INT DEFAULT(10), ADD COLUMN p INT AS (o + n) STORED
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE mutation add COLUMN o INT DEFAULT(10), ADD COLUMN p INT AS (o + n) STORED
 
 statement ok
 UPDATE mutation SET m=2 WHERE n=1

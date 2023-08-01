@@ -150,10 +150,16 @@ SELECT * from pg_temp.view_on_temp
 2
 
 # A "permanent" view on a temporary table gets upgraded to temporary.
+skipif config local-read-committed
 query T noticetrace
 CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
 ----
 NOTICE: view "upgrade_temp_view" will be a temporary view
+
+onlyif config local-read-committed
+statement ok
+CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
+
 
 query I
 SELECT * from pg_temp.upgrade_temp_view

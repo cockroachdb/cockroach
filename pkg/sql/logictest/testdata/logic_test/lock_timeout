@@ -1,3 +1,7 @@
+# LogicTest: !local-read-committed
+# The locks created in this test are intended to work with SERIALIZABLE
+# transactions.
+
 # Create a table, write a row, lock it, then switch users.
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
