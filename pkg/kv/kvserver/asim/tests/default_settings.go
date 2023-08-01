@@ -26,7 +26,7 @@ import (
 const (
 	defaultNumIterations = 3
 	defaultSeed          = int64(42)
-	defaultDuration      = 30 * time.Minute
+	defaultDuration      = 10 * time.Minute
 	defaultVerbosity     = false
 )
 
