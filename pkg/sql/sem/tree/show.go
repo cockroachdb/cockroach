@@ -1295,6 +1295,7 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 type ShowDefaultPrivileges struct {
 	Roles       RoleSpecList
 	ForAllRoles bool
+	ForGrantee  bool
 	// If Schema is not specified, SHOW DEFAULT PRIVILEGES is being
 	// run on the current database.
 	Schema Name
@@ -1306,7 +1307,12 @@ var _ Statement = &ShowDefaultPrivileges{}
 func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DEFAULT PRIVILEGES ")
 	if len(n.Roles) > 0 {
-		ctx.WriteString("FOR ROLE ")
+		if n.ForGrantee {
+			ctx.WriteString("FOR GRANTEE ")
+		} else {
+			ctx.WriteString("FOR ROLE ")
+		}
+
 		for i := range n.Roles {
 			if i > 0 {
 				ctx.WriteString(", ")
