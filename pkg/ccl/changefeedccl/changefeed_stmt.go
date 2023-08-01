@@ -909,8 +909,11 @@ func validateSink(
 		return err
 	}
 
-	if u.Scheme == changefeedbase.SinkSchemeCloudStorageHTTP || u.Scheme == changefeedbase.SinkSchemeCloudStorageHTTPS {
-		p.BufferClientNotice(ctx, pgnotice.Newf(`%s sinks will emit using cloud storage semantics. For a webhook sink, prepend webhook- to the sink URI.`))
+	if u.Scheme == changefeedbase.DeprecatedSinkSchemeHTTP || u.Scheme == changefeedbase.DeprecatedSinkSchemeHTTP {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			`%s sinks will emit using cloud storage semantics. For a webhook sink, prepend webhook- to the sink URI. Prepend file- to remove this notice.`,
+			u.Scheme,
+		))
 	}
 
 	var nilOracle timestampLowerBoundOracle
