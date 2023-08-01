@@ -1470,14 +1470,18 @@ func (b *Builder) validateLockingInFrom(
 		case tree.ForNone:
 			// AST nodes should not be created with this locking strength.
 			panic(errors.AssertionFailedf("locking item without strength"))
-		case tree.ForUpdate, tree.ForNoKeyUpdate, tree.ForShare, tree.ForKeyShare:
-			// CockroachDB treats all of the FOR LOCKED modes as no-ops. Since all
-			// transactions are serializable in CockroachDB, clients can't observe
-			// whether or not FOR UPDATE (or any of the other weaker modes) actually
-			// created a lock. This behavior may improve as the transaction model gains
-			// more capabilities.
+		case tree.ForUpdate:
+			// Exclusive locking on the entire row.
+		case tree.ForNoKeyUpdate:
+			// Exclusive locking on only non-key(s) of the row. Currently
+			// unimplemented and treated identically to ForUpdate.
+		case tree.ForShare:
+			// Shared locking on the entire row.
+		case tree.ForKeyShare:
+			// Shared locking on only key(s) of the row. Currently unimplemented and
+			// treated identically to ForShare.
 		default:
-			panic(errors.AssertionFailedf("unknown locking strength: %s", li.Strength))
+			panic(errors.AssertionFailedf("unknown locking strength: %d", li.Strength))
 		}
 
 		// Validating locking wait policy.
@@ -1489,7 +1493,17 @@ func (b *Builder) validateLockingInFrom(
 		case tree.LockWaitError:
 			// Raise an error on conflicting locks.
 		default:
-			panic(errors.AssertionFailedf("unknown locking wait policy: %s", li.WaitPolicy))
+			panic(errors.AssertionFailedf("unknown locking wait policy: %d", li.WaitPolicy))
+		}
+
+		// Validate locking form.
+		switch li.Form {
+		case tree.LockRecord:
+			// Default. Only lock existing rows.
+		case tree.LockPredicate:
+			// Lock both existing rows and gaps between rows.
+		default:
+			panic(errors.AssertionFailedf("unknown locking form: %d", li.Form))
 		}
 
 		// Validate locking targets by checking that all targets are well-formed

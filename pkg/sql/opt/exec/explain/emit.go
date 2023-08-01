@@ -1074,12 +1074,16 @@ func (e *emitter) emitLockingPolicy(locking opt.Locking) {
 func (e *emitter) emitLockingPolicyWithPrefix(keyPrefix string, locking opt.Locking) {
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	form := locking.Form
 	durability := locking.Durability
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
 		e.ob.Attr(keyPrefix+"locking strength", strength.PrettyString())
 	}
 	if waitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
 		e.ob.Attr(keyPrefix+"locking wait policy", waitPolicy.PrettyString())
+	}
+	if form != tree.LockRecord {
+		e.ob.Attr(keyPrefix+"locking form", form.String())
 	}
 	if durability != tree.LockDurabilityBestEffort {
 		e.ob.Attr(keyPrefix+"locking durability", durability.String())
