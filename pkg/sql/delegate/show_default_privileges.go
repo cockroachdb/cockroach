@@ -44,6 +44,11 @@ func (d *delegator) delegateShowDefaultPrivileges(
 	if n.ForAllRoles {
 		query += " AND for_all_roles=true"
 	} else if len(n.Roles) > 0 {
+		targetCol := "role"
+		if n.ForGrantee {
+			targetCol = "grantee"
+		}
+
 		targetRoles, err := decodeusername.FromRoleSpecList(
 			d.evalCtx.SessionData(), username.PurposeValidation, n.Roles,
 		)
@@ -51,7 +56,7 @@ func (d *delegator) delegateShowDefaultPrivileges(
 			return nil, err
 		}
 
-		query = fmt.Sprintf("%s AND for_all_roles=false AND role IN (", query)
+		query = fmt.Sprintf("%s AND for_all_roles=false AND %s IN (", query, targetCol)
 		for i, role := range targetRoles {
 			if i != 0 {
 				query += fmt.Sprintf(", '%s'", role.Normalized())
