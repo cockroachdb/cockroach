@@ -909,8 +909,18 @@ func validateSink(
 		return err
 	}
 
-	if u.Scheme == changefeedbase.SinkSchemeCloudStorageHTTP || u.Scheme == changefeedbase.SinkSchemeCloudStorageHTTPS {
-		p.BufferClientNotice(ctx, pgnotice.Newf(`%s sinks will emit using cloud storage semantics. For a webhook sink, prepend webhook- to the sink URI.`))
+	ambiguousSchemes := map[string][2]string{
+		changefeedbase.DeprecatedSinkSchemeHTTP:  {changefeedbase.SinkSchemeCloudStorageHTTP, changefeedbase.SinkSchemeWebhookHTTP},
+		changefeedbase.DeprecatedSinkSchemeHTTPS: {changefeedbase.SinkSchemeCloudStorageHTTPS, changefeedbase.SinkSchemeWebhookHTTPS},
+	}
+
+	if disambiguations, isAmbiguous := ambiguousSchemes[u.Scheme]; isAmbiguous {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			`Interpreting deprecated URI scheme %s as %s. For webhook semantics, use %s.`,
+			u.Scheme,
+			disambiguations[0],
+			disambiguations[1],
+		))
 	}
 
 	var nilOracle timestampLowerBoundOracle

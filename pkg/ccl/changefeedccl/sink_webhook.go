@@ -233,7 +233,7 @@ func makeDeprecatedWebhookSink(
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
-		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
+		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
