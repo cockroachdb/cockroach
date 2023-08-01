@@ -3662,3 +3662,29 @@ func TestJobTypeMetrics(t *testing.T) {
 	runner.Exec(t, "CANCEL JOB $1", cfJob.ID())
 	runner.Exec(t, "CANCEL JOB $1", importJob.ID())
 }
+
+func TestLoadJobProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	r := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
+	defer s.Stopper().Stop(context.Background())
+
+	progress := &jobspb.Progress{
+		Details: jobspb.WrapProgressDetails(jobspb.ImportProgress{ReadProgress: []float32{7.1}}),
+	}
+	rec := jobs.Record{
+		JobID:    7,
+		Username: username.TestUserName(),
+		Details:  jobspb.ImportDetails{},
+		Progress: progress.UnwrapDetails(),
+	}
+	_, err := r.CreateJobWithTxn(ctx, rec, 7, nil)
+	require.NoError(t, err)
+
+	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7)
+	require.NoError(t, err)
+	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
+}
