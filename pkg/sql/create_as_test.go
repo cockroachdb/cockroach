@@ -198,9 +198,6 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW RANGE FROM TABLE show_ranges_tbl FOR ROW (0)",
 			setup: "CREATE TABLE show_ranges_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `invalid memory address or nil pointer dereference` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106397.
-			skip: true,
 		},
 		{
 			sql: "SHOW SURVIVAL GOAL FROM DATABASE",
