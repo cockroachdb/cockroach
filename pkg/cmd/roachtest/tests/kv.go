@@ -558,7 +558,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			desiredRunDuration := 5 * time.Minute
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
-					"./cockroach workload run kv --duration=%s --read-percent=0 --max-rate=%d {pgurl:1-%d}",
+					"./cockroach workload run kv --duration=%s --read-percent=0 --concurrency=100 --max-rate=%d {pgurl:1-%d}",
 					desiredRunDuration, specifiedQPS, nodes-1)
 				t.WorkerStatus(cmd)
 				defer func() {
