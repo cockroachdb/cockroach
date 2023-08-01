@@ -30,6 +30,8 @@ type TracingAggregatorEvent interface {
 	Combine(other TracingAggregatorEvent)
 	// Tag returns a string used to identify the TracingAggregatorEvent.
 	Tag() string
+	// String returns the string representation of the TracingAggregatorEvent.
+	String() string
 }
 
 // A TracingAggregator can be used to aggregate and render AggregatorEvents that

@@ -3,14 +3,21 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bulk",
     srcs = [
+        "aggregator_stats.go",
         "iterator.go",
         "tracing_aggregator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/bulk",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/isql",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

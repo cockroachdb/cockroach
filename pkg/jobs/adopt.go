@@ -623,3 +623,14 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		return nil
 	})
 }
+
+func init() {
+	RegisterProtobinFileStringer("resumer-trace", func(content []byte) (string, error) {
+		td := &jobspb.TraceData{}
+		if err := protoutil.Unmarshal(content, td); err != nil {
+			return "", err
+		}
+		rec := tracingpb.Recording(td.CollectedSpans)
+		return rec.String(), nil
+	})
+}

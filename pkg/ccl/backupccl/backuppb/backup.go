@@ -12,19 +12,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // required for backup.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+const ExportStatsTag = "ExportStats"
 
 // IsIncremental returns if the BackupManifest corresponds to an incremental
 // backup.
@@ -226,11 +231,46 @@ func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 }
 
+// String implements the AggregatorEvent and stringer interfaces.
+func (e *ExportStats) String() string {
+	const mb = 1 << 20
+	var b strings.Builder
+	if e.NumFiles > 0 {
+		b.WriteString(fmt.Sprintf("num_files: %d\n", e.NumFiles))
+	}
+	if e.DataSize > 0 {
+		dataSizeMB := float64(e.DataSize) / mb
+		b.WriteString(fmt.Sprintf("data_size: %.2f MB\n", dataSizeMB))
+
+		if !e.StartTime.IsEmpty() && !e.EndTime.IsEmpty() {
+			duration := e.EndTime.GoTime().Sub(e.StartTime.GoTime())
+			throughput := dataSizeMB / duration.Seconds()
+			b.WriteString(fmt.Sprintf("throughput: %.2f MB/s\n", throughput))
+		}
+	}
+
+	return b.String()
+}
+
 // Tag implements the TracingAggregatorEvent interface.
 func (e *ExportStats) Tag() string {
-	return "ExportStats"
+	return ExportStatsTag
 }
 
 func init() {
 	protoreflect.RegisterShorthands((*BackupManifest)(nil), "backup", "backup_manifest")
+	jobs.RegisterProtobinFileStringer(ExportStatsTag, func(content []byte) (string, error) {
+		es := &ExportStats{}
+		if err := protoutil.Unmarshal(content, es); err != nil {
+			return "", err
+		}
+		return es.String(), nil
+	})
+	bulk.RegisterAggregatorEventConstructor(ExportStatsTag, func(event []byte) (bulk.TracingAggregatorEvent, error) {
+		exportStats := &ExportStats{}
+		if err := protoutil.Unmarshal(event, exportStats); err != nil {
+			return nil, err
+		}
+		return exportStats, nil
+	})
 }

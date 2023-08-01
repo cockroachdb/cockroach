@@ -20,14 +20,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/klauspost/compress/gzip"
 )
 
 const bundleChunkSize = 1 << 20 // 1 MiB
 const finalChunkSuffix = "#_final"
+
+var filenameToProtobinStringer map[string]func(content []byte) (string, error)
+
+// RegisterProtobinFileStringer registers a method that converts the byte
+// contents of filename to its string representation.
+func RegisterProtobinFileStringer(filename string, stringer func(content []byte) (string, error)) {
+	if filenameToProtobinStringer == nil {
+		filenameToProtobinStringer = make(map[string]func(content []byte) (string, error))
+	}
+	_, ok := filenameToProtobinStringer[filename]
+	if ok {
+		panic(fmt.Sprintf("duplicate stringers registered for %s", filename))
+	}
+	filenameToProtobinStringer[filename] = stringer
+}
 
 func compressChunk(chunkBuf []byte) ([]byte, error) {
 	gzipBuf := bytes.NewBuffer([]byte{})
@@ -85,16 +98,14 @@ func WriteExecutionDetailFile(
 }
 
 func stringifyProtobinFile(filename string, fileContents *bytes.Buffer) ([]byte, error) {
-	if strings.HasPrefix(filename, "resumer-trace") {
-		td := &jobspb.TraceData{}
-		if err := protoutil.Unmarshal(fileContents.Bytes(), td); err != nil {
-			return nil, err
+	var stringer func(content []byte) (string, error)
+	for tag, f := range filenameToProtobinStringer {
+		if strings.Contains(filename, tag) {
+			stringer = f
 		}
-		rec := tracingpb.Recording(td.CollectedSpans)
-		return []byte(rec.String()), nil
-	} else {
-		return nil, errors.AssertionFailedf("unknown file %s", filename)
 	}
+	s, err := stringer(fileContents.Bytes())
+	return []byte(s), err
 }
 
 // ReadExecutionDetailFile will stitch together all the chunks corresponding to the
