@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -134,6 +135,10 @@ func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
+	var disallowShadowingBelow hlc.Timestamp
+	if !sp.spec.AllowShadowing {
+		disallowShadowingBelow = writeTS
+	}
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
 		ctx, sp.flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 			Name:          sp.tableDesc.GetName(),
@@ -144,7 +149,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 			// the check for allowed shadowing also requires the values match, so a
 			// conflicting unique index entry would still be rejected as its value
 			// would point to a different owning row.
-			DisallowShadowingBelow: writeTS,
+			DisallowShadowingBelow: disallowShadowingBelow,
 			WriteAtBatchTimestamp:  true,
 		},
 	)

@@ -17,9 +17,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -354,9 +356,9 @@ func TestFormat(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(ctx)
-	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(db)
 	var p parser.Parser
 
 	for _, tc := range testCases {
@@ -388,4 +390,23 @@ AND description LIKE 'CREATE%%%s%%'`,
 			sqlRunner.CheckQueryResults(t, query, [][]string{{tc.expectedFormat}})
 		})
 	}
+}
+
+func TestTransactionRetryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	filterFunc, verifyFunc := kvclientutils.PrefixTransactionRetryFilter(t, schemaChangerBackfillTxnDebugName, 1)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			KVClient: &kvcoord.ClientTestingKnobs{
+				TransactionRetryFilter: filterFunc,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	sqlRunner.Exec(t, "CREATE SEQUENCE seq")
+	sqlRunner.Exec(t, "CREATE TABLE t AS SELECT nextval('seq')")
+	verifyFunc()
 }
