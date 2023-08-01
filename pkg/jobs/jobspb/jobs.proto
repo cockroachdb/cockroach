@@ -1429,6 +1429,8 @@ message RetriableExecutionFailure {
   string truncated_error = 6;
 }
 
+// TraceData is used to capture the traces of a job when the resumer completes
+// its execution.
 message TraceData {
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
 }
