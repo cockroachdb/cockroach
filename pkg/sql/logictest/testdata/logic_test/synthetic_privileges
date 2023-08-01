@@ -297,7 +297,7 @@ SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
 false
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 GRANT SELECT ON crdb_internal.tables TO testuser4
@@ -349,6 +349,8 @@ subtest unknown_privilege
 
 statement ok
 INSERT INTO system.users VALUES ('node', NULL, true, 0);
+
+statement ok
 GRANT node TO root;
 
 statement ok

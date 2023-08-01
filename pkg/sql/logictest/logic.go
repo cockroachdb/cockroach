@@ -1258,6 +1258,11 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
 		t.Fatal(err)
 	}
+	if t.cfg.EnableDefaultReadCommitted {
+		if _, err := db.Exec("SET default_transaction_isolation = 'READ COMMITTED'"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if t.clients == nil {
 		t.clients = make(map[string]map[int]*gosql.DB)
 	}
