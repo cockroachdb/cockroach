@@ -1071,6 +1071,7 @@ func (e *emitter) emitLockingPolicyWithPrefix(keyPrefix string, locking opt.Lock
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	durability := locking.Durability
+	class := locking.Class
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
 		e.ob.Attr(keyPrefix+"locking strength", strength.PrettyString())
 	}
@@ -1079,6 +1080,9 @@ func (e *emitter) emitLockingPolicyWithPrefix(keyPrefix string, locking opt.Lock
 	}
 	if durability != tree.LockDurabilityBestEffort {
 		e.ob.Attr(keyPrefix+"locking durability", durability.String())
+	}
+	if class != tree.LockRecord {
+		e.ob.Attr(keyPrefix+"locking class", class.String())
 	}
 }
 

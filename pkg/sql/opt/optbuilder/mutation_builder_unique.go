@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -404,13 +405,29 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 		includeSystem:    false,
 		includeInverted:  false,
 	})
+	locking := noRowLocking
+	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		locking = lockingSpec{
+			&tree.LockingItem{
+				// TODO(michae2): Change this to ForKeyShare when it is supported.
+				Strength:   tree.ForShare,
+				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.mb.tab.Name())},
+				WaitPolicy: tree.LockWaitBlock,
+				// Unique checks must ensure the non-existence of certain rows
+				// (i.e. they error on semi-join instead of anti-join) so we must use
+				// predicate locks instead of record locks to prevent insertion of new
+				// rows into the locked span(s).
+				Class: tree.LockPredicate,
+			},
+		}
+	}
 	return h.mb.b.buildScan(
 		tabMeta,
 		ordinals,
 		// After the update we can't guarantee that the constraints are unique
 		// (which is why we need the uniqueness checks in the first place).
 		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
-		noRowLocking,
+		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
 	), ordinals

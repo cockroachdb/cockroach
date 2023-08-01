@@ -13,7 +13,7 @@ package opt
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // Locking represents the row-level locking properties of a relational operator.
-// Each relational operator clause consists of three different row-level locking
+// Each relational operator clause consists of four different row-level locking
 // properties.
 type Locking struct {
 	// The first property is locking strength (see tree.LockingStrength). Locking
@@ -44,15 +44,19 @@ type Locking struct {
 	//
 	WaitPolicy tree.LockingWaitPolicy
 
-	// The third property is the durability of the locking. A guaranteed-durable
-	// lock always persists until commit time, while a best-effort lock may
-	// sometimes be lost before commit (for example, during a lease transfer). We
-	// currently only require guaranteed-durable locks for SELECT FOR UPDATE
-	// statements and system-maintained constraint checks (e.g. FK checks) under
-	// SNAPSHOT and READ COMMITTED isolation. Other locking statements, such as
-	// UPDATE, rely on the durability of intents for correctness, rather than the
-	// durability of locks.
+	// The third property is the durability of the locking (see
+	// tree.LockingDurability). A guaranteed-durable lock always persists until
+	// commit time, while a best-effort lock may sometimes be lost before commit
+	// (for example, during a lease transfer). We currently only require
+	// guaranteed-durable locks for SELECT FOR UPDATE statements and
+	// system-maintained constraint checks (e.g. FK checks) under SNAPSHOT and
+	// READ COMMITTED isolation. Other locking statements, such as UPDATE, rely on
+	// the durability of intents for correctness, rather than the durability of
+	// locks.
 	Durability tree.LockingDurability
+
+	// The fourth property is the locking class (see tree.LockingClass).
+	Class tree.LockingClass
 }
 
 // Max returns a new set of locking properties where each property is the max of
@@ -62,6 +66,7 @@ func (l Locking) Max(l2 Locking) Locking {
 		Strength:   l.Strength.Max(l2.Strength),
 		WaitPolicy: l.WaitPolicy.Max(l2.WaitPolicy),
 		Durability: l.Durability.Max(l2.Durability),
+		Class:      l.Class.Max(l2.Class),
 	}
 }
 

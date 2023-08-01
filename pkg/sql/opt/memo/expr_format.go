@@ -1564,7 +1564,15 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 	default:
 		panic(errors.AssertionFailedf("unexpected durability"))
 	}
-	tp.Childf("%slocking: %s%s%s", labelPrefix, strength, wait, durability)
+	class := ""
+	switch locking.Class {
+	case tree.LockRecord:
+	case tree.LockPredicate:
+		class = ",predicate"
+	default:
+		panic(errors.AssertionFailedf("unexpected class"))
+	}
+	tp.Childf("%slocking: %s%s%s%s", labelPrefix, strength, wait, durability, class)
 }
 
 // formatDependencies adds a new treeprinter child for schema dependencies.

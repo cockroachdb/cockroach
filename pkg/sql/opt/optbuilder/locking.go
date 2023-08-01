@@ -78,6 +78,7 @@ func (lm lockingSpec) get() opt.Locking {
 		return opt.Locking{
 			Strength:   spec.Strength,
 			WaitPolicy: spec.WaitPolicy,
+			Class:      spec.Class,
 		}
 	}
 	return opt.Locking{}
@@ -134,6 +135,7 @@ func (lm lockingSpec) filter(alias tree.Name) lockingSpec {
 		// > any of the clauses affecting it. Otherwise, it is processed as SKIP
 		// > LOCKED if that is specified in any of the clauses affecting it.
 		ret[0].WaitPolicy = ret[0].WaitPolicy.Max(li.WaitPolicy)
+		ret[0].Class = ret[0].Class.Max(li.Class)
 	}
 
 	for i, li := range lm {

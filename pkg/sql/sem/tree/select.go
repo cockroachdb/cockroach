@@ -1100,6 +1100,7 @@ type LockingItem struct {
 	Strength   LockingStrength
 	Targets    TableNames
 	WaitPolicy LockingWaitPolicy
+	Class      LockingClass
 }
 
 // Format implements the NodeFormatter interface.
@@ -1199,11 +1200,53 @@ func (p LockingWaitPolicy) Max(p2 LockingWaitPolicy) LockingWaitPolicy {
 	return LockingWaitPolicy(max(byte(p), byte(p2)))
 }
 
-// LockingDurability represents the durability of a lock. It is currently not
-// exposed through SQL, but is instead set according to statement type and
+// LockingClass represents the type of locking to use, record locking or
+// predicate locking. It is not currently exposed through SQL, but could be once
+// more fully supported.
+type LockingClass byte
+
+// The ordering of the variants is important, because the highest numerical
+// value takes precedence when row-level locking is specified multiple ways.
+const (
+	// LockRecord represents the default: lock existing rows within the specified
+	// span(s), which prevents modification of those rows but does not prevent
+	// insertion of new rows (phantoms) into the span(s).
+	LockRecord LockingClass = iota
+	// LockPredicate represents locking the logical predicate defined by the
+	// span(s), preventing modification of existing rows as well as insertion of
+	// new rows (phantoms). This is similar to the behavior of "next-key locks" in
+	// InnoDB, "key-range locks" in SQL Server, "phantom locks" in Sybase, etc.
+	// (Postgres also has predicate locks, which it uses under serializable
+	// isolation, but these only detect serializable violations rather than
+	// block.)
+	//
+	// We currently only support predicate locks on spans of a single key. We
+	// currently only use predicate locks for uniqueness checks under snapshot and
+	// read committed isolation.
+	LockPredicate
+)
+
+var lockingClassName = [...]string{
+	LockRecord:    "record",
+	LockPredicate: "predicate",
+}
+
+func (p LockingClass) String() string {
+	return lockingClassName[p]
+}
+
+// Max returns the maximum of the two locking classes.
+func (p LockingClass) Max(p2 LockingClass) LockingClass {
+	return LockingClass(max(byte(p), byte(p2)))
+}
+
+// LockingDurability represents the durability of a lock. It is not exposed
+// through SQL, but is instead set by the system according to statement type and
 // isolation level. It is included here for completeness.
 type LockingDurability byte
 
+// The ordering of the variants is important, because the highest numerical
+// value takes precedence when row-level locking is specified multiple ways.
 const (
 	// LockDurabilityBestEffort represents the default: make a best-effort attempt
 	// to hold the lock until commit while keeping it unreplicated and in-memory
