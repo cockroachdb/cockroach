@@ -14,10 +14,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -58,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -76,6 +81,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/irfansharif/probe"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -975,6 +981,7 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // admission.StoreMetrics.
 type diskStatsMap struct {
 	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
+	probedRate        map[roachpb.StoreID]base.ProvisionedRateSpec
 	diskNameToStoreID map[string]roachpb.StoreID
 }
 
@@ -1013,28 +1020,116 @@ func (dsm *diskStatsMap) empty() bool {
 	return len(dsm.provisionedRate) == 0
 }
 
-func (dsm *diskStatsMap) initDiskStatsMap(specs []base.StoreSpec, engines []storage.Engine) error {
+func GetDevices() ([]string, error) { // XXX: Platform specific?
+	dir, err := ioutil.ReadDir("/dev")
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]string, 0)
+	for _, f := range dir {
+		if strings.HasPrefix(f.Name(), "loop") ||
+			strings.HasPrefix(f.Name(), "tty") ||
+			strings.HasPrefix(f.Name(), "vcs") {
+			continue
+		}
+		files = append(files, filepath.Join("/dev", f.Name()))
+	}
+	return files, nil
+}
+
+func (dsm *diskStatsMap) initDiskStatsMap(
+	ctx context.Context, specs []base.StoreSpec, engines []storage.Engine,
+) error {
 	*dsm = diskStatsMap{
 		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
 		diskNameToStoreID: make(map[string]roachpb.StoreID),
 	}
+
+	devices, err := GetDevices()
+	if err != nil {
+		return err
+	}
+
+	devs := make(map[uint64]string)
+	for _, device := range devices {
+		di, err := os.Stat(device)
+		if err != nil {
+			return err
+		}
+		if di.Sys() != nil {
+			if stat, ok := di.Sys().(*syscall.Stat_t); ok {
+				devs[uint64(stat.Rdev)] = di.Name()
+			}
+		}
+	}
+
 	for i := range engines {
 		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
 			return err
 		}
+
+		fi, err := engines[i].Stat(engines[i].PathJoin(specs[i].Path, "CURRENT"))
+		if err != nil {
+			return err
+		}
+		if fi.Sys() != nil {
+			if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+				if name, ok := devs[uint64(stat.Dev)]; ok {
+					dsm.diskNameToStoreID[name] = id.StoreID
+				}
+			}
+		}
+
+		// XXX:
 		if len(specs[i].ProvisionedRateSpec.DiskName) > 0 {
 			dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
-			dsm.diskNameToStoreID[specs[i].ProvisionedRateSpec.DiskName] = id.StoreID
+			dsm.diskNameToStoreID[specs[i].ProvisionedRateSpec.DiskName] = id.StoreID // XXX: How is this used?
+			// XXX: XXX: Missing mapping between disk name to store ID (path).
+		}
+		log.Infof(ctx, "XXX: %v", dsm.diskNameToStoreID)
+		if probe.Supported() { // XXX: Probe here.
+			bw, err := probe.Probe(ctx,
+				probe.WithDirectory(filepath.Join(engines[i].GetAuxiliaryDir(), "probe-dir")),
+				probe.WithDuration(20*time.Second),
+				probe.WithRamp(2*time.Second),
+				probe.WithSize(5<<30 /* 5 GiB */),
+				probe.WithKind(probe.WriteBandwidth),
+			)
+			if err != nil {
+				return err
+			}
+
+			iops, err := probe.Probe(ctx,
+				probe.WithDirectory(filepath.Join(engines[i].GetAuxiliaryDir(), "probe-dir")),
+				probe.WithDuration(20*time.Second),
+				probe.WithRamp(2*time.Second),
+				probe.WithSize(5<<30 /* 5 GiB */),
+				probe.WithKind(probe.WriteIOPS),
+			)
+			if err != nil {
+				return err
+			}
+
+			log.Infof(ctx, "probed bandwidth: %s/s", humanizeutil.IBytes(int64(bw)))
+			log.Infof(ctx, "probed iops: %d", int64(iops))
+			if dsm.probedRate == nil {
+				dsm.probedRate = map[roachpb.StoreID]base.ProvisionedRateSpec{}
+			}
+			dsm.probedRate[id.StoreID] = base.ProvisionedRateSpec{
+				ProvisionedBandwidth: int64(bw),
+				ProvisionedIOPS:      int64(iops),
+			}
 		}
 	}
 	return nil
 }
 
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine,
+	ctx context.Context, specs []base.StoreSpec, engines []storage.Engine,
 ) error {
-	return n.diskStatsMap.initDiskStatsMap(specs, engines)
+	return n.diskStatsMap.initDiskStatsMap(ctx, specs, engines)
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
@@ -1058,7 +1153,8 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 			StoreID:         store.StoreID(),
 			Metrics:         m.Metrics,
 			WriteStallCount: m.WriteStallCount,
-			DiskStats:       diskStats})
+			DiskStats:       diskStats,
+		})
 		return nil
 	})
 	return metrics

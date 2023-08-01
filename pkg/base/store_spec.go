@@ -173,6 +173,7 @@ func (ss *SizeSpec) Set(value string) error {
 // With that change, the ProvisionedRateSpec would only be needed to override
 // the cluster setting when there are heterogenous bandwidth limits in a
 // cluster (there would be no more DiskName field).
+// XXX:
 type ProvisionedRateSpec struct {
 	// DiskName is the name of the disk observed by the code in disk_counters.go
 	// when retrieving stats for this store.
@@ -180,6 +181,8 @@ type ProvisionedRateSpec struct {
 	// ProvisionedBandwidth is the bandwidth provisioned for this store in
 	// bytes/s.
 	ProvisionedBandwidth int64
+	// ProvisionedIOPS is the IOPS provisioned for this store.
+	ProvisionedIOPS int64
 }
 
 func newStoreProvisionedRateSpec(

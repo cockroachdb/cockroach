@@ -950,7 +950,7 @@ func TestDiskStatsMap(t *testing.T) {
 	require.Equal(t, 0, len(stats))
 
 	// diskStatsMap initialized with these two stores.
-	require.NoError(t, dsm.initDiskStatsMap(specs, engines))
+	require.NoError(t, dsm.initDiskStatsMap(ctx, specs, engines))
 
 	// diskStatsFunc returns stats for these two stores, and an unknown store.
 	diskStatsFunc := func(context.Context) ([]status.DiskStats, error) {

@@ -353,6 +353,7 @@ go_library(
         "@com_github_gorilla_mux//:mux",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@com_github_grpc_ecosystem_grpc_gateway//utilities:go_default_library",
+        "@com_github_irfansharif_probe//:probe",
         "@com_github_jackc_pgx_v4//pgxpool",
         "@com_github_lib_pq//:pq",
         "@com_github_marusama_semaphore//:semaphore",
