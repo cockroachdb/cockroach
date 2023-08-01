@@ -53,7 +53,7 @@ func checkSafeUpdatesForDropColumn(b BuildCtx) {
 		return
 	}
 	err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
-		"remove all data in that column")
+		"remove all data in that column and drop any indexes that reference that column")
 	if !b.EvalCtx().TxnIsSingleStmt {
 		err = errors.WithIssueLink(err, errors.IssueLink{
 			IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
