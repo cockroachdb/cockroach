@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -323,10 +324,14 @@ func (r *rpcNodePaginator) init() {
 	r.responseChan = make(chan paginatedNodeResponse, r.numNodes)
 }
 
+const noTimeout time.Duration = 0
+
 // queryNode queries the given node, and sends the responses back through responseChan
 // in order of idx (i.e. when all nodes with a lower idx have already sent theirs).
 // Safe for concurrent use.
-func (r *rpcNodePaginator) queryNode(ctx context.Context, nodeID roachpb.NodeID, idx int) {
+func (r *rpcNodePaginator) queryNode(
+	ctx context.Context, nodeID roachpb.NodeID, idx int, timeout time.Duration,
+) {
 	if atomic.LoadInt32(&r.done) != 0 {
 		// There are more values than we need. currentLen >= limit.
 		return
@@ -379,7 +384,18 @@ func (r *rpcNodePaginator) queryNode(ctx context.Context, nodeID roachpb.NodeID,
 		return
 	}
 
-	res, err := r.nodeFn(ctx, client, nodeID)
+	var res interface{}
+	var err error
+	if timeout == noTimeout {
+		res, err = r.nodeFn(ctx, client, nodeID)
+	} else {
+		err = timeutil.RunWithTimeout(ctx, "node fn", timeout, func(ctx context.Context) error {
+			var _err error
+			res, _err = r.nodeFn(ctx, client, nodeID)
+			return _err
+		})
+	}
+
 	if err != nil {
 		err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
 			r.errorCtx, nodeID, r.nodeStatuses[serverID(nodeID)])
