@@ -10,10 +10,12 @@ go_library(
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessioninit",
+        "//pkg/sql/ttl/ttlbase",
     ],
 )
 
