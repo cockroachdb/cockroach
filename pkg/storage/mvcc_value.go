@@ -12,7 +12,6 @@ package storage
 
 import (
 	"encoding/binary"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -147,7 +146,10 @@ var disableSimpleValueEncoding = util.ConstantWithMetamorphicTestBool(
 
 // DisableMetamorphicSimpleValueEncoding disables the disableSimpleValueEncoding
 // metamorphic bool for the duration of a test, resetting it at the end.
-func DisableMetamorphicSimpleValueEncoding(t testing.TB) {
+func DisableMetamorphicSimpleValueEncoding(t interface {
+	Helper()
+	Cleanup(func())
+}) {
 	t.Helper()
 	if disableSimpleValueEncoding {
 		disableSimpleValueEncoding = false
