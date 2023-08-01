@@ -299,8 +299,8 @@ func maybeDropDependentFKConstraints(
 
 	// dropDependentFKConstraint is a helper function that drops a dependent
 	// FK constraint with ID `fkConstraintID`.
-	dropDependentFKConstraint := func(fkConstraintID catid.ConstraintID) {
-		b.BackReferences(tableID).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
+	dropDependentFKConstraint := func(fkTableID catid.DescID, fkConstraintID catid.ConstraintID) {
+		b.BackReferences(tableID).Filter(hasTableID(fkTableID)).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
 			ForEachElementStatus(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 			) {
@@ -308,7 +308,10 @@ func maybeDropDependentFKConstraints(
 			})
 	}
 
-	b.BackReferences(tableID).ForEachElementStatus(func(
+	// Iterate over all FKs inbound to this table and decide whether any other
+	// unique constraints will satisfy them if we were to drop the current unique
+	// constraint.
+	b.BackReferences(tableID).Filter(containsDescIDFilter(tableID)).ForEachElementStatus(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		switch t := e.(type) {
@@ -317,13 +320,13 @@ func maybeDropDependentFKConstraints(
 				return
 			}
 			ensureCascadeBehavior(t.TableID)
-			dropDependentFKConstraint(t.ConstraintID)
+			dropDependentFKConstraint(t.TableID, t.ConstraintID)
 		case *scpb.ForeignKeyConstraintUnvalidated:
 			if !shouldDropFK(t.ReferencedColumnIDs) {
 				return
 			}
 			ensureCascadeBehavior(t.TableID)
-			dropDependentFKConstraint(t.ConstraintID)
+			dropDependentFKConstraint(t.TableID, t.ConstraintID)
 		}
 	})
 }
