@@ -133,6 +133,21 @@ func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
 
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
 	writeTS := sp.spec.Table.CreateAsOfTime
+
+	// Delete existing span before ingestion to prevent key collisions.
+	if sp.spec.DeleteSpan {
+		request := kvpb.BatchRequest{
+			Header: kvpb.Header{
+				Timestamp: writeTS,
+			},
+		}
+		tableSpan := sp.tableDesc.TableSpan(sp.EvalCtx.Codec)
+		request.Add(kvpb.NewDeleteRange(tableSpan.Key, tableSpan.EndKey, false))
+		if _, err := sp.flowCtx.Cfg.DB.KV().NonTransactionalSender().Send(ctx, &request); err != nil {
+			return err.GoError()
+		}
+	}
+
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
 		ctx, sp.flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{

@@ -17,9 +17,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -390,6 +392,58 @@ AND description LIKE 'CREATE%%%s%%'`,
 				name,
 			)
 			sqlRunner.CheckQueryResults(t, query, [][]string{{tc.expectedFormat}})
+		})
+	}
+}
+
+// TestTransactionRetryError tests that the schema changer succeeds if there is
+// a retryable transaction error.
+func TestTransactionRetryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		desc          string
+		setup         string
+		query         string
+		verifyResults func(sqlutils.Fataler, *sqlutils.SQLRunner)
+	}{
+		{
+			desc:  "CREATE TABLE AS",
+			setup: "CREATE SEQUENCE seq",
+			query: "CREATE TABLE t AS SELECT nextval('seq')",
+			verifyResults: func(t sqlutils.Fataler, sqlRunner *sqlutils.SQLRunner) {
+				// Result should be 2 but is 3 because of this bug
+				// https://github.com/cockroachdb/cockroach/issues/78457.
+				sqlRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"3"}})
+			},
+		},
+		{
+			desc:  "CREATE MATERIALIZED VIEW AS",
+			setup: "CREATE SEQUENCE seq",
+			query: "CREATE MATERIALIZED VIEW v AS SELECT nextval('seq')",
+			verifyResults: func(t sqlutils.Fataler, sqlRunner *sqlutils.SQLRunner) {
+				sqlRunner.CheckQueryResults(t, "SELECT * FROM v", [][]string{{"2"}})
+			},
+		},
+	}
+
+	ctx := context.Background()
+	for _, testCase := range testCases {
+		t.Run(testCase.desc, func(t *testing.T) {
+			filterFunc, verifyFunc := kvclientutils.PrefixTransactionRetryFilter(t, schemaChangerBackfillTxnDebugName, 1)
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					KVClient: &kvcoord.ClientTestingKnobs{
+						TransactionRetryFilter: filterFunc,
+					},
+				},
+			})
+			defer s.Stopper().Stop(ctx)
+			sqlRunner := sqlutils.MakeSQLRunner(db)
+			sqlRunner.Exec(t, testCase.setup)
+			sqlRunner.Exec(t, testCase.query)
+			verifyFunc()
+			testCase.verifyResults(t, sqlRunner)
 		})
 	}
 }

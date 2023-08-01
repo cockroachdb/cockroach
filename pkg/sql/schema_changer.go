@@ -293,6 +293,8 @@ func (sc *SchemaChanger) refreshMaterializedView(
 	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.GetViewQuery(), refresh.AsOf(), "refreshView")
 }
 
+const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
+
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context, table catalog.TableDescriptor, query string, ts hlc.Timestamp, desc string,
 ) error {
@@ -302,7 +304,12 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		}
 	}
 
+	isTxnRetry := false
 	return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		defer func() {
+			isTxnRetry = true
+		}()
+		txn.KV().SetDebugName(schemaChangerBackfillTxnDebugName)
 		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
 			return err
 		}
@@ -392,7 +399,8 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				localPlanner.extendedEvalCtx.SessionData().DistSQLMode, localPlanner.curPlan.main,
 			).WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
-				Table: *table.TableDesc(),
+				Table:      *table.TableDesc(),
+				DeleteSpan: isTxnRetry,
 			}}
 
 			PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,

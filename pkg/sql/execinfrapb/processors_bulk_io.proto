@@ -390,6 +390,8 @@ message ExportSpec {
 // writes them to a target table using AddSSTable. It outputs a BulkOpSummary.
 message BulkRowWriterSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  // DeleteSpan deletes the span before AddSSTable.
+  optional bool delete_span = 2 [(gogoproto.nullable) = false];
 }
 
 message IndexBackfillMergerSpec {
