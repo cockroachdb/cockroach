@@ -131,7 +131,10 @@ func predecessorHistory(
 		if minVersion != nil && !currentV.AtLeast(minVersion) {
 			break
 		}
-		history[i] = releasePicker(predecessor)
+		history = append(history, releasePicker(predecessor))
+	}
+	for i := 0; i < len(history)/2; i++ {
+		history[i], history[len(history)-1-i] = history[len(history)-1-i], history[i]
 	}
 
 	return history, nil
