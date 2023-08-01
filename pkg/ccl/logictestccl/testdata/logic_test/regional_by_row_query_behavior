@@ -4134,6 +4134,17 @@ INSERT INTO users (crdb_region, id, id2, username)
 VALUES ('ap-southeast-2', '5ebfedee-0dcf-41e6-a315-5fa0b51b9992', 9, 'Craig Roacher')
 
 statement ok
+SET tracing = on,kv,results; INSERT INTO user_settings2 (id2, user_id, value)
+VALUES (9, '5ebfedee-0dcf-41e6-a315-5fa0b51b9992', 'foo'); SET tracing = off
+
+# The FK and uniqueness checks should be bundled in a single batch of scans.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%batch%' AND message LIKE '%Scan%'
+----
+r87: sending batch 4 Scan to (n7,s7):1
+
+statement ok
 CREATE UNIQUE INDEX ON regional_by_row_table (b, a) USING HASH
 
 # After adding a hash sharded unique index, fast path is still legal.
