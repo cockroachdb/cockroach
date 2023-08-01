@@ -60,10 +60,12 @@ func generateHelpCommand(
 			"How To Investigate (internal)",
 			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
 		)(renderer)
-		issues.HelpCommandAsLink(
-			"Grafana",
-			fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
-		)(renderer)
+		if clusterName != "" {
+			issues.HelpCommandAsLink(
+				"Grafana",
+				fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
+			)(renderer)
+		}
 	}
 }
 
@@ -131,6 +133,7 @@ func (g *githubIssues) createPostRequest(
 
 	issueOwner := spec.Owner
 	issueName := testName
+	issueClusterName := ""
 
 	messagePrefix := ""
 	var infraFlake bool
@@ -202,6 +205,7 @@ func (g *githubIssues) createPostRequest(
 			// Hence, we only emit when arch was unspecified.
 			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
 		}
+		issueClusterName = g.cluster.name
 	}
 
 	issueMessage := messagePrefix + message
@@ -218,7 +222,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
-		HelpCommand:     generateHelpCommand(clusterName, start, end),
+		HelpCommand:     generateHelpCommand(issueClusterName, start, end),
 	}, nil
 }
 
