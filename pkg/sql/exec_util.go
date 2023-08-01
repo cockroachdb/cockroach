@@ -1794,6 +1794,8 @@ type StreamingTestingKnobs struct {
 	DistSQLRetryPolicy *retry.Options
 
 	AfterRetryIteration func(err error)
+
+	AfterResumerJobLoad func(err error) error
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
