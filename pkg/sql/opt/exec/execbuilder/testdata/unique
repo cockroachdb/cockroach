@@ -1,8 +1,3 @@
-# LogicTest: local
-
-statement ok
-SET experimental_enable_unique_without_index_constraints = true
-
 statement ok
 CREATE TABLE uniq (
   k INT PRIMARY KEY,

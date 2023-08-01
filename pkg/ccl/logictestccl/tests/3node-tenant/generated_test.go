@@ -2571,3 +2571,10 @@ func TestTenantExecBuild_distsql_tenant(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant")
 }
+
+func TestTenantExecBuild_unique(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "unique")
+}

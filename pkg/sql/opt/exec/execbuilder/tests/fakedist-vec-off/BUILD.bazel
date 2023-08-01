@@ -13,7 +13,7 @@ go_test(
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
     exec_properties = {"Pool": "large"},
-    shard_count = 1,
+    shard_count = 2,
     tags = [
         "cpu:2",
     ],

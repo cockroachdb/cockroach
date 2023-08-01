@@ -90,3 +90,10 @@ func TestExecBuild_geospatial(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "geospatial")
 }
+
+func TestExecBuild_unique(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "unique")
+}
