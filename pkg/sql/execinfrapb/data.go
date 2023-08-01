@@ -205,6 +205,8 @@ type ProducerMetadata struct {
 	Metrics *RemoteProducerMetadata_Metrics
 	// Changefeed contains information about changefeed.
 	Changefeed *ChangefeedMeta
+	// AggregatorEvents contains information from a tracing aggregator.
+	AggregatorEvents *TracingAggregatorEvents
 }
 
 var (

@@ -13,6 +13,7 @@ package bulk
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -36,10 +37,25 @@ type TracingAggregatorEvent interface {
 type TracingAggregator struct {
 	// sp is the tracing span managed by the TracingAggregator.
 	sp *tracing.Span
-	// aggregatedEvents is a mapping from the tag identifying the
-	// TracingAggregatorEvent to the running aggregate of the
-	// TracingAggregatorEvent.
-	aggregatedEvents map[string]TracingAggregatorEvent
+	mu struct {
+		syncutil.Mutex
+		// aggregatedEvents is a mapping from the tag identifying the
+		// TracingAggregatorEvent to the running aggregate of the TracingAggregatorEvent.
+		aggregatedEvents map[string]TracingAggregatorEvent
+	}
+}
+
+// ForEachAggregatedEvent executes f on each event in the TracingAggregator's
+// in-memory map.
+func (b *TracingAggregator) ForEachAggregatedEvent(
+	f func(tag string, event TracingAggregatorEvent),
+) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for tag, event := range b.mu.aggregatedEvents {
+		f(tag, event)
+	}
 }
 
 // Notify implements the tracing.EventListener interface.
@@ -49,14 +65,17 @@ func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsum
 		return tracing.EventNotConsumed
 	}
 
-	// If this is the first TracingAggregatorEvent with this tag, set it as a
-	// LazyTag on the associated tracing span.
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// If this is the first AggregatorEvent with this tag, set it as a LazyTag on
+	// the associated tracing span.
 	eventTag := bulkEvent.Tag()
-	if _, ok := b.aggregatedEvents[bulkEvent.Tag()]; !ok {
-		b.aggregatedEvents[eventTag] = bulkEvent.Identity()
-		b.sp.SetLazyTagLocked(eventTag, b.aggregatedEvents[eventTag])
+	if _, ok := b.mu.aggregatedEvents[bulkEvent.Tag()]; !ok {
+		b.mu.aggregatedEvents[eventTag] = bulkEvent.Identity()
+		b.sp.SetLazyTagLocked(eventTag, b.mu.aggregatedEvents[eventTag])
 	}
-	b.aggregatedEvents[eventTag].Combine(bulkEvent)
+	b.mu.aggregatedEvents[eventTag].Combine(bulkEvent)
 	return tracing.EventNotConsumed
 }
 
@@ -82,7 +101,9 @@ func MakeTracingAggregatorWithSpan(
 	aggCtx, aggSpan := tracing.EnsureChildSpan(ctx, tracer, aggregatorName,
 		tracing.WithEventListeners(agg))
 
-	agg.aggregatedEvents = make(map[string]TracingAggregatorEvent)
+	agg.mu.Lock()
+	defer agg.mu.Unlock()
+	agg.mu.aggregatedEvents = make(map[string]TracingAggregatorEvent)
 	agg.sp = aggSpan
 
 	return aggCtx, agg
