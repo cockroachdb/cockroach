@@ -40,9 +40,16 @@ var (
 		},
 	}
 
-	// Results rely on this constant seed
-	rng = rand.New(rand.NewSource(1))
+	// Results rely on this constant seed.
+	seed = int64(1)
+
+	// Tests must call `resetRNG` if they use this global rng.
+	rng *rand.Rand
 )
+
+func resetRNG() {
+	rng = rand.New(rand.NewSource(seed))
+}
 
 func TestLatestAndRandomPredecessor(t *testing.T) {
 	testCases := []struct {
@@ -72,16 +79,17 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 			name:           "latest is withdrawn",
 			v:              "v22.2.3",
 			expectedLatest: "22.1.12",
-			expectedRandom: "22.1.8",
+			expectedRandom: "22.1.10",
 		},
 	}
 
-	for _, tc := range testCases {
-		oldReleaseData := releaseData
-		releaseData = testReleaseData
-		defer func() { releaseData = oldReleaseData }()
+	oldReleaseData := releaseData
+	releaseData = testReleaseData
+	defer func() { releaseData = oldReleaseData }()
 
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			resetRNG() // deterministic results
 			latestPred, latestErr := LatestPredecessor(version.MustParse(tc.v))
 			randomPred, randomErr := RandomPredecessor(rng, version.MustParse(tc.v))
 			if tc.expectedErr == "" {
@@ -119,23 +127,24 @@ func TestLatestPredecessorHistory(t *testing.T) {
 			v:              "v23.1.1",
 			k:              3,
 			expectedLatest: []string{"19.2.0", "22.1.12", "22.2.8"},
-			expectedRandom: []string{"19.2.0", "22.1.12", "22.2.1"},
+			expectedRandom: []string{"19.2.0", "22.1.8", "22.2.8"},
 		},
 		{
 			name:           "with pre-release",
 			v:              "v23.1.1-beta.1",
 			k:              2,
 			expectedLatest: []string{"22.1.12", "22.2.8"},
-			expectedRandom: []string{"22.1.0", "22.2.5"},
+			expectedRandom: []string{"22.1.8", "22.2.8"},
 		},
 	}
 
-	for _, tc := range testCases {
-		oldReleaseData := releaseData
-		releaseData = testReleaseData
-		defer func() { releaseData = oldReleaseData }()
+	oldReleaseData := releaseData
+	releaseData = testReleaseData
+	defer func() { releaseData = oldReleaseData }()
 
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			resetRNG() // deterministic results
 			latestHistory, latestErr := LatestPredecessorHistory(version.MustParse(tc.v), tc.k)
 			randomHistory, randomErr := RandomPredecessorHistory(rng, version.MustParse(tc.v), tc.k)
 			if tc.expectedErr == "" {

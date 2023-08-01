@@ -508,6 +508,7 @@ go_library(
         "//pkg/sql/storageparam/tablestorageparam",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/syntheticprivilegecache",
+        "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
         "//pkg/sql/vtable",
         "//pkg/storage",

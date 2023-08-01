@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/nstree",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/schemachanger/scerrors",

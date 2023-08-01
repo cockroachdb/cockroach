@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -348,6 +349,10 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
+
+	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
+	// of the given table.
+	UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error
 }
 
 // StatsRefreshQueue queues table for stats refreshes.
