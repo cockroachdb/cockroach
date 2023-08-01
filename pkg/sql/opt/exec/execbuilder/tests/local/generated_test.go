@@ -643,6 +643,13 @@ func TestExecBuild_unique(
 	runExecBuildLogicTest(t, "unique")
 }
 
+func TestExecBuild_unique_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "unique_read_committed")
+}
+
 func TestExecBuild_update(
 	t *testing.T,
 ) {

@@ -641,10 +641,10 @@ func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMe
 	locking := noRowLocking
 	// For insertion-side checks, if enable_implicit_fk_locking_for_serializable
 	// is true or we're using a weaker isolation level, we lock the parent row(s)
-	// to prevent concurrent mutations of the parent from violating the FK
-	// constraint. Deletion-side checks don't need to lock because they can rely
-	// on the deletion intent conflicting with locks from any concurrent inserts
-	// or updates of the child.
+	// to prevent concurrent mutations of the parent from other transactions from
+	// violating the FK constraint. Deletion-side checks don't need to lock
+	// because they can rely on the deletion intent conflicting with locks from
+	// any concurrent inserts or updates of the child.
 	if parent && (h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
 		h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable) {
 		locking = lockingSpec{
