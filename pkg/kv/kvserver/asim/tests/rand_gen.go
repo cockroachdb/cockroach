@@ -13,6 +13,7 @@ package tests
 import (
 	"fmt"
 	"math/rand"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
@@ -21,9 +22,22 @@ import (
 
 // randomClusterInfoGen returns a randomly picked predefined configuration.
 func (f randTestingFramework) randomClusterInfoGen(randSource *rand.Rand) gen.LoadedCluster {
-	chosenIndex := randSource.Intn(len(state.ClusterOptions))
-	chosenType := state.ClusterOptions[chosenIndex]
-	return loadClusterInfo(chosenType)
+	switch t := f.s.clusterGen.clusterGenType; t {
+	case singleRegion:
+		chosenIndex := randSource.Intn(len(state.SingleRegionClusterOptions))
+		chosenType := state.SingleRegionClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	case multiRegion:
+		chosenIndex := randSource.Intn(len(state.MultiRegionClusterOptions))
+		chosenType := state.MultiRegionClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	case anyRegion:
+		chosenIndex := randSource.Intn(len(state.AllClusterOptions))
+		chosenType := state.AllClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	default:
+		panic("unknown cluster gen type")
+	}
 }
 
 // RandomizedBasicRanges implements the RangeGen interface, supporting random
@@ -132,6 +146,28 @@ const (
 	zipfGenerator
 )
 
+func (g generatorType) String() string {
+	switch g {
+	case uniformGenerator:
+		return "uniform"
+	case zipfGenerator:
+		return "zipf"
+	default:
+		panic("unknown cluster type")
+	}
+}
+
+func (g generatorType) getGeneratorType(s string) generatorType {
+	switch s {
+	case "uniform":
+		return uniformGenerator
+	case "zipf":
+		return zipfGenerator
+	default:
+		panic(fmt.Sprintf("unknown generator type: %s", s))
+	}
+}
+
 // newGenerator returns a generator that generates number ∈[min, max] following
 // a distribution based on gType.
 func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generatorType) generator {
@@ -145,12 +181,58 @@ func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generator
 	}
 }
 
+type clusterConfigType int
+
+const (
+	singleRegion clusterConfigType = iota
+	multiRegion
+	anyRegion
+)
+
+func (c clusterConfigType) String() string {
+	switch c {
+	case singleRegion:
+		return "single_region"
+	case multiRegion:
+		return "multi_region"
+	case anyRegion:
+		return "any_region"
+	default:
+		panic("unknown cluster type")
+	}
+}
+
+func (c clusterConfigType) getClusterConfigType(s string) clusterConfigType {
+	switch s {
+	case "single_region":
+		return singleRegion
+	case "multi_region":
+		return multiRegion
+	case "any_region":
+		return anyRegion
+	default:
+		panic(fmt.Sprintf("unknown cluster type: %s", s))
+	}
+}
+
+// These settings apply only to randomized generations and are NOT used if the
+// there are no randomization configured for that particular aspect of
+// generation. For instance, rangeGenSettings is only used if randOption.range
+// is true.
 type rangeGenSettings struct {
 	placementType     gen.PlacementType
 	replicationFactor int
 	rangeGenType      generatorType
 	keySpaceGenType   generatorType
 	weightedRand      []float64
+}
+
+func (t rangeGenSettings) printRangeGenSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"range_gen_settings ->\tplacementType=%v\treplicationFactor=%v\trangeGenType=%v\tkeySpaceGenType=%v\tweightedRand=%v\n",
+		t.placementType, t.replicationFactor, t.rangeGenType, t.keySpaceGenType, t.weightedRand); err != nil {
+		panic(err)
+	}
 }
 
 const (
@@ -160,12 +242,17 @@ const (
 
 var defaultWeightedRand []float64
 
-func defaultRangeGenSettings() rangeGenSettings {
-	return rangeGenSettings{
-		placementType:     defaultPlacementType,
-		replicationFactor: defaultReplicationFactor,
-		rangeGenType:      defaultRangeGenType,
-		keySpaceGenType:   defaultKeySpaceGenType,
-		weightedRand:      defaultWeightedRand,
+type clusterGenSettings struct {
+	clusterGenType clusterConfigType
+}
+
+func (c clusterGenSettings) printClusterGenSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"cluster_gen_settings ->\tclusterGenType=%v\t\n", c.clusterGenType); err != nil {
+		panic(err)
 	}
 }
+
+const (
+	defaultClusterGenType = multiRegion
+)

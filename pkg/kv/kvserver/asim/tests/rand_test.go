@@ -11,85 +11,147 @@
 package tests
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/datadriven"
 )
 
 const (
 	defaultNumIterations = 3
-	defaultSeed          = 42
-	defaultDuration      = 30 * time.Minute
+	defaultSeed          = int64(42)
+	defaultDuration      = 10 * time.Minute
 	defaultVerbosity     = false
 )
 
-func defaultSettings(randOptions testRandOptions, rGenSettings rangeGenSettings) testSettings {
-	return testSettings{
-		numIterations: defaultNumIterations,
-		duration:      defaultDuration,
-		verbose:       defaultVerbosity,
-		randSource:    rand.New(rand.NewSource(defaultSeed)),
-		assertions:    defaultAssertions(),
-		randOptions:   randOptions,
-		rangeGen:      rGenSettings,
-	}
-}
+// TestRandomized is a randomized data-driven testing framework that validates
+// allocators by creating randomized configurations. It is designed for
+// regression and exploratory testing.
+//
+// There are three modes for every aspect of randomized generation.
+// 1. Default mode: if randomization options are disabled (e.g. no rand_ranges
+// command is used), the system uses the default configurations (defined in
+// default_settings.go) with no randomization.
+// 2. Randomized: when enabled, two scenarios occur:
+// - Use default settings for randomized generation (e.g.rand_ranges)
+// - Use settings specified with commands (e.g.rand_ranges range_gen_type=zipf)
+//
+// The following commands are provided:
+// rand_cluster: randomly picks a predefined cluster configuration according to
+// the specified type
+// - “rand_cluster”
+// [cluster_gen_type=(single_region|multi_region|any_region)]: default value is
+// multi_region
+// e.g. rand_cluster cluster_gen_type=(multi_region)
 
-// TestRandomized is a randomized testing framework designed to validate
-// allocator by creating randomized configurations, generating corresponding
-// allocator simulations, and validating assertions on the final state.
-//
-// Input of the framework (fields in the testSetting struct):
-//
-// 1. numIterations (int, default: 3): specifies number of test iterations to be
-// run, each with different random configurations generated
-// 2. duration (time.Duration, default: 30min): defined simulated duration of
-// each iteration verbose (bool, default: false): enables detailed simulation
-// information failing output
-// 3. randSeed (int64, default: 42): sets seed value for random number
-// generation
-// 4. assertions ([]SimulationAssertion, default: conformanceAssertion with 0
-// under-replication, 0 over-replication, 0 violating, and 0 unavailable):
-// defines criteria for validation assertions
-//
-// 5. randOptions: guides the aspect of the test configuration that should be
-// randomized. This includes:
-// - cluster (bool): indicates if the cluster configuration should be randomized
-// - ranges (bool): indicates if the range configuration should be randomized
-// - load (bool): indicates if the workload configuration should be randomized
-// - staticSettings (bool): indicates if the simulation static settings should
-// be randomized
-// - staticEvents (bool): indicates if static events, including any delayed
-// events to be applied during the simulation, should be randomized
-//
-// 6. rangeGen (default: uniform rangeGenType, uniform keySpaceGenType, empty
-// weightedRand).
-// - rangeGenType: determines range generator type across iterations
-// (default: uniformGenerator, min = 1, max = 1000)
-// - keySpaceGenType: determines key space generator type across iterations
-// (default: uniformGenerator, min = 1000, max = 200000)
-// - weightedRand: if non-empty, enables weighted randomization for range
-// distribution
-//
-// RandTestingFramework is initialized with a specified testSetting and
-// maintained its state across all iterations. Each iteration in
-// RandTestingFramework executes the following steps:
-// 1. Generates a random configuration based on whether the aspect of the test
-// configuration is set to be randomized in randOptions
-// 2. Executes a simulation and store any assertion failures in a buffer
-// TODO(wenyihu6): change input structure to datadriven + print more useful info
-// for test output + add more tests to cover cases that are not tested by
-// default
+// rand_ranges: randomly generate a distribution of ranges across stores
+// - “rand_ranges”
+// [placement_type=(uniform|skewed|random|weighted_rand)]
+// [replication_factor=<int>]
+// [range_gen_type=(uniform|zipf)]: default value is uniform, min = 1, max =
+// 1000
+// [keyspace_gen_type=(uniform|zipf)]: default value is uniform, min = 1000, max =
+// 200000
+// [weighted_rand=(<[]float64>)]: default value is []float64{} if non-empty,
+// enables weighted randomization for range distribution
+// e.g. rand_ranges placement_type=weighted_rand weighted_rand=(0.1,0.2,0.7)
+// e.g. rand_ranges placement_type=skewed replication_factor=1
+// range_gen_type=zipf keyspace_gen_type=uniform
+
+// eval: generates simulation with the configuration set with the commands
+// - “eval”
+// [seed=<int64>]: default value is int64(42)
+// [num_iterations=<int>]: default value is 3
+// [duration=<time.Duration>]: default value is 10m
+// [verbose=<bool>]: default value is false
+// e.g. eval seed=20 duration=30m2s verbose=true
+
+// clear: clears the configurations set
+
+// Terminologies:
+// cluster_gen_type: represents a type of cluster configuration
+// placement_type: represents the type of range placement distribution across
+// stores
+// range_gen_type, keyspace_gen_type: represent the range or keyspace generator
+// type which forms a distribution every time ranges are generated across
+// iterations
+// replication_factor: represents the replication factor of each range
+// weighted_rand: specifies the weighted random distribution among stores. Note
+// that use weighted_rand only with placement_type=weighted_rand and vice
+// versa. It is expected to specify a weight [0.0, 1.0] for each store in the
+// configuration.
 func TestRandomized(t *testing.T) {
-	randOptions := testRandOptions{
-		cluster:        true,
-		ranges:         true,
-		load:           false,
-		staticSettings: false,
-		staticEvents:   false,
-	}
-	rangeGenSettings := defaultRangeGenSettings()
-	settings := defaultSettings(randOptions, rangeGenSettings)
-	f := newRandTestingFramework(settings)
-	f.runRandTestRepeated(t)
+	dir := datapathutils.TestDataPath(t, "rand")
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		randOptions := testRandOptions{}
+		var rGenSettings rangeGenSettings
+		var cGenSettings clusterGenSettings
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "clear":
+				randOptions = testRandOptions{}
+				rGenSettings = rangeGenSettings{}
+				cGenSettings = clusterGenSettings{}
+				return ""
+			case "rand_cluster":
+				randOptions.cluster = true
+				clusterGenType := defaultClusterGenType
+				scanIfExists(t, d, "cluster_gen_type", &clusterGenType)
+				cGenSettings = clusterGenSettings{
+					clusterGenType: clusterGenType,
+				}
+				return ""
+			case "rand_ranges":
+				randOptions.ranges = true
+				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultPlacementType, defaultReplicationFactor, defaultRangeGenType, defaultKeySpaceGenType
+				weightedRand := defaultWeightedRand
+				scanIfExists(t, d, "placement_type", &placementType)
+				scanIfExists(t, d, "replication_factor", &replicationFactor)
+				scanIfExists(t, d, "range_gen_type", &rangeGenType)
+				scanIfExists(t, d, "keyspace_gen_type", &keySpaceGenType)
+				scanIfExists(t, d, "weighted_rand", &weightedRand)
+				rGenSettings = rangeGenSettings{
+					placementType:     placementType,
+					replicationFactor: replicationFactor,
+					rangeGenType:      rangeGenType,
+					keySpaceGenType:   keySpaceGenType,
+					weightedRand:      weightedRand,
+				}
+				return ""
+			case "rand_load":
+				return "unimplemented: randomized load"
+			case "rand_events":
+				return "unimplemented: randomized events"
+			case "rand_settings":
+				return "unimplemented: randomized settings"
+			case "eval":
+				seed := defaultSeed
+				numIterations := defaultNumIterations
+				duration := defaultDuration
+				verbose := defaultVerbosity
+				scanIfExists(t, d, "seed", &seed)
+				scanIfExists(t, d, "num_iterations", &numIterations)
+				scanIfExists(t, d, "duration", &duration)
+				scanIfExists(t, d, "verbose", &verbose)
+				settings := testSettings{
+					numIterations: numIterations,
+					duration:      duration,
+					randSource:    rand.New(rand.NewSource(seed)),
+					assertions:    defaultAssertions(),
+					verbose:       verbose,
+					randOptions:   randOptions,
+					rangeGen:      rGenSettings,
+					clusterGen:    cGenSettings,
+				}
+				f := newRandTestingFramework(settings)
+				f.runRandTestRepeated()
+				return f.printResults()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+	})
 }
