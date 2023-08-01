@@ -566,8 +566,9 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	timeout := HotRangesRequestNodeTimeout.Get(&a.status.st.SV)
 	next, err := a.status.paginatedIterateNodes(
-		ctx, "hot ranges", limit, start, requestedNodes, dialFn,
+		ctx, "hot ranges", limit, start, requestedNodes, timeout, dialFn,
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {

@@ -27,6 +27,7 @@ go_library(
         "fanout_clients.go",
         "grpc_gateway.go",
         "grpc_server.go",
+        "hot_ranges.go",
         "import_ts.go",
         "index_usage_stats.go",
         "init.go",
