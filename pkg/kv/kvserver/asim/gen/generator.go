@@ -196,6 +196,36 @@ const (
 	WeightedRandom
 )
 
+func (p PlacementType) String() string {
+	switch p {
+	case Uniform:
+		return "uniform"
+	case Skewed:
+		return "skewed"
+	case Random:
+		return "random"
+	case WeightedRandom:
+		return "weighted_random"
+	default:
+		panic("unknown placement type")
+	}
+}
+
+func (p PlacementType) GetGeneratorType(s string) PlacementType {
+	switch s {
+	case "uniform":
+		return Uniform
+	case "skewed":
+		return Skewed
+	case "random":
+		return Random
+	case "weighted_random":
+		return WeightedRandom
+	default:
+		panic(fmt.Sprintf("unknown placement type %s", s))
+	}
+}
+
 // BaseRanges provide fundamental range functionality and are embedded in
 // specialized range structs. These structs implement the RangeGen interface
 // which is then utilized to generate allocator simulation. Key structs that

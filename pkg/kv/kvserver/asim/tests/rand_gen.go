@@ -21,9 +21,22 @@ import (
 
 // randomClusterInfoGen returns a randomly picked predefined configuration.
 func (f randTestingFramework) randomClusterInfoGen(randSource *rand.Rand) gen.LoadedCluster {
-	chosenIndex := randSource.Intn(len(state.ClusterOptions))
-	chosenType := state.ClusterOptions[chosenIndex]
-	return loadClusterInfo(chosenType)
+	switch t := f.s.clusterGen.clusterGenType; t {
+	case singleRegion:
+		chosenIndex := randSource.Intn(len(state.SingleRegionClusterOptions))
+		chosenType := state.SingleRegionClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	case multiRegion:
+		chosenIndex := randSource.Intn(len(state.MultiRegionClusterOptions))
+		chosenType := state.MultiRegionClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	case anyRegion:
+		chosenIndex := randSource.Intn(len(state.AllClusterOptions))
+		chosenType := state.AllClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	default:
+		panic("unknown cluster gen type")
+	}
 }
 
 // RandomizedBasicRanges implements the RangeGen interface, supporting random
@@ -132,6 +145,28 @@ const (
 	zipfGenerator
 )
 
+func (g generatorType) String() string {
+	switch g {
+	case uniformGenerator:
+		return "uniform"
+	case zipfGenerator:
+		return "zipf"
+	default:
+		panic("unknown cluster type")
+	}
+}
+
+func (g generatorType) getGeneratorType(s string) generatorType {
+	switch s {
+	case "uniform":
+		return uniformGenerator
+	case "zipf":
+		return zipfGenerator
+	default:
+		panic(fmt.Sprintf("unknown generator type: %s", s))
+	}
+}
+
 // newGenerator returns a generator that generates number ∈[min, max] following
 // a distribution based on gType.
 func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generatorType) generator {
@@ -142,5 +177,39 @@ func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generator
 		return newZipfianKeyGen(iMin, iMax, 1.1, 1, randSource)
 	default:
 		panic(fmt.Sprintf("unexpected generator type %v", gType))
+	}
+}
+
+type clusterConfigType int
+
+const (
+	singleRegion clusterConfigType = iota
+	multiRegion
+	anyRegion
+)
+
+func (c clusterConfigType) String() string {
+	switch c {
+	case singleRegion:
+		return "single_region"
+	case multiRegion:
+		return "multi_region"
+	case anyRegion:
+		return "any_region"
+	default:
+		panic("unknown cluster type")
+	}
+}
+
+func (c clusterConfigType) getClusterConfigType(s string) clusterConfigType {
+	switch s {
+	case "single_region":
+		return singleRegion
+	case "multi_region":
+		return multiRegion
+	case "any_region":
+		return anyRegion
+	default:
+		panic(fmt.Sprintf("unknown cluster type: %s", s))
 	}
 }

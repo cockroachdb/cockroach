@@ -11,29 +11,13 @@
 package tests
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
-	"time"
-)
 
-const (
-	defaultNumIterations = 3
-	defaultSeed          = 42
-	defaultDuration      = 30 * time.Minute
-	defaultVerbosity     = false
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/datadriven"
 )
-
-func defaultSettings(randOptions testRandOptions, rGenSettings rangeGenSettings) testSettings {
-	return testSettings{
-		numIterations: defaultNumIterations,
-		duration:      defaultDuration,
-		verbose:       defaultVerbosity,
-		randSource:    rand.New(rand.NewSource(defaultSeed)),
-		assertions:    defaultAssertions(),
-		randOptions:   randOptions,
-		rangeGen:      rGenSettings,
-	}
-}
 
 // TestRandomized is a randomized testing framework designed to validate
 // allocator by creating randomized configurations, generating corresponding
@@ -64,7 +48,7 @@ func defaultSettings(randOptions testRandOptions, rGenSettings rangeGenSettings)
 //
 // 6. rangeGen (default: uniform rangeGenType, uniform keySpaceGenType, empty
 // weightedRand).
-// - rangeKeyGenType: determines range generator type across iterations
+// - rangeGenType: determines range generator type across iterations
 // (default: uniformGenerator, min = 1, max = 1000)
 // - keySpaceGenType: determines key space generator type across iterations
 // (default: uniformGenerator, min = 1000, max = 200000)
@@ -81,15 +65,73 @@ func defaultSettings(randOptions testRandOptions, rGenSettings rangeGenSettings)
 // for test output + add more tests to cover cases that are not tested by
 // default
 func TestRandomized(t *testing.T) {
-	randOptions := testRandOptions{
-		cluster:        true,
-		ranges:         true,
-		load:           false,
-		staticSettings: false,
-		staticEvents:   false,
-	}
-	rangeGenSettings := defaultRangeGenSettings()
-	settings := defaultSettings(randOptions, rangeGenSettings)
-	f := newRandTestingFramework(settings)
-	f.runRandTestRepeated(t)
+	dir := datapathutils.TestDataPath(t, "rand")
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		randOptions := testRandOptions{}
+		rGenSettings := defaultRangeGenSettings()
+		cGenSettings := defaultClusterGenSettings()
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "clear":
+				randOptions = testRandOptions{}
+				rGenSettings = defaultRangeGenSettings()
+				cGenSettings = defaultClusterGenSettings()
+				return ""
+			case "rand_cluster":
+				randOptions.cluster = true
+				clusterGenType := defaultClusterGenType
+				scanIfExists(t, d, "cluster_gen_type", &clusterGenType)
+				cGenSettings = clusterGenSettings{
+					clusterGenType: clusterGenType,
+				}
+				return ""
+			case "rand_ranges":
+				randOptions.ranges = true
+				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultPlacementType, defaultReplicationFactor, defaultRangeGenType, defaultKeySpaceGenType
+				weightedRand := defaultWeightedRand
+				scanIfExists(t, d, "placement_type", &placementType)
+				scanIfExists(t, d, "range_gen_type", &rangeGenType)
+				scanIfExists(t, d, "keyspace_gen_type", &keySpaceGenType)
+				scanIfExists(t, d, "weighted_rand", &weightedRand)
+				rGenSettings = rangeGenSettings{
+					placementType:     placementType,
+					replicationFactor: replicationFactor,
+					rangeGenType:      rangeGenType,
+					keySpaceGenType:   keySpaceGenType,
+					weightedRand:      weightedRand,
+				}
+				return ""
+			case "rand_load":
+				return "unimplemented: randomized load"
+			case "rand_events":
+				return "unimplemented: randomized events"
+			case "rand_settings":
+				return "unimplemented: randomized settings"
+			case "eval":
+				seed := defaultSeed
+				numIterations := defaultNumIterations
+				duration := defaultDuration
+				verbose := defaultVerbosity
+				scanIfExists(t, d, "seed", &seed)
+				scanIfExists(t, d, "num_iterations", &numIterations)
+				scanIfExists(t, d, "duration", &duration)
+				scanIfExists(t, d, "verbose", &verbose)
+				settings := testSettings{
+					numIterations: numIterations,
+					duration:      duration,
+					randSource:    rand.New(rand.NewSource(seed)),
+					assertions:    defaultAssertions(),
+					verbose:       verbose,
+					randOptions:   randOptions,
+					rangeGen:      rGenSettings,
+					clusterGen:    cGenSettings,
+				}
+				f := newRandTestingFramework(settings)
+				f.runRandTestRepeated()
+				return f.printResults()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+	})
 }

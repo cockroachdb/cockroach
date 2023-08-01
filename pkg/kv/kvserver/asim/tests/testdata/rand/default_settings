@@ -1,0 +1,19 @@
+eval
+----
+settings      num_iterations=3  duration=30m0s
+rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false  
+rand_cluster=false
+rand_cluster=false
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------

@@ -1,0 +1,46 @@
+rand_cluster cluster_gen_type=multi_region
+----
+
+rand_ranges placement_type=random
+----
+
+eval duration=2m num_iterations=10
+----
+settings           num_iterations=10        duration=2m0s
+rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false  
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
+rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]  
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample4: start running
+sample4: pass
+----------------------------------
+sample5: start running
+sample5: pass
+----------------------------------
+sample6: start running
+sample6: pass
+----------------------------------
+sample7: start running
+sample7: pass
+----------------------------------
+sample8: start running
+sample8: pass
+----------------------------------
+sample9: start running
+sample9: pass
+----------------------------------
+sample10: start running
+sample10: pass
+----------------------------------
