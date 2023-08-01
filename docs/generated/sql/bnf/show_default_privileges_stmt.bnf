@@ -2,4 +2,5 @@ show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ROLE' role_spec_list ( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'USER' role_spec_list ( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES'  ( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )
+	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'GRANTEE' role_spec_list ( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' ( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )
