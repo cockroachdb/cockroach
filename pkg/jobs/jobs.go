@@ -1147,3 +1147,27 @@ func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracing
 
 	return traceID, nil
 }
+
+// LoadJobProgress returns the job progress from the info table. Note that the
+// progress can be nil if none is recorded.
+func LoadJobProgress(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+) (*jobspb.Progress, error) {
+	var (
+		progressBytes []byte
+		exists        bool
+	)
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := InfoStorageForJob(txn, jobID)
+		var err error
+		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
+		return err
+	}); err != nil || !exists {
+		return nil, err
+	}
+	progress := &jobspb.Progress{}
+	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+		return nil, err
+	}
+	return progress, nil
+}

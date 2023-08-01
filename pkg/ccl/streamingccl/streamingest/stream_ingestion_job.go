@@ -334,6 +334,10 @@ func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job)
 		log.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
 	}
+	if latestProgress == nil {
+		log.Warningf(ctx, "no job progress yet: %s", err)
+		return hlc.Timestamp{}
+	}
 	return latestProgress.ReplicatedTime
 }
 
