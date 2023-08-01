@@ -61,7 +61,7 @@ fi
 tc_end_block "Tag docker images as latest"
 
 tc_start_block "Run preflight"
-mkdir -p artifacts/preflight
+mkdir -p artifacts
 docker run \
   --rm \
   --security-opt=label=disable \
@@ -72,30 +72,9 @@ docker run \
   --env PFLT_PYXIS_API_TOKEN="$REDHAT_API_TOKEN" \
   --env PFLT_DOCKERCONFIG=/temp-authfile.json \
   --env DOCKER_CONFIG=/tmp/docker \
-  -v "$PWD/artifacts/preflight:/artifacts" \
+  -v "$PWD/artifacts:/artifacts" \
   -v ~/.docker/config.json:/temp-authfile.json:ro \
   -v ~/.docker/config.json:/tmp/docker/config.json:ro \
   quay.io/opdev/preflight:stable check container \
   "${rhel_repository}:${version}" --submit
 tc_end_block "Run preflight"
-
-if [[ -n "${PUBLISH_LATEST}" ]]; then
-tc_start_block "Run preflight on latest"
-mkdir -p artifacts/preflight-latest
-docker run \
-  --rm \
-  --security-opt=label=disable \
-  --env PFLT_LOGLEVEL=trace \
-  --env PFLT_ARTIFACTS=/artifacts \
-  --env PFLT_LOGFILE=/artifacts/preflight.log \
-  --env PFLT_CERTIFICATION_PROJECT_ID="$rhel_project_id" \
-  --env PFLT_PYXIS_API_TOKEN="$REDHAT_API_TOKEN" \
-  --env PFLT_DOCKERCONFIG=/temp-authfile.json \
-  --env DOCKER_CONFIG=/tmp/docker \
-  -v "$PWD/artifacts/preflight-latest:/artifacts" \
-  -v ~/.docker/config.json:/temp-authfile.json:ro \
-  -v ~/.docker/config.json:/tmp/docker/config.json:ro \
-  quay.io/opdev/preflight:stable check container \
-  "${rhel_repository}:latest" --submit
-tc_end_block "Run preflight on latest"
-fi
