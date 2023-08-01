@@ -254,7 +254,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 	switch placementType := f.s.rangeGen.placementType; placementType {
 	case gen.Uniform, gen.Skewed:
 		if len(f.s.rangeGen.weightedRand) != 0 {
-			panic("ambiguous weighted ")
+			panic("set placement_type to weighted_rand to use weightedRand")
 		}
 		return gen.BasicRanges{
 			BaseRanges: gen.BaseRanges{
@@ -267,7 +267,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		}
 	case gen.Random:
 		if len(f.s.rangeGen.weightedRand) != 0 {
-			panic("")
+			panic("set placement_type to weighted_rand to use weightedRand")
 		}
 		return RandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
@@ -282,7 +282,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 
 	case gen.WeightedRandom:
 		if len(f.s.rangeGen.weightedRand) == 0 {
-			panic("")
+			panic("set weightedRand array for stores properly to use the weighted_rand placementType")
 		}
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
