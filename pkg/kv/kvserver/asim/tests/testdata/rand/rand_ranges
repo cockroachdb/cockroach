@@ -1,0 +1,302 @@
+# In this test, we run the randomized testing framework with both the
+# rand_ranges and rand_cluster options.
+rand_cluster cluster_gen_type=single_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=uniform
+----
+
+eval duration=5m num_iterations=3 verbose=true
+----
+settings           num_iterations=3         duration=5m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample1
+ 111 ┼─╮
+ 104 ┤ ╰╮
+  98 ┼──╮─╮
+  91 ┤  ╰──╮╮
+  85 ┼────╮╰──╮
+  78 ┤    ╰───╰──╮
+  72 ┼─────╮  ╰─╰╰────╮
+  65 ┤     ╰─╮    ╰─╭╭╮╭╮╭╭╮╮─╮─╭╮─╭────╮─────╭─╮─╭─╮─╮  ╭──╮  ╭──────╮     ╭────╮───
+  59 ┼───╮───────╭╭────╯╰───────╯╰────────────────╯─╰────────────────────────────────
+  52 ┤   ╰───╮╭───╯╯   ╰╯
+  46 ┤     ╭╭╰╯╯╯
+  39 ┼───╭───╯
+  33 ┤  ╭╯╯
+  26 ┼──│
+  20 ┤╭─╯
+  13 ┼╯
+                                          replicas
+sample2
+ 345 ┼───╮
+ 322 ┤  ╰╰─────╮
+ 299 ┼──────╮╰─╰─────╮
+ 276 ┼──╮──╮╰──────────────╮
+ 253 ┤  ╰────────────────╮─╰───────╮╮
+ 230 ┤                 ╰─╰─────────────────╮╮
+ 207 ┤                                    ╰╰─────────────────────────────────────────
+ 184 ┼─────────────────────────────────────────╭─────────────────────────────────────
+ 161 ┼─────────────────────────────────────────╯╯╯
+ 138 ┤                     ╭─────────╯╯
+ 115 ┤              ╭──────╯╯
+  92 ┤   ╭─────╭────╯╯
+  69 ┼───╯╯╭───╯
+  46 ┼───╭─╯
+  23 ┤ ╭─╯
+   0 ┼─╯
+                                          replicas
+sample3
+ 180 ┼─╮╮
+ 168 ┤ ╰──╮╮
+ 156 ┼───────╮╮
+ 144 ┤       ╰───╮╮╮
+ 132 ┤           ╰───╮╮╮
+ 120 ┼───────╮      ╰╰────╮╮
+ 108 ┤   ╰───╰────────╮───╰───────╮
+  96 ┤                ╰───────────╰──────────────────────────────────────────────────
+  84 ┼─────────────────╭╭──────╯╯
+  72 ┤             ╭────╯╯
+  60 ┤       ╭─╭───╯
+  48 ┤╭╭───────╯
+  36 ┼─╯╭──╯
+  24 ┼──╯╯
+  12 ┤ ╭╯
+   0 ┼─╯
+                                          replicas
+
+clear
+----
+
+
+rand_cluster cluster_gen_type=multi_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=zipf
+----
+
+eval duration=5m num_iterations=10
+----
+settings           num_iterations=10        duration=5m0s
+rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
+rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=uniform  keySpaceGenType=zipf  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample4: start running
+sample4: pass
+----------------------------------
+sample5: start running
+sample5: pass
+----------------------------------
+sample6: start running
+sample6: pass
+----------------------------------
+sample7: start running
+sample7: pass
+----------------------------------
+sample8: start running
+sample8: pass
+----------------------------------
+sample9: start running
+sample9: pass
+----------------------------------
+sample10: start running
+sample10: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=multi_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=uniform
+----
+
+eval duration=5m num_iterations=10
+----
+settings           num_iterations=10        duration=5m0s
+rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
+rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=zipf  keySpaceGenType=uniform  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample4: start running
+sample4: pass
+----------------------------------
+sample5: start running
+sample5: pass
+----------------------------------
+sample6: start running
+sample6: pass
+----------------------------------
+sample7: start running
+sample7: pass
+----------------------------------
+sample8: start running
+sample8: pass
+----------------------------------
+sample9: start running
+sample9: pass
+----------------------------------
+sample10: start running
+sample10: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=any_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=zipf
+----
+
+eval duration=5m num_iterations=10
+----
+settings           num_iterations=10        duration=5m0s
+rand_options       cluster=true             ranges=true                load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=any_region  
+rand_ranges=true   range_gen_settings ->    placementType=random       replicationFactor=3  rangeGenType=zipf  keySpaceGenType=zipf  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample4: start running
+sample4: pass
+----------------------------------
+sample5: start running
+sample5: pass
+----------------------------------
+sample6: start running
+sample6: pass
+----------------------------------
+sample7: start running
+sample7: pass
+----------------------------------
+sample8: start running
+sample8: pass
+----------------------------------
+sample9: start running
+sample9: pass
+----------------------------------
+sample10: start running
+sample10: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=single_region
+----
+
+rand_ranges placement_type=random replication_factor=1
+----
+
+eval duration=20m num_iterations=3
+----
+settings           num_iterations=3         duration=20m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=1  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: failed assertion
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=9 violating=0
+over replicated:
+  r120:000001{8921-9080} [(n8,s8):2, (n15,s15):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r133:000002{0988-1147} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r138:0000021{783-942} [(n3,s3):2, (n12,s12):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r156:0000024{645-804} [(n3,s3):2, (n2,s2):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r243:0000038{478-637} [(n3,s3):2, (n12,s12):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r322:0000051{039-198} [(n1,s1):2, (n3,s3):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r567:00000{89994-90153} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r605:0000096{036-195} [(n3,s3):3, (n8,s8):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r875:000013{8966-9125} [(n3,s3):3, (n2,s2):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=single_region
+----
+
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
+----
+
+eval duration=20m num_iterations=3
+----
+settings           num_iterations=3         duration=20m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
