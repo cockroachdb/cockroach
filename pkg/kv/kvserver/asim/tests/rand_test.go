@@ -90,6 +90,7 @@ func TestRandomized(t *testing.T) {
 				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultPlacementType, defaultReplicationFactor, defaultRangeGenType, defaultKeySpaceGenType
 				weightedRand := defaultWeightedRand
 				scanIfExists(t, d, "placement_type", &placementType)
+				scanIfExists(t, d, "replication_factor", &replicationFactor)
 				scanIfExists(t, d, "range_gen_type", &rangeGenType)
 				scanIfExists(t, d, "keyspace_gen_type", &keySpaceGenType)
 				scanIfExists(t, d, "weighted_rand", &weightedRand)

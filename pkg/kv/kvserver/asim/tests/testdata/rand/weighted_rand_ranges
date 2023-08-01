@@ -1,0 +1,6 @@
+rand_cluster cluster_gen_type=single_region
+----
+
+rand_ranges placement_type=weighted_random weighted_rand=(0.1,0.2,0.7)
+----
+
