@@ -142,6 +142,7 @@ function descriptionCell(
   isCockroachCloud: boolean,
   isFingerprint: boolean,
 ): React.ReactElement {
+  console.log("insightRec exec:", insightRec.execution)
   const stmtLink = isIndexRec(insightRec) ? (
     <StatementExecution
       rec={insightRec}
@@ -284,6 +285,10 @@ function descriptionCell(
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Error Code: </span>{" "}
             {insightRec.execution.errorCode}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}> Error Message: </span>{" "}
+            {insightRec.execution.errorMsg}
           </div>
         </>
       );
