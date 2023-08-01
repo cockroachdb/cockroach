@@ -129,7 +129,7 @@ type rangeGenSettings struct {
 
 func (t rangeGenSettings) printRangeGenSettings(w *tabwriter.Writer) {
 	if _, err := fmt.Fprintf(w,
-		"range_gen_settings ->\tplacementType=%v\treplicationFactor=%v\trangeGenType=%v\tkeySpaceGenType=%v\tweightedRand=%v\t\n",
+		"range_gen_settings ->\tplacementType=%v\treplicationFactor=%v\trangeGenType=%v\tkeySpaceGenType=%v\tweightedRand=%v\n",
 		t.placementType, t.replicationFactor, t.rangeGenType, t.keySpaceGenType, t.weightedRand); err != nil {
 		panic(err)
 	}

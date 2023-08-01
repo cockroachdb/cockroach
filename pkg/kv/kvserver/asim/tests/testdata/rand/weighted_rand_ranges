@@ -1,8 +1,0 @@
-rand_cluster cluster_gen_type=multi_region
-----
-
-rand_ranges placement_type=random replication_factor=1
-----
-
-eval duration=30m num_iterations=10
-----

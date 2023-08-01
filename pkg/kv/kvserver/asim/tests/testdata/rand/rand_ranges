@@ -1,15 +1,99 @@
+rand_cluster cluster_gen_type=single_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=uniform
+----
+
+eval duration=5m num_iterations=3 verbose=true
+----
+settings           num_iterations=3         duration=5m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample1
+ 111 ┼─╮
+ 104 ┤ ╰╮
+  98 ┼──╮─╮
+  91 ┤  ╰──╮╮
+  85 ┼────╮╰──╮
+  78 ┤    ╰───╰──╮
+  72 ┼─────╮  ╰─╰╰────╮
+  65 ┤     ╰─╮    ╰─╭╭╮╭╮╭╭╮╮─╮─╭╮─╭────╮─────╭─╮─╭─╮─╮  ╭──╮  ╭──────╮     ╭────╮───
+  59 ┼───╮───────╭╭────╯╰───────╯╰────────────────╯─╰────────────────────────────────
+  52 ┤   ╰───╮╭───╯╯   ╰╯
+  46 ┤     ╭╭╰╯╯╯
+  39 ┼───╭───╯
+  33 ┤  ╭╯╯
+  26 ┼──│
+  20 ┤╭─╯
+  13 ┼╯
+                                          replicas
+sample2
+ 345 ┼───╮
+ 322 ┤  ╰╰─────╮
+ 299 ┼──────╮╰─╰─────╮
+ 276 ┼──╮──╮╰──────────────╮
+ 253 ┤  ╰────────────────╮─╰───────╮╮
+ 230 ┤                 ╰─╰─────────────────╮╮
+ 207 ┤                                    ╰╰─────────────────────────────────────────
+ 184 ┼─────────────────────────────────────────╭─────────────────────────────────────
+ 161 ┼─────────────────────────────────────────╯╯╯
+ 138 ┤                     ╭─────────╯╯
+ 115 ┤              ╭──────╯╯
+  92 ┤   ╭─────╭────╯╯
+  69 ┼───╯╯╭───╯
+  46 ┼───╭─╯
+  23 ┤ ╭─╯
+   0 ┼─╯
+                                          replicas
+sample3
+ 180 ┼─╮╮
+ 168 ┤ ╰──╮╮
+ 156 ┼───────╮╮
+ 144 ┤       ╰───╮╮╮
+ 132 ┤           ╰───╮╮╮
+ 120 ┼───────╮      ╰╰────╮╮
+ 108 ┤   ╰───╰────────╮───╰───────╮
+  96 ┤                ╰───────────╰──────────────────────────────────────────────────
+  84 ┼─────────────────╭╭──────╯╯
+  72 ┤             ╭────╯╯
+  60 ┤       ╭─╭───╯
+  48 ┤╭╭───────╯
+  36 ┼─╯╭──╯
+  24 ┼──╯╯
+  12 ┤ ╭╯
+   0 ┼─╯
+                                          replicas
+
+clear
+----
+
+
 rand_cluster cluster_gen_type=multi_region
 ----
 
-rand_ranges placement_type=random replication_factor=1
+rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=zipf
 ----
 
-eval duration=30m num_iterations=10
+eval duration=5m num_iterations=10
 ----
-settings           num_iterations=10        duration=30m0s
-rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false  
+settings           num_iterations=10        duration=5m0s
+rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
-rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=1  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]  
+rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=uniform  keySpaceGenType=zipf  weightedRand=[]
 rand_load=false
 rand_events=false
 rand_settings=false
@@ -27,384 +111,161 @@ sample4: start running
 sample4: pass
 ----------------------------------
 sample5: start running
-sample5: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=118 violating=0
-over replicated:
-  r4:0000000{636-848} [(n16,s16):6, (n14,s14):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r7:0000001{272-484} [(n28,s28):8, (n21,s21):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r11:0000002{120-332} [(n10,s10):9, (n15,s15):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r19:000000{3816-4028} [(n24,s24):8, (n4,s4):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r22:0000004{452-664} [(n28,s28):12, (n7,s7):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r28:0000005{724-936} [(n24,s24):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r40:0000008{268-480} [(n11,s11):9, (n25,s25):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r49:0000010{176-388} [(n12,s12):4, (n4,s4):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r50:0000010{388-600} [(n2,s2):10, (n19,s19):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r54:0000011{236-448} [(n8,s8):8, (n6,s6):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r55:0000011{448-660} [(n11,s11):6, (n26,s26):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r56:0000011{660-872} [(n28,s28):8, (n8,s8):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r64:0000013{356-568} [(n21,s21):7, (n2,s2):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r72:0000015{052-264} [(n18,s18):10, (n16,s16):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r85:000001{7808-8020} [(n28,s28):13, (n26,s26):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r86:0000018{020-232} [(n8,s8):7, (n1,s1):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r88:0000018{444-656} [(n28,s28):9, (n2,s2):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r96:0000020{140-352} [(n25,s25):11, (n17,s17):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r100:000002{0988-1200} [(n8,s8):10, (n11,s11):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r104:000002{1836-2048} [(n16,s16):9, (n26,s26):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r108:0000022{684-896} [(n2,s2):7, (n1,s1):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r109:000002{2896-3108} [(n5,s5):10, (n14,s14):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r117:0000024{592-804} [(n18,s18):12, (n8,s8):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r118:000002{4804-5016} [(n14,s14):7, (n22,s22):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r119:0000025{016-228} [(n25,s25):11, (n6,s6):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r122:0000025{652-864} [(n8,s8):8, (n26,s26):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r123:000002{5864-6076} [(n25,s25):8, (n8,s8):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r125:0000026{288-500} [(n16,s16):7, (n22,s22):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r128:000002{6924-7136} [(n24,s24):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r132:0000027{772-984} [(n28,s28):11, (n5,s5):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r142:00000{29892-30104} [(n26,s26):10, (n5,s5):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r144:0000030{316-528} [(n26,s26):9, (n4,s4):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r153:0000032{224-436} [(n24,s24):8, (n18,s18):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r165:0000034{768-980} [(n8,s8):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r176:0000037{100-312} [(n28,s28):9, (n18,s18):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r177:0000037{312-524} [(n28,s28):7, (n2,s2):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r201:0000042{400-612} [(n6,s6):13, (n18,s18):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r202:0000042{612-824} [(n5,s5):9, (n1,s1):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r205:0000043{248-460} [(n28,s28):9, (n2,s2):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r210:0000044{308-520} [(n1,s1):10, (n7,s7):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r217:000004{5792-6004} [(n18,s18):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r223:0000047{064-276} [(n25,s25):9, (n18,s18):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r231:0000048{760-972} [(n14,s14):7, (n8,s8):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r233:0000049{184-396} [(n25,s25):8, (n26,s26):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r238:0000050{244-456} [(n16,s16):7, (n5,s5):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r240:0000050{668-880} [(n18,s18):9, (n4,s4):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r249:0000052{576-788} [(n16,s16):9, (n8,s8):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r254:0000053{636-848} [(n11,s11):8, (n24,s24):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r255:000005{3848-4060} [(n10,s10):6, (n15,s15):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r257:0000054{272-484} [(n25,s25):7, (n18,s18):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r264:0000055{756-968} [(n24,s24):9, (n6,s6):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r272:0000057{452-664} [(n19,s19):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r273:0000057{664-876} [(n28,s28):11, (n2,s2):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r280:0000059{148-360} [(n25,s25):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r304:0000064{236-448} [(n16,s16):10, (n5,s5):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r306:0000064{660-872} [(n12,s12):11, (n28,s28):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r327:0000069{112-324} [(n21,s21):9, (n24,s24):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r335:000007{0808-1020} [(n24,s24):8, (n6,s6):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r349:0000073{776-988} [(n16,s16):8, (n14,s14):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r356:0000075{260-472} [(n28,s28):10, (n21,s21):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r364:000007{6956-7168} [(n6,s6):11, (n12,s12):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r368:000007{7804-8016} [(n5,s5):6, (n26,s26):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r374:0000079{076-288} [(n21,s21):4, (n8,s8):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r377:0000079{712-924} [(n10,s10):8, (n19,s19):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r381:0000080{560-772} [(n25,s25):10, (n6,s6):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r385:0000081{408-620} [(n18,s18):10, (n8,s8):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r387:000008{1832-2044} [(n24,s24):10, (n25,s25):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r396:0000083{740-952} [(n28,s28):9, (n21,s21):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r404:0000085{436-648} [(n25,s25):10, (n1,s1):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r408:0000086{284-496} [(n11,s11):14, (n8,s8):15] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r409:0000086{496-708} [(n25,s25):7, (n18,s18):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r411:000008{6920-7132} [(n8,s8):9, (n6,s6):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r428:0000090{524-736} [(n24,s24):9, (n2,s2):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r435:0000092{008-220} [(n12,s12):9, (n2,s2):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r437:0000092{432-644} [(n28,s28):6, (n1,s1):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r438:0000092{644-856} [(n12,s12):9, (n16,s16):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r439:000009{2856-3068} [(n22,s22):10, (n24,s24):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r451:0000095{400-612} [(n22,s22):7, (n28,s28):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r471:0000099{640-852} [(n18,s18):9, (n16,s16):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r493:0000104{304-516} [(n8,s8):11, (n24,s24):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r495:0000104{728-940} [(n12,s12):7, (n7,s7):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r508:0000107{484-696} [(n6,s6):9, (n2,s2):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r512:0000108{332-544} [(n28,s28):9, (n7,s7):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r519:00001{09816-10028} [(n6,s6):8, (n7,s7):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r528:0000111{724-936} [(n19,s19):8, (n7,s7):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r539:0000114{056-268} [(n5,s5):8, (n12,s12):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r540:0000114{268-480} [(n9,s9):7, (n24,s24):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r544:0000115{116-328} [(n14,s14):8, (n10,s10):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r545:0000115{328-540} [(n5,s5):11, (n12,s12):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r571:000012{0840-1052} [(n28,s28):10, (n7,s7):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r574:0000121{476-688} [(n8,s8):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r580:0000122{748-960} [(n28,s28):9, (n26,s26):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r585:000012{3808-4020} [(n8,s8):9, (n25,s25):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r586:0000124{020-232} [(n26,s26):9, (n11,s11):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r605:0000128{048-260} [(n19,s19):6, (n14,s14):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r606:0000128{260-472} [(n20,s20):8, (n8,s8):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r611:0000129{320-532} [(n9,s9):6, (n7,s7):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r615:0000130{168-380} [(n10,s10):10, (n12,s12):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r630:0000133{348-560} [(n6,s6):9, (n16,s16):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r639:0000135{256-468} [(n17,s17):8, (n8,s8):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r645:0000136{528-740} [(n6,s6):9, (n8,s8):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r653:0000138{224-436} [(n6,s6):7, (n25,s25):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r655:0000138{648-860} [(n22,s22):9, (n25,s25):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r658:0000139{284-496} [(n11,s11):8, (n26,s26):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r659:0000139{496-708} [(n26,s26):4, (n16,s16):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r675:000014{2888-3100} [(n12,s12):6, (n28,s28):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r684:000014{4796-5008} [(n6,s6):7, (n24,s24):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r688:0000145{644-856} [(n26,s26):9, (n14,s14):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r690:0000146{068-280} [(n2,s2):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r694:000014{6916-7128} [(n28,s28):5, (n2,s2):6] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r707:0000149{672-884} [(n28,s28):8, (n14,s14):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r720:0000152{428-640} [(n10,s10):8, (n25,s25):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r721:0000152{640-852} [(n10,s10):10, (n17,s17):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r729:0000154{336-548} [(n14,s14):9, (n21,s21):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r733:0000155{184-396} [(n5,s5):8, (n16,s16):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r735:0000155{608-820} [(n28,s28):10, (n1,s1):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r742:0000157{092-304} [(n26,s26):8, (n8,s8):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r775:0000164{088-300} [(n28,s28):4, (n26,s26):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
+sample5: pass
 ----------------------------------
 sample6: start running
-sample6: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=14 violating=0
-over replicated:
-  r85:0000022{008-270} [(n9,s9):4, (n10,s10):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r91:0000023{580-842} [(n9,s9):9, (n2,s2):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r138:000003{5894-6156} [(n9,s9):4, (n1,s1):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r275:000007{1788-2050} [(n9,s9):9, (n11,s11):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r286:0000074{670-932} [(n9,s9):7, (n23,s23):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r289:0000075{456-718} [(n9,s9):11, (n11,s11):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r323:0000084{364-626} [(n9,s9):11, (n3,s3):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r336:000008{7770-8032} [(n9,s9):11, (n25,s25):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r343:0000089{604-866} [(n9,s9):4, (n12,s12):5] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r347:0000090{652-914} [(n9,s9):8, (n23,s23):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r348:000009{0914-1176} [(n9,s9):7, (n28,s28):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r350:0000091{438-700} [(n9,s9):6, (n18,s18):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r352:000009{1962-2224} [(n9,s9):10, (n16,s16):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r353:0000092{224-486} [(n9,s9):7, (n8,s8):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
+sample6: pass
 ----------------------------------
 sample7: start running
 sample7: pass
 ----------------------------------
 sample8: start running
-sample8: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=18 violating=0
-over replicated:
-  r31:000000{4980-5146} [(n2,s2):13, (n26,s26):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r53:0000008{632-798} [(n21,s21):20, (n26,s26):21] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r92:0000015{106-272} [(n17,s17):11, (n31,s31):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r94:0000015{438-604} [(n27,s27):8, (n26,s26):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r123:0000020{252-418} [(n13,s13):17, (n26,s26):18] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r126:0000020{750-916} [(n15,s15):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r128:0000021{082-248} [(n20,s20):16, (n26,s26):17] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r220:0000036{354-520} [(n16,s16):16, (n26,s26):17] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r239:0000039{508-674} [(n26,s26):18, (n18,s18):19] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r245:0000040{504-670} [(n11,s11):13, (n26,s26):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r258:0000042{662-828} [(n26,s26):14, (n32,s32):15] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r280:0000046{314-480} [(n25,s25):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r306:0000050{630-796} [(n24,s24):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r335:0000055{444-610} [(n26,s26):20, (n29,s29):21] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r337:0000055{776-942} [(n10,s10):14, (n26,s26):15] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r339:0000056{108-274} [(n5,s5):12, (n26,s26):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r365:0000060{424-590} [(n17,s17):12, (n31,s31):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r387:0000064{076-242} [(n26,s26):17, (n34,s34):18] applying ttl_seconds=0 num_replicas=1 num_voters=1
+sample8: pass
 ----------------------------------
 sample9: start running
-sample9: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=202 violating=0
-over replicated:
-  r2:0000000{142-284} [(n14,s14):13, (n36,s36):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r6:0000000{710-852} [(n28,s28):9, (n25,s25):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r9:0000001{136-278} [(n23,s23):9, (n6,s6):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r10:0000001{278-420} [(n31,s31):10, (n24,s24):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r13:0000001{704-846} [(n34,s34):13, (n7,s7):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r14:0000001{846-988} [(n31,s31):9, (n36,s36):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r19:0000002{556-698} [(n31,s31):11, (n4,s4):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r30:0000004{118-260} [(n29,s29):10, (n13,s13):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r31:0000004{260-402} [(n4,s4):8, (n35,s35):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r32:0000004{402-544} [(n12,s12):9, (n26,s26):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r36:000000{4970-5112} [(n31,s31):9, (n25,s25):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r38:0000005{254-396} [(n4,s4):11, (n15,s15):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r41:0000005{680-822} [(n9,s9):11, (n13,s13):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r49:0000006{816-958} [(n35,s35):16, (n5,s5):17] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r52:0000007{242-384} [(n29,s29):9, (n35,s35):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r54:0000007{526-668} [(n28,s28):9, (n18,s18):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r63:0000008{804-946} [(n17,s17):13, (n34,s34):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r64:000000{8946-9088} [(n3,s3):12, (n35,s35):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r68:0000009{514-656} [(n30,s30):10, (n5,s5):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r69:0000009{656-798} [(n30,s30):9, (n6,s6):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r71:00000{09940-10082} [(n5,s5):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r72:0000010{082-224} [(n31,s31):10, (n8,s8):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r82:0000011{502-644} [(n31,s31):10, (n35,s35):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r91:0000012{780-922} [(n35,s35):12, (n32,s32):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r99:000001{3916-4058} [(n16,s16):9, (n26,s26):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r100:0000014{058-200} [(n31,s31):8, (n33,s33):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r101:0000014{200-342} [(n7,s7):13, (n22,s22):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r103:0000014{484-626} [(n3,s3):10, (n12,s12):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r110:0000015{478-620} [(n35,s35):10, (n8,s8):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r113:000001{5904-6046} [(n35,s35):16, (n8,s8):17] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r114:0000016{046-188} [(n20,s20):13, (n13,s13):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r120:000001{6898-7040} [(n20,s20):11, (n36,s36):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r124:0000017{466-608} [(n8,s8):10, (n33,s33):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r126:0000017{750-892} [(n2,s2):9, (n20,s20):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r129:0000018{176-318} [(n15,s15):10, (n25,s25):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r130:0000018{318-460} [(n6,s6):10, (n28,s28):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r136:0000019{170-312} [(n16,s16):12, (n36,s36):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r137:0000019{312-454} [(n31,s31):9, (n15,s15):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r142:0000020{022-164} [(n27,s27):10, (n31,s31):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r146:0000020{590-732} [(n30,s30):11, (n21,s21):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r148:000002{0874-1016} [(n27,s27):11, (n24,s24):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r157:0000022{152-294} [(n7,s7):10, (n23,s23):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r164:0000023{146-288} [(n8,s8):13, (n13,s13):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r166:0000023{430-572} [(n21,s21):13, (n31,s31):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r174:0000024{566-708} [(n8,s8):13, (n15,s15):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r178:0000025{134-276} [(n33,s33):11, (n18,s18):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r181:0000025{560-702} [(n21,s21):14, (n15,s15):15] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r183:0000025{844-986} [(n31,s31):8, (n16,s16):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r186:0000026{270-412} [(n16,s16):8, (n31,s31):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r191:000002{6980-7122} [(n33,s33):10, (n36,s36):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r210:0000029{678-820} [(n16,s16):11, (n15,s15):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r218:0000030{814-956} [(n8,s8):11, (n21,s21):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r230:0000032{518-660} [(n32,s32):9, (n24,s24):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r237:0000033{512-654} [(n7,s7):10, (n11,s11):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r241:0000034{080-222} [(n7,s7):10, (n25,s25):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r252:0000035{642-784} [(n27,s27):12, (n7,s7):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r255:0000036{068-210} [(n29,s29):7, (n13,s13):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r257:0000036{352-494} [(n32,s32):9, (n30,s30):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r258:0000036{494-636} [(n19,s19):9, (n22,s22):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r268:000003{7914-8056} [(n35,s35):7, (n13,s13):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r273:0000038{624-766} [(n31,s31):9, (n32,s32):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r283:0000040{044-186} [(n29,s29):8, (n2,s2):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r286:0000040{470-612} [(n14,s14):11, (n35,s35):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r289:000004{0896-1038} [(n7,s7):10, (n34,s34):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r296:000004{1890-2032} [(n28,s28):12, (n31,s31):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r298:0000042{174-316} [(n28,s28):11, (n8,s8):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r302:0000042{742-884} [(n21,s21):7, (n26,s26):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r304:0000043{026-168} [(n20,s20):11, (n22,s22):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r310:000004{3878-4020} [(n30,s30):10, (n14,s14):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r327:0000046{292-434} [(n33,s33):10, (n12,s12):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r332:0000047{002-144} [(n4,s4):11, (n33,s33):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r334:0000047{286-428} [(n17,s17):8, (n35,s35):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r337:0000047{712-854} [(n33,s33):8, (n7,s7):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r355:0000050{268-410} [(n19,s19):10, (n14,s14):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r360:000005{0978-1120} [(n16,s16):12, (n28,s28):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r364:0000051{546-688} [(n17,s17):11, (n34,s34):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r371:0000052{540-682} [(n7,s7):12, (n1,s1):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r375:0000053{108-250} [(n17,s17):6, (n2,s2):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r379:0000053{676-818} [(n28,s28):10, (n22,s22):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r380:0000053{818-960} [(n28,s28):12, (n22,s22):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r385:0000054{528-670} [(n3,s3):12, (n22,s22):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r389:0000055{096-238} [(n27,s27):12, (n35,s35):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r390:0000055{238-380} [(n31,s31):9, (n16,s16):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r391:0000055{380-522} [(n13,s13):10, (n14,s14):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r396:0000056{090-232} [(n28,s28):9, (n12,s12):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r400:0000056{658-800} [(n18,s18):13, (n31,s31):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r407:0000057{652-794} [(n6,s6):9, (n31,s31):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r409:000005{7936-8078} [(n32,s32):9, (n26,s26):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r422:0000059{782-924} [(n4,s4):12, (n21,s21):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r423:00000{59924-60066} [(n4,s4):12, (n14,s14):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r428:0000060{634-776} [(n29,s29):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r440:0000062{338-480} [(n12,s12):8, (n2,s2):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r444:000006{2906-3048} [(n6,s6):13, (n18,s18):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r457:0000064{752-894} [(n7,s7):11, (n33,s33):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r468:0000066{314-456} [(n6,s6):9, (n5,s5):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r471:0000066{740-882} [(n17,s17):14, (n6,s6):15] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r473:0000067{024-166} [(n13,s13):11, (n18,s18):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r475:0000067{308-450} [(n20,s20):10, (n15,s15):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r476:0000067{450-592} [(n13,s13):11, (n35,s35):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r481:0000068{160-302} [(n33,s33):6, (n28,s28):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r486:000006{8870-9012} [(n2,s2):9, (n33,s33):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r494:0000070{006-148} [(n20,s20):8, (n21,s21):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r497:0000070{432-574} [(n12,s12):10, (n22,s22):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r499:0000070{716-858} [(n5,s5):7, (n2,s2):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r502:0000071{142-284} [(n28,s28):10, (n36,s36):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r512:0000072{562-704} [(n30,s30):13, (n6,s6):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r518:0000073{414-556} [(n23,s23):8, (n26,s26):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r525:0000074{408-550} [(n20,s20):12, (n29,s29):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r526:0000074{550-692} [(n13,s13):8, (n15,s15):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r527:0000074{692-834} [(n34,s34):12, (n26,s26):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r530:0000075{118-260} [(n35,s35):9, (n23,s23):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r531:0000075{260-402} [(n32,s32):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r541:0000076{680-822} [(n13,s13):11, (n14,s14):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r542:0000076{822-964} [(n35,s35):11, (n31,s31):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r549:0000077{816-958} [(n6,s6):7, (n20,s20):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r550:000007{7958-8100} [(n32,s32):13, (n15,s15):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r558:0000079{094-236} [(n31,s31):7, (n16,s16):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r568:0000080{514-656} [(n20,s20):8, (n36,s36):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r574:0000081{366-508} [(n28,s28):9, (n32,s32):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r579:0000082{076-218} [(n16,s16):8, (n18,s18):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r580:0000082{218-360} [(n34,s34):12, (n11,s11):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r584:0000082{786-928} [(n28,s28):8, (n27,s27):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r586:0000083{070-212} [(n26,s26):7, (n5,s5):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r596:0000084{490-632} [(n30,s30):8, (n35,s35):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r614:0000087{046-188} [(n28,s28):10, (n15,s15):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r622:0000088{182-324} [(n23,s23):10, (n2,s2):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r623:0000088{324-466} [(n35,s35):13, (n32,s32):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r642:0000091{022-164} [(n32,s32):13, (n36,s36):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r645:0000091{448-590} [(n3,s3):13, (n28,s28):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r647:0000091{732-874} [(n35,s35):13, (n5,s5):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r652:0000092{442-584} [(n12,s12):12, (n14,s14):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r656:0000093{010-152} [(n3,s3):10, (n11,s11):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r658:0000093{294-436} [(n9,s9):8, (n6,s6):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r659:0000093{436-578} [(n5,s5):10, (n33,s33):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r663:0000094{004-146} [(n12,s12):9, (n5,s5):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r666:0000094{430-572} [(n23,s23):10, (n22,s22):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r671:0000095{140-282} [(n35,s35):11, (n22,s22):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r684:000009{6986-7128} [(n7,s7):9, (n16,s16):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r688:0000097{554-696} [(n31,s31):8, (n34,s34):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r694:0000098{406-548} [(n31,s31):13, (n24,s24):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r697:0000098{832-974} [(n32,s32):11, (n6,s6):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r699:0000099{116-258} [(n35,s35):13, (n5,s5):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r700:0000099{258-400} [(n32,s32):8, (n30,s30):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r712:000010{0962-1104} [(n28,s28):10, (n16,s16):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r715:0000101{388-530} [(n17,s17):10, (n14,s14):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r716:0000101{530-672} [(n7,s7):11, (n35,s35):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r718:0000101{814-956} [(n13,s13):9, (n14,s14):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r720:0000102{098-240} [(n28,s28):8, (n36,s36):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r727:0000103{092-234} [(n31,s31):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r728:0000103{234-376} [(n8,s8):11, (n13,s13):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r729:0000103{376-518} [(n30,s30):10, (n4,s4):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r734:0000104{086-228} [(n17,s17):12, (n35,s35):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r737:0000104{512-654} [(n21,s21):10, (n26,s26):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r738:0000104{654-796} [(n28,s28):13, (n5,s5):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r743:0000105{364-506} [(n22,s22):10, (n28,s28):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r748:0000106{074-216} [(n31,s31):9, (n16,s16):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r750:0000106{358-500} [(n4,s4):9, (n24,s24):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r752:0000106{642-784} [(n12,s12):7, (n9,s9):8] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r767:0000108{772-914} [(n28,s28):13, (n36,s36):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r768:000010{8914-9056} [(n5,s5):8, (n26,s26):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r772:0000109{482-624} [(n36,s36):8, (n22,s22):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r774:0000109{766-908} [(n10,s10):9, (n28,s28):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r782:000011{0902-1044} [(n31,s31):11, (n19,s19):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r796:000011{2890-3032} [(n34,s34):11, (n35,s35):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r806:0000114{310-452} [(n23,s23):8, (n34,s34):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r811:0000115{020-162} [(n30,s30):10, (n36,s36):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r815:0000115{588-730} [(n19,s19):13, (n28,s28):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r817:000011{5872-6014} [(n3,s3):13, (n35,s35):14] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r822:0000116{582-724} [(n6,s6):9, (n33,s33):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r823:0000116{724-866} [(n26,s26):10, (n31,s31):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r824:000011{6866-7008} [(n20,s20):10, (n13,s13):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r827:0000117{292-434} [(n24,s24):12, (n31,s31):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r831:000011{7860-8002} [(n28,s28):11, (n35,s35):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r837:0000118{712-854} [(n29,s29):9, (n36,s36):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r839:000011{8996-9138} [(n26,s26):12, (n28,s28):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r840:0000119{138-280} [(n30,s30):9, (n15,s15):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r847:0000120{132-274} [(n23,s23):11, (n15,s15):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r849:0000120{416-558} [(n5,s5):9, (n25,s25):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r854:0000121{126-268} [(n24,s24):8, (n20,s20):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r861:0000122{120-262} [(n7,s7):11, (n35,s35):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r865:0000122{688-830} [(n31,s31):10, (n22,s22):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r869:0000123{256-398} [(n13,s13):9, (n36,s36):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r872:0000123{682-824} [(n35,s35):9, (n15,s15):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r874:000012{3966-4108} [(n31,s31):12, (n11,s11):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r880:0000124{818-960} [(n34,s34):12, (n21,s21):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r889:0000126{096-238} [(n31,s31):11, (n26,s26):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r890:0000126{238-380} [(n5,s5):12, (n19,s19):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r893:0000126{664-806} [(n26,s26):10, (n20,s20):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r898:0000127{374-516} [(n31,s31):11, (n17,s17):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r913:0000129{504-646} [(n28,s28):12, (n4,s4):13] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r923:000013{0924-1066} [(n12,s12):11, (n36,s36):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r931:0000132{060-202} [(n30,s30):9, (n8,s8):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r932:0000132{202-344} [(n29,s29):10, (n15,s15):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r937:000013{2912-3054} [(n8,s8):11, (n15,s15):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r938:0000133{054-196} [(n13,s13):9, (n30,s30):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r940:0000133{338-480} [(n35,s35):9, (n9,s9):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r941:0000133{480-622} [(n23,s23):10, (n9,s9):11] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r942:0000133{622-764} [(n28,s28):6, (n36,s36):7] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r943:0000133{764-906} [(n12,s12):8, (n17,s17):9] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r944:000013{3906-4048} [(n16,s16):11, (n31,s31):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r946:0000134{190-332} [(n31,s31):11, (n8,s8):12] applying ttl_seconds=0 num_replicas=1 num_voters=1
-  r953:{0000135184-2147483647} [(n3,s3):9, (n29,s29):10] applying ttl_seconds=0 num_replicas=1 num_voters=1
+sample9: pass
 ----------------------------------
 sample10: start running
 sample10: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=multi_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=uniform
+----
+
+eval duration=5m num_iterations=10
+----
+settings           num_iterations=10        duration=5m0s
+rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
+rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=zipf  keySpaceGenType=uniform  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample4: start running
+sample4: pass
+----------------------------------
+sample5: start running
+sample5: pass
+----------------------------------
+sample6: start running
+sample6: pass
+----------------------------------
+sample7: start running
+sample7: pass
+----------------------------------
+sample8: start running
+sample8: pass
+----------------------------------
+sample9: start running
+sample9: pass
+----------------------------------
+sample10: start running
+sample10: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=any_region
+----
+
+rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=zipf
+----
+
+eval duration=5m num_iterations=10
+----
+settings           num_iterations=10        duration=5m0s
+rand_options       cluster=true             ranges=true                load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=any_region  
+rand_ranges=true   range_gen_settings ->    placementType=random       replicationFactor=3  rangeGenType=zipf  keySpaceGenType=zipf  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+sample4: start running
+sample4: pass
+----------------------------------
+sample5: start running
+sample5: pass
+----------------------------------
+sample6: start running
+sample6: pass
+----------------------------------
+sample7: start running
+sample7: pass
+----------------------------------
+sample8: start running
+sample8: pass
+----------------------------------
+sample9: start running
+sample9: pass
+----------------------------------
+sample10: start running
+sample10: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=single_region
+----
+
+rand_ranges placement_type=random replication_factor=1
+----
+
+eval duration=20m num_iterations=3
+----
+settings           num_iterations=3         duration=20m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=1  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: failed assertion
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=9 violating=0
+over replicated:
+  r120:000001{8921-9080} [(n8,s8):2, (n15,s15):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r133:000002{0988-1147} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r138:0000021{783-942} [(n3,s3):2, (n12,s12):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r156:0000024{645-804} [(n3,s3):2, (n2,s2):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r243:0000038{478-637} [(n3,s3):2, (n12,s12):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r322:0000051{039-198} [(n1,s1):2, (n3,s3):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r567:00000{89994-90153} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r605:0000096{036-195} [(n3,s3):3, (n8,s8):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+  r875:000013{8966-9125} [(n3,s3):3, (n2,s2):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
+----------------------------------
+sample3: start running
+sample3: pass
 ----------------------------------

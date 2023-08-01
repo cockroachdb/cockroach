@@ -37,7 +37,7 @@ type testRandOptions struct {
 
 func (t testRandOptions) printRandOptions(w *tabwriter.Writer) {
 	if _, err := fmt.Fprintf(w,
-		"rand_options\tcluster=%t\tranges=%t\tload=%t\tstaticSettings=%t\tstaticEvents=%t\t\n", t.cluster, t.ranges, t.load, t.staticSettings, t.staticEvents); err != nil {
+		"rand_options\tcluster=%t\tranges=%t\tload=%t\tstaticSettings=%t\tstaticEvents=%t\n", t.cluster, t.ranges, t.load, t.staticSettings, t.staticEvents); err != nil {
 		panic(err)
 	}
 }
@@ -204,7 +204,7 @@ func plotAllHistory(runs []asim.History, buf *strings.Builder) {
 		history := runs[i]
 		ts := metrics.MakeTS(history.Recorded)
 		statTS := ts[stat]
-		buf.WriteString("\n")
+		buf.WriteString(fmt.Sprintf("sample%d\n", i+1))
 		buf.WriteString(asciigraph.PlotMany(
 			statTS,
 			asciigraph.Caption(stat),
