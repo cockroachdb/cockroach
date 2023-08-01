@@ -10,7 +10,7 @@ statement ok
 SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 0;
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 SAVEPOINT cockroach_restart
@@ -30,7 +30,8 @@ CREATE INDEX y_idx ON t (y);
 user testuser
 
 statement ok
-BEGIN TRANSACTION PRIORITY HIGH
+BEGIN TRANSACTION PRIORITY HIGH;
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
 SHOW TABLES

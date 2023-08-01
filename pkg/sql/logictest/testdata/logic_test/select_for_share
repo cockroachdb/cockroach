@@ -1,4 +1,5 @@
-# LogicTest: !local-mixed-23.1
+# LogicTest: !local-mixed-23.1 !local-read-committed
+# This test assumes that SERIALIZABLE isolation is being used.
 
 statement ok
 CREATE TABLE t(a INT PRIMARY KEY);

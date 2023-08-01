@@ -19,7 +19,7 @@ SELECT * FROM kv
 user testuser
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 SET TRACING = on

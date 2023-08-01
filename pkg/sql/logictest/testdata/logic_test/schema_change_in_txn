@@ -1,3 +1,8 @@
+# LogicTest: !local-read-committed
+# This test is skipped under local-read-committed, since it uses the
+# autocommit_before_ddl setting, which makes it impossible to test schema
+# changes in transactions.
+
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry

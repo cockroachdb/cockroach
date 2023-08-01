@@ -2350,7 +2350,7 @@ SELECT f();
 subtest upsert_into
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 query II rowsort
 SELECT * FROM xy;
@@ -2863,6 +2863,7 @@ CREATE OR REPLACE FUNCTION f(x INT) RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+skipif config local-read-committed
 query III
 SElECT f(0), f(100), f(-100);
 ----

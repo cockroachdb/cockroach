@@ -192,7 +192,7 @@ GRANT role_foo TO testuser WITH ADMIN OPTION;
 user testuser
 
 statement ok
-BEGIN;
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 query TTT colnames
 SELECT * FROM information_schema.applicable_roles ORDER BY role_name;
