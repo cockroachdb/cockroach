@@ -11,7 +11,6 @@
 package tests
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -23,17 +22,8 @@ import (
 // time.Duration types to the datadriven testing repository.
 func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
 	var tmp string
-	var err error
 	switch dest := dest.(type) {
-	case *time.Duration:
-		d.ScanArgs(t, key, &tmp)
-		*dest, err = time.ParseDuration(tmp)
-		require.NoError(t, err)
-	case *float64:
-		d.ScanArgs(t, key, &tmp)
-		*dest, err = strconv.ParseFloat(tmp, 64)
-		require.NoError(t, err)
-	case *[]int, *string, *int, *int64, *uint64, *bool:
+	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64:
 		d.ScanArgs(t, key, dest)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
