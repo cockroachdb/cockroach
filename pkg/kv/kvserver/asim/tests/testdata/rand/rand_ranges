@@ -276,15 +276,15 @@ clear
 rand_cluster cluster_gen_type=single_region
 ----
 
-rand_ranges placement_type=random replication_factor=3 placement_type=weighted_random weighted_rand=(0.01,0.02,0.03,0.04,0.05,0.06,0.01,0.02,0.03,0.04,0.05,0.06,0.01,0.02,0.03,0.04,0.05,0.06,0.37)
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
 ----
 
 eval duration=20m num_iterations=3
 ----
 settings           num_iterations=3         duration=20m0s
-rand_options       cluster=true             ranges=true                    load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region   
-rand_ranges=true   range_gen_settings ->    placementType=weighted_random  replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
 rand_load=false
 rand_events=false
 rand_settings=false

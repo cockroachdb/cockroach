@@ -19,49 +19,48 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-// TestRandomized is a randomized testing framework designed to validate
-// allocator by creating randomized configurations, generating corresponding
-// allocator simulations, and validating assertions on the final state.
+// TestRandomized is a randomized data-driven testing framework that validates
+// allocators by creating randomized configurations. It is designed for
+// regression and exploratory testing. The following commands are provided:
 
-// Input of the framework (fields in the testSetting struct):
-//
-// 1. numIterations (int, default: 3): specifies number of test iterations to be
-// run, each with different random configurations generated
-// 2. duration (time.Duration, default: 30min): defined simulated duration of
-// each iteration verbose (bool, default: false): enables detailed simulation
-// information failing output
-// 3. randSeed (int64, default: 42): sets seed value for random number
-// generation
-// 4. assertions ([]SimulationAssertion, default: conformanceAssertion with 0
-// under-replication, 0 over-replication, 0 violating, and 0 unavailable):
-// defines criteria for validation assertions
-//
-// 5. randOptions: guides the aspect of the test configuration that should be
-// randomized. This includes:
-// - cluster (bool): indicates if the cluster configuration should be randomized
-// - ranges (bool): indicates if the range configuration should be randomized
-// - load (bool): indicates if the workload configuration should be randomized
-// - staticSettings (bool): indicates if the simulation static settings should
-// be randomized
-// - staticEvents (bool): indicates if static events, including any delayed
-// events to be applied during the simulation, should be randomized
-//
-// 6. rangeGen (default: uniform rangeGenType, uniform keySpaceGenType, empty
-// weightedRand).
-// - rangeGenType: determines range generator type across iterations
-// (default: uniformGenerator, min = 1, max = 1000)
-// - keySpaceGenType: determines key space generator type across iterations
-// (default: uniformGenerator, min = 1000, max = 200000)
-// - weightedRand: if non-empty, enables weighted randomization for range
-// distribution
-//
-// RandTestingFramework is initialized with a specified testSetting and
-// maintained its state across all iterations. Each iteration in
-// RandTestingFramework executes the following steps:
-// 1. Generates a random configuration based on whether the aspect of the test
-// configuration is set to be randomized in randOptions
-// 2. Executes a simulation and store any assertion failures in a buffer
-// TODO(wenyihu6): change the comment above
+// rand_cluster: randomly picks a predefined cluster configuration according to
+// the specified type
+// - “rand_cluster”
+// [cluster_gen_type=(single_region|multi_region|any_region)]:
+// represents a type of cluster configuration
+// e.g. rand_cluster cluster_gen_type=(multi_region)
+
+// rand_ranges: randomly generate a distribution of ranges across stores
+// - “rand_ranges”
+// [placement_type=(uniform|skewed|random|weighted_rand)]
+// [replication_factor=<int>]
+// [range_gen_type=(uniform|zipf)]: default value is uniform
+// [keyspace_gen_type=(uniform|zipf)]: default value is uniform
+// [weighted_rand=(<[]float64>)]: default value is []float64{}
+// e.g. rand_ranges placement_type=weighted_rand weighted_rand=(0.1,0.2,0.7)
+// e.g. rand_ranges placement_type=skewed replication_factor=1
+// range_gen_type=zipf keyspace_gen_type=uniform
+
+// placement_type: represents the type of range placement distribution across
+// stores
+// range_gen_type, keyspace_gen_type: represent the range or keyspace generator
+// type which forms a distribution every time ranges are generated across
+// iterations
+// replication_factor: represents the replication factor of each range
+// weighted_rand: specifies the weighted random distribution among stores. Note
+// that use weighted_rand only with placement_type=weighted_rand and vice
+// versa. It is expected to specify a weight [0.0, 1.0] for each store in the
+// configuration.
+
+// eval: generates simulation with the configuration set with the commands
+// - “eval”
+// [seed=<int64>]: default value is int64(42)
+// [num_iterations=<int>]: default value is 3
+// [duration=<time.Duration>]: default value is 10m
+// [verbose=<bool>]: default value is false
+// e.g. eval seed=20 duration=30m2s verbose=true
+
+// clear: clears the configurations set
 func TestRandomized(t *testing.T) {
 	dir := datapathutils.TestDataPath(t, "rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
