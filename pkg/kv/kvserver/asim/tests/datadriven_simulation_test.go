@@ -161,7 +161,13 @@ func TestDataDriven(t *testing.T) {
 		const defaultKeyspace = 10000
 		loadGen := gen.BasicLoad{}
 		var clusterGen gen.ClusterGen
-		rangeGen := defaultBasicRangesGen()
+		var rangeGen gen.RangeGen = gen.BasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            1,
+				ReplicationFactor: 1,
+				KeySpace:          defaultKeyspace,
+			},
+		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
 		assertions := []SimulationAssertion{}

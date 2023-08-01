@@ -31,6 +31,10 @@ rand_ranges=true   range_gen_settings ->    placementType=random          replic
 rand_load=false
 rand_events=false
 rand_settings=false
+STATIC OPTION:
+nodes=3        stores_per_node=1    key_space=200000      
+rw_ratio=0.00  rate=0.00            min_block=1           max_block=1  min_key=1      max_key=200000  skewed_access=false  
+ranges=1       placement_type=even  replication_factor=3  bytes=0      stat=replicas  height=15       width=80             
 ----------------------------------
 sample1: start running
 CONFIG_GEN:

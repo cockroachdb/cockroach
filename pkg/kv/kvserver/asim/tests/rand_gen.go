@@ -260,3 +260,14 @@ func (c clusterGenSettings) printClusterGenSettings(w *tabwriter.Writer) {
 const (
 	defaultClusterGenType = multiRegion
 )
+
+func defaultAssertions() []SimulationAssertion {
+	return []SimulationAssertion{
+		conformanceAssertion{
+			underreplicated: 0,
+			overreplicated:  0,
+			violating:       0,
+			unavailable:     0,
+		},
+	}
+}

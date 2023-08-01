@@ -99,6 +99,38 @@ const (
 //    - plot_history: shows plots of the history stat (default: replicas) for
 //    all iterations
 
+// 4. “change_static_option”[nodes=<int>][stores_per_node=<int>]
+// [rw_ratio=<float64>] [rate=<float64>] [min_block=<int>] [max_block=<int>]
+// [min_key=<int64>] [max_key=<int64>] [skewed_access=<bool>] [ranges=<int>]
+// [placement_type=<gen.PlacementType>] [key_space=<int>]
+// [replication_factor=<int>] [bytes=<int64>] [stat=<string>] [height=<int>]
+// [width=<int>]
+// e.g. change_static_option nodes=2 stores_per_node=3 placement_type=skewed
+//	- Change_static_option: modifies the settings for the static mode where no
+//	  randomization is involved. Note that this does not change the default
+//	  settings for any randomized generation.
+//	- nodes (default value is 3): number of nodes in the generated cluster
+//	- storesPerNode (default value is 1): number of store per nodes in the
+// 	  generated cluster
+//	- rwRatio (default value is 0.0): read-write ratio of the generated load
+//	- rate (default value is 0.0): rate at which the load is generated
+//	- minBlock (default value is 1): min size of each load event
+//	- maxBlock (default value is 1): max size of each load event
+//	- minKey (default value is int64(1)): min key of the generated load
+//	- maxKey (default value is int64(200000)): max key of the generated load
+//	- skewedAccess (default value is false): is true, workload key generator is
+// 	  skewed (zipf)
+//	- ranges (default value is 1): number of generated ranges
+//	- keySpace (default value is 200000): keyspace for the generated range
+//	- placementType (default value is gen.Even): type of distribution for how
+// 	  ranges are distributed across stores
+//	- replicationFactor (default value is 3): number of replica for each range
+//	- bytes (default value is int64(0)): size of each range in bytes
+//	- stat (default value is “replicas”): specifies the output to be plotted
+//	  for the verbose option
+//	- height (default value is 15): height of the plot
+//	- width (default value is 80): width of the plot
+
 // RandTestingFramework is initialized with specified testSetting and maintains
 // its state across all iterations. It repeats the test with different random
 // configurations. Each iteration in RandTestingFramework executes the following
@@ -113,12 +145,14 @@ func TestRandomized(t *testing.T) {
 		randOptions := testRandOptions{}
 		var rGenSettings rangeGenSettings
 		var cGenSettings clusterGenSettings
+		staticOptionSettings := getDefaultStaticOptionSettings()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "clear":
 				randOptions = testRandOptions{}
 				rGenSettings = rangeGenSettings{}
 				cGenSettings = clusterGenSettings{}
+				staticOptionSettings = getDefaultStaticOptionSettings()
 				return ""
 			case "rand_cluster":
 				randOptions.cluster = true
@@ -128,9 +162,28 @@ func TestRandomized(t *testing.T) {
 					clusterGenType: clusterGenType,
 				}
 				return ""
+			case "change_static_option":
+				scanIfExists(t, d, "nodes", &staticOptionSettings.nodes)
+				scanIfExists(t, d, "stores_per_node", &staticOptionSettings.storesPerNode)
+				scanIfExists(t, d, "rw_ratio", &staticOptionSettings.rwRatio)
+				scanIfExists(t, d, "rate", &staticOptionSettings.rate)
+				scanIfExists(t, d, "min_block", &staticOptionSettings.minBlock)
+				scanIfExists(t, d, "max_block", &staticOptionSettings.maxBlock)
+				scanIfExists(t, d, "min_key", &staticOptionSettings.minKey)
+				scanIfExists(t, d, "max_key", &staticOptionSettings.maxKey)
+				scanIfExists(t, d, "skewed_access", &staticOptionSettings.skewedAccess)
+				scanIfExists(t, d, "ranges", &staticOptionSettings.ranges)
+				scanIfExists(t, d, "key_space", &staticOptionSettings.keySpace)
+				scanIfExists(t, d, "placement_type", &staticOptionSettings.placementType)
+				scanIfExists(t, d, "replication_factor", &staticOptionSettings.replicationFactor)
+				scanIfExists(t, d, "bytes", &staticOptionSettings.bytes)
+				scanIfExists(t, d, "stat", &staticOptionSettings.stat)
+				scanIfExists(t, d, "height", &staticOptionSettings.height)
+				scanIfExists(t, d, "width", &staticOptionSettings.width)
+				return ""
 			case "rand_ranges":
 				randOptions.ranges = true
-				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultPlacementType, defaultReplicationFactor, defaultRangeGenType, defaultKeySpaceGenType
+				placementType, replicationFactor, rangeGenType, keySpaceGenType := staticOptionSettings.placementType, staticOptionSettings.replicationFactor, defaultRangeGenType, defaultKeySpaceGenType
 				weightedRand := defaultWeightedRand
 				scanIfExists(t, d, "placement_type", &placementType)
 				scanIfExists(t, d, "replication_factor", &replicationFactor)
@@ -160,7 +213,7 @@ func TestRandomized(t *testing.T) {
 				scanIfExists(t, d, "num_iterations", &numIterations)
 				scanIfExists(t, d, "duration", &duration)
 				scanIfExists(t, d, "verbose", &verbose)
-				settings := testSettings{
+				s := testSettings{
 					numIterations: numIterations,
 					duration:      duration,
 					randSource:    rand.New(rand.NewSource(seed)),
@@ -170,7 +223,7 @@ func TestRandomized(t *testing.T) {
 					rangeGen:      rGenSettings,
 					clusterGen:    cGenSettings,
 				}
-				f := newRandTestingFramework(settings)
+				f := newRandTestingFramework(s, staticOptionSettings)
 				f.runRandTestRepeated()
 				return f.printResults()
 			default:
