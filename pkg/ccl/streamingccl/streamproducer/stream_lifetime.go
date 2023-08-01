@@ -188,7 +188,7 @@ func heartbeatReplicationStream(
 	// job progress.
 	if frontier == hlc.MaxTimestamp {
 		var status streampb.StreamReplicationStatus
-		pj, err := execConfig.JobRegistry.LoadJob(ctx, jobspb.JobID(streamID))
+		pj, err := execConfig.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 		if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
 			status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
 			return status, nil
@@ -219,13 +219,13 @@ func heartbeatReplicationStream(
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
 func getReplicationStreamSpec(
-	ctx context.Context, evalCtx *eval.Context, streamID streampb.StreamID,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
-	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(ctx, jobspb.JobID(streamID))
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "replication stream %d has error", streamID)
+		return nil, errors.Wrapf(err, "could not load job for replication stream %d", streamID)
 	}
 	if j.Status() != jobs.StatusRunning {
 		return nil, errors.Errorf("replication stream %d is not running", streamID)

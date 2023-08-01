@@ -160,6 +160,11 @@ INSERT INTO d.t2 VALUES (2);
 	_, err = client.Plan(ctx, 999)
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
 
+	var telemetryJobID int64
+	h.SysSQL.QueryRow(t, "SELECT crdb_internal.create_sql_schema_telemetry_job()").Scan(&telemetryJobID)
+	_, err = client.Plan(ctx, streampb.StreamID(telemetryJobID))
+	require.True(t, testutils.IsError(err, fmt.Sprintf("job with id %d is not a replication stream job", telemetryJobID)), err)
+
 	expectStreamState(streamID, jobs.StatusRunning)
 	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
