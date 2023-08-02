@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -679,7 +678,9 @@ SELECT descriptor_id, index_id
 
 func TestLegacyIndexGCSucceedsWithMissingDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := tests.CreateTestServerParams()
+	defer log.Scope(t).Close(t)
+
+	var params base.TestServerArgs
 	// Override binary version to be older.
 	params.Knobs.Server = &server.TestingKnobs{
 		DisableAutomaticVersionUpgrade: make(chan struct{}),

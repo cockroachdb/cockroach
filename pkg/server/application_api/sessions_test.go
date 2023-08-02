@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -133,11 +132,8 @@ func TestStatusAPIListSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: params,
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
 	serverProto := testCluster.Server(0)
@@ -200,10 +196,7 @@ func TestListClosedSessions(t *testing.T) {
 	skip.UnderStressRace(t, "active sessions")
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: serverParams,
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
 	server := testCluster.Server(0)

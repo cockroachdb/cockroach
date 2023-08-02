@@ -130,14 +130,6 @@ func (d *dev) getExecutionRoot(ctx context.Context) (string, error) {
 	return d.getBazelInfo(ctx, "execution_root", []string{})
 }
 
-// getDevBin returns the path to the running dev executable.
-func (d *dev) getDevBin() string {
-	if d.knobs.devBinOverride != "" {
-		return d.knobs.devBinOverride
-	}
-	return os.Args[0]
-}
-
 // getArchivedCdepString returns a non-empty string iff the force_build_cdeps
 // config is not being used. This string is the name of the cross config used to
 // build the pre-built c-deps, minus the "cross" prefix. This can be used to
@@ -246,4 +238,14 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	}
 	_ = os.Remove(bepFilepath)
 	return nil
+}
+
+func (d *dev) warnAboutChangeInStressBehavior(timeout time.Duration) {
+	if e := d.os.Getenv("DEV_I_UNDERSTAND_ABOUT_STRESS"); e == "" {
+		log.Printf("NOTE: The behavior of `dev test --stress` has changed. The new default behavior is to run the test 1,000 times in parallel (500 for logictests), stopping if any of the tests fail. The number of runs can be tweaked with the `--count` parameter to `dev`.")
+		if timeout > 0 {
+			log.Printf("WARNING: The behavior of --timeout under --stress has changed. --timeout controls the timeout of the test, not the entire `stress` invocation.")
+		}
+		log.Printf("Set DEV_I_UNDERSTAND_ABOUT_STRESS=1 to squelch this message")
+	}
 }

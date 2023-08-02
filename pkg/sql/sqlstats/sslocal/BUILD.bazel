@@ -44,6 +44,7 @@ go_test(
     deps = [
         ":sslocal",
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -64,7 +65,6 @@ go_test(
         "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
-        "//pkg/sql/tests",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -80,7 +80,6 @@ go_test(
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_jackc_pgx_v4//:pgx",
-        "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
     ],
 )

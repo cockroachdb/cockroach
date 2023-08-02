@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,8 +43,6 @@ func TestTransactionIDCache(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-
 	appName := "txnIDCacheTest"
 	expectedTxnIDToUUIDMapping := make(map[uuid.UUID]appstatspb.TransactionFingerprintID)
 	injector := runtimeHookInjector{}
@@ -59,15 +57,13 @@ func TestTransactionIDCache(t *testing.T) {
 		}
 	})
 
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		BeforeTxnStatsRecorded: injector.hook,
 	}
-
-	testServer, sqlConn, kvDB := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	srv, sqlConn, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 
@@ -135,7 +131,7 @@ func TestTransactionIDCache(t *testing.T) {
 		}
 	}
 
-	ie := testServer.InternalExecutor().(*sql.InternalExecutor)
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
 	for _, tc := range testCases {
 		// Send statements one by one since internal executor doesn't support
@@ -171,7 +167,7 @@ func TestTransactionIDCache(t *testing.T) {
 	expectedTxnIDCacheSize := len(testCases)*2 + 1 - 3
 	require.Equal(t, expectedTxnIDCacheSize, len(expectedTxnIDToUUIDMapping))
 
-	sqlServer := testServer.SQLServer().(*sql.Server)
+	sqlServer := s.SQLServer().(*sql.Server)
 	txnIDCache := sqlServer.GetTxnIDCache()
 
 	txnIDCache.DrainWriteBuffer()

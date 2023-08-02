@@ -14,10 +14,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,8 +30,11 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serverParams, _ := tests.CreateTestServerParams()
-	s, goDB, _ := serverutils.StartServer(t, serverParams)
+	s, goDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	testCases := map[string]string{

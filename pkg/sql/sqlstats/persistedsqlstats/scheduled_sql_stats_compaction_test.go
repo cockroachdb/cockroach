@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -39,7 +39,7 @@ import (
 )
 
 type testHelper struct {
-	server           serverutils.TestServerInterface
+	server           serverutils.ApplicationLayerInterface
 	sqlDB            *sqlutils.SQLRunner
 	env              *jobstest.JobSchedulerTestEnv
 	cfg              *scheduledjobs.JobExecutionConfig
@@ -86,17 +86,17 @@ func newTestHelper(
 		helper.cfg = config
 	}
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = knobs
 	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
-	server, db, _ := serverutils.StartServer(t, params)
+	srv, db, _ := serverutils.StartServer(t, params)
 	require.NotNil(t, helper.cfg)
 
 	helper.sqlDB = sqlutils.MakeSQLRunner(db)
-	helper.server = server
+	helper.server = srv.ApplicationLayer()
 
 	return helper, func() {
-		server.Stopper().Stop(context.Background())
+		srv.Stopper().Stop(context.Background())
 	}
 }
 

@@ -65,16 +65,6 @@ rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
 
 exec
-dev build stress
-----
-bazel build @com_github_cockroachdb_stress//:stress --//build/toolchains:nogo_disable_flag --build_event_binary_file=/tmp/path
-bazel info workspace --color=no
-mkdir crdb-checkout/bin
-bazel info bazel-bin --color=no
-rm crdb-checkout/bin/stress
-cp sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress
-
-exec
 dev build tests
 ----
 bazel build //pkg:all_tests --config=test --build_event_binary_file=/tmp/path

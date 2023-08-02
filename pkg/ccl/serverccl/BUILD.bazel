@@ -17,7 +17,6 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/contention",
         "//pkg/sql/sqlstats/persistedsqlstats",
-        "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/httputil",

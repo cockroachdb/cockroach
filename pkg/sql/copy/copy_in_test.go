@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -51,8 +50,7 @@ func TestCopyFromNullInfNaN(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -152,8 +150,7 @@ func TestCopyFromRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -307,10 +304,10 @@ func TestCopyFromBinary(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
 		t, s.AdvSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
@@ -374,8 +371,7 @@ func TestCopyFromError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -502,7 +498,7 @@ func TestCopyFromRetries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
+			var params base.TestServerArgs
 			var attemptNumber int
 			params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 				BeforeCopyFromInsert: func() error {
@@ -510,8 +506,9 @@ func TestCopyFromRetries(t *testing.T) {
 					return tc.hook(attemptNumber)
 				},
 			}
-			s, db, _ := serverutils.StartServer(t, params)
-			defer s.Stopper().Stop(context.Background())
+			srv, db, _ := serverutils.StartServer(t, params)
+			defer srv.Stopper().Stop(context.Background())
+			s := srv.ApplicationLayer()
 
 			_, err := db.Exec(
 				`CREATE TABLE t (
@@ -575,8 +572,7 @@ func TestCopyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -629,8 +625,7 @@ func TestCopyFromFKCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	db.SetMaxOpenConns(1)
@@ -675,10 +670,10 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(ctx)
 	tdb.Exec(t, `CREATE TABLE t (k INT8 PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE USER foo WITH PASSWORD 'testabc'`)
 	tdb.Exec(t, `GRANT admin TO foo`)
@@ -720,8 +715,7 @@ func TestMessageSizeTooBig(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s := serverutils.StartServerOnly(t, params)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))

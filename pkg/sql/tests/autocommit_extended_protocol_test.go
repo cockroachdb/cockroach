@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -38,9 +39,7 @@ func TestInsertFastPathExtendedProtocol(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := CreateTestServerParams()
-	params.Settings = cluster.MakeTestingClusterSettings()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec(`CREATE TABLE fast_path_test(val int);`)
 	require.NoError(t, err)
@@ -86,9 +85,7 @@ func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := CreateTestServerParams()
-	params.Settings = cluster.MakeTestingClusterSettings()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec(`CREATE TABLE fast_path_test(val int, j int);`)
 	require.NoError(t, err)
@@ -152,7 +149,7 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 
 	var shouldErrorOnAutoCommit syncutil.AtomicBool
 	var traceID atomic.Uint64
-	params, _ := CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		DisableAutoCommitDuringExec: true,
 		BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {

@@ -15,12 +15,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,10 +41,11 @@ func TestSpanSplitterDoesNotSplitSystemTableFamilySpans(t *testing.T) {
 func TestSpanSplitterCanSplitSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 	tcs := []struct {
 		sql           string
 		index         string
@@ -127,7 +127,7 @@ func TestSpanSplitterCanSplitSpan(t *testing.T) {
 			if _, err := sqlDB.Exec(sql); err != nil {
 				t.Fatal(err)
 			}
-			desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
+			desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "t")
 			idx, err := catalog.MustFindIndexByName(desc, tc.index)
 			if err != nil {
 				t.Fatal(err)

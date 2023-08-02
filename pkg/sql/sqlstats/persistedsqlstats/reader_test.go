@@ -43,13 +43,12 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 	}
 	fakeTime.setTime(timeutil.Now())
 
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.StubTimeNow = fakeTime.Now
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					StubTimeNow: fakeTime.Now,
-					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-				},
+				SQLStatsKnobs: knobs,
 			},
 		},
 	})
@@ -160,13 +159,12 @@ func TestSQLStatsWithMultipleIdxRec(t *testing.T) {
 	}
 	fakeTime.setTime(timeutil.Now())
 
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.StubTimeNow = fakeTime.Now
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					StubTimeNow: fakeTime.Now,
-					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-				},
+				SQLStatsKnobs: knobs,
 			},
 		},
 	})

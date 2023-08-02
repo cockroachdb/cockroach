@@ -8,6 +8,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     deps = [
+        "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/security/securityassets",

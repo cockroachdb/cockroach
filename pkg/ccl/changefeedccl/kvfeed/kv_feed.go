@@ -584,6 +584,7 @@ func copyFromSourceToDestUntilTableEvent(
 ) error {
 	var (
 		scanBoundary errBoundaryReached
+		endTimeIsSet = !endTime.IsEmpty()
 
 		// checkForScanBoundary takes in a new event's timestamp (event generated
 		// from rangefeed), and asks "Is some type of 'boundary' reached
@@ -595,7 +596,11 @@ func copyFromSourceToDestUntilTableEvent(
 			// If the scanBoundary is not nil, it either means that there is a table
 			// event boundary set or a boundary for the end time. If the boundary is
 			// for the end time, we should keep looking for table events.
-			_, isEndTimeBoundary := scanBoundary.(*errEndTimeReached)
+			isEndTimeBoundary := false
+			if endTimeIsSet {
+				_, isEndTimeBoundary = scanBoundary.(*errEndTimeReached)
+			}
+
 			if scanBoundary != nil && !isEndTimeBoundary {
 				return nil
 			}
@@ -610,7 +615,7 @@ func copyFromSourceToDestUntilTableEvent(
 			// precedence to table events.
 			if len(nextEvents) > 0 {
 				scanBoundary = &errTableEventReached{nextEvents[0]}
-			} else if !endTime.IsEmpty() && scanBoundary == nil {
+			} else if endTimeIsSet && scanBoundary == nil {
 				scanBoundary = &errEndTimeReached{
 					endTime: endTime,
 				}
@@ -691,6 +696,17 @@ func copyFromSourceToDestUntilTableEvent(
 			if err != nil {
 				return err
 			}
+
+			if skipEntry || scanBoundaryReached {
+				// We will skip this entry or outright terminate kvfeed (if boundary reached).
+				// Regardless of the reason, we must release this event memory allocation
+				// since other ranges might not have reached scan boundary yet.
+				// Failure to release this event allocation may prevent other events from being
+				// enqueued in the blocking buffer due to memory limit.
+				a := e.DetachAlloc()
+				a.Release(ctx)
+			}
+
 			if scanBoundaryReached {
 				// All component rangefeeds are now at the boundary.
 				// Break out of the ctxgroup by returning the sentinel error.
@@ -702,7 +718,6 @@ func copyFromSourceToDestUntilTableEvent(
 			return addEntry(e)
 		}
 	)
-
 	for {
 		e, err := source.Get(ctx)
 		if err != nil {
