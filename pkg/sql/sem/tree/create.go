@@ -2255,7 +2255,15 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FROM REPLICATION OF ")
 		ctx.FormatNode(node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
+		_, canOmitParentheses := node.ReplicationSourceAddress.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
 		ctx.FormatNode(node.ReplicationSourceAddress)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
+
 	}
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH ")
@@ -2267,7 +2275,14 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 	if o.Retention != nil {
 		ctx.WriteString("RETENTION = ")
+		_, canOmitParentheses := o.Retention.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
 		ctx.FormatNode(o.Retention)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
 	}
 }
 

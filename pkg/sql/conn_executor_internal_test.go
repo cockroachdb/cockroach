@@ -297,6 +297,7 @@ func startConnExecutor(
 	)
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
+	collectionFactory := descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec)
 	cfg := &ExecutorConfig{
 		AmbientCtx: ambientCtx,
 		Settings:   st,
@@ -325,6 +326,7 @@ func startConnExecutor(
 					NodeID:            nodeID,
 					TempFS:            tempFS,
 					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
+					CollectionFactory: collectionFactory,
 				},
 				flowinfra.NewRemoteFlowRunner(ambientCtx, stopper, nil /* acc */),
 			),
@@ -343,7 +345,7 @@ func startConnExecutor(
 		TestingKnobs:            ExecutorTestingKnobs{},
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
-		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
+		CollectionFactory:       collectionFactory,
 	}
 
 	s := NewServer(cfg, pool)

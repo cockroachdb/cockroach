@@ -2001,10 +2001,9 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	}
 
 	// Set index recommendations, so it can be saved on statement statistics.
-	// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
-	// to true for the internal executors.
-	isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
-	planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
+	planner.instrumentation.SetIndexRecommendations(
+		ctx, ex.server.idxRecommendationsCache, planner, ex.executorType == executorTypeInternal,
+	)
 
 	return nil
 }

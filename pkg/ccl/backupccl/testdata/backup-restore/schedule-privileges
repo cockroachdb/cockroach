@@ -104,8 +104,8 @@ query-sql
 with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label, command FROM schedules WHERE id IN
 ($fullID, $incID) ORDER BY next_run;
 ----
-foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH detached
-foocluster_admin BACKUP INTO 'external://foo/cluster' WITH detached
+foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH OPTIONS (detached)
+foocluster_admin BACKUP INTO 'external://foo/cluster' WITH OPTIONS (detached)
 
 # nonadmin testuser is not allowed to drop a schedule they do not own.
 exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
@@ -155,8 +155,8 @@ query-sql
 with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label, command, owner FROM schedules WHERE id
 IN ($testuserFullID, $testuserIncID) ORDER BY next_run;
 ----
-foocluster_testuser BACKUP INTO LATEST IN 'external://foo/cluster' WITH detached testuser
-foocluster_testuser BACKUP INTO 'external://foo/cluster' WITH detached testuser
+foocluster_testuser BACKUP INTO LATEST IN 'external://foo/cluster' WITH OPTIONS (detached) testuser
+foocluster_testuser BACKUP INTO 'external://foo/cluster' WITH OPTIONS (detached) testuser
 
 # testuser owns these schedules so should be able to pause, resume, drop, alter
 # them without admin.

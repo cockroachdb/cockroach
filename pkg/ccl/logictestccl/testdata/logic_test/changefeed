@@ -59,9 +59,9 @@ SELECT job_id FROM [SHOW CHANGEFEED JOBS] WHERE user_name = 'testuser'
 query TT
 SELECT user_name, description FROM [SHOW CHANGEFEED JOB $job_id]
 ----
-testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH initial_scan = 'only'
+testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_scan = 'only')
 
 query TT
 SELECT user_name, description FROM [SHOW CHANGEFEED JOBS]
 ----
-testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH initial_scan = 'only'
+testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_scan = 'only')

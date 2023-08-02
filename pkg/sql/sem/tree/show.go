@@ -237,15 +237,15 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("CONCURRENTLY = ")
 		ctx.FormatNode(o.CheckConnectionConcurrency)
 	}
-	if o.CheckConnectionDuration != nil {
-		maybeAddSep()
-		ctx.WriteString("TIME = ")
-		ctx.FormatNode(o.CheckConnectionDuration)
-	}
 	if o.CheckConnectionTransferSize != nil {
 		maybeAddSep()
 		ctx.WriteString("TRANSFER = ")
 		ctx.FormatNode(o.CheckConnectionTransferSize)
+	}
+	if o.CheckConnectionDuration != nil {
+		maybeAddSep()
+		ctx.WriteString("TIME = ")
+		ctx.FormatNode(o.CheckConnectionDuration)
 	}
 }
 
@@ -1125,8 +1125,9 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 	ctx.WriteString("FOR TABLE ")
 	ctx.FormatNode(node.Table)
 	if len(node.Options) > 0 {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 

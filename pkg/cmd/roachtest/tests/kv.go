@@ -15,13 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -30,9 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -516,22 +514,22 @@ func registerKVGracefulDraining(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 			t.Status("starting cluster")
-
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
-			db := c.Conn(ctx, t.L(), 1)
-			defer db.Close()
+			db1 := c.Conn(ctx, t.L(), 1)
+			defer db1.Close()
+			db2 := c.Conn(ctx, t.L(), 2)
+			defer db2.Close()
 
-			err := WaitFor3XReplication(ctx, t, db)
+			err := WaitFor3XReplication(ctx, t, db1)
 			require.NoError(t, err)
 
 			t.Status("initializing workload")
@@ -539,27 +537,29 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Initialize the database with a lot of ranges so that there are
 			// definitely a large number of leases on the node that we shut down
 			// before it starts draining.
-			splitCmd := "./workload run kv --init --max-ops=1 --splits 100 {pgurl:1}"
-			c.Run(ctx, c.Node(nodes+1), splitCmd)
+			c.Run(ctx, c.Node(1), "./cockroach workload init kv --splits 100")
 
 			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
+			m.ExpectDeath()
 
 			// specifiedQPS is going to be the --max-rate for the kv workload.
-			const specifiedQPS = 1000
+			specifiedQPS := 1000
+			if c.IsLocal() {
+				specifiedQPS = 100
+			}
 			// Because we're specifying a --max-rate well less than what cockroach
 			// should be capable of, draining one of the three nodes should have no
 			// effect on performance at all, meaning that a fairly aggressive
 			// threshold here should be ok.
-			expectedQPS := specifiedQPS * 0.9
+			expectedQPS := float64(specifiedQPS) * .9
 
 			t.Status("starting workload")
 			workloadStartTime := timeutil.Now()
 			desiredRunDuration := 5 * time.Minute
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
-					"./workload run kv --duration=%s --read-percent=0 --tolerate-errors --max-rate=%d {pgurl:1-%d}",
-					desiredRunDuration,
-					specifiedQPS, nodes-1)
+					"./cockroach workload run kv --duration=%s --read-percent=0 --concurrency=100 --max-rate=%d {pgurl:1-%d}",
+					desiredRunDuration, specifiedQPS, nodes-1)
 				t.WorkerStatus(cmd)
 				defer func() {
 					t.WorkerStatus("workload command completed")
@@ -568,152 +568,81 @@ func registerKVGracefulDraining(r registry.Registry) {
 				return c.RunE(ctx, c.Node(nodes+1), cmd)
 			})
 
-			m.Go(func(ctx context.Context) error {
-				defer t.WorkerStatus()
-
-				t.WorkerStatus("waiting for perf to stabilize")
-				// Before we start shutting down nodes, wait for the performance
-				// of the workload to stabilize at the expected allowed level.
-
-				adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(1))
-				if err != nil {
-					return err
+			verifyQPS := func(ctx context.Context) error {
+				if qps := measureQPS(ctx, t, time.Second, db1, db2); qps < expectedQPS {
+					return errors.Newf(
+						"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",
+						qps, timeutil.Now(), expectedQPS)
 				}
-				url := "http://" + adminURLs[0] + "/ts/query"
-				getQPSTimeSeries := func(start, end time.Time) ([]tspb.TimeSeriesDatapoint, error) {
-					request := tspb.TimeSeriesQueryRequest{
-						StartNanos: start.UnixNano(),
-						EndNanos:   end.UnixNano(),
-						// Check the performance in each timeseries sample interval.
-						SampleNanos: base.DefaultMetricsSampleInterval.Nanoseconds(),
-						Queries: []tspb.Query{
-							{
-								Name:             "cr.node.sql.query.count",
-								Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-								SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-								Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
-							},
-						},
-					}
-					var response tspb.TimeSeriesQueryResponse
-					if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
-						return nil, err
-					}
-					if len(response.Results[0].Datapoints) <= 1 {
-						return nil, errors.Newf("not enough datapoints in timeseries query response: %+v", response)
-					}
-					return response.Results[0].Datapoints, nil
-				}
-
-				waitBegin := timeutil.Now()
-				// Nb: we could want to use testutil.SucceedSoonError() here,
-				// however that has a hardcoded timeout of 45 seconds, and
-				// empirically we see this loop needs ~40 seconds to get enough
-				// samples to succeed. This would be too close to call, so
-				// we're using our own timeout instead.
-				if err := retry.ForDuration(1*time.Minute, func() (err error) {
-					defer func() {
-						if timeutil.Since(waitBegin) > 3*time.Second && err != nil {
-							t.Status(fmt.Sprintf("perf not stable yet: %v", err))
-						}
-					}()
-					now := timeutil.Now()
-					datapoints, err := getQPSTimeSeries(workloadStartTime, now)
-					if err != nil {
-						return err
-					}
-
-					// Examine the last data point. As the retry.ForDuration loop
-					// iterates, this will only consider the last 10 seconds of
-					// measurement.
-					dp := datapoints[len(datapoints)-1]
-					if qps := dp.Value; qps < expectedQPS {
-						return errors.Newf(
-							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries: %+v",
-							qps, timeutil.Unix(0, dp.TimestampNanos), expectedQPS, datapoints)
-					}
-
-					// The desired performance has been reached by the
-					// workload. We're ready to start exercising shutdowns.
-					return nil
-				}); err != nil {
-					t.Fatal(err)
-				}
-				t.Status("detected stable perf before restarts: OK")
-
-				// The time at which we know the performance has become stable already.
-				stablePerfStartTime := timeutil.Now()
-
-				t.WorkerStatus("gracefully draining and restarting nodes")
-				// Gracefully shut down the third node, let the cluster run for a
-				// while, then restart it. Then repeat for good measure.
-				for i := 0; i < 2; i++ {
-					if i > 0 {
-						// No need to wait extra during the first iteration: we
-						// have already waited for the perf to become stable
-						// above.
-						t.Status("letting workload run with all nodes")
-						select {
-						case <-ctx.Done():
-							return nil
-						case <-time.After(1 * time.Minute):
-						}
-					}
-					m.ExpectDeath()
-					// Graceful drain: send SIGTERM, which should be sufficient
-					// to stop the node, followed by a non-graceful SIGKILL a
-					// bit later to clean up should the process have become
-					// stuck.
-					stopOpts := option.DefaultStopOpts()
-					stopOpts.RoachprodOpts.Sig = 15
-					stopOpts.RoachprodOpts.Wait = true
-					stopOpts.RoachprodOpts.MaxWait = 30
-					c.Stop(ctx, t.L(), stopOpts, c.Node(nodes))
-					c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
-					t.Status("letting workload run with one node down")
-					select {
-					case <-ctx.Done():
-						return nil
-					case <-time.After(1 * time.Minute):
-					}
-					c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes))
-					m.ResetDeaths()
-				}
-
-				// Let the test run for nearly the entire duration of the kv command.
-				// The key is that we want the workload command to still be running when
-				// we look at the performance below. Given that the workload was set
-				// to run for 5 minutes, we should be fine here, however we want to guarantee
-				// there's at least 10s left to go. Check this.
-				t.WorkerStatus("checking workload is still running")
-				runDuration := timeutil.Since(workloadStartTime)
-				if runDuration > desiredRunDuration-10*time.Second {
-					t.Fatalf("not enough workload time left to reliably determine performance (%s left)",
-						desiredRunDuration-runDuration)
-				}
-
-				t.WorkerStatus("checking for perf throughout the test")
-
-				// Check that the QPS has been at the expected max rate for the entire
-				// test duration, even as one of the nodes was being stopped and started.
-				endTestTime := timeutil.Now()
-				datapoints, err := getQPSTimeSeries(stablePerfStartTime, endTestTime)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				for _, dp := range datapoints {
-					if qps := dp.Value; qps < expectedQPS {
-						t.Fatalf(
-							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries: %+v",
-							qps, timeutil.Unix(0, dp.TimestampNanos), expectedQPS, datapoints)
-					}
-				}
-				t.Status("perf is OK!")
-				t.WorkerStatus("waiting for workload to complete")
 				return nil
+			}
+
+			t.Status("waiting for perf to stabilize")
+			testutils.SucceedsSoon(t, func() error { return verifyQPS(ctx) })
+
+			// Begin the monitoring goroutine to track QPS every second.
+			m.Go(func(ctx context.Context) error {
+				t.Status("starting watcher to verify QPS during the test")
+				defer t.WorkerStatus()
+				for {
+					// Measure QPS every second throughout the test. verifyQPS takes time
+					// to run so we don't sleep between invocations.
+					require.NoError(t, verifyQPS(ctx))
+					// Stop measuring 10 seconds before we stop the workload.
+					if timeutil.Since(workloadStartTime) > desiredRunDuration-10*time.Second {
+						return nil
+					}
+				}
 			})
 
+			t.Status("gracefully draining and restarting nodes")
+			// Gracefully shut down the third node, let the cluster run for a
+			// while, then restart it. Then repeat for good measure.
+			for i := 0; i < 2; i++ {
+				if i > 0 {
+					// No need to wait extra during the first iteration: we
+					// have already waited for the perf to become stable
+					// above.
+					t.Status("letting workload run with all nodes")
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(1 * time.Minute):
+					}
+				}
+				// Graceful drain: send SIGTERM, which should be sufficient
+				// to stop the node, followed by a non-graceful SIGKILL a
+				// bit later to clean up should the process have become
+				// stuck.
+				stopOpts := option.DefaultStopOpts()
+				stopOpts.RoachprodOpts.Sig = 15
+				stopOpts.RoachprodOpts.Wait = true
+				stopOpts.RoachprodOpts.MaxWait = 30
+				c.Stop(ctx, t.L(), stopOpts, c.Node(nodes))
+				c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
+				t.Status("letting workload run with one node down")
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(1 * time.Minute):
+				}
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes))
+				m.ResetDeaths()
+			}
+
+			// Let the test run for nearly the entire duration of the kv command.
+			// The key is that we want the workload command to still be running when
+			// we look at the performance below. Given that the workload was set
+			// to run for 5 minutes, we should be fine here, however we want to guarantee
+			// there's at least 10s left to go. Check this.
+			t.Status("checking workload is still running")
+			runDuration := timeutil.Since(workloadStartTime)
+			if runDuration > desiredRunDuration-10*time.Second {
+				t.Fatalf("not enough workload time left to reliably determine performance (%s left)",
+					desiredRunDuration-runDuration)
+			}
+
+			t.Status("waiting for workload to complete")
 			m.Wait()
 		},
 	})
@@ -959,24 +888,46 @@ func registerKVRangeLookups(r registry.Registry) {
 }
 
 // measureQPS will measure the approx QPS at the time this command is run. The
-// duration is how long of an interval to wait while measuring. Setting too
-// short of an interval can mean inaccuracy in results. Setting too long of an
-// interval may mean the impact is blurred out.
-func measureQPS(ctx context.Context, t test.Test, db *gosql.DB, duration time.Duration) float64 {
-	numInserts := func() float64 {
-		var v float64
-		if err := db.QueryRowContext(
-			ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
-		).Scan(&v); err != nil {
-			t.Fatal(err)
+// duration is the interval to measure over. Setting too short of an interval
+// can mean inaccuracy in results. Setting too long of an interval may mean the
+// impact is blurred out.
+func measureQPS(
+	ctx context.Context, t test.Test, duration time.Duration, dbs ...*gosql.DB,
+) float64 {
+
+	currentQPS := func() uint64 {
+		var value uint64
+		var wg sync.WaitGroup
+		wg.Add(len(dbs))
+
+		// Count the inserts before sleeping.
+		for _, db := range dbs {
+			db := db
+			go func() {
+				defer wg.Done()
+				var v uint64
+				if err := db.QueryRowContext(
+					ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
+				).Scan(&v); err != nil {
+					t.Fatal(err)
+				}
+				atomic.AddUint64(&value, v)
+			}()
 		}
-		return v
+		wg.Wait()
+		return value
 	}
 
-	before := numInserts()
-	time.Sleep(duration)
-	after := numInserts()
-	return (after - before) / duration.Seconds()
+	// Measure the current time and the QPS now.
+	startTime := timeutil.Now()
+	beforeQPS := currentQPS()
+	// Wait for the duration minus the first query time.
+	select {
+	case <-ctx.Done():
+		return 0
+	case <-time.After(duration - timeutil.Since(startTime)):
+		return float64(currentQPS()-beforeQPS) / duration.Seconds()
+	}
 }
 
 // registerKVRestartImpact measures the impact of stopping and then restarting a
@@ -1035,7 +986,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			// Let some data be written to all nodes in the cluster.
 			t.Status(fmt.Sprintf("waiting %s to establish a base QPS", duration))
 			time.Sleep(duration)
-			qpsInitial := measureQPS(ctx, t, db, 5*time.Second)
+			qpsInitial := measureQPS(ctx, t, 5*time.Second, db)
 			t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
 			// Disable replicate queue on all nodes. This allows the test to reproduce
@@ -1075,7 +1026,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			if !c.IsLocal() {
 				time.Sleep(3 * time.Minute)
 			}
-			qpsFinal := measureQPS(ctx, t, db, 5*time.Second)
+			qpsFinal := measureQPS(ctx, t, 5*time.Second, db)
 			t.Status(fmt.Sprintf("post outage qps: %.0f", qpsFinal))
 
 			// Pass the test if the QPS is within a factor of 2. Often the qpsFinal is
