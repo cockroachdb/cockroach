@@ -1866,7 +1866,8 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rnd, _ := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewPseudoRand()
+	t.Logf("random seed: %d", seed)
 
 	// This test asserts that a second checkpoint made after resumption does its
 	// best to not lose information from the first checkpoint, therefore the
@@ -1876,7 +1877,14 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		disableDeclarativeSchemaChangesForTest(t, sqlDB)
+		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB, rnd)
+		// NB: For the `ALTER TABLE foo ADD COLUMN ... DEFAULT` schema change,
+		// the expected boundary is different depending on if we are using the
+		// legacy schema changer or not.
+		expectedBoundaryType := jobspb.ResolvedSpan_RESTART
+		if usingLegacySchemaChanger {
+			expectedBoundaryType = jobspb.ResolvedSpan_BACKFILL
+		}
 
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
@@ -1957,10 +1965,10 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 				return true, nil
 			}
 
-			// A backfill begins when the backfill resolved event arrives, which has a
+			// A backfill begins when the associated resolved event arrives, which has a
 			// timestamp such that all backfill spans have a timestamp of
-			// timestamp.Next()
-			if r.BoundaryType == jobspb.ResolvedSpan_BACKFILL {
+			// timestamp.Next().
+			if r.BoundaryType == expectedBoundaryType {
 				backfillTimestamp = r.Timestamp
 				return false, nil
 			}

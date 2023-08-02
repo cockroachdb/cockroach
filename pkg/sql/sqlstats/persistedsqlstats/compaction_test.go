@@ -141,7 +141,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 							},
 						},
 						Store: &kvserver.StoreTestingKnobs{
-							TestingRequestFilter: kvInterceptor.intercept,
+							TestingRequestFilter:      kvInterceptor.intercept,
+							DisableLoadBasedSplitting: true,
 						},
 					},
 				},

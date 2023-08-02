@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const supportedKnexTag = "2.0.0"
+const supportedKnexTag = "2.5.1"
 
 // This test runs one of knex's test suite against a single cockroach
 // node.
