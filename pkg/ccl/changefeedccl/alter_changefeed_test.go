@@ -1107,7 +1107,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB, rnd)
+		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 		// NB: For the `ALTER TABLE foo ADD COLUMN ... DEFAULT` schema change,
 		// the expected boundary is different depending on if we are using the
 		// legacy schema changer or not.
