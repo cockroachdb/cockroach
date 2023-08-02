@@ -998,18 +998,22 @@ memory that the store may consume, for example:
 </PRE>
 Optionally, to configure admission control enforcement to prevent disk
 bandwidth saturation, the "provisioned-rate" field can be specified with
-the "disk-name" and an optional "bandwidth". The bandwidth is used to override
-the value of the cluster setting, kvadmission.store.provisioned_bandwidth.
-For example:
+the optional "disk-name" and "bandwidth" parameters. If the "bandwidth"
+parameter is specified for a given store, admission control enforcement is
+enabled. Using the kvadmission.store.provisioned_bandwidth cluster setting also
+enables admission control enforcement. The "bandwidth" parameter takes
+precedence over the cluster setting. Example usage:
 <PRE>
 
-  --store=provisioned-rate=disk-name=nvme1n1
   --store=provisioned-rate=disk-name=sdb:bandwidth=250MiB/s
+  --store=provisioned-rate=disk-name=nvme1n1
+  --store=provisioned-rate=bandwidth=250MiB/s
 
 </PRE>
 Commas are forbidden in all values, since they are used to separate fields.
-Also, if you use equal signs in the file path to a store, you must use the
-"path" field label.
+If you use equal signs in the file path to a store, you must use the "path"
+field label. If the "disk-name" field is omitted, CockroachDB will attempt to
+automatically infer the disk name from the given store path.
 
 (default is 'cockroach-data' in current directory except for mt commands
 which use 'cockroach-data-tenant-X' for tenant 'X')

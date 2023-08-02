@@ -6,6 +6,8 @@ go_library(
         "acl_unix.go",
         "acl_windows.go",
         "aclinfo.go",
+        "device_unix.go",
+        "device_windows.go",
         "large_file.go",
         "large_file_linux.go",
         "large_file_nonlinux.go",

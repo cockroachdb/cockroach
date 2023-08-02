@@ -1946,7 +1946,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// wholly initialized stores (it reads the StoreIdentKeys). It also needs
 	// to come before the call into SetPebbleMetricsProvider, which internally
 	// uses the disk stats map we're initializing.
-	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
+	if err := s.node.registerEnginesForDiskStatsMap(ctx, s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 

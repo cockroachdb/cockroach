@@ -208,7 +208,7 @@ func (d *diskLoadWatcher) getLoadLevel() diskLoadLevel {
 }
 
 func (d diskLoadWatcher) SafeFormat(p redact.SafePrinter, _ rune) {
-	p.Printf("disk bandwidth: read: %s/s, write: %s/s, provisioned: %s/s, util: %.2f",
+	p.Printf("read-bw %s/s write-bw %s/s provisioned-bw %s/s, util: %.2f",
 		humanizeutil.IBytes(d.lastInterval.readBandwidth),
 		humanizeutil.IBytes(d.lastInterval.writeBandwidth),
 		humanizeutil.IBytes(d.lastInterval.provisionedBandwidth), d.lastUtil)
@@ -359,9 +359,9 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	level := d.diskLoadWatcher.getLoadLevel()
-	p.Printf("diskBandwidthLimiter %s (%v): elastic-frac: %.2f, incoming: %s, "+
-		"elastic-tokens (used %s): %s",
+	p.Printf("disk bandwidth load level: %s (%v); elastic-frac ≈%.2f, incoming ≈%s, "+
+		"elastic-disk-bw-tokens %s (used %s)",
 		diskLoadLevelString(level), d.diskLoadWatcher, d.state.smoothedElasticFraction,
-		ib(int64(d.state.smoothedIncomingBytes)), ib(d.state.prevElasticTokensUsed),
-		ib(d.state.elasticTokens))
+		ib(int64(d.state.smoothedIncomingBytes)), ib(d.state.elasticTokens),
+		ib(d.state.prevElasticTokensUsed))
 }

@@ -162,23 +162,17 @@ func (ss *SizeSpec) Set(value string) error {
 }
 
 // ProvisionedRateSpec is an optional part of the StoreSpec.
-//
-// TODO(sumeer): We should map the file path specified in the store spec to
-// the disk name. df can be used to map paths to names like /dev/nvme1n1 and
-// /dev/sdb (these examples are from AWS EBS and GCP PD respectively) and the
-// corresponding names produced by disk_counters.go are nvme1n1 and sdb
-// respectively. We need to find or write a platform independent library --
-// see the discussion on
-// https://github.com/cockroachdb/cockroach/pull/86063#pullrequestreview-1074487018.
-// With that change, the ProvisionedRateSpec would only be needed to override
-// the cluster setting when there are heterogenous bandwidth limits in a
-// cluster (there would be no more DiskName field).
 type ProvisionedRateSpec struct {
 	// DiskName is the name of the disk observed by the code in disk_counters.go
-	// when retrieving stats for this store.
+	// when retrieving stats for this store. They look like /dev/nvme1n1 or
+	// /dev/sdb on AWS EBS and GCP PD respectively. (The names in
+	// disk_counters.go omit the /dev suffix). It's optionally passed in using
+	// --store=provisioned-rate=disk-name=nvme1n1. When unspecified, the disk
+	// names are automatically inferred from the store path.
 	DiskName string
 	// ProvisionedBandwidth is the bandwidth provisioned for this store in
-	// bytes/s.
+	// bytes/s. It's optionally passed in using
+	// --store=provisioned-rate=bandwidth=250MiB/s.
 	ProvisionedBandwidth int64
 }
 
@@ -233,10 +227,6 @@ func newStoreProvisionedRateSpec(
 			return ProvisionedRateSpec{}, errors.Errorf("%s field has unknown sub-field %s",
 				field, subField)
 		}
-	}
-	if len(spec.DiskName) == 0 {
-		return ProvisionedRateSpec{},
-			errors.Errorf("%s field did not specify disk-name", field)
 	}
 	return spec, nil
 }
@@ -314,9 +304,12 @@ func (ss StoreSpec) String() string {
 		fmt.Fprint(&buffer, optsStr)
 		fmt.Fprint(&buffer, ",")
 	}
-	if len(ss.ProvisionedRateSpec.DiskName) > 0 {
-		fmt.Fprintf(&buffer, "provisioned-rate=disk-name=%s",
-			ss.ProvisionedRateSpec.DiskName)
+	if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
+		diskName := "<omitted>"
+		if len(ss.ProvisionedRateSpec.DiskName) > 0 {
+			diskName = ss.ProvisionedRateSpec.DiskName
+		}
+		fmt.Fprintf(&buffer, "provisioned-rate=disk-name=%s", diskName)
 		if ss.ProvisionedRateSpec.ProvisionedBandwidth > 0 {
 			fmt.Fprintf(&buffer, ":bandwidth=%s/s,",
 				humanizeutil.IBytes(ss.ProvisionedRateSpec.ProvisionedBandwidth))
@@ -366,10 +359,12 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 //   - 20%             -> 20% of the available space
 //   - 0.2             -> 20% of the available space
 //   - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
-//   - provisioned-rate=disk-name=<disk-name>[:bandwidth=<bandwidth-bytes/s>] The
+//   - provisioned-rate=[disk-name=<disk-name>][:][bandwidth=<bandwidth-bytes/s>] The
 //     provisioned-rate can be used for admission control for operations on the
-//     store. The bandwidth is optional, and if unspecified, a cluster setting
-//     (kvadmission.store.provisioned_bandwidth) will be used.
+//     store. The disk-name and bandwidth are optional. If disk-name is
+//     unspecified, it's automatically inferred. If the bandwidth is
+//     unspecified, a cluster setting (kvadmission.store.provisioned_bandwidth),
+//     if non-zero, is used.
 //
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {

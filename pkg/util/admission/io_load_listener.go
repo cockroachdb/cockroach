@@ -1059,13 +1059,14 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.SafeString("all")
 	}
 	if res.elasticDiskBWTokens != unlimitedTokens {
-		p.Printf("; elastic-disk-bw tokens %s (used %s, regular used %s): "+
-			"write model %.2fx+%s ingest model %.2fx+%s, ",
-			ib(res.elasticDiskBWTokens), ib(res.aux.diskBW.intervalLSMInfo.elasticTokensUsed),
+		p.Printf("; elastic-disk-bw-tokens %s (used %s regular-used %s): "+
+			"write-model %.2fx+%s ingest-model %.2fx+%s, ",
+			ib(res.elasticDiskBWTokens),
+			ib(res.aux.diskBW.intervalLSMInfo.elasticTokensUsed),
 			ib(res.aux.diskBW.intervalLSMInfo.regularTokensUsed),
 			res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant),
 			res.ingestLM.multiplier, ib(res.ingestLM.constant))
-		p.Printf("disk bw read %s write %s provisioned %s",
+		p.Printf("read-bw %s/s write-bw %s/s provisioned-bw %s/s",
 			ib(res.aux.diskBW.intervalDiskLoadInfo.readBandwidth),
 			ib(res.aux.diskBW.intervalDiskLoadInfo.writeBandwidth),
 			ib(res.aux.diskBW.intervalDiskLoadInfo.provisionedBandwidth))

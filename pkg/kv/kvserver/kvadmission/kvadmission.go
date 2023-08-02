@@ -98,6 +98,12 @@ var rangefeedCatchupScanElasticControlEnabled = settings.RegisterBoolSetting(
 
 // ProvisionedBandwidth set a value of the provisioned
 // bandwidth for each store in the cluster.
+//
+// TODO(irfansharif): Now that we automatically infer disk names, if we're
+// unable to for whatever reason and this bandwidth setting is non-zero, we
+// don't have an easy way to communicate to the user that admission control
+// enforcement for disk bandwidth is not happening, despite expectations. Maybe
+// we surface this through SQL hints somehow?
 var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	settings.SystemOnly, "kvadmission.store.provisioned_bandwidth",
 	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), "+
