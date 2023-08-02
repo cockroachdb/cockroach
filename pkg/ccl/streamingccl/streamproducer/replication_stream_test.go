@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -229,6 +230,38 @@ func testStreamReplicationStatus(
 	checkStreamStatus(t, hlc.MaxTimestamp, expectedStreamStatus)
 }
 
+func TestSpanConfigReplicationStreamSetup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	serverArgs := base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, serverArgs)
+	defer cleanup()
+	testTenantName := roachpb.TenantName("test-tenant")
+	h.SysSQL.Exec(t, "CREATE TENANT $1", testTenantName)
+	specs := h.SetupSpanConfigsReplicationStream(t, testTenantName)
+
+	var spanConfigTableID uint32
+	h.SysSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`,
+		systemschema.SpanConfigurationsTableName.Table()).Scan(&spanConfigTableID)
+	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
+	spanConfigKey := codec.TablePrefix(spanConfigTableID)
+	expectedSpan := roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
+
+	require.Equal(t, 1, len(specs.Partitions))
+	require.Equal(t, 1, len(specs.Partitions[0].PartitionSpec.Spans))
+
+	require.NotEqual(t, 0, specs.SpanConfigStreamID)
+
+	require.Equal(t, expectedSpan, specs.Partitions[0].PartitionSpec.Spans[0])
+
+}
 func TestReplicationStreamInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

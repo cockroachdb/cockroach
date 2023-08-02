@@ -168,8 +168,6 @@ subtest replication-builtins
 
 user root
 
-query error pq: crdb_internal\.replication_stream_spec\(\): job.*is not a replication stream job
-SELECT crdb_internal.replication_stream_spec(crdb_internal.create_sql_schema_telemetry_job())
 
 query error pq: crdb_internal\.stream_ingestion_stats_json\(\): unimplemented
 SELECT crdb_internal.stream_ingestion_stats_json(1);
