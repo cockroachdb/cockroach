@@ -1,5 +1,6 @@
 eval
 ----
+----
 settings      num_iterations=3  duration=10m0s
 rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false
 rand_cluster=false
@@ -9,19 +10,64 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+asim inputs:
+duration=[10m0s]
+clusterGen=[basic_cluster: nodes=3, stores=1]
+rangeGen=[basic_ranges: ranges=1, key_space=200000, replication_factor=3, bytes=0 placement_type=uniform]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[3440579354231278675]
+state at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+asim inputs:
+duration=[10m0s]
+clusterGen=[basic_cluster: nodes=3, stores=1]
+rangeGen=[basic_ranges: ranges=1, key_space=200000, replication_factor=3, bytes=0 placement_type=uniform]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[608747136543856411]
+state at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+asim inputs:
+duration=[10m0s]
+clusterGen=[basic_cluster: nodes=3, stores=1]
+rangeGen=[basic_ranges: ranges=1, key_space=200000, replication_factor=3, bytes=0 placement_type=uniform]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[5571782338101878760]
+state at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample3: pass
 ----------------------------------
+----
+----
 
 clear
 ----
 
 eval verbose=true duration=5m
+----
 ----
 settings      num_iterations=3  duration=5m0s
 rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false
@@ -32,12 +78,54 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+asim inputs:
+duration=[5m0s]
+clusterGen=[basic_cluster: nodes=3, stores=1]
+rangeGen=[basic_ranges: ranges=1, key_space=200000, replication_factor=3, bytes=0 placement_type=uniform]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[3440579354231278675]
+state at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+asim inputs:
+duration=[5m0s]
+clusterGen=[basic_cluster: nodes=3, stores=1]
+rangeGen=[basic_ranges: ranges=1, key_space=200000, replication_factor=3, bytes=0 placement_type=uniform]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[608747136543856411]
+state at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+asim inputs:
+duration=[5m0s]
+clusterGen=[basic_cluster: nodes=3, stores=1]
+rangeGen=[basic_ranges: ranges=1, key_space=200000, replication_factor=3, bytes=0 placement_type=uniform]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[5571782338101878760]
+state at 2022-03-21 11:00:00 +0000 UTC:
+stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample3: pass
 ----------------------------------
 sample1
@@ -49,3 +137,5 @@ sample2
 sample3
  1.00 ┼───────────────────────────────────────────────────────────────────────────────
                                            replicas
+----
+----

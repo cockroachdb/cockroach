@@ -132,6 +132,31 @@ func (rm *rmap) initFirstRange() {
 	rm.rangeMap[rangeID] = rng
 }
 
+func (s *state) PrettyPrint() string {
+	builder := &strings.Builder{}
+	nStores := len(s.stores)
+	iterStores := 0
+	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for _, storeID := range storeIDs {
+		store := s.stores[storeID]
+		builder.WriteString(store.PrettyPrint())
+		if iterStores < nStores-1 {
+			builder.WriteString(",")
+		}
+		iterStores++
+	}
+	builder.WriteString("] \n")
+	topology := s.Topology()
+	builder.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
+	return builder.String()
+}
+
 // String returns a string containing a compact representation of the state.
 // TODO(kvoli,lidorcarmel): Add a unit test for this function.
 func (s *state) String() string {
@@ -1322,6 +1347,12 @@ type store struct {
 	storepool *storepool.StorePool
 	settings  *cluster.Settings
 	replicas  map[RangeID]ReplicaID
+}
+
+func (s *store) PrettyPrint() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("s%dn%d=(replicas(%d))", s.storeID, s.nodeID, len(s.replicas)))
+	return builder.String()
 }
 
 // String returns a compact string representing the current state of the store.

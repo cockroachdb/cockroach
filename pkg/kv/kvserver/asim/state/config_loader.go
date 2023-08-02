@@ -12,6 +12,7 @@ package state
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -263,6 +264,20 @@ type ClusterInfo struct {
 	Regions        []Region
 }
 
+func (c ClusterInfo) String() (s string) {
+	buf := &strings.Builder{}
+	for _, r := range c.Regions {
+		buf.WriteString(fmt.Sprintf("region:%s -> zones:", r.Name))
+		for _, z := range r.Zones {
+			buf.WriteString(fmt.Sprintf(" %s(nodes_count:%d, stores_per_node:%d)", z.Name, z.NodeCount, z.StoresPerNode))
+		}
+		if len(r.Zones) == 0 {
+			// TODO(wenyihu6): check if we should panic here
+			buf.WriteString("no zones")
+		}
+	}
+	return buf.String()
+}
 type RangeInfo struct {
 	Descriptor  roachpb.RangeDescriptor
 	Config      *roachpb.SpanConfig

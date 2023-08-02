@@ -50,6 +50,10 @@ type RandomizedBasicRanges struct {
 
 var _ gen.RangeGen = &RandomizedBasicRanges{}
 
+func (r RandomizedBasicRanges) String() string {
+	return fmt.Sprintf("%v placement_type=%v", r.BaseRanges, r.placementType)
+}
+
 func (r RandomizedBasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
@@ -71,6 +75,10 @@ type WeightedRandomizedBasicRanges struct {
 }
 
 var _ gen.RangeGen = &WeightedRandomizedBasicRanges{}
+
+func (wr WeightedRandomizedBasicRanges) String() string {
+	return fmt.Sprintf("%v placement_type=%v, weighted_rand=%v", wr.BaseRanges, wr.placementType, wr.weightedRand)
+}
 
 func (wr WeightedRandomizedBasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
