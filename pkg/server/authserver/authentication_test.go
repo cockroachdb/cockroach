@@ -99,29 +99,25 @@ func TestSSLEnforcement(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(ctx, rpc.ContextOptions{
-			TenantID:        roachpb.SystemTenantID,
-			Config:          cfg,
-			Clock:           &timeutil.DefaultTimeSource{},
-			ToleratedOffset: time.Nanosecond,
-			Stopper:         s.Stopper(),
-			Settings:        s.ClusterSettings(),
-		})
+	newRPCContext := func(insecure bool, user username.SQLUsername) *rpc.Context {
+		opts := rpc.DefaultContextOptions()
+		opts.Insecure = insecure
+		opts.User = user
+		opts.Stopper = s.Stopper()
+		opts.Settings = s.ClusterSettings()
+		return rpc.NewContext(ctx, opts)
 	}
 
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := newRPCContext(testutils.NewTestBaseContext(username.RootUserName()))
+	rootCertsContext := newRPCContext(false, username.RootUserName())
 	// HTTPS with client certs for security.NodeUser.
-	nodeCertsContext := newRPCContext(testutils.NewNodeTestBaseContext())
+	nodeCertsContext := newRPCContext(false, username.NodeUserName())
 	// HTTPS with client certs for TestUser.
-	testCertsContext := newRPCContext(testutils.NewTestBaseContext(username.TestUserName()))
+	testCertsContext := newRPCContext(false, username.TestUserName())
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := insecureCtx{}
 	// Plain http.
-	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
-	plainHTTPCfg.Insecure = true
-	insecureContext := newRPCContext(plainHTTPCfg)
+	insecureContext := newRPCContext(true, username.TestUserName())
 
 	kvGet := &kvpb.GetRequest{}
 	kvGet.Key = roachpb.Key("/")

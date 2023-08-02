@@ -24,15 +24,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,22 +48,7 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(ctx,
-			rpc.ContextOptions{
-				TenantID:        roachpb.SystemTenantID,
-				Config:          cfg,
-				Clock:           &timeutil.DefaultTimeSource{},
-				ToleratedOffset: 1,
-				Stopper:         s.Stopper(),
-				Settings:        s.ClusterSettings(),
-
-				ClientOnly: true,
-			})
-	}
-
-	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
-	testCertsContext := newRPCContext(plainHTTPCfg)
+	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
@@ -89,19 +71,6 @@ func TestOIDCEnabled(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-
-	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(ctx, rpc.ContextOptions{
-			TenantID:        roachpb.SystemTenantID,
-			Config:          cfg,
-			Clock:           &timeutil.DefaultTimeSource{},
-			ToleratedOffset: 1,
-			Stopper:         s.Stopper(),
-			Settings:        s.ClusterSettings(),
-
-			ClientOnly: true,
-		})
-	}
 
 	// Set up a test OIDC server that serves the JSON discovery document
 	var issuer string
@@ -184,8 +153,7 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 
-	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
-	testCertsContext := newRPCContext(plainHTTPCfg)
+	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)

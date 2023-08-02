@@ -40,7 +40,7 @@ func newTestAllocator(t testing.TB) (*localtestcluster.LocalTestCluster, *idallo
 		DisableLivenessHeartbeat: true,
 		DontCreateSystemRanges:   true,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
+	s.Start(t, kvcoord.InitFactoryForLocalTestCluster)
 	idAlloc, err := idalloc.NewAllocator(idalloc.Options{
 		AmbientCtx:  s.Cfg.AmbientCtx,
 		Key:         keys.RangeIDGenerator,

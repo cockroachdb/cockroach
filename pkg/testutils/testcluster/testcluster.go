@@ -488,6 +488,8 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		for _, ssrv := range tc.Servers {
 			for _, dsrv := range tc.Servers {
 				stl := dsrv.StorageLayer()
+				// Note: we avoid using .RPCClientConn() here to avoid accumulating
+				// stopper closures in RAM during the SucceedsSoon iterations.
 				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.SystemLayer().AdvRPCAddr(),
 					stl.NodeID(), rpc.DefaultClass).Connect(context.TODO())
 				err = errors.CombineErrors(err, e)
@@ -1527,10 +1529,14 @@ func (tc *TestCluster) WaitForZoneConfigPropagation() error {
 // store in the cluster.
 func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 	testutils.SucceedsSoon(t, func() error {
-		client, err := tc.GetStatusClient(context.Background(), t, 0)
+		// Note: we avoid using .RPCClientConn() here to avoid accumulating
+		// stopper closures in RAM during the SucceedsSoon iterations.
+		srv := tc.Server(0).SystemLayer()
+		conn, err := srv.RPCContext().GRPCDialNode(srv.AdvRPCAddr(), tc.Server(0).NodeID(), rpc.DefaultClass).Connect(context.TODO())
 		if err != nil {
 			return err
 		}
+		client := serverpb.NewStatusClient(conn)
 		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
 		if err != nil {
 			return err
@@ -1847,26 +1853,16 @@ func (tc *TestCluster) GetRaftLeader(
 
 // GetAdminClient gets the severpb.AdminClient for the specified server.
 func (tc *TestCluster) GetAdminClient(
-	ctx context.Context, t serverutils.TestFataler, serverIdx int,
-) (serverpb.AdminClient, error) {
-	srv := tc.Server(serverIdx)
-	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create an admin client")
-	}
-	return serverpb.NewAdminClient(cc), nil
+	t serverutils.TestFataler, serverIdx int,
+) serverpb.AdminClient {
+	return tc.Server(serverIdx).GetAdminClient(t)
 }
 
 // GetStatusClient gets the severpb.StatusClient for the specified server.
 func (tc *TestCluster) GetStatusClient(
-	ctx context.Context, t serverutils.TestFataler, serverIdx int,
-) (serverpb.StatusClient, error) {
-	srv := tc.Server(serverIdx)
-	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create a status client")
-	}
-	return serverpb.NewStatusClient(cc), nil
+	t serverutils.TestFataler, serverIdx int,
+) serverpb.StatusClient {
+	return tc.Server(serverIdx).GetStatusClient(t)
 }
 
 // SplitTable implements TestClusterInterface.

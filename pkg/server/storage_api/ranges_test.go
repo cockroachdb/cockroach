@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -82,11 +81,7 @@ func TestRangesResponse(t *testing.T) {
 		rpcStopper := stop.NewStopper()
 		defer rpcStopper.Stop(ctx)
 
-		conn, err := ts.RPCContext().GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		client := serverpb.NewStatusClient(conn)
+		client := ts.GetStatusClient(t)
 		resp1, err := client.Ranges(ctx, &serverpb.RangesRequest{
 			Limit: 1,
 		})
@@ -119,12 +114,8 @@ func TestTenantRangesResponse(t *testing.T) {
 		rpcStopper := stop.NewStopper()
 		defer rpcStopper.Stop(ctx)
 
-		conn, err := ts.RPCContext().GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		client := serverpb.NewStatusClient(conn)
-		_, err = client.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
+		client := ts.GetStatusClient(t)
+		_, err := client.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no tenant ID found in context")
 	})
