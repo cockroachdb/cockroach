@@ -48,6 +48,9 @@ const (
 	meanCPUTolerance = 0.15
 	// statSamplePeriod is the period at which timeseries stats are sampled.
 	statSamplePeriod = 10 * time.Second
+	// stableDuration is the duration which the cluster's load must remain
+	// balanced for to pass.
+	stableDuration = time.Minute
 )
 
 func registerRebalanceLoad(r registry.Registry) {
@@ -150,7 +153,8 @@ func registerRebalanceLoad(r registry.Registry) {
 			}
 
 			var reason string
-			var done bool
+			var balancedStartTime time.Time
+			var prevIsBalanced bool
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
 				// Wait out the sample period initially to allow the timeseries to
 				// populate meaningful information for the test to query.
@@ -160,14 +164,20 @@ func registerRebalanceLoad(r registry.Registry) {
 				case <-time.After(statSamplePeriod):
 				}
 
+				now := timeutil.Now()
 				clusterStoresCPU, err := storeCPUFn(ctx)
 				if err != nil {
 					t.L().Printf("unable to get the cluster stores CPU %s\n", err.Error())
+					continue
 				}
-
-				done, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance)
+				var curIsBalanced bool
+				curIsBalanced, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance)
 				t.L().Printf("cpu %s", reason)
-				if done {
+				if !prevIsBalanced && curIsBalanced {
+					balancedStartTime = now
+				}
+				prevIsBalanced = curIsBalanced
+				if prevIsBalanced && now.Sub(balancedStartTime) > stableDuration {
 					t.Status("successfully achieved CPU balance; waiting for kv to finish running")
 					cancel()
 					return nil
@@ -194,7 +204,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					concurrency = 32
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
-				rebalanceLoadRun(ctx, t, c, "leases", 5*time.Minute, concurrency, false /* mixedVersion */)
+				rebalanceLoadRun(ctx, t, c, "leases", 10*time.Minute, concurrency, false /* mixedVersion */)
 			},
 		},
 	)
@@ -208,7 +218,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					concurrency = 32
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
-				rebalanceLoadRun(ctx, t, c, "leases", 5*time.Minute, concurrency, true /* mixedVersion */)
+				rebalanceLoadRun(ctx, t, c, "leases", 10*time.Minute, concurrency, true /* mixedVersion */)
 			},
 		},
 	)
@@ -224,7 +234,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
 				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", 5*time.Minute, concurrency, false, /* mixedVersion */
+					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, false, /* mixedVersion */
 				)
 			},
 		},
@@ -240,7 +250,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
 				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", 5*time.Minute, concurrency, true, /* mixedVersion */
+					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, true, /* mixedVersion */
 				)
 			},
 		},
@@ -304,6 +314,11 @@ func makeStoreCPUFn(
 		storesPerNode := numStores / numNodes
 		storeCPUs := make([]float64, numStores)
 		for node, result := range resp.Results {
+			if len(result.Datapoints) == 0 {
+				// If any node has no datapoints, there isn't much point looking at
+				// others because the comparison is useless.
+				return nil, errors.Newf("node %d has no CPU datapoints", node)
+			}
 			// Take the latest CPU data point only.
 			cpu := result.Datapoints[len(result.Datapoints)-1].Value
 			nodeIdx := node * storesPerNode
