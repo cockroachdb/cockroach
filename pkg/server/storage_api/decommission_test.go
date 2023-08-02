@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,7 +57,7 @@ func TestDecommissionPreCheckInvalid(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	firstSvr := tc.Server(0).(*server.TestServer)
+	firstSvr := tc.Server(0)
 
 	// Create database and tables.
 	ac := firstSvr.AmbientCtx()
@@ -73,7 +73,7 @@ func TestDecommissionPreCheckInvalid(t *testing.T) {
 	status, ok := status.FromError(err)
 	require.True(t, ok, "expected grpc status error")
 	require.Equal(t, codes.InvalidArgument, status.Code())
-	require.Equal(t, server.DecommissionPreCheckResult{}, result)
+	require.Equal(t, decommissioning.PreCheckResult{}, result)
 }
 
 // TestDecommissionPreCheckEvaluation tests evaluation of decommission readiness
@@ -103,7 +103,7 @@ func TestDecommissionPreCheckEvaluation(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	firstSvr := tc.Server(0).(*server.TestServer)
+	firstSvr := tc.Server(0)
 	db := tc.ServerConn(0)
 	runQueries := func(queries ...string) {
 		for _, q := range queries {
@@ -214,7 +214,7 @@ func TestDecommissionPreCheckOddToEven(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	firstSvr := tc.Server(0).(*server.TestServer)
+	firstSvr := tc.Server(0)
 	db := tc.ServerConn(0)
 	runQueries := func(queries ...string) {
 		for _, q := range queries {

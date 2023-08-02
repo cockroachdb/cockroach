@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,10 +31,9 @@ func TestPurgeSession(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.(*TestServer)
+	ts := s.ApplicationLayer()
 	userName := username.TestUserName()
 	if err := ts.CreateAuthUser(userName, false /* isAdmin */); err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestPurgeSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	settingsValues := &ts.st.SV
+	settingsValues := &ts.ClusterSettings().SV
 	var (
 		purgeTTL = webSessionPurgeTTL.Get(settingsValues)
 	)
@@ -62,7 +62,7 @@ VALUES($1, $2, $3, $4, (SELECT user_id FROM system.users WHERE username = $2))
 	// Each iteration of the loop inserts a session, rewinding the age of
 	// the given timestamp column with each iteration.
 	insertOldSessions := func(column string) {
-		currTime := ts.clock.PhysicalTime()
+		currTime := ts.Clock().PhysicalTime()
 
 		// Initialize each timestamp column at the current time.
 		expiresAt, revokedAt := currTime, currTime
@@ -85,7 +85,7 @@ VALUES($1, $2, $3, $4, (SELECT user_id FROM system.users WHERE username = $2))
 				durationSinceRevocation := purgeTTL + margin
 				revokedAt = revokedAt.Add(durationSinceRevocation * time.Duration(-1))
 			}
-			if _, err = ts.sqlServer.internalExecutor.QueryRowEx(
+			if _, err = ts.InternalExecutor().(isql.Executor).QueryRowEx(
 				ctx,
 				"add-session",
 				nil, /* txn */
@@ -111,7 +111,7 @@ VALUES($1, $2, $3, $4, (SELECT user_id FROM system.users WHERE username = $2))
 
 	purgeOldSessions := func() {
 		systemLogsToGC := getTablesToGC()
-		runSystemLogGC(ctx, ts.sqlServer, ts.Cfg.Settings, systemLogsToGC)
+		runSystemLogGC(ctx, ts.SQLServerInternal().(*SQLServer), ts.ClusterSettings(), systemLogsToGC)
 	}
 
 	// Check deletion for old expired sessions.

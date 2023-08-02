@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -53,7 +52,7 @@ import (
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
 
-func startNoSplitMergeServer(t *testing.T) (*server.TestServer, *kv.DB) {
+func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -62,7 +61,7 @@ func startNoSplitMergeServer(t *testing.T) (*server.TestServer, *kv.DB) {
 			},
 		},
 	})
-	return s.(*server.TestServer), db
+	return s, db
 }
 
 // TestRangeLookupWithOpenTransaction verifies that range lookups are
@@ -87,14 +86,15 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
 	ambient := s.AmbientCtx()
+	gs := s.GossipI().(*gossip.Gossip)
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         ambient,
 		Settings:           cluster.MakeTestingClusterSettings(),
 		Clock:              s.Clock(),
-		NodeDescs:          s.Gossip(),
+		NodeDescs:          gs,
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
-		FirstRangeProvider: s.Gossip(),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+		FirstRangeProvider: gs,
 	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -1120,16 +1120,17 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				// applied by time we execute the scan. If it has not run, then try the
 				// scan again. READ_UNCOMMITTED and INCONSISTENT reads to not push
 				// intents.
+				gs := s.GossipI().(*gossip.Gossip)
 				testutils.SucceedsSoon(t, func() error {
 					clock := hlc.NewClockForTesting(timeutil.NewManualTime(ts.GoTime().Add(1)))
 					ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 						AmbientCtx:         s.AmbientCtx(),
 						Settings:           s.ClusterSettings(),
 						Clock:              clock,
-						NodeDescs:          s.Gossip(),
+						NodeDescs:          gs,
 						RPCContext:         s.RPCContext(),
-						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
-						FirstRangeProvider: s.Gossip(),
+						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+						FirstRangeProvider: gs,
 					})
 
 					reply, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{ReadConsistency: rc}, request)
@@ -1650,14 +1651,15 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
+	gs := s.GossipI().(*gossip.Gossip)
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx:         s.AmbientCtx(),
 		Clock:              s.Clock(),
-		NodeDescs:          s.Gossip(),
+		NodeDescs:          gs,
 		RPCContext:         s.RPCContext(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.Gossip())),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
 		Settings:           cluster.MakeTestingClusterSettings(),
-		FirstRangeProvider: s.Gossip(),
+		FirstRangeProvider: gs,
 	})
 	for _, key := range []string{"c"} {
 		req := &kvpb.AdminSplitRequest{
@@ -4042,11 +4044,10 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			si, _, db := serverutils.StartServer(t,
-				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			ctx := context.Background()
-			defer si.Stopper().Stop(ctx)
-			s := si.(*server.TestServer)
+			s, _, db := serverutils.StartServer(t,
+				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+			defer s.Stopper().Stop(ctx)
 
 			keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
 			require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))

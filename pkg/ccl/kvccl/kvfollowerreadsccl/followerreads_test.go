@@ -803,7 +803,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// Make a note of the follower reads metric on n3. We'll check that it was
 	// incremented.
 	var followerReadsCountBefore int64
-	err := tc.Servers[2].Stores().VisitStores(func(s *kvserver.Store) error {
+	err := tc.Servers[2].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		followerReadsCountBefore = s.Metrics().FollowerReadsCount.Count()
 		return nil
 	})
@@ -820,7 +820,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 
 	// Check that the follower read metric was incremented.
 	var followerReadsCountAfter int64
-	err = tc.Servers[2].Stores().VisitStores(func(s *kvserver.Store) error {
+	err = tc.Servers[2].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		followerReadsCountAfter = s.Metrics().FollowerReadsCount.Count()
 		return nil
 	})
@@ -1025,7 +1025,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		getFollowerReadCounts := func() [numNodes]int64 {
 			var counts [numNodes]int64
 			for i := range tc.Servers {
-				err := tc.Servers[i].Stores().VisitStores(func(s *kvserver.Store) error {
+				err := tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 					counts[i] = s.Metrics().FollowerReadsCount.Count()
 					return nil
 				})

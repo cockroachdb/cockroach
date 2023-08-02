@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -78,9 +78,9 @@ func TestSpanStatsFanOut(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	s := tc.Server(0).(*server.TestServer)
+	s := tc.Server(0)
 
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	// Create a number of ranges using splits.
 	splitKeys := []string{"a", "c", "e", "g", "i"}

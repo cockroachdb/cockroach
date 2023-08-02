@@ -796,7 +796,7 @@ func makeSystemServerWithOptions(
 			TestServer: TestServer{
 				DB:           systemDB,
 				Server:       systemServer,
-				TestingKnobs: systemServer.(*server.TestServer).Cfg.TestingKnobs,
+				TestingKnobs: *systemServer.SystemLayer().TestingKnobs(),
 				Codec:        keys.SystemSQLCodec,
 			},
 			SystemServer: systemServer,
@@ -822,7 +822,7 @@ func makeTenantServerWithOptions(
 			TestServer: TestServer{
 				DB:           tenantDB,
 				Server:       tenantServer,
-				TestingKnobs: tenantServer.(*server.TestTenant).Cfg.TestingKnobs,
+				TestingKnobs: *tenantServer.TestingKnobs(),
 				Codec:        keys.MakeSQLCodec(tenantID),
 			},
 			SystemDB:     systemDB,

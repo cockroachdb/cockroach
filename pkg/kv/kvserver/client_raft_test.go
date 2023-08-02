@@ -948,7 +948,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
-		tc.Servers[s].RaftTransport().ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
 	}
 
 	// Perform a series of writes on the partitioned replica. The writes will
@@ -1044,7 +1044,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Remove the partition. Snapshot should follow.
 	log.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
-		tc.Servers[s].RaftTransport().ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
 			rangeID:                    partRepl.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
@@ -1075,7 +1075,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Perform another write. The partitioned replica should be able to receive
 	// replicated updates.
 	incArgs = incrementArgs(key, incC)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	tc.WaitForValues(t, key, []int64{incABC, incABC, incABC})
@@ -1211,7 +1211,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		t.Fatalf("expected leader to be 1 or 2, was: %d", leaderReplicaID)
 	}
 	leaderNodeIdx := int(leaderReplicaID - 1)
-	leaderNode := tc.Server(leaderNodeIdx).(*server.TestServer)
+	leaderNode := tc.Server(leaderNodeIdx)
 	leaderStore, err := leaderNode.GetStores().(*kvserver.Stores).GetStore(leaderNode.GetFirstStoreID())
 	require.NoError(t, err)
 
@@ -2823,7 +2823,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Shut down a raft transport via the circuit breaker, and wait for two
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
-	b, ok := tc.Servers[followerIdx].RaftTransport().GetCircuitBreaker(
+	b, ok := tc.Servers[followerIdx].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(
 		tc.Target(followerIdx).NodeID, rpc.DefaultClass)
 	require.True(t, ok)
 	undo := circuit.TestingSetTripped(b, errors.New("boom"))
@@ -2913,7 +2913,7 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		var undos []func()
 		for i := range tc.Servers {
 			if i != partitionedMaybeLeaseholderIdx {
-				b, ok := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
+				b, ok := tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
 				require.True(t, ok)
 				undos = append(undos, circuit.TestingSetTripped(b, errors.New("boom")))
 			}
@@ -3138,7 +3138,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   target2.StoreID,
 	}
 
-	tc.Servers[2].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Heartbeats: []kvserverpb.RaftHeartbeat{
@@ -3314,8 +3314,8 @@ func TestReplicaGCRace(t *testing.T) {
 	toStore := tc.GetFirstStoreFromServer(t, 2)
 
 	// Prevent the victim replica from processing configuration changes.
-	tc.Servers[2].RaftTransport().StopIncomingRaftMessages(toStore.Ident.StoreID)
-	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(toStore.Ident.StoreID, &noConfChangeTestHandler{
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).StopIncomingRaftMessages(toStore.Ident.StoreID)
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(toStore.Ident.StoreID, &noConfChangeTestHandler{
 		rangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: toStore,
 	})
@@ -3736,7 +3736,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// established after the first node's removal.
 	value := int64(5)
 	incArgs := incrementArgs(key, value)
-	if _, err := kv.SendWrapped(ctx, tc.Servers[1].DistSender(), incArgs); err != nil {
+	if _, err := kv.SendWrapped(ctx, tc.Servers[1].DistSenderI().(kv.Sender), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4341,7 +4341,7 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	}
 	s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
 	require.NoError(t, err)
-	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(s2.StoreID(), &unreliableRaftHandler{
+	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s2.StoreID(), &unreliableRaftHandler{
 		rangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: s2,
 		unreliableRaftHandlerFuncs: handlerFuncs,
@@ -4516,7 +4516,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-	distSender := tc.Servers[0].DistSender()
+	distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 	key := []byte("a")
 	tc.SplitRangeOrFatal(t, key)
@@ -4704,7 +4704,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 		var repl *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
-			tc.Servers[0].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
+			tc.Servers[0].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
 				ToReplica: roachpb.ReplicaDescriptor{
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,
@@ -4760,7 +4760,7 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	require.Nil(t, err)
 
 	for i := 0; i < 3; i++ {
-		tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(tc.Target(i).StoreID, &unreliableRaftHandler{
+		tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(i).StoreID, &unreliableRaftHandler{
 			rangeID:                    ri.Desc.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
@@ -5687,7 +5687,7 @@ func TestElectionAfterRestart(t *testing.T) {
 				var err error
 				var lastIndex kvpb.RaftIndex
 				for _, srv := range tc.Servers {
-					_ = srv.Stores().VisitStores(func(s *kvserver.Store) error {
+					_ = srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 						s.VisitReplicas(func(replica *kvserver.Replica) (more bool) {
 							if replica.RangeID != rangeID {
 								return
@@ -5712,7 +5712,7 @@ func TestElectionAfterRestart(t *testing.T) {
 			return nil
 		})
 		for _, srv := range tc.Servers {
-			require.NoError(t, srv.Stores().VisitStores(func(s *kvserver.Store) error {
+			require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				return s.TODOEngine().Flush()
 			}))
 		}
@@ -5818,7 +5818,7 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 
 	// Read them back from all stores.
 	for _, srv := range tc.Servers {
-		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
 		require.Equal(t, kvs{
 			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),

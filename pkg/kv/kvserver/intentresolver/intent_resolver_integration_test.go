@@ -335,7 +335,7 @@ func TestSyncIntentResolution_ByteSizePagination(t *testing.T) {
 
 func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 	for _, s := range tc.Servers {
-		err = s.Stores().VisitStores(func(store *kvserver.Store) error {
+		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceReplicationScanAndProcess()
 		})
 	}

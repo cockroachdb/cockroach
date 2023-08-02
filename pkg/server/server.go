@@ -163,7 +163,7 @@ type Server struct {
 	admin           *systemAdminServer
 	status          *systemStatusServer
 	drain           *drainServer
-	decomNodeMap    *DecommissioningNodeMap
+	decomNodeMap    *decommissioningNodeMap
 	authentication  authserver.Server
 	migrationServer *migrationServer
 	tsDB            *ts.DB
@@ -486,7 +486,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 
-	decomNodeMap := &DecommissioningNodeMap{
+	decomNodeMap := &decommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),
 	}
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
@@ -1522,7 +1522,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Register the Migration service, to power internal crdb upgrades.
 	migrationServer := &migrationServer{server: s}
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
-	s.migrationServer = migrationServer // only for testing via TestServer
+	s.migrationServer = migrationServer // only for testing via testServer
 
 	// Register the KeyVisualizer Server
 	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.keyVisualizerServer)
@@ -2227,15 +2227,6 @@ func (s *Server) AcceptInternalClients(ctx context.Context) error {
 			})
 			netutil.FatalIfUnexpected(err)
 		})
-}
-
-// Stop shuts down this server instance. Note that this method exists
-// solely for the benefit of the `\demo shutdown` command in
-// `cockroach demo`. It is not called as part of the regular server
-// shutdown sequence; for this, see cli/start.go and the Drain()
-// RPC.
-func (s *Server) Stop() {
-	s.stopper.Stop(context.Background())
 }
 
 // ShutdownRequested returns a channel that is signaled when a subsystem wants

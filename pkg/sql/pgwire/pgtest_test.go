@@ -43,7 +43,7 @@ func TestPGTest(t *testing.T) {
 			cleanup = func() {
 				s.Stopper().Stop(ctx)
 			}
-			addr = s.AdvSQLAddr()
+			addr = s.ApplicationLayer().AdvSQLAddr()
 			user = username.RootUser
 			// None of the tests read that much data, so we hardcode the max message
 			// size to something small. This lets us test the handling of large

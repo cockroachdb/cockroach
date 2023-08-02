@@ -194,9 +194,9 @@ func TestConnMessageTooBig(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer mainDB.Close()
-	defer s.Stopper().Stop(context.Background())
+	srv, mainDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Form a 1MB string.
 	longStr := "a"
@@ -917,9 +917,10 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 	// We're going to test closing the connection in both the Open and Aborted
 	// state.
 	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
-		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 		ctx := context.Background()
-		defer s.Stopper().Stop(ctx)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
 		pgURL, cleanupFunc := sqlutils.PGUrl(
 			t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
@@ -986,9 +987,11 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 func TestConnCloseWhileProducingRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	// Disable results buffering.
 	if _, err := db.Exec(
@@ -1202,8 +1205,9 @@ func TestReadTimeoutConnExits(t *testing.T) {
 func TestConnResultsBufferSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Check that SHOW results_buffer_size correctly exposes the value when it
 	// inherits the default.
@@ -1275,7 +1279,7 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	authBlocked := make(chan struct{})
-	s := serverutils.StartServerOnly(t,
+	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Insecure: true,
 			Knobs: base.TestingKnobs{
@@ -1293,7 +1297,8 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 			},
 		})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// We're going to open a client connection and do the minimum so that the
 	// server gets to the authentication phase, where it will block.
@@ -1325,7 +1330,7 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	var shouldError uint32 = 0
 	testingKnobError := fmt.Errorf("a random error")
-	s, db, _ := serverutils.StartServer(t,
+	srv, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: true,
 			Knobs: base.TestingKnobs{
@@ -1340,8 +1345,7 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 			},
 		})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	defer srv.Stopper().Stop(ctx)
 
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)
@@ -1717,10 +1721,10 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 		},
 	}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -1748,10 +1752,10 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
@@ -1828,9 +1832,10 @@ func TestRoleDefaultSettings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
 	require.NoError(t, err)
@@ -1989,8 +1994,10 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testServer := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer testServer.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	testServer := srv.ApplicationLayer()
 
 	// Users.
 	rootUser := username.RootUser
@@ -2037,7 +2044,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	}
 
 	getConnectionCount := func() int {
-		return int(testServer.ApplicationLayer().SQLServer().(*sql.Server).GetConnectionCount())
+		return int(testServer.SQLServer().(*sql.Server).GetConnectionCount())
 	}
 
 	requireConnectionCount := func(t *testing.T, expectedCount int) {
@@ -2204,9 +2211,11 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 func TestConnCloseReleasesReservedMem(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	before := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 

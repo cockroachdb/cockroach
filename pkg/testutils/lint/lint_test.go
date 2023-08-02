@@ -617,6 +617,41 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestServerCast", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\*(testServer|testTenant)`,
+			"--",
+			"server/*_test.go",
+			":!server/server_special_test.go",
+			":!server/server_controller_test.go",
+			":!server/settings_cache_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use Go interfaces instead (see testutils/serverutils/api.go)", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestSQLTelemetryDirectCount", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(

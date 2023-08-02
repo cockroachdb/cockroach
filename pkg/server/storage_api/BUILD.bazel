@@ -44,6 +44,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/apiconstants",
+        "//pkg/server/decommissioning",
         "//pkg/server/serverpb",
         "//pkg/server/srvtestutils",
         "//pkg/server/status/statuspb",

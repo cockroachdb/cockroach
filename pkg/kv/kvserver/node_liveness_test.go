@@ -55,14 +55,14 @@ func verifyLiveness(t *testing.T, tc *testcluster.TestCluster) {
 		return nil
 	})
 }
-func verifyLivenessServer(s *server.TestServer, numServers int64) error {
+func verifyLivenessServer(s serverutils.TestServerInterface, numServers int64) error {
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
-	if !nl.GetNodeVitalityFromCache(s.Gossip().NodeID.Get()).IsLive(livenesspb.IsAliveNotification) {
-		return errors.Errorf("node %d not live", s.Gossip().NodeID.Get())
+	if !nl.GetNodeVitalityFromCache(s.NodeID()).IsLive(livenesspb.IsAliveNotification) {
+		return errors.Errorf("node %d not live", s.NodeID())
 	}
 	if a, e := nl.Metrics().LiveNodes.Value(), numServers; a != e {
 		return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
-			s.Gossip().NodeID.Get(), e, a)
+			s.NodeID(), e, a)
 	}
 	return nil
 }
@@ -106,7 +106,7 @@ func TestNodeLiveness(t *testing.T) {
 
 	for _, s := range tc.Servers {
 		nl := s.NodeLiveness().(*liveness.NodeLiveness)
-		nodeID := s.Gossip().NodeID.Get()
+		nodeID := s.NodeID()
 		if nl.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.IsAliveNotification) {
 			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
 		}
@@ -180,7 +180,7 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, tc)
 
-	nl, ok := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(tc.Servers[0].Gossip().NodeID.Get())
+	nl, ok := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(tc.Servers[0].NodeID())
 	assert.True(t, ok)
 	if nl.Epoch != 1 {
 		t.Errorf("expected epoch to be set to 1 initially; got %d", nl.Epoch)
@@ -193,7 +193,7 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 
 func verifyEpochIncremented(t *testing.T, tc *testcluster.TestCluster, nodeIdx int) {
 	testutils.SucceedsSoon(t, func() error {
-		liv, ok := tc.Servers[nodeIdx].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(tc.Servers[nodeIdx].Gossip().NodeID.Get())
+		liv, ok := tc.Servers[nodeIdx].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(tc.Servers[nodeIdx].NodeID())
 		if !ok {
 			return errors.New("liveness not found")
 		}
@@ -212,9 +212,8 @@ func TestRedundantNodeLivenessHeartbeatsAvoided(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	s := serv.(*server.TestServer)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	defer s.Stopper().Stop(ctx)
 
@@ -339,7 +338,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 		cbMu.Lock()
 		defer cbMu.Unlock()
 		for _, s := range tc.Servers {
-			nodeID := s.Gossip().NodeID.Get()
+			nodeID := s.NodeID()
 			if _, ok := cbs[nodeID]; !ok {
 				return errors.Errorf("expected IsLive callback for node %d", nodeID)
 			}
@@ -405,7 +404,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	pauseNodeLivenessHeartbeatLoops(tc)
 
 	// First try to increment the epoch of a known-live node.
-	deadNodeID := tc.Servers[1].Gossip().NodeID.Get()
+	deadNodeID := tc.Servers[1].NodeID()
 	oldLiveness, ok := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(deadNodeID)
 	assert.True(t, ok)
 	if err := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(
@@ -502,10 +501,11 @@ func TestNodeLivenessRestart(t *testing.T) {
 	// seeing the liveness record properly gossiped at store startup.
 	var expKeys []string
 	for _, s := range tc.Servers {
-		nodeID := s.Gossip().NodeID.Get()
+		nodeID := s.NodeID()
 		key := gossip.MakeNodeLivenessKey(nodeID)
 		expKeys = append(expKeys, key)
-		if err := s.Gossip().AddInfoProto(key, &livenesspb.Liveness{NodeID: nodeID}, 0); err != nil {
+		if err := s.GossipI().(*gossip.Gossip).
+			AddInfoProto(key, &livenesspb.Liveness{NodeID: nodeID}, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -519,18 +519,19 @@ func TestNodeLivenessRestart(t *testing.T) {
 	}
 
 	// Restart store and verify gossip contains liveness record for nodes 1&2.
-	require.NoError(t, tc.RestartServerWithInspect(1, func(s *server.TestServer) {
+	require.NoError(t, tc.RestartServerWithInspect(1, func(s serverutils.TestServerInterface) {
 		livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
-		s.Gossip().RegisterCallback(livenessRegex, func(key string, _ roachpb.Value) {
-			keysMu.Lock()
-			defer keysMu.Unlock()
-			for _, k := range keysMu.keys {
-				if k == key {
-					return
+		s.GossipI().(*gossip.Gossip).
+			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value) {
+				keysMu.Lock()
+				defer keysMu.Unlock()
+				for _, k := range keysMu.keys {
+					if k == key {
+						return
+					}
 				}
-			}
-			keysMu.keys = append(keysMu.keys, key)
-		})
+				keysMu.keys = append(keysMu.keys, key)
+			})
 	}))
 	testutils.SucceedsSoon(t, func() error {
 		keysMu.Lock()
@@ -555,10 +556,9 @@ func TestNodeLivenessSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	s := serv.(*server.TestServer)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	g := s.Gossip()
+	g := s.GossipI().(*gossip.Gossip)
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
 	nl.PauseHeartbeatLoopForTest()
 
@@ -642,7 +642,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
 	var livenessRec liveness.Record
 	testutils.SucceedsSoon(t, func() error {
-		lr, ok := nl.GetLiveness(tc.Servers[0].Gossip().NodeID.Get())
+		lr, ok := nl.GetLiveness(tc.Servers[0].NodeID())
 		if !ok {
 			return errors.New("liveness not found")
 		}
@@ -709,7 +709,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
 	var livenessRecord liveness.Record
 	testutils.SucceedsSoon(t, func() error {
-		livenessRec, ok := nl.GetLiveness(tc.Servers[0].Gossip().NodeID.Get())
+		livenessRec, ok := nl.GetLiveness(tc.Servers[0].NodeID())
 		if !ok {
 			return errors.New("liveness not found")
 		}
@@ -748,14 +748,13 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manualClock,
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	testutils.SucceedsSoon(t, func() error {
@@ -812,7 +811,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 	// Advance the clock and this time increment epoch concurrently for node 1.
 	nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
 	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
-	l, ok := nl.GetLiveness(tc.Servers[1].Gossip().NodeID.Get())
+	l, ok := nl.GetLiveness(tc.Servers[1].NodeID())
 	assert.True(t, ok)
 	errCh := make(chan error, concurrency)
 	for i := 0; i < concurrency; i++ {
@@ -870,7 +869,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	verifyLiveness(t, tc)
 
 	drainingNodeIdx := 0
-	drainingNodeID := tc.Servers[0].Gossip().NodeID.Get()
+	drainingNodeID := tc.Servers[0].NodeID()
 
 	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl storepool.StoreList) bool {
 		for _, store := range sl.TestingStores() {
@@ -902,7 +901,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		// been gossiped to the rest of the cluster.
 		testutils.SucceedsSoon(t, func() error {
 			for i, s := range tc.Servers {
-				curNodeID := s.Gossip().NodeID.Get()
+				curNodeID := s.NodeID()
 				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.TestingGetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
@@ -936,7 +935,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		// been gossiped to the rest of the cluster.
 		testutils.SucceedsSoon(t, func() error {
 			for i, s := range tc.Servers {
-				curNodeID := s.Gossip().NodeID.Get()
+				curNodeID := s.NodeID()
 				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.TestingGetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
@@ -980,7 +979,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -989,7 +988,6 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	// Verify retry of the ambiguous result for heartbeat loop.
@@ -1107,7 +1105,7 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 		<-sem
 		return nil
 	}
-	serv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -1122,7 +1120,6 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 			},
 		},
 	})
-	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
 
@@ -1204,7 +1201,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	verifyLiveness(t, tc)
 
 	callerNodeLiveness := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
-	nodeID := tc.Servers[decommissionNodeIdx].Gossip().NodeID.Get()
+	nodeID := tc.Servers[decommissionNodeIdx].NodeID()
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.

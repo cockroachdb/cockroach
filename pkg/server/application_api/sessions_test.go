@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -42,8 +41,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	ts := s.(*server.TestServer)
-	defer ts.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(context.Background())
 
 	ctx := context.Background()
 
@@ -70,7 +68,7 @@ func TestListSessionsSecurity(t *testing.T) {
 			}
 			for _, tc := range testCases {
 				var response serverpb.ListSessionsResponse
-				err := srvtestutils.GetStatusJSONProtoWithAdminOption(ts, tc.endpoint, &response, requestWithAdmin)
+				err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, tc.endpoint, &response, requestWithAdmin)
 				if tc.expectedErr == "" {
 					if err != nil || len(response.Errors) > 0 {
 						t.Errorf("unexpected failure listing sessions from %s; error: %v; response errors: %v",
@@ -92,7 +90,7 @@ func TestListSessionsSecurity(t *testing.T) {
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
-	client := ts.GetStatusClient(t)
+	client := s.GetStatusClient(t)
 
 	for _, user := range []string{"", apiconstants.TestingUser, username.RootUser} {
 		request := &serverpb.ListSessionsRequest{Username: user}

@@ -198,17 +198,15 @@ func TestStatusLocalLogsTenantFilter(t *testing.T) {
 		skip.IgnoreLint(t, "Test only works with low verbosity levels")
 	}
 
-	s := log.ScopeWithoutShowLogs(t)
-	defer s.Close(t)
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
 
 	// This test cares about the number of output files. Ensure
 	// there's just one.
-	defer s.SetupSingleFileLogging()()
+	defer sc.SetupSingleFileLogging()()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-
-	ts := srv.(*server.TestServer)
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(context.Background())
 
 	appTenantID := roachpb.MustMakeTenantID(uint64(2))
 	ctxSysTenant, ctxAppTenant := server.TestingMakeLoggingContexts(appTenantID)
