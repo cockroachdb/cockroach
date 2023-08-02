@@ -162,6 +162,11 @@ const (
 	DeprecatedSinkSchemeCloudStorageNodelocal = `experimental-nodelocal`
 	DeprecatedSinkSchemeCloudStorageS3        = `experimental-s3`
 
+	// DeprecatedSinkSchemeHTTP is interpreted as cloudstorage over HTTP PUT.
+	DeprecatedSinkSchemeHTTP = `http`
+	// DeprecatedSinkSchemeHTTPS is interpreted as cloudstorage over HTTPS PUT.
+	DeprecatedSinkSchemeHTTPS = `https`
+
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig   = `kafka_sink_config`
 	OptPubsubSinkConfig  = `pubsub_sink_config`
@@ -186,13 +191,11 @@ const (
 	SinkParamTopicName              = `topic_name`
 	SinkSchemeCloudStorageAzure     = `azure`
 	SinkSchemeCloudStorageGCS       = `gs`
-	SinkSchemeCloudStorageHTTP      = `http`
-	SinkSchemeCloudStorageHTTPS     = `https`
+	SinkSchemeCloudStorageHTTP      = `file-http`
+	SinkSchemeCloudStorageHTTPS     = `file-https`
 	SinkSchemeCloudStorageNodelocal = `nodelocal`
 	SinkSchemeCloudStorageS3        = `s3`
 	SinkSchemeExperimentalSQL       = `experimental-sql`
-	SinkSchemeHTTP                  = `http`
-	SinkSchemeHTTPS                 = `https`
 	SinkSchemeKafka                 = `kafka`
 	SinkSchemeNull                  = `null`
 	SinkSchemeWebhookHTTP           = `webhook-http`

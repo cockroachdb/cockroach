@@ -49,6 +49,10 @@ func isCloudStorageSink(u *url.URL) bool {
 		changefeedbase.SinkSchemeCloudStorageNodelocal, changefeedbase.SinkSchemeCloudStorageHTTP,
 		changefeedbase.SinkSchemeCloudStorageHTTPS, changefeedbase.SinkSchemeCloudStorageAzure:
 		return true
+	// During the deprecation period, we need to keep parsing these as cloudstorage for backwards
+	// compatibility. Afterwards we'll either remove them or move them to webhook.
+	case changefeedbase.DeprecatedSinkSchemeHTTP, changefeedbase.DeprecatedSinkSchemeHTTPS:
+		return true
 	default:
 		return false
 	}
@@ -375,6 +379,7 @@ func makeCloudStorageSink(
 		}
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
+	u.Scheme = strings.TrimPrefix(u.Scheme, `file-`)
 
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
 	sessID, err := generateChangefeedSessionID()

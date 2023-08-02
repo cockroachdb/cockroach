@@ -904,6 +904,25 @@ func validateSink(
 	if err != nil {
 		return err
 	}
+	u, err := url.Parse(details.SinkURI)
+	if err != nil {
+		return err
+	}
+
+	ambiguousSchemes := map[string][2]string{
+		changefeedbase.DeprecatedSinkSchemeHTTP:  {changefeedbase.SinkSchemeCloudStorageHTTP, changefeedbase.SinkSchemeWebhookHTTP},
+		changefeedbase.DeprecatedSinkSchemeHTTPS: {changefeedbase.SinkSchemeCloudStorageHTTPS, changefeedbase.SinkSchemeWebhookHTTPS},
+	}
+
+	if disambiguations, isAmbiguous := ambiguousSchemes[u.Scheme]; isAmbiguous {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			`Interpreting deprecated URI scheme %s as %s. For webhook semantics, use %s.`,
+			u.Scheme,
+			disambiguations[0],
+			disambiguations[1],
+		))
+	}
+
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
 		nilOracle, p.User(), jobID, sli)
