@@ -258,6 +258,12 @@ func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(PushTxn)
 }
 
+// IsSingleRecoverTxnRequest returns true iff the batch contains a single request,
+// and that request is a RecoverTxnRequest.
+func (ba *BatchRequest) IsSingleRecoverTxnRequest() bool {
+	return ba.isSingleRequestWithMethod(RecoverTxn)
+}
+
 // IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
 // request, and that request is a HeartbeatTxn.
 func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
@@ -825,6 +831,15 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 			}
 			if et.InternalCommitTrigger != nil {
 				s.Printf(" %s", et.InternalCommitTrigger.Kind())
+			}
+			s.Printf(") [%s]", h.Key)
+		} else if rt, ok := req.(*RecoverTxnRequest); ok {
+			h := req.Header()
+			s.Printf("%s(%s, ", req.Method(), rt.Txn.Short())
+			if rt.ImplicitlyCommitted {
+				s.Printf("commit")
+			} else {
+				s.Printf("abort")
 			}
 			s.Printf(") [%s]", h.Key)
 		} else {
