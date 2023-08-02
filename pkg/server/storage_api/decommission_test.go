@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -342,10 +340,7 @@ func TestDecommissionPreCheckBasicReadiness(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	adminSrv := tc.Server(4)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
+	adminClient := adminSrv.GetAdminClient(t)
 
 	resp, err := adminClient.DecommissionPreCheck(ctx, &serverpb.DecommissionPreCheckRequest{
 		NodeIDs: []roachpb.NodeID{tc.Server(5).NodeID()},
@@ -379,10 +374,7 @@ func TestDecommissionPreCheckUnready(t *testing.T) {
 
 	adminSrv := tc.Server(adminSrvIdx)
 	decommissioningSrv := tc.Server(decommissioningSrvIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
+	adminClient := adminSrv.GetAdminClient(t)
 
 	checkNodeReady := func(nID roachpb.NodeID, replicaCount int64, strict bool) {
 		resp, err := adminClient.DecommissionPreCheck(ctx, &serverpb.DecommissionPreCheckRequest{
@@ -557,10 +549,7 @@ func TestDecommissionPreCheckMultiple(t *testing.T) {
 	}
 
 	adminSrv := tc.Server(adminSrvIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
+	adminClient := adminSrv.GetAdminClient(t)
 
 	// We expect to be able to decommission the targeted nodes simultaneously.
 	resp, err := adminClient.DecommissionPreCheck(ctx, &serverpb.DecommissionPreCheckRequest{
@@ -622,10 +611,7 @@ func TestDecommissionPreCheckInvalidNode(t *testing.T) {
 	}
 
 	adminSrv := tc.Server(adminSrvIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
+	adminClient := adminSrv.GetAdminClient(t)
 
 	// We expect the pre-check to fail as some node IDs are invalid.
 	resp, err := adminClient.DecommissionPreCheck(ctx, &serverpb.DecommissionPreCheckRequest{
@@ -662,10 +648,7 @@ func TestDecommissionSelf(t *testing.T) {
 	// admin server's logic, which involves a subsequent DecommissionStatus
 	// call which could fail if used from a node that's just decommissioned.
 	adminSrv := tc.Server(4)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
-	require.NoError(t, err)
-	adminClient := serverpb.NewAdminClient(conn)
+	adminClient := adminSrv.GetAdminClient(t)
 	decomNodeIDs := []roachpb.NodeID{
 		tc.Server(4).NodeID(),
 		tc.Server(5).NodeID(),
@@ -751,13 +734,9 @@ func TestDecommissionEnqueueReplicas(t *testing.T) {
 		decommissioningSrv := tc.Server(decommissioningSrvIdx)
 		tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
 
-		conn, err := decommissioningSrv.RPCContext().GRPCDialNode(
-			decommissioningSrv.RPCAddr(), decommissioningSrv.NodeID(), rpc.DefaultClass,
-		).Connect(ctx)
-		require.NoError(t, err)
-		adminClient := serverpb.NewAdminClient(conn)
+		adminClient := decommissioningSrv.GetAdminClient(t)
 		decomNodeIDs := []roachpb.NodeID{tc.Server(decommissioningSrvIdx).NodeID()}
-		_, err = adminClient.Decommission(
+		_, err := adminClient.Decommission(
 			ctx,
 			&serverpb.DecommissionRequest{
 				NodeIDs:          decomNodeIDs,
@@ -837,13 +816,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	}, 10*time.Second)
 
 	// Set up an admin client.
-	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(decomSrv.AdvRPCAddr(), grpc.WithInsecure())
-	require.NoError(t, err)
-	defer func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}()
-	adminClient := serverpb.NewAdminClient(conn)
+	adminClient := decomSrv.GetAdminClient(t)
 
 	// Run some operations on the decommissioned node. The ones that require
 	// access to the cluster should fail, other should succeed. We're mostly

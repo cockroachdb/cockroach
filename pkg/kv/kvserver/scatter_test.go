@@ -57,8 +57,7 @@ func TestAdminScatterWithDrainingNodes(t *testing.T) {
 	scratchKey := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(drainingServerIdx))
 
-	client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
-	require.NoError(t, err)
+	client := tc.GetAdminClient(t, drainingServerIdx)
 	drain(ctx, t, client, drainingNodeID)
 
 	nonDrainingStore := tc.GetFirstStoreFromServer(t, 0)

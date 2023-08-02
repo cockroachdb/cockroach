@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -952,7 +951,7 @@ func checkConcurrency(
 			},
 		},
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
+	s.Start(t, kvcoord.InitFactoryForLocalTestCluster)
 	defer s.Stop()
 	// Reduce the deadlock detection push delay so that txns that encounter locks
 	// begin deadlock detection immediately. This speeds up tests significantly.

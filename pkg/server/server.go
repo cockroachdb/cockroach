@@ -311,26 +311,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
 	authorizer := tenantcapabilitiesauthorizer.New(cfg.Settings, tenantCapabilitiesTestingKnobs)
-	rpcCtxOpts := rpc.ContextOptions{
-		TenantID:               roachpb.SystemTenantID,
-		UseNodeAuth:            true,
-		NodeID:                 nodeIDContainer,
-		StorageClusterID:       cfg.ClusterIDContainer,
-		Config:                 cfg.Config,
-		Clock:                  clock.WallClock(),
-		ToleratedOffset:        clock.ToleratedOffset(),
-		FatalOnOffsetViolation: true,
-		Stopper:                stopper,
-		Settings:               cfg.Settings,
-		OnOutgoingPing: func(ctx context.Context, req *rpc.PingRequest) error {
-			// Outgoing ping will block requests with codes.FailedPrecondition to
-			// notify caller that this replica is decommissioned but others could
-			// still be tried as caller node is valid, but not the destination.
-			return decommissionCheck(ctx, req.TargetNodeID, codes.FailedPrecondition)
-		},
-		TenantRPCAuthorizer: authorizer,
-		NeedsDialback:       true,
+	rpcCtxOpts := rpc.ServerContextOptionsFromBaseConfig(cfg.BaseConfig.Config)
+
+	rpcCtxOpts.TenantID = roachpb.SystemTenantID
+	rpcCtxOpts.UseNodeAuth = true
+	rpcCtxOpts.NodeID = nodeIDContainer
+	rpcCtxOpts.StorageClusterID = cfg.ClusterIDContainer
+	rpcCtxOpts.Clock = clock.WallClock()
+	rpcCtxOpts.ToleratedOffset = clock.ToleratedOffset()
+	rpcCtxOpts.FatalOnOffsetViolation = true
+	rpcCtxOpts.Stopper = stopper
+	rpcCtxOpts.Settings = cfg.Settings
+	rpcCtxOpts.OnOutgoingPing = func(ctx context.Context, req *rpc.PingRequest) error {
+		// Outgoing ping will block requests with codes.FailedPrecondition to
+		// notify caller that this replica is decommissioned but others could
+		// still be tried as caller node is valid, but not the destination.
+		return decommissionCheck(ctx, req.TargetNodeID, codes.FailedPrecondition)
 	}
+	rpcCtxOpts.TenantRPCAuthorizer = authorizer
+	rpcCtxOpts.NeedsDialback = true
+
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs

@@ -14,8 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -92,14 +90,13 @@ func NewInsecureTestingContextWithClusterID(
 func NewInsecureTestingContextWithKnobs(
 	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
-	return NewContext(ctx,
-		ContextOptions{
-			TenantID:        roachpb.SystemTenantID,
-			Config:          &base.Config{Insecure: true},
-			Clock:           clock.WallClock(),
-			ToleratedOffset: clock.ToleratedOffset(),
-			Stopper:         stopper,
-			Settings:        cluster.MakeTestingClusterSettings(),
-			Knobs:           knobs,
-		})
+	opts := DefaultContextOptions()
+	opts.Insecure = true
+	opts.Clock = clock.WallClock()
+	opts.ToleratedOffset = clock.ToleratedOffset()
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	opts.Knobs = knobs
+	opts.Stopper = stopper
+
+	return NewContext(ctx, opts)
 }

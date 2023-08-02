@@ -18,11 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/require"
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -33,12 +32,10 @@ func TestStatusLocalStacks(t *testing.T) {
 	skip.UnderRaceWithIssue(t, 74133)
 
 	ctx := context.Background()
-	var args base.TestClusterArgs
-	tc := testcluster.StartTestCluster(t, 1 /* nodes */, args)
-	defer tc.Stopper().Stop(ctx)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	cc, err := tc.GetStatusClient(ctx, t, 0 /* idx */)
-	require.NoError(t, err)
+	cc := s.GetStatusClient(t)
 
 	testCases := []struct {
 		stackType serverpb.StacksType

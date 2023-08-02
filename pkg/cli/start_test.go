@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -206,7 +207,7 @@ func TestAddrWithDefaultHost(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		addr, err := addrWithDefaultHost(test.inAddr)
+		addr, err := addr.AddrWithDefaultLocalhost(test.inAddr)
 		if err != nil {
 			t.Error(err)
 		} else if addr != test.outAddr {

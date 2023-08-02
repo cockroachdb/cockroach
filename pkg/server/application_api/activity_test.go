@@ -17,8 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -110,15 +108,7 @@ func TestListActivitySecurity(t *testing.T) {
 	}
 
 	// gRPC requests behave as root and thus are always allowed.
-	rootConfig := testutils.NewTestBaseContext(username.RootUserName())
-	rpcContext := srvtestutils.NewRPCTestContext(ctx, ts, rootConfig)
-	url := ts.AdvRPCAddr()
-	nodeID := ts.NodeID()
-	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := serverpb.NewStatusClient(conn)
+	client := ts.GetStatusClient(t)
 	{
 		request := &serverpb.ListContentionEventsRequest{}
 		if resp, err := client.ListLocalContentionEvents(ctx, request); err != nil || len(resp.Errors) > 0 {

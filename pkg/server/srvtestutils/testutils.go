@@ -11,18 +11,13 @@
 package srvtestutils
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // GetAdminJSONProto performs a RPC-over-HTTP request to the admin endpoint
@@ -131,27 +126,4 @@ func GetJSON(ts serverutils.ApplicationLayerInterface, url string) (interface{},
 		return nil, errors.Wrapf(err, "body is:\n%s", body)
 	}
 	return jI, nil
-}
-
-// NewRPCTestContext constructs a RPC context for use in API tests.
-func NewRPCTestContext(
-	ctx context.Context, ts serverutils.TestServerInterface, cfg *base.Config,
-) *rpc.Context {
-	var c base.NodeIDContainer
-	ctx = logtags.AddTag(ctx, "n", &c)
-	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		NodeID:          &c,
-		Config:          cfg,
-		Clock:           ts.Clock().WallClock(),
-		ToleratedOffset: ts.Clock().ToleratedOffset(),
-		Stopper:         ts.Stopper(),
-		Settings:        ts.ClusterSettings(),
-		Knobs:           rpc.ContextTestingKnobs{NoLoopbackDialer: true},
-	})
-	// Ensure that the RPC client context validates the server cluster ID.
-	// This ensures that a test where the server is restarted will not let
-	// its test RPC client talk to a server started by an unrelated concurrent test.
-	rpcContext.StorageClusterID.Set(ctx, ts.StorageClusterID())
-	return rpcContext
 }

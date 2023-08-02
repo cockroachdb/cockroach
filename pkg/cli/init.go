@@ -46,7 +46,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err := dialAndCheckHealth(ctx); err != nil {
 		return err
 	}
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func dialAndCheckHealth(ctx context.Context) error {
 		// (Attempt to) establish the gRPC connection. If that fails,
 		// it may be that the server hasn't started to listen yet, in
 		// which case we'll retry.
-		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return err
 		}

@@ -29,11 +29,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -265,20 +263,12 @@ func (c *Cluster) RPCPort(nodeIdx int) string {
 }
 
 func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
-	baseCtx := &base.Config{
-		User:     username.NodeUserName(),
-		Insecure: true,
-	}
-	rpcCtx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:        roachpb.SystemTenantID,
-		Config:          baseCtx,
-		Clock:           &timeutil.DefaultTimeSource{},
-		ToleratedOffset: 0,
-		Stopper:         c.stopper,
-		Settings:        cluster.MakeTestingClusterSettings(),
-
-		ClientOnly: true,
-	})
+	opts := rpc.DefaultContextOptions()
+	opts.Insecure = true
+	opts.Stopper = c.stopper
+	opts.Settings = cluster.MakeTestingClusterSettings()
+	opts.ClientOnly = true
+	rpcCtx := rpc.NewContext(ctx, opts)
 
 	n := &Node{
 		Cfg:    cfg,

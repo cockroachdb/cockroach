@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestDrain tests the Drain RPC.
@@ -192,12 +191,8 @@ func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainConte
 	}
 
 	// We'll have the RPC talk to the first node.
-	var err error
-	tc.c, tc.connCloser, err = getAdminClientForServer(tc.tc.Server(0))
-	if err != nil {
-		tc.Close()
-		t.Fatal(err)
-	}
+	tc.c = tc.tc.Server(0).GetAdminClient(t)
+	tc.connCloser = func() {}
 
 	return tc
 }
@@ -292,20 +287,6 @@ func (t *testDrainContext) getDrainResponse(
 		return nil, err
 	}
 	return resp, nil
-}
-
-func getAdminClientForServer(
-	s serverutils.TestServerInterface,
-) (c serverpb.AdminClient, closer func(), err error) {
-	//lint:ignore SA1019 grpc.WithInsecure is deprecated
-	conn, err := grpc.Dial(s.AdvRPCAddr(), grpc.WithInsecure())
-	if err != nil {
-		return nil, nil, err
-	}
-	client := serverpb.NewAdminClient(conn)
-	return client, func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}, nil
 }
 
 func TestServerShutdownReleasesSession(t *testing.T) {

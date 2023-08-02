@@ -59,15 +59,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	t.Logf("subtests starting")
 
 	t.Run("gRPC is running", func(t *testing.T) {
-		grpcAddr := tenant.RPCAddr()
-		rpcCtx := tenant.RPCContext()
-
-		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, rpc.DefaultClass).Connect(ctx)
-		require.NoError(t, err)
-
-		client := serverpb.NewStatusClient(conn)
-
+		client := tenant.GetStatusClient(t)
 		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Statements)

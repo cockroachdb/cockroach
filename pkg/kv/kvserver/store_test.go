@@ -179,16 +179,14 @@ func createTestStoreWithoutStart(
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 
-	rpcContext := rpc.NewContext(ctx,
-		rpc.ContextOptions{
-			TenantID:            roachpb.SystemTenantID,
-			Config:              &base.Config{Insecure: true},
-			Clock:               cfg.Clock.WallClock(),
-			ToleratedOffset:     cfg.Clock.ToleratedOffset(),
-			Stopper:             stopper,
-			Settings:            cfg.Settings,
-			TenantRPCAuthorizer: tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
-		})
+	rpcOpts := rpc.DefaultContextOptions()
+	rpcOpts.Insecure = true
+	rpcOpts.Clock = cfg.Clock.WallClock()
+	rpcOpts.ToleratedOffset = cfg.Clock.ToleratedOffset()
+	rpcOpts.Stopper = stopper
+	rpcOpts.Settings = cfg.Settings
+	rpcOpts.TenantRPCAuthorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
+	rpcContext := rpc.NewContext(ctx, rpcOpts)
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	server, err := rpc.NewServer(rpcContext) // never started
 	require.NoError(t, err)
