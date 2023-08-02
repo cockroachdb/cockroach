@@ -56,7 +56,7 @@ func newRandTestingFramework(settings testSettings) randTestingFramework {
 			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
 			defaultMaxRange, defaultMinKeySpace))
 	}
-	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeKeyGenType)
+	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeGenType)
 	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
 	return randTestingFramework{
 		s:                 settings,
@@ -203,28 +203,51 @@ func convertInt64ToInt(num int64) int {
 }
 
 func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
-	if len(f.s.rangeGen.weightedRand) == 0 {
+	switch placementType := f.s.rangeGen.placementType; placementType {
+	case gen.Even, gen.Skewed:
+		if len(f.s.rangeGen.weightedRand) != 0 {
+			panic("set placement_type to weighted_rand to use weighted random placement for stores")
+		}
+		return gen.BasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
+				ReplicationFactor: f.s.rangeGen.replicationFactor,
+				Bytes:             defaultBytes,
+			},
+			PlacementType: placementType,
+		}
+	case gen.Random:
+		if len(f.s.rangeGen.weightedRand) != 0 {
+			panic("set placement_type to weighted_rand to use weighted random placement for stores")
+		}
 		return RandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
 				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
-				ReplicationFactor: defaultReplicationFactor,
+				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},
 			placementType: gen.Random,
 			randSource:    f.s.randSource,
 		}
-	} else {
+
+	case gen.WeightedRandom:
+		if len(f.s.rangeGen.weightedRand) == 0 {
+			panic("set weightedRand array for stores properly to use weighted random placement for stores")
+		}
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
 				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
-				ReplicationFactor: defaultReplicationFactor,
+				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},
 			placementType: gen.WeightedRandom,
 			randSource:    f.s.randSource,
 			weightedRand:  f.s.rangeGen.weightedRand,
 		}
+	default:
+		panic("unknown ranges placement type")
 	}
 }

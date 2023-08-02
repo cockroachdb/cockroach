@@ -64,7 +64,7 @@ func defaultSettings(randOptions testRandOptions, rGenSettings rangeGenSettings)
 //
 // 6. rangeGen (default: uniform rangeGenType, uniform keySpaceGenType, empty
 // weightedRand).
-// - rangeKeyGenType: determines range generator type across iterations
+// - rangeGenType: determines range generator type across iterations
 // (default: uniformGenerator, min = 1, max = 1000)
 // - keySpaceGenType: determines key space generator type across iterations
 // (default: uniformGenerator, min = 1000, max = 200000)
