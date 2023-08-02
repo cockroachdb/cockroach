@@ -99,7 +99,8 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 
 	// Sanity check that we're testing what we wanted to test and didn't accidentally
 	// bootstrap three single-node clusters (who knows).
-	for _, srv := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		srv := tc.Server(serverIdx)
 		require.Equal(t, clusterID, srv.StorageClusterID())
 	}
 
@@ -107,7 +108,8 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 	// store ID.
 	testutils.SucceedsSoon(t, func() error {
 		var storeIDs []roachpb.StoreID
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			var storeCount = 0
 			if err := server.GetStores().(*kvserver.Stores).VisitStores(
 				func(s *kvserver.Store) error {
@@ -169,7 +171,8 @@ func TestMultiStoreIDAlloc(t *testing.T) {
 	// Sanity check that we're testing what we wanted to test and didn't accidentally
 	// bootstrap three single-node clusters (who knows).
 	clusterID := tc.Server(0).StorageClusterID()
-	for _, srv := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		srv := tc.Server(serverIdx)
 		require.Equal(t, clusterID, srv.StorageClusterID())
 	}
 
@@ -177,7 +180,8 @@ func TestMultiStoreIDAlloc(t *testing.T) {
 	// store ID.
 	testutils.SucceedsSoon(t, func() error {
 		var storeIDs []roachpb.StoreID
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			var storeCount = 0
 			if err := server.GetStores().(*kvserver.Stores).VisitStores(
 				func(s *kvserver.Store) error {

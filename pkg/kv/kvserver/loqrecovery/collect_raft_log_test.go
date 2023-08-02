@@ -64,7 +64,7 @@ func TestFindUpdateDescriptor(t *testing.T) {
 			lHSBefore, rHS, err = tc.SplitRange(splitKey)
 			require.NoError(t, err, "failed to split scratch range")
 
-			lHSAfter, err = tc.Servers[0].MergeRanges(scratchKey)
+			lHSAfter, err = tc.Server(0).MergeRanges(scratchKey)
 			require.NoError(t, err, "failed to merge scratch range")
 
 			require.NoError(t,

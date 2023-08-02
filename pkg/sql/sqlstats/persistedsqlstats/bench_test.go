@@ -143,8 +143,8 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 							SQLMemoryPoolSize: 512 << 20,
 						},
 					})
-				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0],
-					tc.Conns[1], tc.Conns[2])
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.ServerConn(0),
+					tc.ServerConn(1), tc.ServerConn(2))
 				return sqlRunner, tc
 			},
 		},
@@ -159,9 +159,9 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 							SQLMemoryPoolSize: 512 << 20,
 						},
 					})
-				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0],
-					tc.Conns[1], tc.Conns[2], tc.Conns[3],
-					tc.Conns[4], tc.Conns[5])
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.ServerConn(0),
+					tc.ServerConn(1), tc.ServerConn(2), tc.ServerConn(3),
+					tc.ServerConn(4), tc.ServerConn(5))
 				return sqlRunner, tc
 			},
 		},

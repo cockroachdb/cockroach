@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -470,7 +471,7 @@ func (s *stopperSessionEventListener) OnSessionDeleted(
 	ctx context.Context,
 ) (createAnotherSession bool) {
 	s.trigger.signalStop(ctx,
-		MakeShutdownRequest(ShutdownReasonFatalError, errors.New("sql liveness session deleted")))
+		serverctl.MakeShutdownRequest(serverctl.ShutdownReasonFatalError, errors.New("sql liveness session deleted")))
 	// Return false in order to prevent the sqlliveness loop from creating a new
 	// session. We're shutting down the server and creating a new session would
 	// only cause confusion.
@@ -524,7 +525,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 }
 
 // newSQLServer constructs a new SQLServer. The caller is responsible for
-// listening to the server's ShutdownRequested() channel (which is the same as
+// listening to the server's serverctl.ShutdownRequested() channel (which is the same as
 // cfg.stopTrigger.C()) and stopping cfg.stopper when signaled.
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
@@ -1724,7 +1725,7 @@ func (s *SQLServer) startCheckService(ctx context.Context, stopper *stop.Stopper
 			case <-updateCh:
 				if err := check(); err != nil {
 					s.stopTrigger.signalStop(ctx,
-						MakeShutdownRequest(ShutdownReasonFatalError, err))
+						serverctl.MakeShutdownRequest(serverctl.ShutdownReasonFatalError, err))
 				}
 			}
 		}
@@ -1959,7 +1960,7 @@ func (s *SQLServer) LogicalClusterID() uuid.UUID {
 
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
-func (s *SQLServer) ShutdownRequested() <-chan ShutdownRequest {
+func (s *SQLServer) ShutdownRequested() <-chan serverctl.ShutdownRequest {
 	return s.stopTrigger.C()
 }
 

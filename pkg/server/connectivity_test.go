@@ -337,7 +337,7 @@ func TestJoinVersionGate(t *testing.T) {
 
 	oldVersionServerArgs := commonArg
 	oldVersionServerArgs.Knobs = knobs
-	oldVersionServerArgs.JoinAddr = tc.Servers[0].AdvRPCAddr()
+	oldVersionServerArgs.JoinAddr = tc.Server(0).AdvRPCAddr()
 
 	serv, err := tc.AddServer(oldVersionServerArgs)
 	if err != nil {
@@ -374,7 +374,7 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 	for _, status := range []livenesspb.MembershipStatus{
 		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
 	} {
-		require.NoError(t, tc.Servers[0].Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
+		require.NoError(t, tc.Server(0).Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
 	}
 
 	testutils.SucceedsSoon(t, func() error {

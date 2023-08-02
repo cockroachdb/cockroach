@@ -532,7 +532,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 	// Job exec relocation will return an error while it waits for resumption on a
 	// matching node, but this makes for a slow test, so just send the job stmt to
 	// the node which will not need to relocate the coordination, i.e. n3 or n4.
-	n3, n4 := sqlutils.MakeSQLRunner(tc.Conns[2]), sqlutils.MakeSQLRunner(tc.Conns[3])
+	n3, n4 := sqlutils.MakeSQLRunner(tc.ServerConn(2)), sqlutils.MakeSQLRunner(tc.ServerConn(3))
 
 	t.Run("pin-top", func(t *testing.T) {
 		ensureLeaseholder(t, sqlDB)
@@ -742,10 +742,10 @@ func TestBackupRestoreAppend(t *testing.T) {
 			// incremental backups that were appended to that backup.
 			store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
 				base.ExternalIODirConfig{},
-				tc.Servers[0].ClusterSettings(),
+				tc.Server(0).ClusterSettings(),
 				blobs.TestEmptyBlobClientFactory,
 				username.RootUserName(),
-				tc.Servers[0].InternalDB().(isql.DB),
+				tc.Server(0).InternalDB().(isql.DB),
 				nil, /* limiters */
 				cloud.NilMetrics,
 			)
@@ -1003,7 +1003,7 @@ func backupAndRestore(
 	numAccounts int,
 	kmsURIs []string,
 ) {
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	storageConn := tc.SystemLayer(0).SQLConn(t, "")
 	storageSQLDB := sqlutils.MakeSQLRunner(storageConn)
@@ -1815,7 +1815,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	srv := tc.ApplicationLayer(0)
 	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
 	clusterID := srv.RPCContext().LogicalClusterID.Get()
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), codec, "data", "bank")
 
 	t.Run("backup", func(t *testing.T) {
 		for _, item := range []struct {
@@ -1855,7 +1855,7 @@ func TestBackupRestoreResume(t *testing.T) {
 				createAndWaitForJob(
 					t, sqlDB, []descpb.ID{backupTableDesc.GetID()},
 					jobspb.BackupDetails{
-						EndTime: tc.Servers[0].Clock().Now(),
+						EndTime: tc.Server(0).Clock().Now(),
 						URI:     "nodelocal://1/backup" + "-" + item.testName,
 					},
 					jobspb.BackupProgress{},
@@ -2950,7 +2950,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore everything to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		db.Exec(t, createStore)
 		db.Exec(t, `RESTORE store.* FROM $1`, localFoo)
@@ -2988,7 +2988,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore customers to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		db.Exec(t, createStore)
 		db.Exec(t, `RESTORE store.customers, store.orders FROM $1`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -3006,7 +3006,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore orders to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		db.Exec(t, createStore)
 
 		// FK validation of self-FK is preserved.
@@ -3026,7 +3026,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore receipts to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		db.Exec(t, createStore)
 		db.Exec(t, `RESTORE store.receipts FROM $1 WITH OPTIONS (skip_missing_foreign_keys)`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -3044,7 +3044,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore receipts and customers to new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		db.Exec(t, createStore)
 		db.Exec(t, `RESTORE store.receipts, store.customers FROM $1 WITH OPTIONS (skip_missing_foreign_keys)`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
@@ -3074,7 +3074,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore simple view", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		db.Exec(t, createStore)
 		db.ExpectErr(
 			t, `cannot restore view "early_customers" without restoring referenced table`,
@@ -3105,7 +3105,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore multi-table view", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		db.ExpectErr(
 			t, `cannot restore view "ordercounts" without restoring referenced table`,
@@ -3164,7 +3164,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	t.Run("restore and skip missing views", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		// Test cases where, after filtering out views that can't be restored, there are no other tables to restore
 
@@ -3284,7 +3284,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	{
 		restoreTC := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer restoreTC.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		sqlDBRestore.Exec(t, `CREATE TABLE data.bank (id INT PRIMARY KEY)`)
@@ -3295,7 +3295,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		// generated by the same cluster.
 
 		sqlDBRestore.ExpectErr(
-			t, fmt.Sprintf("belongs to cluster %s", tc.Servers[0].RPCContext().LogicalClusterID.Get()),
+			t, fmt.Sprintf("belongs to cluster %s", tc.Server(0).RPCContext().LogicalClusterID.Get()),
 			`BACKUP TABLE data.bank TO $1 INCREMENTAL FROM $2`,
 			"nodelocal://1/some-other-table", "nodelocal://1/0",
 		)
@@ -3377,7 +3377,7 @@ func TestBackupRestorePartitionedIncremental(t *testing.T) {
 	{
 		restoreTC := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer restoreTC.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		for i := len(defaultBackupDirs); i > 0; i-- {
@@ -3462,7 +3462,7 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	for task := 0; task < numBackgroundTasks; task++ {
 		taskNum := task
 		_ = tc.Stopper().RunAsyncTask(ctx, "bg-task", func(context.Context) {
-			conn := tc.Conns[taskNum%len(tc.Conns)]
+			conn := tc.ServerConn(taskNum % tc.NumServers())
 			// Use different sql gateways to make sure leasing is right.
 			if err := startBackgroundWrites(tc.Stopper(), conn, rows, bgActivity, &allowErrors); err != nil {
 				t.Error(err)
@@ -3557,7 +3557,7 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+	_, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
 
 	const msg = "can not backup tenants with revision history"
@@ -4678,7 +4678,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	t.Run("into fresh db", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
+		sqlDBRestore := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		sqlDBRestore.Exec(t, `RESTORE data.bank FROM $1`, localFoo)
 		sqlDBRestore.CheckQueryResults(t, `SHOW GRANTS ON data.bank`, rootOnly)
@@ -4687,7 +4687,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	t.Run("into db with added grants", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
+		sqlDBRestore := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		sqlDBRestore.Exec(t, `CREATE USER someone`)
 		sqlDBRestore.Exec(t, `USE data`)
@@ -4699,7 +4699,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	t.Run("into db on db grants", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
+		sqlDBRestore := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		sqlDBRestore.Exec(t, `CREATE USER someone`)
 		sqlDBRestore.Exec(t, `RESTORE DATABASE data2 FROM $1`, localFoo)
 		sqlDBRestore.CheckQueryResults(t, `SHOW GRANTS ON DATABASE data2`, data2Grants)
@@ -4734,7 +4734,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	const numAccounts = 1
 	tc, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
+	args := base.TestServerArgs{ExternalIODir: tc.Server(0).ClusterSettings().ExternalIODir}
 
 	for _, q := range []string{
 		`CREATE DATABASE d2`,
@@ -4759,7 +4759,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	t.Run("incomplete-db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tcRestore.ServerConn(0))
 
 		sqlDB.Exec(t, `create database d5`)
 
@@ -4794,14 +4794,14 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	t.Run("db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tcRestore.ServerConn(0))
 		sqlDB.Exec(t, `RESTORE DATABASE data, d2, d3 FROM $1`, localFoo)
 	})
 
 	t.Run("db-exists", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tcRestore.ServerConn(0))
 
 		sqlDB.Exec(t, `CREATE DATABASE data`)
 		sqlDB.ExpectErr(t, "already exists", `RESTORE DATABASE data FROM $1`, localFoo)
@@ -4810,7 +4810,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	t.Run("tables", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tcRestore.ServerConn(0))
 
 		sqlDB.Exec(t, `CREATE DATABASE data`)
 		sqlDB.Exec(t, `RESTORE data.* FROM $1`, localFoo)
@@ -4819,7 +4819,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	t.Run("tables-needs-db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tcRestore.ServerConn(0))
 
 		sqlDB.ExpectErr(t, "needs to exist", `RESTORE data.*, d4.* FROM $1`, localFoo)
 	})
@@ -4827,7 +4827,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	t.Run("into_db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tcRestore.ServerConn(0))
 
 		sqlDB.ExpectErr(
 			t, `cannot use "into_db"`,
@@ -5228,7 +5228,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 	t.Run("restore both table & sequence to a new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `RESTORE DATABASE data FROM $1`, backupLoc)
 		newDB.Exec(t, `USE data`)
@@ -5274,7 +5274,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 	t.Run("restore just the table to a new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `CREATE DATABASE data`)
 		newDB.Exec(t, `USE data`)
@@ -5307,7 +5307,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 	t.Run("restore just the sequence to a new cluster", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `CREATE DATABASE data`)
 		newDB.Exec(t, `USE data`)
@@ -5450,7 +5450,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `RESTORE DATABASE d FROM $1`, backupLoc)
 
@@ -5479,7 +5479,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `CREATE DATABASE d`)
 		newDB.Exec(t, `USE d`)
@@ -5501,7 +5501,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 			defer tc.Stopper().Stop(context.Background())
 
-			newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+			newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 			newDB.Exec(t, `CREATE DATABASE d`)
 			newDB.Exec(t, `USE d`)
@@ -5532,7 +5532,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `CREATE DATABASE restore_db`)
 		newDB.Exec(t, `RESTORE d.* FROM $1 WITH into_db='restore_db'`, backupLoc)
@@ -5580,7 +5580,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 			defer tc.Stopper().Stop(context.Background())
 
-			newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+			newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 			newDB.ExpectErr(t, "pq: cannot restore sequence \"seq\" without referenced owner|"+
 				"pq: cannot restore table \"t\" without referenced sequence",
@@ -5624,7 +5624,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.Background())
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		newDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		newDB.Exec(t, `RESTORE DATABASE d2, d3 FROM $1`, backupLocD2D3)
 
@@ -7043,7 +7043,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
-		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		restoreDB.CheckQueryResults(t, `select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`, [][]string{
 			{
@@ -7209,7 +7209,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
-		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
@@ -7271,7 +7271,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		defer restoreTC.Stopper().Stop(ctx)
-		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
@@ -7386,7 +7386,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
-		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 
@@ -7412,7 +7412,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
-		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+		restoreDB := sqlutils.MakeSQLRunner(restoreTC.ServerConn(0))
 
 		restoreDB.Exec(t, `RESTORE TENANT 20 FROM 'nodelocal://1/t20'`)
 
@@ -7652,7 +7652,8 @@ func TestRestoreTypeDescriptorsRollBack(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
 
-	for _, server := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		server := tc.Server(serverIdx)
 		registry := server.JobRegistry().(*jobs.Registry)
 		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -7782,7 +7783,8 @@ func TestOfflineDescriptorsDuringRestore(t *testing.T) {
 		defer cancel()
 		kvDB := tc.Server(0).DB()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(
 				jobspb.TypeRestore, func(raw jobs.Resumer) jobs.Resumer {
@@ -7877,7 +7879,8 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		defer cancel()
 		kvDB := tc.Server(0).DB()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -7985,7 +7988,8 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		defer cancel()
 		kvDB := tc.Server(0).DB()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -8118,7 +8122,8 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -8179,7 +8184,8 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -8242,7 +8248,8 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -8257,7 +8264,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		// Use the same connection throughout (except for the concurrent RESTORE) to
 		// preserve session variables.
-		conn, err := tc.Conns[0].Conn(ctx)
+		conn, err := tc.ServerConn(0).Conn(ctx)
 		require.NoError(t, err)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -8280,7 +8287,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		afterPublishNotif, continueNotif := notifyAfterPublishing()
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
-			conn, err := tc.Conns[0].Conn(ctx)
+			conn, err := tc.ServerConn(0).Conn(ctx)
 			require.NoError(t, err)
 			_, err = conn.ExecContext(ctx, `RESTORE olddb.* FROM 'nodelocal://1/test/' WITH into_db='newdb'`)
 			require.Regexp(t, "injected error", err)
@@ -8310,7 +8317,8 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		for _, server := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			server := tc.Server(serverIdx)
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 				func(raw jobs.Resumer) jobs.Resumer {
@@ -8617,7 +8625,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	defer cleanupFn()
 
 	var forceFailure bool
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -8923,7 +8931,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	tc, _, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts,
 		InitManualReplication, params)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	defer cleanup()
 
@@ -9074,10 +9082,10 @@ func TestRestorePauseOnError(t *testing.T) {
 	defer cleanupFn()
 
 	var forceFailure bool
-	for i := range tc.Servers {
-		jobRegistry := tc.Servers[i].JobRegistry()
+	for i := 0; i < tc.NumServers(); i++ {
+		jobRegistry := tc.Server(i).JobRegistry()
 		if tc.StartedDefaultTestTenant() {
-			jobRegistry = tc.Servers[i].TestTenants()[0].JobRegistry()
+			jobRegistry = tc.Server(i).TestTenants()[0].JobRegistry()
 		}
 
 		jobRegistry.(*jobs.Registry).TestingWrapResumerConstructor(
@@ -9286,7 +9294,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 	sqlRunner := sqlutils.MakeSQLRunner(conn)
 	sqlRunner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
 
@@ -9333,7 +9341,8 @@ func TestRestoreSchemaDescriptorsRollBack(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
 
-	for _, server := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		server := tc.Server(serverIdx)
 		registry := server.JobRegistry().(*jobs.Registry)
 		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -9466,7 +9475,7 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	conn := tc.Conns[0]
+	conn := tc.ServerConn(0)
 
 	sqlDB.Exec(t, `CREATE TABLE data.foo (id INT, INDEX bar(id))`)
 	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(1,10)`)
@@ -9528,7 +9537,8 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	tc.WaitForNodeLiveness(t)
 	require.NoError(t, tc.WaitForFullReplication())
 
-	for _, server := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		server := tc.Server(serverIdx)
 		registry := server.JobRegistry().(*jobs.Registry)
 		registry.TestingWrapResumerConstructor(jobspb.TypeBackup,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -9721,7 +9731,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 
 	ctx := context.Background()
 	if !tc.StartedDefaultTestTenant() {
-		_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.
+		_, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.
 			MustMakeTenantID(10)})
 		require.NoError(t, err)
 	}
@@ -10451,7 +10461,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	defer cleanupFn()
 
 	var forceFailure bool
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeRestore,
 			func(raw jobs.Resumer) jobs.Resumer {
@@ -10652,7 +10662,7 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
-	s0 := tc.Servers[0]
+	s0 := tc.Server(0)
 
 	// Speeds up the test.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
@@ -10675,7 +10685,7 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	`)
 
 	// Wait for splits to be created on the new tables.
-	waitForTableSplit(t, tc.Conns[0], "t2", "da")
+	waitForTableSplit(t, tc.ServerConn(0), "t2", "da")
 
 	sqlDB.Exec(t, `BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;`)
 

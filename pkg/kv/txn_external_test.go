@@ -192,8 +192,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 					},
 				},
 			}
-			tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{ServerArgs: args})
-			tc := tci.(*testcluster.TestCluster)
+			tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{ServerArgs: args})
 			defer tc.Stopper().Stop(ctx)
 
 			key = tc.ScratchRange(t)
@@ -212,11 +211,11 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			var db *kv.DB
 			var tr *tracing.Tracer
 			if leaseHolder.NodeID == 1 {
-				db = tc.Servers[1].DB()
-				tr = tc.Servers[1].TracerI().(*tracing.Tracer)
+				db = tc.Server(1).DB()
+				tr = tc.Server(1).TracerI().(*tracing.Tracer)
 			} else {
-				db = tc.Servers[0].DB()
-				tr = tc.Servers[0].TracerI().(*tracing.Tracer)
+				db = tc.Server(0).DB()
+				tr = tc.Server(0).TracerI().(*tracing.Tracer)
 			}
 
 			txn := db.NewTxn(ctx, "test")
@@ -410,7 +409,8 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 
 	// Reader goroutines: perform bounded-staleness reads that hit the server-side
 	// negotiation fast-path.
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
 		tracer := s.Tracer()
@@ -527,10 +527,9 @@ func TestRevScanAndGet(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tci := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	tc := tci.(*testcluster.TestCluster)
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	db := tc.Servers[0].DB()
+	db := tc.Server(0).DB()
 
 	require.NoError(t, db.AdminSplit(ctx, "b", hlc.MaxTimestamp))
 	require.NoError(t, db.AdminSplit(ctx, "h", hlc.MaxTimestamp))

@@ -565,7 +565,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 
 	manual.Pause()
 	// Upreplicate a range.
-	n1, n2 := tc.Servers[0], tc.Servers[1]
+	n1, n2 := tc.Server(0), tc.Server(1)
 	// One of the filters hardcodes a node id.
 	require.Equal(t, roachpb.NodeID(2), n2.NodeID())
 	key := tc.ScratchRangeWithExpirationLease(t)
@@ -919,7 +919,8 @@ func testNonBlockingReadsWithReaderFn(
 	}
 
 	// Reader goroutines: run one reader per store.
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
 		g.Go(func() error {

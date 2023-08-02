@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -80,11 +79,11 @@ func TestSQLStatsRegions(t *testing.T) {
 		serverArgs[i] = args
 	}
 
-	host := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
 		ServerArgsPerNode: serverArgs,
 		ParallelStart:     true,
 	})
-	defer host.Stopper().Stop(ctx)
+	defer tc.Stopper().Stop(ctx)
 
 	go func() {
 		for _, c := range signalAfter {
@@ -92,7 +91,7 @@ func TestSQLStatsRegions(t *testing.T) {
 		}
 	}()
 
-	tdb := sqlutils.MakeSQLRunner(host.ServerConn(1))
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
 	// Shorten the closed timestamp target duration so that span configs
 	// propagate more rapidly.
@@ -116,7 +115,8 @@ func TestSQLStatsRegions(t *testing.T) {
 
 	// Create secondary tenants
 	var tenantDbs []*gosql.DB
-	for _, server := range host.Servers {
+	for i := 0; i < numServers; i++ {
+		server := tc.Server(i)
 		_, tenantDb := serverutils.StartTenant(t, server, base.TestTenantArgs{
 			Settings: st,
 			TenantID: roachpb.MustMakeTenantID(11),
@@ -131,19 +131,19 @@ func TestSQLStatsRegions(t *testing.T) {
 	tenantDbName := "testDbTenant"
 	createMultiRegionDbAndTable(t, tenantRunner, regionNames, tenantDbName)
 
-	require.NoError(t, host.WaitForFullReplication())
+	require.NoError(t, tc.WaitForFullReplication())
 
 	testCases := []struct {
 		name   string
 		dbName string
-		db     func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner
+		db     func(t *testing.T, tc serverutils.TestClusterInterface, st *cluster.Settings) *sqlutils.SQLRunner
 	}{{
 		// This test runs against the system tenant, opening a database
 		// connection to the first node in the cluster.
 		name:   "system tenant",
 		dbName: systemDbName,
-		db: func(t *testing.T, host *testcluster.TestCluster, _ *cluster.Settings) *sqlutils.SQLRunner {
-			return sqlutils.MakeSQLRunner(host.ServerConn(0))
+		db: func(t *testing.T, tc serverutils.TestClusterInterface, _ *cluster.Settings) *sqlutils.SQLRunner {
+			return sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		},
 	}, {
 		// This test runs against a secondary tenant, launching a SQL instance
@@ -151,13 +151,13 @@ func TestSQLStatsRegions(t *testing.T) {
 		// connection to the first one.
 		name:   "secondary tenant",
 		dbName: tenantDbName,
-		db: func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner {
+		db: func(t *testing.T, tc serverutils.TestClusterInterface, st *cluster.Settings) *sqlutils.SQLRunner {
 			return tenantRunner
 		},
 	}}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			db := tc.db(t, host, st)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			db := testCase.db(t, tc, st)
 
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
 
@@ -165,7 +165,7 @@ func TestSQLStatsRegions(t *testing.T) {
 			testutils.SucceedsWithin(t, func() error {
 				var expectedNodes []int64
 				var expectedRegions []string
-				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
+				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, testCase.dbName))
 				if err != nil {
 					return err
 				}

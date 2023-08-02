@@ -99,10 +99,10 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 	})
 
 	// Run migrations.
-	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1RoleMembersTableHasIDColumns).String())
 	require.NoError(t, err)
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1RoleMembersIDColumnsBackfilled).String())
 	require.NoError(t, err)
 
@@ -133,7 +133,7 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 	FAMILY fam_4_role_id (role_id),
 	FAMILY fam_5_member_id (member_id)
 )`
-	r := tc.Conns[0].QueryRow("SELECT create_statement FROM [SHOW CREATE TABLE system.role_members]")
+	r := tc.ServerConn(0).QueryRow("SELECT create_statement FROM [SHOW CREATE TABLE system.role_members]")
 	var actualSchema string
 	require.NoError(t, r.Scan(&actualSchema))
 	require.Equal(t, expectedSchema, actualSchema)

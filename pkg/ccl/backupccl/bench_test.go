@@ -127,10 +127,10 @@ func BenchmarkIteratorMemory(b *testing.B) {
 			ctx,
 			storeURI,
 			base.ExternalIODirConfig{},
-			tc.Servers[0].ClusterSettings(),
+			tc.Server(0).ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,
 			username.RootUserName(),
-			tc.Servers[0].InternalDB().(isql.DB),
+			tc.Server(0).InternalDB().(isql.DB),
 			nil, /* limiters */
 			cloud.NilMetrics,
 		)

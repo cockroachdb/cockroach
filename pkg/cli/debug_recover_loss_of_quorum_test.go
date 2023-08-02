@@ -185,7 +185,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		},
 	})
 	tcBefore.Start(t)
-	s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
+	s := sqlutils.MakeSQLRunner(tcBefore.ServerConn(0))
 	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
 	defer tcBefore.Stopper().Stop(ctx)
 
@@ -201,7 +201,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 
 	createIntentOnRangeDescriptor(ctx, t, tcBefore, sk)
 
-	node1ID := tcBefore.Servers[0].NodeID()
+	node1ID := tcBefore.Server(0).NodeID()
 	// Now that stores are prepared and replicated we can shut down cluster
 	// and perform store manipulations.
 	tcBefore.Stopper().Stop(ctx)
@@ -264,8 +264,8 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		[]roachpb.NodeID{roachpb.NodeID(2), roachpb.NodeID(3)}, tcAfter.Server(0).NodeID()),
 		"Failed to decommission removed nodes")
 
-	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+	for i := 0; i < tcAfter.NumServers(); i++ {
+		require.NoError(t, tcAfter.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(true)
 			return nil
 		}), "Failed to activate replication queue")
@@ -274,15 +274,15 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		"Failed to ensure zone configs are propagated")
 	require.NoError(t, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
 
-	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+	for i := 0; i < tcAfter.NumServers(); i++ {
+		require.NoError(t, tcAfter.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceConsistencyQueueProcess()
 		}), "Failed to force replicas to consistency queue")
 	}
 
 	// As a validation step we will just pick one range and get its replicas to see
 	// if they were up-replicated to the new nodes.
-	s = sqlutils.MakeSQLRunner(tcAfter.Conns[0])
+	s = sqlutils.MakeSQLRunner(tcAfter.ServerConn(0))
 	r := s.QueryRow(t, "select replicas from crdb_internal.ranges limit 1")
 	var replicas string
 	r.Scan(&replicas)
@@ -391,7 +391,7 @@ func TestStageVersionCheck(t *testing.T) {
 func createIntentOnRangeDescriptor(
 	ctx context.Context, t *testing.T, tcBefore *testcluster.TestCluster, sk roachpb.Key,
 ) {
-	txn := kv.NewTxn(ctx, tcBefore.Servers[0].DB(), 1)
+	txn := kv.NewTxn(ctx, tcBefore.Server(0).DB(), 1)
 	var desc roachpb.RangeDescriptor
 	// Pick one of the predefined split points.
 	rdKey := keys.RangeDescriptorKey(roachpb.RKey(sk))
@@ -467,7 +467,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		ServerArgsPerNode:   sa,
 	})
 	tc.Start(t)
-	s := sqlutils.MakeSQLRunner(tc.Conns[0])
+	s := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
 	defer tc.Stopper().Stop(ctx)
 
@@ -483,7 +483,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	createIntentOnRangeDescriptor(ctx, t, tc, sk)
 
-	node1ID := tc.Servers[0].NodeID()
+	node1ID := tc.Server(0).NodeID()
 
 	// Now that stores are prepared and replicated we can shut down cluster
 	// and perform store manipulations.
@@ -548,7 +548,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// This is caused by liveness range becoming unavailable and preventing any
 	// progress. So it is likely that test will timeout if basic workflow fails.
 	require.NoError(t, tc.RestartServer(0), "restart failed")
-	s = sqlutils.MakeSQLRunner(tc.Conns[0])
+	s = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Verifying that post start cleanup performed node decommissioning that
 	// prevents old nodes from rejoining.

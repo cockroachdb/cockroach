@@ -1191,14 +1191,14 @@ func setupPartitioningTestCluster(
 	}}
 	tc := testcluster.StartTestCluster(t, 3, tcArgs)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `CREATE DATABASE data`)
 
 	// Disabling store throttling vastly speeds up rebalancing.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.declined_reservation_timeout = '0s'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.failed_reservation_timeout = '0s'`)
 
-	return tc.Conns[0], sqlDB, func() {
+	return tc.ServerConn(0), sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
 	}
 }

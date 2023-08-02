@@ -288,8 +288,9 @@ SELECT checkpoint > extract(epoch from after)
 
 	// Wait for the configs to be applied.
 	testutils.SucceedsWithin(t, func() error {
-		for _, server := range tc.Servers {
-			reporter := server.SpanConfigReporter().(spanconfig.Reporter)
+		for i := 0; i < tc.NumServers(); i++ {
+			s := tc.Server(i)
+			reporter := s.SpanConfigReporter().(spanconfig.Reporter)
 			report, err := reporter.SpanConfigConformance(ctx, []roachpb.Span{
 				{Key: keys.TableDataMin, EndKey: keys.TenantTableDataMax},
 			})

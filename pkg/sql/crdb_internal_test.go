@@ -129,10 +129,10 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 		},
 	)
 	defer tc.Stopper().Stop(ctx)
-	assert.EqualValues(t, 1, tc.Servers[len(tc.Servers)-1].GetFirstStoreID())
+	assert.EqualValues(t, 1, tc.Server(tc.NumServers()-1).GetFirstStoreID())
 
 	// Set to 2 so the next store id will be 3.
-	assert.NoError(t, tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 2))
+	assert.NoError(t, tc.Server(0).DB().Put(ctx, keys.StoreIDGenerator, 2))
 
 	// NodeID=2, StoreID=3
 	tc.AddAndStartServer(t,
@@ -140,10 +140,10 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "2"}}},
 		},
 	)
-	assert.EqualValues(t, 3, tc.Servers[len(tc.Servers)-1].GetFirstStoreID())
+	assert.EqualValues(t, 3, tc.Server(tc.NumServers()-1).GetFirstStoreID())
 
 	// Set to 1 so the next store id will be 2.
-	assert.NoError(t, tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 1))
+	assert.NoError(t, tc.Server(0).DB().Put(ctx, keys.StoreIDGenerator, 1))
 
 	// NodeID=3, StoreID=2
 	tc.AddAndStartServer(t,
@@ -151,10 +151,10 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "3"}}},
 		},
 	)
-	assert.EqualValues(t, 2, tc.Servers[len(tc.Servers)-1].GetFirstStoreID())
+	assert.EqualValues(t, 2, tc.Server(tc.NumServers()-1).GetFirstStoreID())
 	assert.NoError(t, tc.WaitForFullReplication())
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	var replicas, localities string
 	sqlDB.QueryRow(t, `select replicas, replica_localities from crdb_internal.ranges limit 1`).
 		Scan(&replicas, &localities)

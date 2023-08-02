@@ -50,7 +50,7 @@ func TestGCPKMSExternalConnection(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -178,7 +178,7 @@ func TestGCPKMSExternalConnectionAssumeRole(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -305,7 +305,7 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -452,7 +452,7 @@ func TestGCPExternalConnection(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)

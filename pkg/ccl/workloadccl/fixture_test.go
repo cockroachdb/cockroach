@@ -267,7 +267,7 @@ func TestImportFixtureNodeCount(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Conns[0]
+	db := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	gen := makeTestWorkload()

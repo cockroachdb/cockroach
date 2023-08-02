@@ -92,10 +92,10 @@ VALUES (
 	}
 
 	// Run migrations.
-	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err := tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn).String())
 	require.NoError(t, err)
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err = tc.ServerConn(0).ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1WebSessionsTableUserIDColumnBackfilled).String())
 	require.NoError(t, err)
 

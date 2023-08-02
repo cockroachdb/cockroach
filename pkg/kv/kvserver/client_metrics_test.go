@@ -303,7 +303,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Flush Pebble memtables, so that Pebble begins using block-based tables.
 	// This is useful, because most of the stats we track don't apply to
 	// memtables.
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		if err := tc.GetFirstStoreFromServer(t, i).TODOEngine().Flush(); err != nil {
 			t.Fatal(err)
 		}

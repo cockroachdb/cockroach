@@ -83,7 +83,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(context.Background())
 
-	for _, server := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		server := tc.Server(serverIdx)
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		kvserver.LoadBasedRebalancingMode.Override(ctx, &st.SV, int64(kvserver.LBRebalancingOff))
@@ -119,8 +120,9 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	}
 
 	countReplicas := func() []int {
-		counts := make([]int, len(tc.Servers))
-		for _, s := range tc.Servers {
+		counts := make([]int, tc.NumServers())
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			s := tc.Server(serverIdx)
 			err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				counts[s.StoreID()-1] += s.ReplicaCount()
 				return nil
@@ -160,7 +162,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	// Query the range log to see if anything unexpected happened. Concretely,
 	// we'll make sure that our tracked ranges never had >3 replicas.
-	infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
+	infos, err := queryRangeLog(tc.ServerConn(0), `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
 	require.NoError(t, err)
 	for _, info := range infos {
 		if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
@@ -240,7 +242,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 				args)
 			defer tc.Stopper().Stop(context.Background())
 			ctx := context.Background()
-			for _, server := range tc.Servers {
+			for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+				server := tc.Server(serverIdx)
 				st := server.ClusterSettings()
 				st.Manual.Store(true)
 				allocatorimpl.LeaseRebalanceThreshold.Override(ctx, &st.SV, leaseRebalanceThreshold)
@@ -279,7 +282,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 
 			countReplicas := func() (total int, perStore []int) {
 				perStore = make([]int, numStores)
-				for _, s := range tc.Servers {
+				for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+					s := tc.Server(serverIdx)
 					err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 						require.Zero(t, perStore[s.StoreID()-1])
 						perStore[s.StoreID()-1] = s.ReplicaCount()
@@ -292,7 +296,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			}
 			countLeases := func() (total int, perStore []int) {
 				perStore = make([]int, numStores)
-				for _, s := range tc.Servers {
+				for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+					s := tc.Server(serverIdx)
 					err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 						c, err := s.Capacity(ctx, false)
 						require.NoError(t, err)
@@ -350,7 +355,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 
 			// Query the range log to see if anything unexpected happened. Concretely,
 			// we'll make sure that our tracked ranges never had >3 replicas.
-			infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
+			infos, err := queryRangeLog(tc.ServerConn(0), `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
 			require.NoError(t, err)
 			for _, info := range infos {
 				if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
@@ -393,7 +398,7 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 
 	tc.AddAndStartServer(t, base.TestServerArgs{})
 
-	if err := tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	if err := tc.Server(0).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		return s.ForceReplicationScanAndProcess()
 	}); err != nil {
 		t.Fatal(err)
@@ -401,13 +406,13 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	// After the initial splits have been performed, all of the resulting ranges
 	// should be present in replicate queue purgatory (because we only have a
 	// single store in the test and thus replication cannot succeed).
-	expected, err := tc.Servers[0].ExpectedInitialRangeCount()
+	expected, err := tc.Server(0).ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var store *kvserver.Store
-	_ = tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	_ = tc.Server(0).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		store = s
 		return nil
 	})
@@ -432,7 +437,7 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], desc.RangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated,
+		tc.ServerConn(0), desc.RangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -483,7 +488,8 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		require.NoError(t, s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			require.NoError(t, s.ForceReplicationScanAndProcess())
 			return nil
@@ -502,7 +508,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 
 	desc := tc.LookupRangeOrFatal(t, testKey)
 	infos, err := filterRangeLog(
-		tc.Conns[0], desc.RangeID, kvserverpb.RangeLogEventType_remove_voter, kvserverpb.ReasonRangeOverReplicated,
+		tc.ServerConn(0), desc.RangeID, kvserverpb.RangeLogEventType_remove_voter, kvserverpb.ReasonRangeOverReplicated,
 	)
 	require.NoError(t, err)
 	require.Truef(t, len(infos) >= 1, "found no down replication due to over-replication in the range logs")
@@ -511,7 +517,8 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 func scanAndGetNumNonVoters(
 	t *testing.T, tc *testcluster.TestCluster, scratchKey roachpb.Key,
 ) (numNonVoters int) {
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		// Nudge internal queues to up/down-replicate our scratch range.
 		require.NoError(t, s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			require.NoError(t, s.ForceSplitScanAndProcess())
@@ -1018,7 +1025,7 @@ func getLeaseholderStore(
 	if err != nil {
 		return nil, err
 	}
-	leaseHolderSrv := tc.Servers[leaseHolder.NodeID-1]
+	leaseHolderSrv := tc.Server(leaseHolder.NodeID - 1)
 	store, err := leaseHolderSrv.GetStores().(*kvserver.Stores).GetStore(leaseHolder.StoreID)
 	if err != nil {
 		return nil, err
@@ -1400,7 +1407,8 @@ func getAggregateMetricCounts(
 	voterMap map[roachpb.NodeID]roachpb.StoreID,
 	add bool,
 ) (currentCount int64, currentVoterCount int64) {
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		if storeId, exists := voterMap[s.NodeID()]; exists {
 			store, err := s.GetStores().(*kvserver.Stores).GetStore(storeId)
 			if err != nil {
@@ -1722,7 +1730,8 @@ func filterRangeLog(
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(active)
 			return nil
@@ -1731,7 +1740,8 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 }
 
 func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceReplicationScanAndProcess()
 		})
@@ -1740,7 +1750,8 @@ func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 }
 
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
-	for _, s := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		s := tc.Server(serverIdx)
 		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetSplitQueueActive(active)
 			return nil
@@ -1793,7 +1804,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	toggleReplicationQueues(tc, false /* active */)
 	toggleSplitQueues(tc, false /* active */)
 
-	db := tc.Conns[0]
+	db := tc.ServerConn(0)
 	_, err := db.Exec("create table t (i int primary key, s string)")
 	require.NoError(t, err)
 
@@ -1828,7 +1839,8 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 
 	forceProcess := func() {
 		// Speed up the queue processing.
-		for _, s := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			s := tc.Server(serverIdx)
 			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 				return store.ForceReplicationScanAndProcess()
 			})
@@ -1940,7 +1952,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	// Get the system.comments' range and lease holder
 	var rangeID roachpb.RangeID
 	var leaseHolderNodeID uint64
-	s := sqlutils.MakeSQLRunner(tc.Conns[0])
+	s := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	s.Exec(t, "INSERT INTO system.comments VALUES(0,0,0,'abc')")
 	s.QueryRow(t,
 		"SELECT range_id, lease_holder FROM "+
@@ -1952,7 +1964,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	}
 	log.Infof(ctx, "RangeID %d, RemoteNodeID %d, LeaseHolderNodeID %d",
 		rangeID, remoteNodeID, leaseHolderNodeID)
-	leaseHolderSrv := tc.Servers[leaseHolderNodeID-1]
+	leaseHolderSrv := tc.Server(leaseHolderNodeID - 1)
 	leaseHolderStoreID := leaseHolderSrv.GetFirstStoreID()
 	leaseHolderStore, err := leaseHolderSrv.GetStores().(*kvserver.Stores).GetStore(leaseHolderStoreID)
 	if err != nil {
@@ -1960,7 +1972,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	}
 
 	// Start delaying Raft messages to the remote node
-	remoteSrv := tc.Servers[remoteNodeID-1]
+	remoteSrv := tc.Server(remoteNodeID - 1)
 	remoteStoreID := remoteSrv.GetFirstStoreID()
 	remoteStore, err := remoteSrv.GetStores().(*kvserver.Stores).GetStore(remoteStoreID)
 	if err != nil {
@@ -1974,7 +1986,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	workerReady := make(chan bool)
 	// Create persistent range load.
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "load", func(ctx context.Context) {
-		s = sqlutils.MakeSQLRunner(tc.Conns[remoteNodeID-1])
+		s = sqlutils.MakeSQLRunner(tc.ServerConn(remoteNodeID - 1))
 		workerReady <- true
 		for {
 			s.Exec(t, fmt.Sprintf("update system.comments set comment='abc' "+
@@ -2052,7 +2064,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			)
 			return nil
 		}
-		currentSrv := tc.Servers[leaseBefore.Replica.NodeID-1]
+		currentSrv := tc.Server(leaseBefore.Replica.NodeID - 1)
 		leaseStore, err := currentSrv.GetStores().(*kvserver.Stores).GetStore(currentSrv.GetFirstStoreID())
 		if err != nil {
 			return err
@@ -2112,7 +2124,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 		},
 	)
 	defer tc.Stopper().Stop(ctx)
-	db := tc.Conns[0]
+	db := tc.ServerConn(0)
 	// Disable consistency checker and sql stats collection that may acquire a
 	// lease by querying a range.
 	_, err := db.Exec("set cluster setting server.consistency_check.interval = '0s'")
@@ -2147,7 +2159,7 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 	require.Len(t, invalidLeases(), 0)
 
 	// Restart the servers to invalidate the leases.
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		tc.StopServer(i)
 		err = tc.RestartServerWithInspect(i, nil)
 		require.NoError(t, err)
@@ -2155,7 +2167,8 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 
 	forceProcess := func() {
 		// Speed up the queue processing.
-		for _, s := range tc.Servers {
+		for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+			s := tc.Server(serverIdx)
 			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 				return store.ForceReplicationScanAndProcess()
 			})
@@ -2184,7 +2197,8 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 func iterateOverAllStores(
 	t *testing.T, tc *testcluster.TestCluster, f func(*kvserver.Store) error,
 ) {
-	for _, server := range tc.Servers {
+	for serverIdx := 0; serverIdx < tc.NumServers(); serverIdx++ {
+		server := tc.Server(serverIdx)
 		require.NoError(t, server.GetStores().(*kvserver.Stores).VisitStores(f))
 	}
 }
@@ -2345,7 +2359,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	var rangeID roachpb.RangeID
 	err = db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
 	require.NoError(t, err)
-	addVoterEvents, err := filterRangeLog(tc.Conns[0],
+	addVoterEvents, err := filterRangeLog(tc.ServerConn(0),
 		rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
 	require.NoError(t, err)
 
@@ -2540,7 +2554,7 @@ func TestReplicateQueueLeasePreferencePurgatoryError(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.Conns[0]
+	db := tc.ServerConn(0)
 	setLeasePreferences := func(node int) {
 		_, err := db.Exec(fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
       num_replicas=3, num_voters=3, voter_constraints='[]', lease_preferences='[[+rack=%d]]'`,

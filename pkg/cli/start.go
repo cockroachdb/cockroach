@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -312,45 +313,7 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
-type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error)
-
-type serverStartupInterface interface {
-	serverShutdownInterface
-
-	// ClusterSettings retrieves this server's settings.
-	ClusterSettings() *cluster.Settings
-
-	// LogicalClusterID retrieves this server's logical cluster ID.
-	LogicalClusterID() uuid.UUID
-
-	// PreStart starts the server on the specified port(s) and
-	// initializes subsystems.
-	// It does not activate the pgwire listener over the network / unix
-	// socket, which is done by the AcceptClients() method. The separation
-	// between the two exists so that SQL initialization can take place
-	// before the first client is accepted.
-	PreStart(ctx context.Context) error
-
-	// AcceptClients starts listening for incoming SQL clients over the network.
-	AcceptClients(ctx context.Context) error
-	// AcceptInternalClients starts listening for incoming internal SQL clients over the
-	// loopback interface.
-	AcceptInternalClients(ctx context.Context) error
-
-	// InitialStart returns whether this node is starting for the first time.
-	// This is (currently) used when displaying the server status report
-	// on the terminal & in logs. We know that some folk have automation
-	// that depend on certain strings displayed from this when orchestrating
-	// KV-only nodes.
-	InitialStart() bool
-
-	// RunInitialSQL runs the SQL initialization for brand new clusters,
-	// if the cluster is being started for the first time.
-	// The arguments are:
-	// - startSingleNode is used by 'demo' and 'start-single-node'.
-	// - adminUser/adminPassword is used for 'demo'.
-	RunInitialSQL(ctx context.Context, startSingleNode bool, adminUser, adminPassword string) error
-}
+type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error)
 
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
@@ -398,9 +361,9 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	const serverType redact.SafeString = "node"
 
-	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
 		// Beware of not writing simply 'return server.NewServer()'. This is
-		// because it would cause the serverStartupInterface reference to
+		// because it would cause the serverctl.ServerStartupInterface reference to
 		// always be non-nil, even if NewServer returns a nil pointer (and
 		// an error). The code below is dependent on the interface
 		// reference remaining nil in case of error.
@@ -757,10 +720,10 @@ func createAndStartServerAsync(
 	newServerFn newServerFn,
 	startSingleNode bool,
 	serverType redact.SafeString,
-) (srvStatus *serverStatus, serverShutdownReqC <-chan server.ShutdownRequest) {
+) (srvStatus *serverStatus, serverShutdownReqC <-chan serverctl.ShutdownRequest) {
 	var serverStatusMu serverStatus
-	var s serverStartupInterface
-	shutdownReqC := make(chan server.ShutdownRequest, 1)
+	var s serverctl.ServerStartupInterface
+	shutdownReqC := make(chan serverctl.ShutdownRequest, 1)
 
 	log.Ops.Infof(ctx, "starting cockroach %s", serverType)
 
@@ -851,8 +814,8 @@ func createAndStartServerAsync(
 			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
 				serverType, s.InitialStart(), s.LogicalClusterID())
 		}(); err != nil {
-			shutdownReqC <- server.MakeShutdownRequest(
-				server.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))
+			shutdownReqC <- serverctl.MakeShutdownRequest(
+				serverctl.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))
 		} else {
 			// Start a goroutine that watches for shutdown requests and notifies
 			// errChan.
@@ -885,7 +848,7 @@ type serverStatus struct {
 	// s is a reference to the server, to be used by the shutdown process. This
 	// starts as nil, and is set by setStarted(). Once set, a graceful shutdown
 	// should use a soft drain.
-	s serverShutdownInterface
+	s serverctl.ServerShutdownInterface
 	// stopper is the server's stopper. This is set in setStarted(), together with
 	// `s`. The stopper is handed out to callers of startShutdown(), who will
 	// Stop() it.
@@ -904,7 +867,9 @@ type serverStatus struct {
 // setStarted returns whether shutdown has been requested already. If it has,
 // then the serverStatus does not take ownership of the stopper; the caller is
 // responsible for calling stopper.Stop().
-func (s *serverStatus) setStarted(server serverShutdownInterface, stopper *stop.Stopper) bool {
+func (s *serverStatus) setStarted(
+	server serverctl.ServerShutdownInterface, stopper *stop.Stopper,
+) bool {
 	s.Lock()
 	defer s.Unlock()
 	if s.shutdownRequested {
@@ -927,19 +892,11 @@ func (s *serverStatus) shutdownInProgress() bool {
 // was started already. If the server started, a reference to the server is also
 // returned, and a reference to the stopper that the caller needs to eventually
 // Stop().
-func (s *serverStatus) startShutdown() (bool, serverShutdownInterface, *stop.Stopper) {
+func (s *serverStatus) startShutdown() (bool, serverctl.ServerShutdownInterface, *stop.Stopper) {
 	s.Lock()
 	defer s.Unlock()
 	s.shutdownRequested = true
 	return s.s != nil, s.s, s.stopper
-}
-
-// serverShutdownInterface is the subset of the APIs on a server
-// object that's sufficient to run a server shutdown.
-type serverShutdownInterface interface {
-	AnnotateCtx(context.Context) context.Context
-	Drain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
-	ShutdownRequested() <-chan server.ShutdownRequest
 }
 
 // waitForShutdown blocks until interrupted by a shutdown signal, which can come
@@ -953,7 +910,7 @@ type serverShutdownInterface interface {
 // before shutting down.
 func waitForShutdown(
 	stopper *stop.Stopper,
-	shutdownC <-chan server.ShutdownRequest,
+	shutdownC <-chan serverctl.ShutdownRequest,
 	signalCh <-chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
@@ -966,7 +923,7 @@ func waitForShutdown(
 	case shutdownRequest := <-shutdownC:
 		returnErr = shutdownRequest.ShutdownCause()
 		// There's no point in draining if the server didn't even fully start.
-		drain := shutdownRequest.Reason != server.ShutdownReasonServerStartupError
+		drain := shutdownRequest.Reason != serverctl.ShutdownReasonServerStartupError
 		startShutdownAsync(serverStatusMu, stopWithoutDrain, drain)
 
 	case sig := <-signalCh:

@@ -181,7 +181,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	s := tc.Servers[0]
+	s := tc.Server(0)
 
 	testcases := make(map[string]testcase)
 	for _, table := range systemschema.MakeSystemTables() {

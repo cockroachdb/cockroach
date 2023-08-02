@@ -42,7 +42,7 @@ func TestGossipFirstRange(t *testing.T) {
 
 	errors := make(chan error, 1)
 	descs := make(chan *roachpb.RangeDescriptor)
-	unregister := tc.Servers[0].GossipI().(*gossip.Gossip).
+	unregister := tc.Server(0).GossipI().(*gossip.Gossip).
 		RegisterCallback(gossip.KeyFirstRangeDescriptor,
 			func(_ string, content roachpb.Value) {
 				var desc roachpb.RangeDescriptor
@@ -172,10 +172,10 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
 	newServerArgs := serverArgs
-	newServerArgs.Addr = tc.Servers[oldNodeIdx].AdvRPCAddr()
-	newServerArgs.SQLAddr = tc.Servers[oldNodeIdx].AdvSQLAddr()
+	newServerArgs.Addr = tc.Server(oldNodeIdx).AdvRPCAddr()
+	newServerArgs.SQLAddr = tc.Server(oldNodeIdx).AdvSQLAddr()
 	newServerArgs.PartOfCluster = true
-	newServerArgs.JoinAddr = tc.Servers[1].AdvRPCAddr()
+	newServerArgs.JoinAddr = tc.Server(1).AdvRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
 	// We are re-using a hard-coded port. Other processes on the system may by now
@@ -195,7 +195,8 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first
 	// node, they can get stuck here.
-	for i, server := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
+		server := tc.Server(i)
 		if i == oldNodeIdx {
 			continue
 		}

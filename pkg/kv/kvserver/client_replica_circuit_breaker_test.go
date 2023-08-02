@@ -610,7 +610,7 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 			return addReq
 		},
 		func() kvpb.Request {
-			return &kvpb.RevertRangeRequest{TargetTime: tc.Servers[0].Clock().Now()}
+			return &kvpb.RevertRangeRequest{TargetTime: tc.Server(0).Clock().Now()}
 		},
 		func() kvpb.Request {
 			return &kvpb.GCRequest{}
@@ -830,7 +830,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	require.NoError(t, tc.WaitForVoters(k, tc.Target(n2)))
 
 	var repls []replWithKnob
-	for i := range tc.Servers {
+	for i := 0; i < tc.NumServers(); i++ {
 		repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(keys.MustAddr(k))
 		enableProbe := makeBreakerToggleable(repl.Breaker())
 		repls = append(repls, replWithKnob{repl, enableProbe})

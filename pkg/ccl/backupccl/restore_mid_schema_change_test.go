@@ -220,7 +220,7 @@ func restoreMidSchemaChange(
 			tc.Stopper().Stop(ctx)
 			dirCleanupFn()
 		}()
-		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		symlink := filepath.Join(dir, "foo")
 		err := os.Symlink(backupDir, symlink)
