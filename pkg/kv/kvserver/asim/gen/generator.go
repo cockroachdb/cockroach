@@ -166,8 +166,8 @@ type BasicCluster struct {
 // nodes having the same locality and with the specified number of stores/nodes
 // created. The cluster is created based on the stores and stores-per-node
 // values the basic cluster generator is created with.
-func (lc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
-	info := state.ClusterInfoWithStoreCount(lc.Nodes, lc.StoresPerNode)
+func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
+	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
 	return state.LoadClusterInfo(info, settings)
 }
 
