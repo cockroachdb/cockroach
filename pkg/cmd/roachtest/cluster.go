@@ -616,6 +616,11 @@ func (r *clusterRegistry) registerCluster(c *clusterImpl) error {
 		return fmt.Errorf("cluster named %q already exists in registry", c.name)
 	}
 	r.mu.clusters[c.name] = c
+	if err := c.addLabels(map[string]string{
+		"test_run_id": runId,
+	}); err != nil && c.l != nil {
+		c.l.Printf("failed to add test_run_id label to cluster: %s", err)
+	}
 	return nil
 }
 
@@ -626,6 +631,9 @@ func (r *clusterRegistry) unregisterCluster(c *clusterImpl) bool {
 		// If the cluster is not registered, no-op. This allows the
 		// method to be called defensively.
 		return false
+	}
+	if err := c.removeLabels([]string{"test_run_id"}); err != nil && c.l != nil {
+		c.l.Printf("failed to remove test_run_id label from cluster: %s", err)
 	}
 	delete(r.mu.clusters, c.name)
 	if c.tag != "" {

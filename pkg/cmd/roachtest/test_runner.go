@@ -70,7 +70,15 @@ var (
 	prometheusScrapeInterval = time.Second * 15
 
 	prng, _ = randutil.NewLockedPseudoRand()
+
+	runId string
 )
+
+// VmLabelTestName is the label used to identify the test name in the VM metadata
+const VmLabelTestName string = "test_name"
+
+// VmLabelTestRunId is the label used to identify the test run id in the VM metadata
+const VmLabelTestRunId string = "test_run_id"
 
 // testRunner runs tests.
 type testRunner struct {
@@ -296,6 +304,8 @@ func (r *testRunner) Run(
 
 	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
 	l := lopt.l
+	runId = generateRunId(clustersOpt.user)
+	shout(ctx, l, lopt.stdout, "%s: %s", VmLabelTestRunId, runId)
 	var wg sync.WaitGroup
 
 	for i := 0; i < parallelism; i++ {
@@ -384,6 +394,16 @@ func numConcurrentClusterCreations() int {
 		res = 1000
 	}
 	return res
+}
+
+// This will be added as a label to all cluster nodes when the
+// cluster is registered.
+func generateRunId(user string) string {
+	uniqueId := os.Getenv("TC_BUILD_ID")
+	if uniqueId == "" {
+		uniqueId = fmt.Sprintf("%d", timeutil.Now().Unix())
+	}
+	return fmt.Sprintf("%s-%s", user, uniqueId)
 }
 
 // defaultClusterAllocator is used by workers to create new clusters (or to attach
