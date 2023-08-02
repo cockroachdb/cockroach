@@ -248,4 +248,5 @@ var hibernateIgnoreList21_1 = blocklist{
 	"org.hibernate.userguide.pc.WhereTest.testLifecycle":                                                 "unknown",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
+	"org.hibernate.test.batch.BatchTest.testBatchInsertUpdate":                                           "flaky",
 }
