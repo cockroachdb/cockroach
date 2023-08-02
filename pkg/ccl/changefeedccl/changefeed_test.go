@@ -7841,6 +7841,25 @@ func (s *memoryHoggingSink) Close() error {
 	return nil
 }
 
+type countEmittedRowsSink struct {
+	memoryHoggingSink
+	numRows int64 // Accessed atomically; not using atomic.Int64 to make backports possible.
+}
+
+func (s *countEmittedRowsSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	alloc.Release(ctx)
+	atomic.AddInt64(&s.numRows, 1)
+	return nil
+}
+
+var _ Sink = (*countEmittedRowsSink)(nil)
+
 func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -7889,6 +7908,54 @@ func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 123)`)
 	<-allEmitted
 	require.Greater(t, sink.numFlushes(), 0)
+}
+
+// Test verifies that KV feed does not leak event memory allocation
+// when it reaches end_time or scan boundary.
+func TestKVFeedDoesNotLeakMemoryWhenSkippingEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stopServer := makeServer(t)
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	knobs := s.TestingKnobs.
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+
+	// Arrange for a small memory budget.
+	knobs.MemMonitor = startMonitorWithBudget(4096)
+
+	// Arrange for custom sink to be used -- a sink that counts emitted rows.
+	sink := &countEmittedRowsSink{}
+	knobs.WrapSink = func(_ Sink, _ jobspb.JobID) Sink {
+		return sink
+	}
+	sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
+
+	startTime := s.Server.Clock().Now().AsOfSystemTime()
+
+	// Insert 123 rows -- this fills up our tiny memory buffer (~26 rows do)
+	// Collect statement timestamp -- this will become our end time.
+	var insertTimeStr string
+	sqlDB.QueryRow(t,
+		`INSERT INTO foo (val) SELECT * FROM generate_series(1, 123) RETURNING cluster_logical_timestamp();`,
+	).Scan(&insertTimeStr)
+	endTime := parseTimeToHLC(t, insertTimeStr).AsOfSystemTime()
+
+	// Start the changefeed, with end_time set to be equal to the insert time.
+	// KVFeed should ignore all events.
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'null:' WITH cursor = $1, end_time = $2`,
+		startTime, endTime).Scan(&jobID)
+
+	// If everything is fine (events are ignored, but their memory allocation is released),
+	// the changefeed should terminate.  If not, we'll time out waiting for job.
+	waitForJobStatus(sqlDB, t, jobID, jobs.StatusSucceeded)
+
+	// No rows should have been emitted (all should have been filtered out due to end_time).
+	require.EqualValues(t, 0, atomic.LoadInt64(&sink.numRows))
 }
 
 func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
