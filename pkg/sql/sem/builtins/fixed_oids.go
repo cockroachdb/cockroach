@@ -2437,6 +2437,18 @@ var builtinOidsArray = []string{
 	2464: `workload_index_recs(budget: string) -> string`,
 	2465: `workload_index_recs(timestamptz: timestamptz, budget: string) -> string`,
 	2466: `crdb_internal.setup_span_configs_stream(tenant_name: string) -> bytes`,
+	2467: `bitmask_or(a: varbit, b: varbit) -> varbit`,
+	2468: `bitmask_or(a: string, b: string) -> varbit`,
+	2469: `bitmask_or(a: varbit, b: string) -> varbit`,
+	2470: `bitmask_or(a: string, b: varbit) -> varbit`,
+	2471: `bitmask_and(a: varbit, b: varbit) -> varbit`,
+	2472: `bitmask_and(a: string, b: string) -> varbit`,
+	2473: `bitmask_and(a: varbit, b: string) -> varbit`,
+	2474: `bitmask_and(a: string, b: varbit) -> varbit`,
+	2475: `bitmask_xor(a: varbit, b: varbit) -> varbit`,
+	2476: `bitmask_xor(a: string, b: string) -> varbit`,
+	2477: `bitmask_xor(a: varbit, b: string) -> varbit`,
+	2478: `bitmask_xor(a: string, b: varbit) -> varbit`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
