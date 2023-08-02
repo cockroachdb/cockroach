@@ -655,9 +655,8 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) bool {
 	descBeforeRebalance, _ := candidateReplica.DescAndSpanConfig()
-	log.KvDistribution.VEventf(
+	log.KvDistribution.Infof(
 		ctx,
-		1,
 		"rebalancing r%d (%s load) to better balance load: voters from %v to %v; non-voters from %v to %v",
 		candidateReplica.GetRangeID(),
 		candidateReplica.RangeUsageInfo().Load(),
@@ -800,9 +799,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 		if targetStore, ok := rctx.allStoresList.FindStoreByID(candidate.StoreID); ok {
-			log.KvDistribution.VEventf(
+			log.KvDistribution.Infof(
 				ctx,
-				1,
 				"transferring lease for r%d load=%s to store s%d load=%s from local store s%d load=%s",
 				desc.RangeID,
 				candidateReplica.RangeUsageInfo().TransferImpact(),
