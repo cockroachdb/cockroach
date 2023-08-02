@@ -1718,6 +1718,11 @@ func dropColumnImpl(
 	}
 
 	for _, idxName := range idxNamesToDelete {
+		params.EvalContext().ClientNoticeSender.BufferClientNotice(params.ctx, pgnotice.Newf(
+			"dropping index %q which depends on column %q",
+			idxName,
+			colToDrop.ColName(),
+		))
 		jobDesc := fmt.Sprintf(
 			"removing index %q dependent on column %q which is being dropped; full details: %s",
 			idxName,
