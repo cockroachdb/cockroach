@@ -1,0 +1,228 @@
+# Disable fast path for some test runs.
+let $enable_insert_fast_path
+SELECT random() < 0.5
+
+statement ok
+SET enable_insert_fast_path = $enable_insert_fast_path
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p));
+
+
+subtest insert
+
+statement ok
+CREATE FUNCTION f_fk_c(k INT, r INT) RETURNS RECORD AS $$
+  INSERT INTO child VALUES (k,r) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_p(r INT) RETURNS RECORD AS $$
+  INSERT INTO parent VALUES (r) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_c_p(k INT, r INT) RETURNS RECORD AS $$
+  INSERT INTO child VALUES (k,r);
+  INSERT INTO parent VALUES (r) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_p_c(k INT, r INT) RETURNS RECORD AS $$
+  INSERT INTO parent VALUES (r);
+  INSERT INTO child VALUES (k, r) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c(100, 1);
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_p(100, 1);
+
+query T
+SELECT f_fk_p_c(100, 1);
+----
+(100,1)
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+WITH x AS (SELECT f_fk_c(101, 2)) INSERT INTO parent VALUES (2);
+
+query T
+WITH x AS (INSERT INTO parent VALUES (2) RETURNING p) SELECT f_fk_c(101, 2);
+----
+(101,2)
+
+statement ok
+TRUNCATE parent CASCADE
+
+statement ok
+INSERT INTO parent (p) VALUES (1);
+
+statement ok
+CREATE FUNCTION f_fk_c_multi(k1 INT, r1 INT, k2 INT, r2 INT) RETURNS SETOF RECORD AS $$
+  INSERT INTO child VALUES (k1,r1);
+  INSERT INTO child VALUES (k2,r2);
+  SELECT * FROM child WHERE c = k1 OR c = k2;
+$$ LANGUAGE SQL;
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_multi(101, 1, 102, 2);
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_multi(101, 2, 102, 1);
+
+query T rowsort
+SELECT f_fk_c_multi(101, 1, 102, 1);
+----
+(101,1)
+(102,1)
+
+# Sequences advance even if subsequent statements fail foreign key checks.
+statement ok
+CREATE SEQUENCE s;
+
+statement ok
+CREATE FUNCTION f_fk_c_seq_first(k INT, r INT) RETURNS RECORD AS $$
+  SELECT nextval('s');
+  INSERT INTO child VALUES (k,r) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_c_seq_last(k INT, r INT) RETURNS RECORD AS $$
+  INSERT INTO child VALUES (k,r) RETURNING *;
+  SELECT nextval('s');
+$$ LANGUAGE SQL;
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_seq_last(103,2);
+
+statement error pq: currval\(\): currval of sequence \"test.public.s\" is not yet defined in this session
+SELECT currval('s');
+
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_seq_first(103,2);
+
+query I
+SELECT currval('s');
+----
+1
+
+subtest delete
+
+statement ok
+TRUNCATE parent CASCADE
+
+statement ok
+INSERT INTO parent (p) VALUES (1), (2), (3), (4);
+
+statement ok
+INSERT INTO child (c, p) VALUES (100, 1), (101, 2), (102, 3);
+
+query I rowsort
+SELECT * FROM parent
+----
+1
+2
+3
+4
+
+query II rowsort
+SELECT * FROM child
+----
+100 1
+101 2
+102 3
+
+statement ok
+CREATE FUNCTION f_fk_c_del(k INT) RETURNS RECORD AS $$
+  DELETE FROM child WHERE c = k RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_p_del(r INT) RETURNS RECORD AS $$
+  DELETE FROM parent WHERE p = r RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_c_p_del(k INT, r INT) RETURNS RECORD AS $$
+  DELETE FROM child WHERE c = k RETURNING *;
+  DELETE FROM parent WHERE p = r RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_fk_p_c_del(k INT, r INT) RETURNS RECORD AS $$
+  DELETE FROM parent WHERE p = r RETURNING *;
+  DELETE FROM child WHERE c = k RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+SELECT f_fk_p_del(4);
+
+statement error pq: delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(3\) is still referenced from table "child"\.
+SELECT f_fk_p_del(3);
+
+statement ok
+SELECT f_fk_c_del(102);
+
+statement ok
+SELECT f_fk_p_del(3);
+
+statement error pq: delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(2\) is still referenced from table "child"\.
+SELECT f_fk_p_c_del(101,2);
+
+statement ok
+SELECT f_fk_c_p_del(101,2);
+
+statement ok
+SELECT f_fk_c_del(100), f_fk_p_del(1);
+
+query I rowsort
+SELECT * FROM parent
+----
+
+query II rowsort
+SELECT * FROM child
+----
+
+
+subtest upsert
+
+statement ok
+TRUNCATE parent CASCADE
+
+statement ok
+CREATE FUNCTION f_fk_c_ocdu(k INT, r INT) RETURNS RECORD AS $$
+  INSERT INTO child VALUES (k, r) ON CONFLICT (c) DO UPDATE SET p = r RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+INSERT INTO parent VALUES (1), (3);
+
+# Insert
+statement ok
+SELECT f_fk_c_ocdu(100,1);
+
+# Update to value not in parent fails.
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_ocdu(100,2);
+
+# Inserting value not in parent fails.
+statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_ocdu(101,2);
+
+statement ok
+CREATE FUNCTION f_fk_c_ups(k INT, r INT) RETURNS RECORD AS $$
+  UPSERT INTO child VALUES (k, r) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+SELECT f_fk_c_ups(102,3);
+
+statement error pq: upsert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_ups(102,4);
+
+statement error pq: upsert on table "child" violates foreign key constraint "child_p_fkey"
+SELECT f_fk_c_ups(103,4);
