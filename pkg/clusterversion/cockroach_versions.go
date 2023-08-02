@@ -561,6 +561,11 @@ const (
 	// and its ready for use.
 	V23_2_RegionaLivenessTable
 
+	// V23_2_RemoveLockTableWaiterTouchPush simplifies the push logic in
+	// lock_table_waiter by passing the wait policy of the pusher as part of the
+	// push request and leaving the push outcome to the server-side logic.
+	V23_2_RemoveLockTableWaiterTouchPush
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -974,10 +979,13 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2_StmtDiagForPlanGist,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 18},
 	},
-
 	{
 		Key:     V23_2_RegionaLivenessTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 20},
+	},
+	{
+		Key:     V23_2_RemoveLockTableWaiterTouchPush,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 22},
 	},
 
 	// *************************************************
