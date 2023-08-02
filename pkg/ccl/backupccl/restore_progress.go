@@ -176,18 +176,20 @@ func (pt *progressTracker) updateJobCallback(
 ) {
 	switch d := progressDetails.(type) {
 	case *jobspb.Progress_Restore:
-		pt.mu.Lock()
-		if pt.useFrontier {
-			// TODO (msbutler): this requires iterating over every span in the frontier,
-			// and rewriting every completed required span to disk.
-			// We may want to be more intelligent about this.
-			d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
-		} else {
-			if pt.mu.highWaterMark >= 0 {
-				d.Restore.HighWater = pt.mu.inFlightImportSpans[pt.mu.highWaterMark].Key
+		func() {
+			pt.mu.Lock()
+			defer pt.mu.Unlock()
+			if pt.useFrontier {
+				// TODO (msbutler): this requires iterating over every span in the frontier,
+				// and rewriting every completed required span to disk.
+				// We may want to be more intelligent about this.
+				d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
+			} else {
+				if pt.mu.highWaterMark >= 0 {
+					d.Restore.HighWater = pt.mu.inFlightImportSpans[pt.mu.highWaterMark].Key
+				}
 			}
-		}
-		pt.mu.Unlock()
+		}()
 	default:
 		log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 	}

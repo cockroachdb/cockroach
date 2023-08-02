@@ -52,7 +52,7 @@ func (l *maybeLocker) Lock() {
 }
 func (l *maybeLocker) Unlock() {
 	if l.locked {
-		l.wrapped.Unlock()
+		defer l.wrapped.Unlock()
 		l.locked = false
 	}
 }
@@ -412,16 +412,20 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	defer s.metrics.recordFlushRequestCallback()()
 
 	flushCh := make(chan struct{}, 1)
-
-	s.mu.Lock()
-	inflight := s.mu.inflight
-	flushErr := s.mu.flushErr
-	s.mu.flushErr = nil
-	immediateFlush := inflight == 0 || flushErr != nil
-	if !immediateFlush {
-		s.mu.flushCh = flushCh
-	}
-	s.mu.Unlock()
+	var inflight int64
+	var flushErr error
+	var immediateFlush bool
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		inflight = s.mu.inflight
+		flushErr = s.mu.flushErr
+		s.mu.flushErr = nil
+		immediateFlush = inflight == 0 || flushErr != nil
+		if !immediateFlush {
+			s.mu.flushCh = flushCh
+		}
+	}()
 
 	if immediateFlush {
 		return flushErr
@@ -435,9 +439,9 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		return ctx.Err()
 	case <-flushCh:
 		s.mu.Lock()
+		defer s.mu.Unlock()
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
-		s.mu.Unlock()
 		return flushErr
 	}
 }
@@ -582,6 +586,7 @@ func (s *kafkaSink) workerLoop() {
 		// If we're in a retry we keep hold of the lock to stop all other operations
 		// until the retry has completed.
 		if !isRetrying() {
+			// nolint:deferunlock
 			muLocker.Unlock()
 		}
 	}

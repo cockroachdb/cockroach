@@ -102,9 +102,11 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 		seen[*table.TableName] = true
 		targets.Tables.TablePatterns = append(targets.Tables.TablePatterns, table.TableName)
 	}
-	s.lock.Lock()
-	s.bulkBackups[name] = targets
-	s.lock.Unlock()
+	func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		s.bulkBackups[name] = targets
+	}()
 
 	coinD := tree.DBoolFalse
 	if s.coin() {
@@ -122,13 +124,15 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 func makeRestore(s *Smither) (tree.Statement, bool) {
 	var name string
 	var targets tree.BackupTargetList
-	s.lock.Lock()
-	for name, targets = range s.bulkBackups {
-		break
-	}
-	// Only restore each backup once.
-	delete(s.bulkBackups, name)
-	s.lock.Unlock()
+	func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		for name, targets = range s.bulkBackups {
+			break
+		}
+		// Only restore each backup once.
+		delete(s.bulkBackups, name)
+	}()
 
 	if name == "" {
 		return nil, false
@@ -190,9 +194,9 @@ func makeExport(s *Smither) (tree.Statement, bool) {
 	exp := s.name("exp")
 	name := fmt.Sprintf("%s/%s", s.bulkSrv.URL, exp)
 	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.bulkFiles[fmt.Sprintf("/%s%s", exp, exportSchema)] = []byte(schema)
 	s.bulkExports = append(s.bulkExports, string(exp))
-	s.lock.Unlock()
 
 	return &tree.Export{
 		Query:      stmt,
@@ -208,22 +212,28 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 
-	s.lock.Lock()
-	if len(s.bulkExports) == 0 {
-		s.lock.Unlock()
+	if noBulkExports := func() bool {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		return len(s.bulkExports) == 0
+	}(); !noBulkExports {
 		return nil, false
 	}
-	exp := s.bulkExports[0]
-	s.bulkExports = s.bulkExports[1:]
 
-	// Find all CSV files created by the EXPORT.
+	var exp string
 	var files tree.Exprs
-	for name := range s.bulkFiles {
-		if strings.Contains(name, exp+"/") && !strings.HasSuffix(name, exportSchema) {
-			files = append(files, tree.NewStrVal(s.bulkSrv.URL+name))
+	// Find all CSV files created by the EXPORT.
+	func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		exp = s.bulkExports[0]
+		s.bulkExports = s.bulkExports[1:]
+		for name := range s.bulkFiles {
+			if strings.Contains(name, exp+"/") && !strings.HasSuffix(name, exportSchema) {
+				files = append(files, tree.NewStrVal(s.bulkSrv.URL+name))
+			}
 		}
-	}
-	s.lock.Unlock()
+	}()
 	// An empty table will produce an EXPORT with zero files.
 	if len(files) == 0 {
 		return nil, false
@@ -231,13 +241,17 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 
 	// Fix the table name in the existing schema file.
 	tab := s.name("tab")
-	s.lock.Lock()
-	schema := fmt.Sprintf("/%s%s", exp, exportSchema)
-	tableSchema := importCreateTableRE.ReplaceAll(
-		s.bulkFiles[schema],
-		[]byte(fmt.Sprintf("CREATE TABLE %s (", tab)),
-	)
-	s.lock.Unlock()
+	var schema string
+	var tableSchema []byte
+	func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		schema = fmt.Sprintf("/%s%s", exp, exportSchema)
+		tableSchema = importCreateTableRE.ReplaceAll(
+			s.bulkFiles[schema],
+			[]byte(fmt.Sprintf("CREATE TABLE %s (", tab)),
+		)
+	}()
 
 	// Create the table to be imported into.
 	_, err := s.db.Exec(string(tableSchema))

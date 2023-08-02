@@ -309,15 +309,17 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	progressTracker.mu.Lock()
-	filter, err := makeSpanCoveringFilter(
-		progressTracker.mu.checkpointFrontier,
-		job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
-		introducedSpanFrontier,
-		targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
-		progressTracker.useFrontier)
-	progressTracker.mu.Unlock()
-	if err != nil {
+	var filter spanCoveringFilter
+	if filter, err = func() (spanCoveringFilter, error) {
+		progressTracker.mu.Lock()
+		defer progressTracker.mu.Unlock()
+		return makeSpanCoveringFilter(
+			progressTracker.mu.checkpointFrontier,
+			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
+			introducedSpanFrontier,
+			targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
+			progressTracker.useFrontier)
+	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
@@ -2128,11 +2130,15 @@ func insertStats(
 					}); err != nil {
 						return err
 					}
-					mu.Lock()
-					mu.completedBatches++
-					remainingBatches := totalNumBatches - mu.completedBatches
-					completedBatches := mu.completedBatches
-					mu.Unlock()
+					var remainingBatches int
+					var completedBatches int
+					func() {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.completedBatches++
+						remainingBatches = totalNumBatches - mu.completedBatches
+						completedBatches = mu.completedBatches
+					}()
 					if insertStatsProgress.ShouldLog() {
 						logStatsProgress(remainingBatches, completedBatches)
 					}
