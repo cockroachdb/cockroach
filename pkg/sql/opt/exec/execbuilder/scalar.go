@@ -1125,9 +1125,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if len(eb.cascades) > 0 {
 				return expectedLazyRoutineError("cascade")
 			}
-			if len(eb.checks) > 0 {
-				return expectedLazyRoutineError("check")
-			}
 			isFinalPlan := i == len(stmts)-1
 			err = fn(plan, isFinalPlan)
 			if err != nil {

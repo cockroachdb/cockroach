@@ -2080,19 +2080,17 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		if len(planner.curPlan.subqueryPlans) != 0 ||
 			len(planner.curPlan.cascades) != 0 ||
 			len(planner.curPlan.checkPlans) != 0 {
-			var serialEvalCtx extendedEvalContext
-			ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+			serialEvalCtx := planner.ExtendedEvalContextCopyAndReset()
+			ex.initEvalCtx(ctx, serialEvalCtx, planner)
 			evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
 				// Reuse the same object if this factory is not used concurrently.
-				factoryEvalCtx := &serialEvalCtx
+				factoryEvalCtx := serialEvalCtx
 				if usedConcurrently {
-					factoryEvalCtx = &extendedEvalContext{}
+					factoryEvalCtx = planner.ExtendedEvalContextCopyAndReset()
 					ex.initEvalCtx(ctx, factoryEvalCtx, planner)
 				}
 				ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
-				factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
-				factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
-				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
+				planner.ExtendedEvalContextReset(factoryEvalCtx)
 				return factoryEvalCtx
 			}
 		}
