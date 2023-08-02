@@ -18,6 +18,14 @@ exec-ddl
 CREATE TABLE ab (a INT, b INT)
 ----
 
+exec-ddl
+CREATE TABLE xy_decimal (x DECIMAL(10, 2) PRIMARY KEY, y DECIMAL(10, 2));
+----
+
+exec-ddl
+CREATE TABLE ab_decimal (a DECIMAL(10, 0), b DECIMAL(10, 0));
+----
+
 # --------------------------------------------------
 # DecorrelateJoin
 # --------------------------------------------------
@@ -6924,6 +6932,31 @@ project
       │              └── v
       └── filters
            └── corr = x
+
+# Regression test for #108057. Do not remap a column into an equivalent, but not
+# identically typed column. The a + x projection should remain.
+norm expect-not=(TryRemapJoinOuterColsRight,TryRemapJoinOuterColsLeft,TryRemapSelectOuterCols)
+SELECT * FROM xy_decimal INNER JOIN LATERAL (SELECT a, a+x FROM ab_decimal) ON a = x
+----
+project
+ ├── columns: x:1!null y:2 a:5!null "?column?":10!null
+ ├── immutable
+ ├── fd: (1)-->(2), (1)==(5), (5)==(1), (5)-->(10)
+ ├── inner-join (hash)
+ │    ├── columns: x:1!null y:2 a:5!null
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── immutable
+ │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
+ │    ├── scan xy_decimal
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan ab_decimal
+ │    │    └── columns: a:5
+ │    └── filters
+ │         └── a:5 = x:1 [outer=(1,5), immutable, constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── projections
+      └── a:5 + x:1 [as="?column?":10, outer=(1,5), immutable]
 
 # --------------------------------------------------
 # TryRemapJoinOuterColsLeft
