@@ -27,6 +27,9 @@ type requestCounts []requestCount
 
 func (s requestCounts) Len() int { return len(s) }
 func (s requestCounts) Less(i, j int) bool {
+	if s[i].req == s[j].req {
+		return i < j
+	}
 	return s[i].req > s[j].req
 }
 func (s requestCounts) Swap(i, j int) { s[i], s[j] = s[j], s[i] }

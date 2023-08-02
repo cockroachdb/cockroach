@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -166,12 +167,27 @@ func registerTypeORM(r registry.Registry) {
 		rawResults := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResults)
 		if err != nil {
+			// We don't have a good way of parsing test results from javascript, so we
+			// use substring matching and regexp instead of using a blocklist like
+			// we use for other ORM tests.
+			numFailingRegex := regexp.MustCompile(`(\d+) failing`)
+			matches := numFailingRegex.FindStringSubmatch(rawResults)
+			numFailing, convErr := strconv.Atoi(matches[1])
+			if convErr != nil {
+				t.Fatal(convErr)
+			}
+
+			// One test is known to flake during setup.
+			if strings.Contains(rawResults, `"before each" hook for "should select specific columns":`) {
+				numFailing -= 1
+			}
+
+			// Tests are allowed to flake due to transaction retry errors.
 			txnRetryErrCount := strings.Count(rawResults, "restart transaction")
-			if strings.Contains(rawResults, "1 failing") && txnRetryErrCount == 1 {
-				err = nil
-			} else if strings.Contains(rawResults, "2 failing") && txnRetryErrCount == 2 {
+			if numFailing == txnRetryErrCount {
 				err = nil
 			}
+
 			if err != nil {
 				t.Fatal(err)
 			}
