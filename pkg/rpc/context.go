@@ -213,9 +213,6 @@ type Context struct {
 	RemoteClocks *RemoteClockMonitor
 	MasterCtx    context.Context // cancel on stopper quiesce
 
-	heartbeatInterval time.Duration
-	heartbeatTimeout  time.Duration
-
 	rpcCompression bool
 
 	localInternalClient RestrictedInternalClient
@@ -531,13 +528,11 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	secCtx.useNodeAuth = opts.UseNodeAuth
 
 	rpcCtx := &Context{
-		ContextOptions:    opts,
-		SecurityContext:   secCtx,
-		rpcCompression:    enableRPCCompression,
-		MasterCtx:         masterCtx,
-		metrics:           makeMetrics(),
-		heartbeatInterval: opts.RPCHeartbeatInterval,
-		heartbeatTimeout:  opts.RPCHeartbeatTimeout,
+		ContextOptions:  opts,
+		SecurityContext: secCtx,
+		rpcCompression:  enableRPCCompression,
+		MasterCtx:       masterCtx,
+		metrics:         makeMetrics(),
 	}
 
 	rpcCtx.dialbackMu.Lock()
