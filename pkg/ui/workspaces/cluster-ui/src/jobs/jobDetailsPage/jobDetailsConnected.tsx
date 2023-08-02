@@ -11,7 +11,7 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import {
   JobDetailsStateProps,
   JobDetailsDispatchProps,
@@ -30,6 +30,8 @@ import {
   actions as jobProfilerActions,
 } from "src/store/jobs/jobProfiler.reducer";
 import { Dispatch } from "redux";
+import long from "long";
+import { selectHasAdminRole } from "src/store/uiConfig";
 
 const emptyState = createInitialState<JobResponse>();
 
@@ -45,6 +47,7 @@ const mapStateToProps = (
     jobProfilerLastUpdated: state.adminUI?.executionDetailFiles?.lastUpdated,
     jobProfilerDataIsValid: state.adminUI?.executionDetailFiles?.valid,
     onDownloadExecutionFileClicked: getExecutionDetailFile,
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
@@ -52,6 +55,10 @@ const mapDispatchToProps = (dispatch: Dispatch): JobDetailsDispatchProps => ({
   refreshJob: (req: JobRequest) => jobActions.refresh(req),
   refreshExecutionDetailFiles: (req: ListJobProfilerExecutionDetailsRequest) =>
     dispatch(jobProfilerActions.refresh(req)),
+  onRequestExecutionDetails: (jobID: long) => {
+    dispatch(jobProfilerActions.collectExecutionDetails({ job_id: jobID }));
+  },
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const JobDetailsPageConnected = withRouter(

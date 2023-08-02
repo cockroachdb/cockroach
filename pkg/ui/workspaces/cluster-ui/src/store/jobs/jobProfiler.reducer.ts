@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../utils";
+import { DOMAIN_NAME, noopReducer } from "../utils";
 import moment from "moment-timezone";
 import { createInitialState, RequestState } from "src/api/types";
 import {
+  CollectExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
 } from "src/api";
@@ -58,6 +59,15 @@ const JobProfilerExecutionDetailsSlice = createSlice({
     ) => {
       state.inFlight = true;
     },
+    collectExecutionDetails: (
+      _state,
+      _action: PayloadAction<CollectExecutionDetailsRequest>,
+    ) => {},
+    collectExecutionDetailsCompleted: noopReducer,
+    collectExecutionDetailsFailed: (
+      _state,
+      _action: PayloadAction<Error>,
+    ) => {},
   },
 });
 
