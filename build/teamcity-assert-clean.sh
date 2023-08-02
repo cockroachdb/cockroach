@@ -18,6 +18,10 @@ cleanup_on_completion() {
 }
 trap cleanup_on_completion EXIT
 
+
+echo "TC_BUILD_BRANCH: $TC_BUILD_BRANCH"
+exit 1
+
 # The workspace is clean iff `git status --porcelain` produces no output. Any
 # output is either an error message or a listing of an untracked/dirty file.
 if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
