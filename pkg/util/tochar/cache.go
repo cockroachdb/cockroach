@@ -20,8 +20,9 @@ const maxCacheKeySize = 100
 // FormatCache is a cache used to store parsing info used for to_char.
 // It is thread safe, and is safe to use by `nil` caches.
 type FormatCache struct {
+	// mu must be a Mutex, not a RWMutex because Get can modify the LRU cache.
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		cache *cache.UnorderedCache
 	}
 }
@@ -41,8 +42,8 @@ func NewFormatCache(size int) *FormatCache {
 func (pc *FormatCache) lookup(fmtString string) []formatNode {
 	if pc != nil && len(fmtString) <= maxCacheKeySize {
 		if ret, ok := func() ([]formatNode, bool) {
-			pc.mu.RLock()
-			defer pc.mu.RUnlock()
+			pc.mu.Lock()
+			defer pc.mu.Unlock()
 			ret, ok := pc.mu.cache.Get(fmtString)
 			if ok {
 				return ret.([]formatNode), true

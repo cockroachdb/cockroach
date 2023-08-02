@@ -40,3 +40,17 @@ func TestFormatCache(t *testing.T) {
 	_, ok = c.mu.cache.Get("HH24")
 	require.True(t, ok)
 }
+
+// TestFormatCacheLookupThreadSafe is non-deterministic. Flakes indicate that
+// FormatCache.lookup is not thread safe.
+// See https://github.com/cockroachdb/cockroach/issues/95424
+func TestFormatCacheLookupThreadSafe(t *testing.T) {
+	formats := []string{"HH12", "HH24", "MI"}
+	c := NewFormatCache(len(formats) - 1)
+	for i := 0; i < 100_000; i++ {
+		go func(i int) {
+			format := formats[i%len(formats)]
+			c.lookup(format)
+		}(i)
+	}
+}
