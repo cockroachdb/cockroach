@@ -11,8 +11,9 @@
 package delegate
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompletions(t *testing.T) {
@@ -31,7 +32,7 @@ func TestCompletions(t *testing.T) {
 		},
 		{
 			stmt:                "creat ",
-			expectedCompletions: []string{},
+			expectedCompletions: nil,
 		},
 		{
 			stmt:                "SHOW CREAT",
@@ -59,57 +60,61 @@ func TestCompletions(t *testing.T) {
 		},
 		{
 			stmt:                "create ta",
-			expectedCompletions: []string{"CREATE"},
 			offset:              3,
+			expectedCompletions: []string{"CREATE"},
 		},
 		{
 			stmt:                "select",
-			expectedCompletions: []string{"SELECT"},
 			offset:              2,
+			expectedCompletions: []string{"SELECT"},
 		},
 		{
 			stmt:                "select ",
-			expectedCompletions: []string{},
 			offset:              7,
+			expectedCompletions: nil,
 		},
 		{
 			stmt:                "你好，我的名字是鲍勃 SELECT",
-			expectedCompletions: []string{"你好，我的名字是鲍勃"},
 			offset:              2,
+			expectedCompletions: []string{"你好，我的名字是鲍勃"},
 		},
 		{
 			stmt:                "你好，我的名字是鲍勃 SELECT",
-			expectedCompletions: []string{},
 			offset:              11,
+			expectedCompletions: nil,
 		},
 		{
 			stmt:                "你好，我的名字是鲍勃 SELECT",
-			expectedCompletions: []string{"SELECT"},
 			offset:              12,
+			expectedCompletions: []string{"SELECT"},
 		},
 		{
 			stmt:                "😋😋😋 😋😋😋",
-			expectedCompletions: []string{},
 			offset:              25,
+			expectedCompletions: nil,
 		},
 		{
 			stmt:                "Jalapeño",
-			expectedCompletions: []string{},
 			offset:              9,
+			expectedCompletions: nil,
+		},
+		// Test an offset greater than the number of runes in the string, but less
+		// than or equal to the number of bytes in the string.
+		// 🦹 has 1 rune and 4 bytes.
+		{
+			stmt:   "🦹",
+			offset: 2,
 		},
 	}
 	for _, tc := range tests {
-		offset := tc.offset
-		if tc.offset == 0 {
-			offset = len(tc.stmt)
-		}
-		completions, err := RunShowCompletions(tc.stmt, offset)
-		if err != nil {
-			t.Error(err)
-		}
-		if !(len(completions) == 0 && len(tc.expectedCompletions) == 0) &&
-			!reflect.DeepEqual(completions, tc.expectedCompletions) {
-			t.Errorf("expected %v, got %v", tc.expectedCompletions, completions)
-		}
+		t.Run(tc.stmt, func(t *testing.T) {
+			offset := tc.offset
+			if tc.offset == 0 {
+				offset = len([]rune(tc.stmt))
+			}
+			actualCompletions, err := RunShowCompletions(tc.stmt, offset)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedCompletions, actualCompletions)
+		})
 	}
 }
