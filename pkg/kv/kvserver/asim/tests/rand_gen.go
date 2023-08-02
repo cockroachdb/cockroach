@@ -13,6 +13,7 @@ package tests
 import (
 	"fmt"
 	"math/rand"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
@@ -76,6 +77,9 @@ func (wr WeightedRandomizedBasicRanges) Generate(
 ) state.State {
 	if wr.placementType != gen.WeightedRandom || len(wr.weightedRand) == 0 {
 		panic("RandomizedBasicRanges generate only weighted randomized distributions with non-empty weightedRand")
+	}
+	if len(s.Stores()) != len(wr.weightedRand) {
+		panic(" stores doesnt match")
 	}
 	rangesInfo := wr.GetRangesInfo(wr.placementType, len(s.Stores()), wr.randSource, wr.weightedRand)
 	wr.LoadRangeInfo(s, rangesInfo)
@@ -211,5 +215,54 @@ func (c clusterConfigType) getClusterConfigType(s string) clusterConfigType {
 		return anyRegion
 	default:
 		panic(fmt.Sprintf("unknown cluster type: %s", s))
+	}
+}
+
+type rangeGenSettings struct {
+	placementType     gen.PlacementType
+	replicationFactor int
+	rangeGenType      generatorType
+	keySpaceGenType   generatorType
+	weightedRand      []float64
+}
+
+const (
+	defaultRangeGenType    = uniformGenerator
+	defaultKeySpaceGenType = uniformGenerator
+)
+
+var defaultWeightedRand []float64
+
+func (t rangeGenSettings) printRangeGenSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"range_gen_settings ->\tplacementType=%v\treplicationFactor=%v\trangeGenType=%v\tkeySpaceGenType=%v\tweightedRand=%v\n",
+		t.placementType, t.replicationFactor, t.rangeGenType, t.keySpaceGenType, t.weightedRand); err != nil {
+		panic(err)
+	}
+}
+
+type clusterGenSettings struct {
+	clusterGenType clusterConfigType
+}
+
+const (
+	defaultClusterGenType = multiRegion
+)
+
+func (c clusterGenSettings) printClusterGenSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintf(w,
+		"cluster_gen_settings ->\tclusterGenType=%v\t\n", c.clusterGenType); err != nil {
+		panic(err)
+	}
+}
+
+func defaultAssertions() []SimulationAssertion {
+	return []SimulationAssertion{
+		conformanceAssertion{
+			underreplicated: 0,
+			overreplicated:  0,
+			violating:       0,
+			unavailable:     0,
+		},
 	}
 }

@@ -283,7 +283,7 @@ eval duration=20m num_iterations=3
 ----
 settings           num_iterations=3         duration=20m0s
 rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region
 rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
 rand_load=false
 rand_events=false

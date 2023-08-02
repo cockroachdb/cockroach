@@ -65,14 +65,15 @@ func TestRandomized(t *testing.T) {
 	dir := datapathutils.TestDataPath(t, "rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		randOptions := testRandOptions{}
-		rGenSettings := defaultRangeGenSettings()
-		cGenSettings := defaultClusterGenSettings()
+		var rGenSettings rangeGenSettings
+		var cGenSettings clusterGenSettings
+		defaultSettings := getDefaultSettings()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "clear":
 				randOptions = testRandOptions{}
-				rGenSettings = defaultRangeGenSettings()
-				cGenSettings = defaultClusterGenSettings()
+				rGenSettings = rangeGenSettings{}
+				cGenSettings = clusterGenSettings{}
 				return ""
 			case "rand_cluster":
 				randOptions.cluster = true
@@ -82,11 +83,32 @@ func TestRandomized(t *testing.T) {
 					clusterGenType: clusterGenType,
 				}
 				return ""
-			case "load_cluster":
-
+			case "change_default":
+				scanIfExists(t, d, "num_iterations", &defaultSettings.numIterations)
+				scanIfExists(t, d, "seed", &defaultSettings.seed)
+				scanIfExists(t, d, "duration", &defaultSettings.duration)
+				scanIfExists(t, d, "verbose", &defaultSettings.verbose)
+				scanIfExists(t, d, "nodes", &defaultSettings.nodes)
+				scanIfExists(t, d, "stores_per_node", &defaultSettings.storesPerNode)
+				scanIfExists(t, d, "key_space", &defaultSettings.keySpace)
+				scanIfExists(t, d, "rw_ratio", &defaultSettings.rwRatio)
+				scanIfExists(t, d, "rate", &defaultSettings.rate)
+				scanIfExists(t, d, "min_block", &defaultSettings.minBlock)
+				scanIfExists(t, d, "max_block", &defaultSettings.maxBlock)
+				scanIfExists(t, d, "min_key", &defaultSettings.minKey)
+				scanIfExists(t, d, "max_key", &defaultSettings.maxKey)
+				scanIfExists(t, d, "skewed_access", &defaultSettings.skewedAccess)
+				scanIfExists(t, d, "ranges", &defaultSettings.ranges)
+				scanIfExists(t, d, "placement_type", &defaultSettings.placementType)
+				scanIfExists(t, d, "replication_factor", &defaultSettings.replicationFactor)
+				scanIfExists(t, d, "bytes", &defaultSettings.bytes)
+				scanIfExists(t, d, "stat", &defaultSettings.stat)
+				scanIfExists(t, d, "height", &defaultSettings.height)
+				scanIfExists(t, d, "stat", &defaultSettings.width)
+				return ""
 			case "rand_ranges":
 				randOptions.ranges = true
-				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultPlacementType, defaultReplicationFactor, defaultRangeGenType, defaultKeySpaceGenType
+				placementType, replicationFactor, rangeGenType, keySpaceGenType := defaultSettings.placementType, defaultSettings.replicationFactor, defaultRangeGenType, defaultKeySpaceGenType
 				weightedRand := defaultWeightedRand
 				scanIfExists(t, d, "placement_type", &placementType)
 				scanIfExists(t, d, "replication_factor", &replicationFactor)
@@ -108,15 +130,15 @@ func TestRandomized(t *testing.T) {
 			case "rand_settings":
 				return "unimplemented: randomized settings"
 			case "eval":
-				seed := defaultSeed
-				numIterations := defaultNumIterations
-				duration := defaultDuration
-				verbose := defaultVerbosity
+				seed := defaultSettings.seed
+				numIterations := defaultSettings.numIterations
+				duration := defaultSettings.duration
+				verbose := defaultSettings.verbose
 				scanIfExists(t, d, "seed", &seed)
 				scanIfExists(t, d, "num_iterations", &numIterations)
 				scanIfExists(t, d, "duration", &duration)
 				scanIfExists(t, d, "verbose", &verbose)
-				settings := testSettings{
+				randSettings := randTestSettings{
 					numIterations: numIterations,
 					duration:      duration,
 					randSource:    rand.New(rand.NewSource(seed)),
@@ -126,7 +148,7 @@ func TestRandomized(t *testing.T) {
 					rangeGen:      rGenSettings,
 					clusterGen:    cGenSettings,
 				}
-				f := newRandTestingFramework(settings)
+				f := newRandTestingFramework(randSettings, defaultSettings)
 				f.runRandTestRepeated()
 				return f.printResults()
 			default:

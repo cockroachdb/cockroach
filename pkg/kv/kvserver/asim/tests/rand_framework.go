@@ -42,7 +42,7 @@ func (t testRandOptions) printRandOptions(w *tabwriter.Writer) {
 	}
 }
 
-type testSettings struct {
+type randTestSettings struct {
 	numIterations int
 	duration      time.Duration
 	verbose       bool
@@ -53,7 +53,7 @@ type testSettings struct {
 	rangeGen      rangeGenSettings
 }
 
-func (t testSettings) printTestSettings(w *tabwriter.Writer) {
+func (t randTestSettings) printRandTestSettings(w *tabwriter.Writer) {
 	if _, err := fmt.Fprintf(w,
 		"settings\tnum_iterations=%v\tduration=%s\n", t.numIterations, t.duration.Round(time.Second)); err != nil {
 		panic(err)
@@ -81,24 +81,28 @@ func (t testSettings) printTestSettings(w *tabwriter.Writer) {
 
 type randTestingFramework struct {
 	recordBuf         *strings.Builder
-	s                 testSettings
+	defaultSettings   defaultSettings
+	s                 randTestSettings
 	rangeGenerator    generator
 	keySpaceGenerator generator
 }
 
-func newRandTestingFramework(settings testSettings) randTestingFramework {
+func newRandTestingFramework(
+	s randTestSettings, defaultSettings defaultSettings,
+) randTestingFramework {
 	if int64(defaultMaxRange) > defaultMinKeySpace {
 		panic(fmt.Sprintf(
 			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
 			defaultMaxRange, defaultMinKeySpace))
 	}
-	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeGenType)
-	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
+	rangeGenerator := newGenerator(s.randSource, defaultMinRange, defaultMaxRange, s.rangeGen.rangeGenType)
+	keySpaceGenerator := newGenerator(s.randSource, defaultMinKeySpace, defaultMaxKeySpace, s.rangeGen.keySpaceGenType)
 	var buf strings.Builder
 
 	return randTestingFramework{
 		recordBuf:         &buf,
-		s:                 settings,
+		defaultSettings:   defaultSettings,
+		s:                 s,
 		rangeGenerator:    rangeGenerator,
 		keySpaceGenerator: keySpaceGenerator,
 	}
@@ -106,35 +110,35 @@ func newRandTestingFramework(settings testSettings) randTestingFramework {
 
 func (f randTestingFramework) getCluster() gen.ClusterGen {
 	if !f.s.randOptions.cluster {
-		return defaultBasicClusterGen()
+		return f.defaultBasicClusterGen()
 	}
 	return f.randomClusterInfoGen(f.s.randSource)
 }
 
 func (f randTestingFramework) getRanges() gen.RangeGen {
 	if !f.s.randOptions.ranges {
-		return defaultBasicRangesGen()
+		return f.defaultBasicRangesGen()
 	}
 	return f.randomBasicRangesGen()
 }
 
 func (f randTestingFramework) getLoad() gen.LoadGen {
 	if !f.s.randOptions.load {
-		return defaultLoadGen()
+		return f.defaultLoadGen()
 	}
 	return gen.BasicLoad{}
 }
 
 func (f randTestingFramework) getStaticSettings() gen.StaticSettings {
 	if !f.s.randOptions.staticSettings {
-		return defaultStaticSettingsGen()
+		return f.defaultStaticSettingsGen()
 	}
 	return gen.StaticSettings{}
 }
 
 func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	if !f.s.randOptions.staticEvents {
-		return defaultStaticEventsGen()
+		return f.defaultStaticEventsGen()
 	}
 	return gen.StaticEvents{}
 }
@@ -172,14 +176,15 @@ func (f randTestingFramework) runRandTestRepeated() {
 	}
 
 	if f.s.verbose {
-		plotAllHistory(runs, f.recordBuf)
+		f.plotAllHistory(runs, f.recordBuf)
 	}
 }
 
 func (f randTestingFramework) printResults() string {
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
-	f.s.printTestSettings(w)
+	f.s.printRandTestSettings(w)
+	f.defaultSettings.printDefaultSettings(w)
 	_, _ = fmt.Fprintf(w, "%s", f.recordBuf.String())
 	_ = w.Flush()
 	return buf.String()
@@ -197,8 +202,8 @@ func loadClusterInfo(configName string) gen.LoadedCluster {
 
 // PlotAllHistory outputs stat plots for the provided asim history array into
 // the given strings.Builder buf.
-func plotAllHistory(runs []asim.History, buf *strings.Builder) {
-	settings := defaultPlotSettings()
+func (f randTestingFramework) plotAllHistory(runs []asim.History, buf *strings.Builder) {
+	settings := f.defaultPlotSettings()
 	stat, height, width := settings.stat, settings.height, settings.width
 	for i := 0; i < len(runs); i++ {
 		history := runs[i]
@@ -283,6 +288,13 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 	case gen.WeightedRandom:
 		if len(f.s.rangeGen.weightedRand) == 0 {
 			panic("set weightedRand array for stores properly to use the weighted_rand placementType")
+		}
+		if f.s.randOptions.cluster {
+			panic("randomized cluster with weighted rand stores is not supported")
+		}
+
+		if stores, length := f.defaultSettings.storesPerNode*f.defaultSettings.nodes, len(f.s.rangeGen.weightedRand); stores != length {
+			panic(fmt.Sprintf("number of stores %d does not match length of weighted_rand %d: ", stores, length))
 		}
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{

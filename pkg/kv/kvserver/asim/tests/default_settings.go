@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 )
 
-// This file defines the default parameters for allocator simulator testing,
-// including configurations for the cluster, ranges, load, static settings,
-// static events, assertions, and plot settings.
 const (
 	defaultNumIterations = 3
 	defaultSeed          = int64(42)
@@ -35,21 +32,6 @@ const (
 	defaultStoresPerNode = 1
 )
 
-func defaultBasicClusterGen() gen.BasicCluster {
-	return gen.BasicCluster{
-		Nodes:         defaultNodes,
-		StoresPerNode: defaultStoresPerNode,
-	}
-}
-
-func defaultStaticSettingsGen() gen.StaticSettings {
-	return gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-}
-
-func defaultStaticEventsGen() gen.StaticEvents {
-	return gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
-}
-
 const defaultKeyspace = 200000
 
 const (
@@ -59,116 +41,146 @@ const (
 	defaultSkewedAccess              = false
 )
 
-func defaultLoadGen() gen.BasicLoad {
-	return gen.BasicLoad{
-		RWRatio:      defaultRwRatio,
-		Rate:         defaultRate,
-		SkewedAccess: defaultSkewedAccess,
-		MinBlockSize: defaultMinBlock,
-		MaxBlockSize: defaultMaxBlock,
-		MinKey:       defaultMinKey,
-		MaxKey:       defaultMaxKey,
-	}
-}
-
 const (
 	defaultRanges            = 1
 	defaultPlacementType     = gen.Uniform
 	defaultReplicationFactor = 3
-	defaultBytes             = 0
+	defaultBytes             = int64(0)
 )
-
-func defaultBasicRangesGen() gen.BasicRanges {
-	return gen.BasicRanges{
-		BaseRanges: gen.BaseRanges{
-			Ranges:            defaultRanges,
-			KeySpace:          defaultKeyspace,
-			ReplicationFactor: defaultReplicationFactor,
-			Bytes:             defaultBytes,
-		},
-		PlacementType: defaultPlacementType,
-	}
-}
-
-func defaultAssertions() []SimulationAssertion {
-	return []SimulationAssertion{
-		conformanceAssertion{
-			underreplicated: 0,
-			overreplicated:  0,
-			violating:       0,
-			unavailable:     0,
-		},
-	}
-}
 
 const (
 	defaultStat                 = "replicas"
 	defaultHeight, defaultWidth = 15, 80
 )
 
+type defaultSettings struct {
+	numIterations     int
+	seed              int64
+	duration          time.Duration
+	verbose           bool
+	nodes             int
+	storesPerNode     int
+	keySpace          int
+	rwRatio           float64
+	rate              float64
+	minBlock          int
+	maxBlock          int
+	minKey            int64
+	maxKey            int64
+	skewedAccess      bool
+	ranges            int
+	placementType     gen.PlacementType
+	replicationFactor int
+	bytes             int64
+	stat              string
+	height            int
+	width             int
+}
+
+func (d defaultSettings) printDefaultSettings(w *tabwriter.Writer) {
+	if _, err := fmt.Fprintln(w, "default_settings"); err != nil {
+		panic(err)
+	}
+	_, _ = fmt.Fprintf(w, "numIterat8ions=%d\t", d.numIterations)
+	_, _ = fmt.Fprintf(w, "seed=%d\t", d.seed)
+	_, _ = fmt.Fprintf(w, "duration=%s\t", d.duration)
+	_, _ = fmt.Fprintf(w, "verbose=%t\t", d.verbose)
+	_, _ = fmt.Fprintf(w, "nodes=%d\t", d.nodes)
+	_, _ = fmt.Fprintf(w, "storesPerNode=%d\t", d.storesPerNode)
+	_, _ = fmt.Fprintf(w, "keySpace=%d\t\n", d.keySpace)
+	_, _ = fmt.Fprintf(w, "rwRatio=%0.2f\t", d.rwRatio)
+	_, _ = fmt.Fprintf(w, "rate=%0.2f\t", d.rate)
+	_, _ = fmt.Fprintf(w, "minBlock=%d\t", d.minBlock)
+	_, _ = fmt.Fprintf(w, "maxBlock=%d\t", d.maxBlock)
+	_, _ = fmt.Fprintf(w, "minKey=%d\t", d.minKey)
+	_, _ = fmt.Fprintf(w, "maxKey=%d\t", d.maxKey)
+	_, _ = fmt.Fprintf(w, "skewedAccess=%t\t\n", d.skewedAccess)
+	_, _ = fmt.Fprintf(w, "ranges=%d\t", d.ranges)
+	_, _ = fmt.Fprintf(w, "placementType=%v\t", d.placementType)
+	_, _ = fmt.Fprintf(w, "replicationFactor=%d\t", d.replicationFactor)
+	_, _ = fmt.Fprintf(w, "bytes=%d\t", d.bytes)
+	_, _ = fmt.Fprintf(w, "stat=%s\t", d.stat)
+	_, _ = fmt.Fprintf(w, "height=%d\t", d.height)
+	_, _ = fmt.Fprintf(w, "width=%d\t\n", d.width)
+}
+
+func getDefaultSettings() defaultSettings {
+	return defaultSettings{
+		numIterations:     defaultNumIterations,
+		seed:              defaultSeed,
+		duration:          defaultDuration,
+		verbose:           defaultVerbosity,
+		nodes:             defaultNodes,
+		storesPerNode:     defaultStoresPerNode,
+		keySpace:          defaultKeyspace,
+		rwRatio:           defaultRwRatio,
+		rate:              defaultRate,
+		minBlock:          defaultMinBlock,
+		maxBlock:          defaultMaxBlock,
+		minKey:            defaultMinKey,
+		maxKey:            defaultMaxKey,
+		skewedAccess:      defaultSkewedAccess,
+		ranges:            defaultRanges,
+		placementType:     defaultPlacementType,
+		replicationFactor: defaultReplicationFactor,
+		bytes:             defaultBytes,
+		stat:              defaultStat,
+		height:            defaultHeight,
+		width:             defaultWidth,
+	}
+}
+
+// This file defines the default parameters for allocator simulator testing,
+// including configurations for the cluster, ranges, load, static settings,
+// static events, assertions, and plot settings.
+func (f randTestingFramework) defaultBasicClusterGen() gen.BasicCluster {
+	return gen.BasicCluster{
+		Nodes:         f.defaultSettings.nodes,
+		StoresPerNode: f.defaultSettings.storesPerNode,
+	}
+}
+
+func (f randTestingFramework) defaultStaticSettingsGen() gen.StaticSettings {
+	return gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
+}
+
+func (f randTestingFramework) defaultStaticEventsGen() gen.StaticEvents {
+	return gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
+}
+
+func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
+	return gen.BasicLoad{
+		RWRatio:      f.defaultSettings.rwRatio,
+		Rate:         f.defaultSettings.rate,
+		SkewedAccess: f.defaultSettings.skewedAccess,
+		MinBlockSize: f.defaultSettings.minBlock,
+		MaxBlockSize: f.defaultSettings.maxBlock,
+		MinKey:       f.defaultSettings.minKey,
+		MaxKey:       f.defaultSettings.maxKey,
+	}
+}
+
+func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
+	return gen.BasicRanges{
+		BaseRanges: gen.BaseRanges{
+			Ranges:            f.defaultSettings.ranges,
+			KeySpace:          f.defaultSettings.keySpace,
+			ReplicationFactor: f.defaultSettings.replicationFactor,
+			Bytes:             f.defaultSettings.bytes,
+		},
+		PlacementType: f.defaultSettings.placementType,
+	}
+}
+
 type plotSettings struct {
 	stat          string
 	height, width int
 }
 
-func defaultPlotSettings() plotSettings {
+func (f randTestingFramework) defaultPlotSettings() plotSettings {
 	return plotSettings{
-		stat:   defaultStat,
-		height: defaultHeight,
-		width:  defaultWidth,
-	}
-}
-
-type rangeGenSettings struct {
-	placementType     gen.PlacementType
-	replicationFactor int
-	rangeGenType      generatorType
-	keySpaceGenType   generatorType
-	weightedRand      []float64
-}
-
-func (t rangeGenSettings) printRangeGenSettings(w *tabwriter.Writer) {
-	if _, err := fmt.Fprintf(w,
-		"range_gen_settings ->\tplacementType=%v\treplicationFactor=%v\trangeGenType=%v\tkeySpaceGenType=%v\tweightedRand=%v\n",
-		t.placementType, t.replicationFactor, t.rangeGenType, t.keySpaceGenType, t.weightedRand); err != nil {
-		panic(err)
-	}
-}
-
-const (
-	defaultRangeGenType    = uniformGenerator
-	defaultKeySpaceGenType = uniformGenerator
-)
-
-var defaultWeightedRand []float64
-
-func defaultRangeGenSettings() rangeGenSettings {
-	return rangeGenSettings{
-		placementType:     defaultPlacementType,
-		replicationFactor: defaultReplicationFactor,
-		rangeGenType:      defaultRangeGenType,
-		keySpaceGenType:   defaultKeySpaceGenType,
-		weightedRand:      defaultWeightedRand,
-	}
-}
-
-type clusterGenSettings struct {
-	clusterGenType clusterConfigType
-}
-
-func (c clusterGenSettings) printClusterGenSettings(w *tabwriter.Writer) {
-	if _, err := fmt.Fprintf(w,
-		"cluster_gen_settings ->\tclusterGenType=%v\t\n", c.clusterGenType); err != nil {
-		panic(err)
-	}
-}
-
-const (
-	defaultClusterGenType = multiRegion
-)
-
-func defaultClusterGenSettings() clusterGenSettings {
-	return clusterGenSettings{
-		clusterGenType: defaultClusterGenType,
+		stat:   f.defaultSettings.stat,
+		height: f.defaultSettings.height,
+		width:  f.defaultSettings.width,
 	}
 }
