@@ -184,8 +184,8 @@ func (rpcCtx *Context) newPeer(k peerKey) *peer {
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
 			return rpcCtx.grpcDialRaw(ctx, target, class, rpcCtx.testingDialOpts...)
 		},
-		heartbeatInterval: rpcCtx.heartbeatInterval,
-		heartbeatTimeout:  rpcCtx.heartbeatTimeout,
+		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
+		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
 	}
 	var b *circuit.Breaker
 
