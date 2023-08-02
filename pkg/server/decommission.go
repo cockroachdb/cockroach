@@ -141,7 +141,7 @@ func getPingCheckDecommissionFn(
 // or remove actions. If maxErrors >0, range checks will stop once maxError is
 // reached.
 // The error returned is a gRPC error.
-func (s *Server) DecommissionPreCheck(
+func (s *topLevelServer) DecommissionPreCheck(
 	ctx context.Context,
 	nodeIDs []roachpb.NodeID,
 	strictReadiness bool,
@@ -314,7 +314,7 @@ func evaluateRangeCheckResult(
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 // The error return is a gRPC error.
-func (s *Server) Decommission(
+func (s *topLevelServer) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
 	// If we're asked to decommission ourself we may lose access to cluster RPC,
@@ -396,7 +396,7 @@ func (s *Server) Decommission(
 
 // DecommissioningNodeMap returns the set of node IDs that are decommissioning
 // from the perspective of the server.
-func (s *Server) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
+func (s *topLevelServer) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
 	s.decomNodeMap.RLock()
 	defer s.decomNodeMap.RUnlock()
 	nodes := make(map[roachpb.NodeID]interface{})

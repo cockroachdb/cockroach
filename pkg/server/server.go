@@ -130,8 +130,8 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-// Server is the cockroach server node.
-type Server struct {
+// topLevelServer is the cockroach server node.
+type topLevelServer struct {
 	// The following fields are populated in NewServer.
 
 	nodeIDContainer *base.NodeIDContainer
@@ -225,7 +225,7 @@ type Server struct {
 //
 // The caller is responsible for listening on the server's ShutdownRequested()
 // channel and calling stopper.Stop().
-func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
+func NewServer(cfg Config, stopper *stop.Stopper) (*topLevelServer, error) {
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
 	if err := cfg.ValidateAddrs(ctx); err != nil {
@@ -946,7 +946,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
 	)
 
-	lateBoundServer := &Server{}
+	lateBoundServer := &topLevelServer{}
 
 	// The following initialization is mirrored in NewTenantServer().
 	// Please keep them in sync.
@@ -1261,7 +1261,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	)
 
-	*lateBoundServer = Server{
+	*lateBoundServer = topLevelServer{
 		nodeIDContainer:           nodeIDContainer,
 		cfg:                       cfg,
 		st:                        st,
@@ -1319,36 +1319,36 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 }
 
 // ClusterSettings returns the cluster settings.
-func (s *Server) ClusterSettings() *cluster.Settings {
+func (s *topLevelServer) ClusterSettings() *cluster.Settings {
 	return s.st
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
-func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
+func (s *topLevelServer) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
 // AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
-func (s *Server) AnnotateCtxWithSpan(
+func (s *topLevelServer) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
 ) (context.Context, *tracing.Span) {
 	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
 // StorageClusterID returns the ID of the storage cluster this server is a part of.
-func (s *Server) StorageClusterID() uuid.UUID {
+func (s *topLevelServer) StorageClusterID() uuid.UUID {
 	return s.rpcContext.StorageClusterID.Get()
 }
 
 // NodeID returns the ID of this node within its cluster.
-func (s *Server) NodeID() roachpb.NodeID {
+func (s *topLevelServer) NodeID() roachpb.NodeID {
 	return s.node.Descriptor.NodeID
 }
 
 // InitialStart returns whether this is the first time the node has started (as
 // opposed to being restarted). Only intended to help print debugging info
 // during server startup.
-func (s *Server) InitialStart() bool {
+func (s *topLevelServer) InitialStart() bool {
 	return s.node.initialStart
 }
 
@@ -1401,7 +1401,7 @@ func (li listenerInfo) Iter() map[string]string {
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
-func (s *Server) PreStart(ctx context.Context) error {
+func (s *topLevelServer) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 	done := startup.Begin(ctx)
 	defer done()
@@ -2173,7 +2173,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 // AcceptClients starts listening for incoming SQL clients over the network.
 // This mirrors the implementation of (*SQLServerWrapper).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
-func (s *Server) AcceptClients(ctx context.Context) error {
+func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 	workersCtx := s.AnnotateCtx(context.Background())
 
 	if err := startServeSQL(
@@ -2205,7 +2205,7 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 
 // AcceptInternalClients starts listening for incoming SQL connections on the
 // internal loopback interface.
-func (s *Server) AcceptInternalClients(ctx context.Context) error {
+func (s *topLevelServer) AcceptInternalClients(ctx context.Context) error {
 	connManager := netutil.MakeTCPServer(ctx, s.stopper)
 
 	return s.stopper.RunAsyncTaskEx(ctx,
@@ -2231,34 +2231,34 @@ func (s *Server) AcceptInternalClients(ctx context.Context) error {
 
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
-func (s *Server) ShutdownRequested() <-chan ShutdownRequest {
+func (s *topLevelServer) ShutdownRequested() <-chan ShutdownRequest {
 	return s.stopTrigger.C()
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
 // It is empty for an in-memory temp storage.
-func (s *Server) TempDir() string {
+func (s *topLevelServer) TempDir() string {
 	return s.cfg.TempStorageConfig.Path
 }
 
 // PGServer exports the pgwire server. Used by tests.
-func (s *Server) PGServer() *pgwire.Server {
+func (s *topLevelServer) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
 }
 
 // SpanConfigReporter returns the spanconfig.Reporter. Used by tests.
-func (s *Server) SpanConfigReporter() spanconfig.Reporter {
+func (s *topLevelServer) SpanConfigReporter() spanconfig.Reporter {
 	return s.spanConfigReporter
 }
 
 // LogicalClusterID implements cli.serverStartupInterface. This
 // implementation exports the logical cluster ID of the system tenant.
-func (s *Server) LogicalClusterID() uuid.UUID {
+func (s *topLevelServer) LogicalClusterID() uuid.UUID {
 	return s.sqlServer.LogicalClusterID()
 }
 
 // startDiagnostics starts periodic diagnostics reporting and update checking.
-func (s *Server) startDiagnostics(ctx context.Context) {
+func (s *topLevelServer) startDiagnostics(ctx context.Context) {
 	s.updates.PeriodicallyCheckForUpdates(ctx, s.stopper)
 	s.sqlServer.StartDiagnostics(ctx)
 }
@@ -2268,12 +2268,12 @@ func init() {
 }
 
 // Insecure returns true iff the server has security disabled.
-func (s *Server) Insecure() bool {
+func (s *topLevelServer) Insecure() bool {
 	return s.cfg.Insecure
 }
 
 // TenantCapabilitiesReader returns the Server's tenantcapabilities.Reader.
-func (s *Server) TenantCapabilitiesReader() tenantcapabilities.Reader {
+func (s *topLevelServer) TenantCapabilitiesReader() tenantcapabilities.Reader {
 	return s.tenantCapabilitiesWatcher
 }
 
@@ -2292,7 +2292,7 @@ func (s *Server) TenantCapabilitiesReader() tenantcapabilities.Reader {
 // TODO(knz): This method is currently exported for use by the
 // shutdown code in cli/start.go; however, this is a mis-design. The
 // start code should use the Drain() RPC like quit does.
-func (s *Server) Drain(
+func (s *topLevelServer) Drain(
 	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	return s.drain.runDrain(ctx, verbose)

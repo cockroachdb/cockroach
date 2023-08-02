@@ -127,7 +127,7 @@ func TestInternalSQL(t *testing.T) {
 	conf.User = "root"
 	// Configure pgx to connect on the loopback listener.
 	conf.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return s.(*testServer).Server.loopbackPgL.Connect(ctx)
+		return s.(*testServer).topLevelServer.loopbackPgL.Connect(ctx)
 	}
 	conn, err := pgx.ConnectConfig(ctx, conf)
 	require.NoError(t, err)
