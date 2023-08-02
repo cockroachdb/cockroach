@@ -2,6 +2,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "sqlstatsccl_test",
+    # Explicitly indicate timeout as some of the tests (ie TestSQLStatsRegions) might take up to 3 min to run.
+    timeout = "moderate",
     srcs = [
         "main_test.go",
         "sql_stats_test.go",
