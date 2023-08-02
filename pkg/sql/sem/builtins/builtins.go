@@ -9859,7 +9859,7 @@ func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
 func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
 	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
 	// in the timestamp portion of the final value instead of always setting them.
-	id := (timestamp << builtinconstants.NodeIDBits) ^ uint64(instanceID)
+	id := (timestamp << builtinconstants.UniqueIntNodeIDBits) ^ uint64(instanceID)
 	return tree.DInt(id)
 }
 
