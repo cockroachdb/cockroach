@@ -104,7 +104,8 @@ sequence req=reqNoWait1
 [4] sequence reqNoWait1: scanning lock table for conflicting locks
 [4] sequence reqNoWait1: waiting in lock wait-queues
 [4] sequence reqNoWait1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
-[4] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
+[4] sequence reqNoWait1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[4] sequence reqNoWait1: pushing timestamp of txn 00000001 above 12.000000000,1
 [4] sequence reqNoWait1: pushee not abandoned
 [4] sequence reqNoWait1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence reqNoWait1: sequencing complete, returned error: conflicting intents on ‹"k"› [reason=wait_policy]
@@ -167,6 +168,9 @@ sequence req=reqNoWait2
 [6] sequence reqNoWait2: scanning lock table for conflicting locks
 [6] sequence reqNoWait2: waiting in lock wait-queues
 [6] sequence reqNoWait2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedWriters: 2, queuedReaders: 0)
+[6] sequence reqNoWait2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[6] sequence reqNoWait2: pushing txn 00000003 to abort
+[6] sequence reqNoWait2: pushee not abandoned
 [6] sequence reqNoWait2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [6] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on ‹"k2"› [reason=wait_policy]
 
@@ -198,7 +202,8 @@ sequence req=reqNoWait3
 [9] sequence reqNoWait3: scanning lock table for conflicting locks
 [9] sequence reqNoWait3: waiting in lock wait-queues
 [9] sequence reqNoWait3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k4"› (queuedWriters: 0, queuedReaders: 1)
-[9] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
+[9] sequence reqNoWait3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[9] sequence reqNoWait3: pushing timestamp of txn 00000002 above 12.000000000,1
 [9] sequence reqNoWait3: pushee not abandoned
 [9] sequence reqNoWait3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
 [9] sequence reqNoWait3: sequencing complete, returned error: conflicting intents on ‹"k4"› [reason=wait_policy]
@@ -280,3 +285,6 @@ num=1
 
 reset
 ----
+
+# For tests where a read-only WaitPolicy_Error request pushes a lower-priority
+# request, see refresh, which is an example of such a request.

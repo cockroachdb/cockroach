@@ -408,6 +408,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 	b := &kv.Batch{}
 	b.Header.Timestamp = ir.clock.Now()
 	b.Header.Timestamp.Forward(pushTo)
+	b.Header.WaitPolicy = h.WaitPolicy
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&kvpb.PushTxnRequest{
 			RequestHeader: kvpb.RequestHeader{
