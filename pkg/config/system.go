@@ -139,9 +139,12 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		panic(err)
 	}
 
-	testingLock.Lock()
-	_, ok := testingZoneConfig[ObjectID(id)]
-	testingLock.Unlock()
+	_, ok := func() (zonepb.ZoneConfig, bool) {
+		testingLock.Lock()
+		defer testingLock.Unlock()
+		zc, ok := testingZoneConfig[ObjectID(id)]
+		return zc, ok
+	}()
 
 	if ok {
 		// A test installed a zone config for this ID, but no descriptor.
@@ -203,9 +206,11 @@ func (s *SystemConfig) getIndexBound(key roachpb.Key) int {
 func (s *SystemConfig) GetLargestObjectID(
 	maxReservedDescID ObjectID, pseudoIDs []uint32,
 ) (ObjectID, error) {
-	testingLock.Lock()
-	hook := testingLargestIDHook
-	testingLock.Unlock()
+	hook := func() func(maxID ObjectID) ObjectID {
+		testingLock.Lock()
+		defer testingLock.Unlock()
+		return testingLargestIDHook
+	}()
 	if hook != nil {
 		return hook(maxReservedDescID), nil
 	}
@@ -424,15 +429,20 @@ func (s *SystemConfig) PurgeZoneConfigCache() {
 // zonepb.ZoneConfig(s) from the SystemConfig and install them as an
 // entry in the cache.
 func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry, error) {
-	s.mu.RLock()
-	entry, ok := s.mu.zoneCache[id]
-	s.mu.RUnlock()
+	entry, ok := func() (zoneEntry, bool) {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		e, ok := s.mu.zoneCache[id]
+		return e, ok
+	}()
 	if ok {
 		return entry, nil
 	}
-	testingLock.Lock()
-	hook := ZoneConfigHook
-	testingLock.Unlock()
+	hook := func() zoneConfigHook {
+		testingLock.Lock()
+		defer testingLock.Unlock()
+		return ZoneConfigHook
+	}()
 	zone, placeholder, cache, err := hook(s, codec, id)
 	if err != nil {
 		return zoneEntry{}, err
@@ -449,9 +459,11 @@ func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry
 		}
 
 		if cache {
-			s.mu.Lock()
-			s.mu.zoneCache[id] = entry
-			s.mu.Unlock()
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				s.mu.zoneCache[id] = entry
+			}()
 		}
 		return entry, nil
 	}
@@ -717,9 +729,12 @@ func (s *SystemConfig) NeedsSplit(
 func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 	// Check the cache.
 	{
-		s.mu.RLock()
-		shouldSplit, ok := s.mu.shouldSplitCache[id]
-		s.mu.RUnlock()
+		shouldSplit, ok := func() (bool, bool) {
+			s.mu.RLock()
+			defer s.mu.RUnlock()
+			ss, ok := s.mu.shouldSplitCache[id]
+			return ss, ok
+		}()
 		if ok {
 			return shouldSplit
 		}
@@ -738,9 +753,11 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 		shouldSplit = desc != nil && ShouldSplitAtDesc(desc)
 	}
 	// Populate the cache.
-	s.mu.Lock()
-	s.mu.shouldSplitCache[id] = shouldSplit
-	s.mu.Unlock()
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.shouldSplitCache[id] = shouldSplit
+	}()
 	return shouldSplit
 }
 

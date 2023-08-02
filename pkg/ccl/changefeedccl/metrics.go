@@ -743,12 +743,12 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		now := timeutil.Now()
 		var maxBehind time.Duration
 		m.mu.Lock()
+		defer m.mu.Unlock()
 		for _, resolved := range m.mu.resolved {
 			if behind := now.Sub(resolved.GoTime()); behind > maxBehind {
 				maxBehind = behind
 			}
 		}
-		m.mu.Unlock()
 		return maxBehind.Nanoseconds()
 	})
 	return m

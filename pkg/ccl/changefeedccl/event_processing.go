@@ -644,16 +644,18 @@ func (c *parallelEventConsumer) workerLoop(
 
 func (c *parallelEventConsumer) incInFlight() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.mu.inFlight++
 	c.metrics.ParallelConsumerInFlightEvents.Update(int64(c.mu.inFlight))
-	c.mu.Unlock()
 }
 
 func (c *parallelEventConsumer) decInFlight() {
-	c.mu.Lock()
-	c.mu.inFlight--
-	notifyFlush := c.mu.waiting && c.mu.inFlight == 0
-	c.mu.Unlock()
+	notifyFlush := func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.mu.inFlight--
+		return c.mu.waiting && c.mu.inFlight == 0
+	}()
 
 	// If someone is waiting on a flush, signal to them
 	// that there are no more events.
@@ -704,9 +706,9 @@ func (c *parallelEventConsumer) Flush(ctx context.Context) error {
 		return c.mu.termErr
 	case <-c.flushCh:
 		c.mu.Lock()
+		defer c.mu.Unlock()
 		c.mu.waiting = false
 		c.mu.flushFrontier = c.spanFrontier.Frontier()
-		c.mu.Unlock()
 		return nil
 	}
 }

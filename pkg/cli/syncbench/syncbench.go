@@ -105,11 +105,13 @@ func (w *worker) run(wg *sync.WaitGroup) {
 		atomic.AddUint64(&numOps, 1)
 		atomic.AddUint64(&numBytes, bytes)
 		elapsed := clampLatency(timeutil.Since(start), minLatency, maxLatency)
-		w.latency.Lock()
-		if err := w.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
-			log.Fatalf(ctx, "%v", err)
-		}
-		w.latency.Unlock()
+		func() {
+			w.latency.Lock()
+			defer w.latency.Unlock()
+			if err := w.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
+				log.Fatalf(ctx, "%v", err)
+			}
+		}()
 	}
 }
 
@@ -185,10 +187,13 @@ func Run(opts Options) error {
 		case <-ticker.C:
 			var h *hdrhistogram.Histogram
 			for _, w := range workers {
-				w.latency.Lock()
-				m := w.latency.Merge()
-				w.latency.Rotate()
-				w.latency.Unlock()
+				var m *hdrhistogram.Histogram
+				func() {
+					w.latency.Lock()
+					defer w.latency.Unlock()
+					m = w.latency.Merge()
+					w.latency.Rotate()
+				}()
 				if h == nil {
 					h = m
 				} else {

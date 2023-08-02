@@ -102,27 +102,30 @@ func buildData() embeddedproj.Data {
 				}
 
 				key := spheroidKey{s.Radius(), s.Flattening()}
-				mu.Lock()
-				spheroidHash, ok := foundSpheroids[key]
-				if !ok {
-					shaBytes := sha256.Sum256([]byte(
-						strconv.FormatFloat(s.Radius(), 'f', -1, 64) + "," + strconv.FormatFloat(s.Flattening(), 'f', -1, 64),
-					))
-					spheroidHash = 0
-					for _, b := range shaBytes[:6] {
-						spheroidHash = (spheroidHash << 8) | int64(b)
+				spheroidHash := func() int64 {
+					mu.Lock()
+					defer mu.Unlock()
+					sphHash, ok := foundSpheroids[key]
+					if !ok {
+						shaBytes := sha256.Sum256([]byte(
+							strconv.FormatFloat(s.Radius(), 'f', -1, 64) + "," + strconv.FormatFloat(s.Flattening(), 'f', -1, 64),
+						))
+						sphHash = 0
+						for _, b := range shaBytes[:6] {
+							sphHash = (sphHash << 8) | int64(b)
+						}
+						foundSpheroids[key] = sphHash
+						d.Spheroids = append(
+							d.Spheroids,
+							embeddedproj.Spheroid{
+								Hash:       sphHash,
+								Radius:     s.Radius(),
+								Flattening: s.Flattening(),
+							},
+						)
 					}
-					foundSpheroids[key] = spheroidHash
-					d.Spheroids = append(
-						d.Spheroids,
-						embeddedproj.Spheroid{
-							Hash:       spheroidHash,
-							Radius:     s.Radius(),
-							Flattening: s.Flattening(),
-						},
-					)
-				}
-				mu.Unlock()
+					return sphHash
+				}()
 
 				var bounds embeddedproj.Bounds
 				if record[1] == "EPSG" {
@@ -235,22 +238,24 @@ func buildData() embeddedproj.Data {
 					return err
 				}
 
-				mu.Lock()
-				d.Projections = append(
-					d.Projections,
-					embeddedproj.Projection{
-						SRID:      int(srid),
-						AuthName:  record[1],
-						AuthSRID:  int(authSRID),
-						SRText:    record[3],
-						Proj4Text: proj4text,
+				func() {
+					mu.Lock()
+					defer mu.Unlock()
+					d.Projections = append(
+						d.Projections,
+						embeddedproj.Projection{
+							SRID:      int(srid),
+							AuthName:  record[1],
+							AuthSRID:  int(authSRID),
+							SRText:    record[3],
+							Proj4Text: proj4text,
 
-						Bounds:   bounds,
-						IsLatLng: isLatLng,
-						Spheroid: spheroidHash,
-					},
-				)
-				mu.Unlock()
+							Bounds:   bounds,
+							IsLatLng: isLatLng,
+							Spheroid: spheroidHash,
+						},
+					)
+				}()
 			}
 			return nil
 		})

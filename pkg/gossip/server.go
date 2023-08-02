@@ -180,14 +180,14 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 				HighWaterStamps: s.mu.is.getHighWaterStamps(),
 				Delta:           delta,
 			}
-
+			// nolint:deferunlock
 			s.mu.Unlock()
 			if err := send(reply); err != nil {
 				return err
 			}
 			s.mu.Lock()
 		}
-
+		// nolint:deferunlock
 		s.mu.Unlock()
 
 		select {
@@ -282,7 +282,7 @@ func (s *server) gossipReceiver(
 					AlternateAddr:   &alternateAddr,
 					AlternateNodeID: alternateNodeID,
 				}
-
+				// nolint:deferunlock
 				s.mu.Unlock()
 				err := senderFn(reply)
 				s.mu.Lock()
@@ -318,7 +318,7 @@ func (s *server) gossipReceiver(
 			NodeID:          s.NodeID.Get(),
 			HighWaterStamps: s.mu.is.getHighWaterStamps(),
 		}
-
+		// nolint:deferunlock
 		s.mu.Unlock()
 		err = senderFn(reply)
 		s.mu.Lock()
@@ -329,7 +329,7 @@ func (s *server) gossipReceiver(
 		if cycler := s.simulationCycler; cycler != nil {
 			cycler.Wait()
 		}
-
+		// nolint:deferunlock
 		s.mu.Unlock()
 		recvArgs, err := receiverFn()
 		s.mu.Lock()
@@ -387,9 +387,11 @@ func (s *server) start(addr net.Addr) {
 	waitQuiesce := func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
 
-		s.mu.Lock()
-		unregister()
-		s.mu.Unlock()
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			unregister()
+		}()
 
 		broadcast()
 	}
