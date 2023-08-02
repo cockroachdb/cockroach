@@ -37,7 +37,7 @@ func TestServerController(t *testing.T) {
 
 	d, err := ts.serverController.getServer(ctx, "system")
 	require.NoError(t, err)
-	if d.(*systemServerWrapper).server != ts.Server {
+	if d.(*systemServerWrapper).server != ts.topLevelServer {
 		t.Fatal("expected wrapped system server")
 	}
 
