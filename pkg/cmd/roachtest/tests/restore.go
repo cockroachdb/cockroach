@@ -815,7 +815,11 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
-	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	// TODO(kvoli): Once CPU profiling is enabled by default across roachtests,
+	// remove this cluster setting change #97699.
+	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "70"
+	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), settings)
 	rd.getAOST(ctx)
 }
 
