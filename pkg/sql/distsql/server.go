@@ -499,9 +499,9 @@ func (ds *ServerImpl) newFlowContext(
 	}
 
 	if localState.IsLocal && localState.Collection != nil {
-		// If we were passed a descs.Collection to use, then take it. In this case,
-		// the caller will handle releasing the used descriptors, so we don't need
-		// to cleanup the descriptors when cleaning up the flow.
+		// If we were passed a descs.Collection to use, then take it. In this
+		// case, the caller will handle releasing the used descriptors, so we
+		// don't need to clean up the descriptors when cleaning up the flow.
 		flowCtx.Descriptors = localState.Collection
 	} else {
 		// If we weren't passed a descs.Collection, then make a new one. We are

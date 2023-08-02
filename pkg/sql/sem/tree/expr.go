@@ -800,11 +800,19 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(ctx *FmtCtx) {
-	if ctx.placeholderFormat != nil {
-		ctx.placeholderFormat(ctx, node)
-		return
+	if ctx.HasFlags(FmtHideConstants) {
+		if ctx.placeholderFormat != nil {
+			ctx.placeholderFormat(ctx, node)
+			return
+		}
+		ctx.Printf("$%d", node.Idx+1)
+	} else {
+		if ctx.placeholderFormat != nil {
+			ctx.placeholderFormat(ctx, node)
+			return
+		}
+		ctx.Printf("$%d", node.Idx+1)
 	}
-	ctx.Printf("$%d", node.Idx+1)
 }
 
 // ResolvedType implements the TypedExpr interface.

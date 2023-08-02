@@ -2254,7 +2254,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			testFiles.filesWithOpts,
-			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
+			` WITH OPTIONS (comment = '#', delimiter = '|', "nullif" = '', skip = '2')`,
 			"",
 		},
 		{
@@ -2263,7 +2263,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH sstsize = '10K'`,
 			testFiles.files,
-			` WITH sstsize = '10K'`,
+			` WITH OPTIONS (sstsize = '10K')`,
 			"",
 		},
 		{
@@ -2287,7 +2287,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.files,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		{
@@ -2295,7 +2295,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.files,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			"",
 		},
 		{
@@ -2303,7 +2303,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"",
 		},
 		{
@@ -2311,7 +2311,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.bzipFiles,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		{
@@ -2327,7 +2327,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'bzip'`,
 			testFiles.bzipFiles,
-			` WITH decompress = 'bzip'`,
+			` WITH OPTIONS (decompress = 'bzip')`,
 			"",
 		},
 		{
@@ -2335,7 +2335,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.bzipFiles,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		{
@@ -2384,7 +2384,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			// This returns different errors for `make test` and `make testrace` but
 			// field is in both error messages.
 			`field`,
@@ -2394,7 +2394,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`CREATE TABLE t (a int8 primary key, b string, index (b), index (a, b))`,
 			`IMPORT INTO t CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.files,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"gzip: invalid header",
 		},
 		{
@@ -3177,7 +3177,7 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-with-opts",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			testFiles.filesWithOpts,
-			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
+			` WITH OPTIONS (comment = '#', delimiter = '|', "nullif" = '', skip = '2')`,
 			"",
 		},
 		{
@@ -3185,7 +3185,7 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-sstsize",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH sstsize = '10K'`,
 			testFiles.files,
-			` WITH sstsize = '10K'`,
+			` WITH OPTIONS (sstsize = '10K')`,
 			"",
 		},
 		{
@@ -3206,28 +3206,28 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-auto-decompress",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.files,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		{
 			"import-into-no-decompress",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.files,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			"",
 		},
 		{
 			"import-into-explicit-gzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"",
 		},
 		{
 			"import-into-auto-gzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		{
@@ -3241,14 +3241,14 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-explicit-bzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'bzip'`,
 			testFiles.bzipFiles,
-			` WITH decompress = 'bzip'`,
+			` WITH OPTIONS (decompress = 'bzip')`,
 			"",
 		},
 		{
 			"import-into-auto-bzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.bzipFiles,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		{
@@ -3262,21 +3262,21 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-no-decompress-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.filesUsingWildcard,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			"",
 		},
 		{
 			"import-into-explicit-gzip-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.gzipFilesUsingWildcard,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"",
 		},
 		{
 			"import-into-auto-bzip-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			testFiles.gzipFilesUsingWildcard,
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			"",
 		},
 		// NB: successes above, failures below, because we check the i-th job.
@@ -3305,7 +3305,7 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-no-decompress-gzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
 			testFiles.gzipFiles,
-			` WITH decompress = 'none'`,
+			` WITH OPTIONS (decompress = 'none')`,
 			// This returns different errors for `make test` and `make testrace` but
 			// field is in both error messages.
 			"field",
@@ -3314,21 +3314,21 @@ func TestImportIntoCSV(t *testing.T) {
 			"import-into-no-decompress-gzip",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
 			testFiles.files,
-			` WITH decompress = 'gzip'`,
+			` WITH OPTIONS (decompress = 'gzip')`,
 			"gzip: invalid header",
 		},
 		{
 			"import-no-files-match-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
 			[]string{`'nodelocal://1/data-[0-9][0-9]*'`},
-			` WITH decompress = 'auto'`,
+			` WITH OPTIONS (decompress = 'auto')`,
 			`pq: no files matched`,
 		},
 		{
 			"import-into-no-glob-wildcard",
 			`IMPORT INTO t (a, b) CSV DATA (%s) WITH disable_glob_matching`,
 			testFiles.filesUsingWildcard,
-			` WITH disable_glob_matching`,
+			` WITH OPTIONS (disable_glob_matching)`,
 			"pq: (.+)no such file or directory: nodelocal storage file does not exist:",
 		},
 	} {

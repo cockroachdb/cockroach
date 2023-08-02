@@ -808,7 +808,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP TO ($1,$2,$3) INCREMENTAL FROM $4", append(incrementals, backups[0])...)
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH incremental_location = ($4, $5, $6)",
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH OPTIONS (incremental_location = ($4, $5, $6))",
 		append(collections, incrementals...)...)
 
 	sqlDB.ExpectErr(t, "the incremental_location option must contain the same number of locality",
@@ -848,7 +848,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 				collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1,
 				collections[0], collections[1], collections[2])},
-			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
+			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
 				full1, collections[0], collections[1], collections[2], incrementals[0],
 				incrementals[1], incrementals[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') AS OF SYSTEM TIME '-1s'", asOf1, collections[0],
@@ -904,7 +904,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
 				resolvedCollectionURIs[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1], resolvedCollectionURIs[2],
 				resolvedIncURIs[0], resolvedIncURIs[1], resolvedIncURIs[2])},
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
@@ -1308,7 +1308,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
-			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
+			`RESTORE TABLE bank FROM '%s', '%s' WITH OPTIONS (into_db = 'restoredb')`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
 		DescriptorIDs: descpb.IDs{
@@ -1395,7 +1395,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 				jobs.Record{
 					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
-						`BACKUP DATABASE data TO '%s' WITH %s`,
+						`BACKUP DATABASE data TO '%s' WITH OPTIONS (%s)`,
 						backupLoc1, sanitizedEncryptionOption),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
@@ -1414,7 +1414,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
-					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db = 'restoredb'`,
+					`RESTORE TABLE data.bank FROM '%s' WITH OPTIONS (%s, into_db = 'restoredb')`,
 					backupLoc1, sanitizedEncryptionOption,
 				),
 				DescriptorIDs: descpb.IDs{
@@ -5700,8 +5700,8 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND description != 'updating privileges' ORDER BY description",
 		[][]string{
-			{"BACKUP DATABASE data TO 'nodelocal://1/foo' WITH revision_history = true"},
-			{"RESTORE TABLE data.bank FROM 'nodelocal://1/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
+			{"BACKUP DATABASE data TO 'nodelocal://1/foo' WITH OPTIONS (revision_history = true)"},
+			{"RESTORE TABLE data.bank FROM 'nodelocal://1/foo' WITH OPTIONS (into_db = 'data 2', skip_missing_foreign_keys)"},
 		},
 	)
 }
