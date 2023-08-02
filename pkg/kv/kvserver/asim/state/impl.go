@@ -147,7 +147,14 @@ func (s *state) String() string {
 	nStores := len(s.stores)
 	iterStores := 0
 	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
-	for _, store := range s.stores {
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for _, storeID := range storeIDs {
+		store := s.stores[storeID]
 		builder.WriteString(store.String())
 		if iterStores < nStores-1 {
 			builder.WriteString(",")
@@ -1322,14 +1329,18 @@ func (s *store) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("s%dn%d=(", s.storeID, s.nodeID))
 
-	nRepls := len(s.replicas)
-	iterRepls := 0
-	for rangeID, replicaID := range s.replicas {
+	var rangeIDs RangeIDSlice
+	for rangeID := range s.replicas {
+		rangeIDs = append(rangeIDs, rangeID)
+	}
+	sort.Sort(rangeIDs)
+
+	for i, rangeID := range rangeIDs {
+		replicaID := s.replicas[rangeID]
 		builder.WriteString(fmt.Sprintf("r%d:%d", rangeID, replicaID))
-		if iterRepls < nRepls-1 {
+		if i < len(s.replicas)-1 {
 			builder.WriteString(",")
 		}
-		iterRepls++
 	}
 	builder.WriteString(")")
 	return builder.String()
@@ -1383,17 +1394,22 @@ func (r *rng) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("r%d(%d)=(", r.rangeID, r.startKey))
 
-	nRepls := len(r.replicas)
-	iterRepls := 0
-	for storeID, replica := range r.replicas {
+	var storeIDs StoreIDSlice
+	for storeID := range r.replicas {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		replica := r.replicas[storeID]
 		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
-		if iterRepls < nRepls-1 {
+		if i < len(r.replicas)-1 {
 			builder.WriteString(",")
 		}
-		iterRepls++
+		i++
 	}
 	builder.WriteString(")")
 
