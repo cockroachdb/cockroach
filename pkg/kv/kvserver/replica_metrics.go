@@ -71,6 +71,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
+	// nolint:deferunlock
 	r.store.unquiescedReplicas.Unlock()
 
 	latchMetrics := r.concMgr.LatchMetrics()
@@ -112,7 +113,7 @@ func (r *Replica) Metrics(
 		paused:                r.mu.pausedFollowers,
 		slowRaftProposalCount: r.mu.slowProposalCount,
 	}
-
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	return calcReplicaMetrics(input)

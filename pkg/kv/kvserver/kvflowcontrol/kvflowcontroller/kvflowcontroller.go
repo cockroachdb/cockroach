@@ -145,6 +145,7 @@ func (c *Controller) Admit(
 		c.mu.Lock()
 		b := c.getBucketLocked(connection.Stream())
 		tokens := b.tokens[class]
+		// nolint:deferunlock
 		c.mu.Unlock()
 
 		if tokens > 0 ||

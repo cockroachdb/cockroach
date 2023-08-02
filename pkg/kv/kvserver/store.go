@@ -505,6 +505,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		repl.mu.RLock()
 		destroyed := repl.mu.destroyStatus
 		initialized := repl.IsInitialized()
+		// nolint:deferunlock
 		repl.mu.RUnlock()
 		if initialized && destroyed.IsAlive() && !visitor(repl) {
 			break
@@ -1434,6 +1435,7 @@ func NewStore(
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
+	// nolint:deferunlock
 	s.coalescedMu.Unlock()
 
 	s.mu.Lock()
@@ -1441,14 +1443,17 @@ func NewStore(
 	s.mu.replicasByKey = newStoreReplicaBTree()
 	s.mu.creatingReplicas = map[roachpb.RangeID]struct{}{}
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
+	// nolint:deferunlock
 	s.mu.Unlock()
 
 	s.unquiescedReplicas.Lock()
 	s.unquiescedReplicas.m = map[roachpb.RangeID]struct{}{}
+	// nolint:deferunlock
 	s.unquiescedReplicas.Unlock()
 
 	s.rangefeedReplicas.Lock()
 	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
+	// nolint:deferunlock
 	s.rangefeedReplicas.Unlock()
 
 	s.tsCache = tscache.New(cfg.Clock)
@@ -1745,6 +1750,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						if nextLease != (roachpb.Lease{}) && nextLease.OwnedBy(s.StoreID()) {
 							llHandle = r.mu.pendingLeaseRequest.JoinRequest()
 						}
+						// nolint:deferunlock
 						r.mu.Unlock()
 
 						if llHandle != nil {
@@ -2074,6 +2080,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		if err == nil {
 			err = s.addToReplicasByKeyLocked(rep, rep.Desc())
 		}
+		// nolint:deferunlock
 		s.mu.Unlock()
 		if err != nil {
 			return err
@@ -2263,6 +2270,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			for rangeID := range s.rangefeedReplicas.m {
 				rangeIDs = append(rangeIDs, rangeID)
 			}
+			// nolint:deferunlock
 			s.rangefeedReplicas.Unlock()
 			// Sort the range IDs so that we notify them in the same order on each
 			// iteration. With the pacing below, this helps to ensure a consistent
@@ -2360,14 +2368,14 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 
 func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Lock()
+	defer s.rangefeedReplicas.Unlock()
 	s.rangefeedReplicas.m[rangeID] = struct{}{}
-	s.rangefeedReplicas.Unlock()
 }
 
 func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Lock()
+	defer s.rangefeedReplicas.Unlock()
 	delete(s.rangefeedReplicas.m, rangeID)
-	s.rangefeedReplicas.Unlock()
 }
 
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
@@ -2843,6 +2851,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	{
 		s.ioThreshold.Lock()
 		capacity.IOThreshold = *s.ioThreshold.t
+		// nolint:deferunlock
 		s.ioThreshold.Unlock()
 	}
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
@@ -2987,12 +2996,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 
 	s.mu.RLock()
 	uninitializedCount = int64(len(s.mu.uninitReplicas))
+	// nolint:deferunlock
 	s.mu.RUnlock()
 
 	// TODO(kaisun314,kvoli): move this to a per-store admission control metrics
 	// struct when available. See pkg/util/admission/granter.go.
 	s.ioThreshold.Lock()
 	ioOverload, _ = s.ioThreshold.t.Score()
+	// nolint:deferunlock
 	s.ioThreshold.Unlock()
 
 	// We want to avoid having to read this multiple times during the replica
@@ -3174,6 +3185,7 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 	s.mu.RLock()
 	left := s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), desc.StartKey)
 	right := s.mu.replicasByKey.LookupNextReplica(context.Background(), desc.EndKey)
+	// nolint:deferunlock
 	s.mu.RUnlock()
 
 	// Cover all range IDs (prevID, desc.RangeID, nextID) using a continuous span.
@@ -3727,7 +3739,7 @@ func (s *storeForTruncatorImpl) acquireReplicaForTruncator(
 		defer r.mu.Unlock()
 		return r.mu.destroyStatus.IsAlive()
 	}(); !isAlive {
-		r.raftMu.Unlock()
+		defer r.raftMu.Unlock()
 		return nil
 	}
 	return (*raftTruncatorReplica)(r)
@@ -3735,7 +3747,7 @@ func (s *storeForTruncatorImpl) acquireReplicaForTruncator(
 
 func (s *storeForTruncatorImpl) releaseReplicaForTruncator(r replicaForTruncator) {
 	replica := r.(*raftTruncatorReplica)
-	replica.raftMu.Unlock()
+	defer replica.raftMu.Unlock()
 }
 
 func (s *storeForTruncatorImpl) getEngine() storage.Engine {

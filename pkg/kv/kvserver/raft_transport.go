@@ -513,6 +513,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					}
 					t.kvflowControl.mu.Lock()
 					t.kvflowControl.mu.connectionTracker.markStoresConnected(storeIDs)
+					// nolint:deferunlock
 					t.kvflowControl.mu.Unlock()
 					if len(batch.Requests) == 0 {
 						continue
@@ -701,6 +702,7 @@ func (t *RaftTransport) processQueue(
 			t.kvflowControl.mu.RLock()
 			batch.StoreIDs = nil
 			batch.StoreIDs = append(batch.StoreIDs, t.kvflowControl.mu.localStoreIDs...)
+			// nolint:deferunlock
 			t.kvflowControl.mu.RUnlock()
 			// Unconditionally set sentInitialStoreIDs, since we always have
 			// the initial store IDs before the additional ones.
@@ -866,6 +868,7 @@ func (t *RaftTransport) getQueue(
 		}
 		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
 		t.kvflowControl.mu.connectionTracker.markNodeConnected(nodeID, class)
+		// nolint:deferunlock
 		t.kvflowControl.mu.Unlock()
 	}
 	return (*raftSendQueue)(value), ok
@@ -972,9 +975,9 @@ func (t *RaftTransport) startProcessNewQueue(
 		defer cleanup(q)
 		defer func() {
 			t.kvflowControl.mu.Lock()
+			defer t.kvflowControl.mu.Unlock()
 			t.queues[class].Delete(int64(toNodeID))
 			t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
-			t.kvflowControl.mu.Unlock()
 		}()
 		conn, err := t.dialer.Dial(ctx, toNodeID, class)
 		if err != nil {
@@ -1002,9 +1005,9 @@ func (t *RaftTransport) startProcessNewQueue(
 		})
 	if err != nil {
 		t.kvflowControl.mu.Lock()
+		defer t.kvflowControl.mu.Unlock()
 		t.queues[class].Delete(int64(toNodeID))
 		t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
-		t.kvflowControl.mu.Unlock()
 		return false
 	}
 	return true

@@ -327,13 +327,13 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 // internal (testing) use only.
 func (txn *Txn) TestingSetPriority(priority enginepb.TxnPriority) {
 	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.
 	txn.mu.userPriority = roachpb.UserPriority(-priority)
 	if err := txn.mu.sender.SetUserPriority(txn.mu.userPriority); err != nil {
 		log.Fatalf(context.TODO(), "%+v", err)
 	}
-	txn.mu.Unlock()
 }
 
 // UserPriority returns the transaction's user priority.
@@ -1083,6 +1083,7 @@ func (txn *Txn) Send(
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
 	sender := txn.mu.sender
+	// nolint:deferunlock
 	txn.mu.Unlock()
 	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
 

@@ -518,6 +518,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 	streamerLocked := false
 	defer func() {
 		if streamerLocked {
+			// nolint:deferunlock
 			s.mu.Unlock()
 		}
 	}()
@@ -662,6 +663,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 		// Per the contract of the budget's mutex (which must be acquired first,
 		// before the Streamer's mutex), we cannot hold the mutex of s when
 		// consuming below, so we have to unlock it.
+		// nolint:deferunlock
 		s.mu.Unlock()
 		streamerLocked = false
 	}
@@ -744,6 +746,7 @@ func (s *Streamer) Close(ctx context.Context) {
 		s.coordinatorCtxCancel()
 		s.mu.Lock()
 		s.mu.done = true
+		// nolint:deferunlock
 		s.mu.Unlock()
 		s.requestsToServe.close()
 		// Unblock the coordinator in case it is waiting for the budget.
@@ -832,6 +835,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			// with less urgency when necessary to free up the budget.
 			spillingPriority = w.s.requestsToServe.nextLocked().priority()
 		}
+		// nolint:deferunlock
 		w.s.requestsToServe.Unlock()
 
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
@@ -901,6 +905,7 @@ func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
 		}
 		w.s.mu.Lock()
 		shouldExit := w.s.results.error() != nil || w.s.mu.done
+		// nolint:deferunlock
 		w.s.mu.Unlock()
 		if shouldExit {
 			return nil
@@ -1529,6 +1534,7 @@ func processSingleRangeResults(
 	if fp.numScanResults > 0 && !s.hints.SingleRowLookup {
 		defer s.mu.Unlock()
 	} else {
+		// nolint:deferunlock
 		s.mu.Unlock()
 	}
 

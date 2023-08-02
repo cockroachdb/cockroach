@@ -763,6 +763,7 @@ func (rc *RangeCache) tryLookup(
 ) (EvictionToken, error) {
 	rc.rangeCache.RLock()
 	if entry, _ := rc.getCachedRLocked(ctx, key, useReverseScan); entry != nil {
+		// nolint:deferunlock
 		rc.rangeCache.RUnlock()
 		returnToken := rc.makeEvictionToken(entry, nil /* nextDesc */)
 		return returnToken, nil
@@ -842,6 +843,7 @@ func (rc *RangeCache) tryLookup(
 	// We must use DoChan above so that we can always unlock this mutex. This must
 	// be done *after* the request has been added to the lookupRequests group, or
 	// we risk it racing with an inflight request.
+	// nolint:deferunlock
 	rc.rangeCache.RUnlock()
 
 	if !leader {

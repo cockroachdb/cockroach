@@ -264,6 +264,7 @@ func (m *Manager) WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
 	defer snap.close()
+	// nolint:deferunlock
 	m.mu.Unlock()
 
 	return m.wait(ctx, lg, snap)
@@ -359,9 +360,9 @@ func (m *Manager) sequence(spans *spanset.SpanSet, pp poison.Policy) (*Guard, sn
 	lg := newGuard(spans, pp)
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	snap := m.snapshotLocked(spans)
 	m.insertLocked(lg)
-	m.mu.Unlock()
 	return lg, snap
 }
 
@@ -601,8 +602,8 @@ func (m *Manager) Release(lg *Guard) {
 	}
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.removeLocked(lg)
-	m.mu.Unlock()
 }
 
 // removeLocked removes the latches owned by the provided Guard from the

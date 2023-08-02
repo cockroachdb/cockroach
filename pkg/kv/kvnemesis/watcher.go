@@ -84,6 +84,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 		for i := 0; ; i = (i + 1) % len(dbs) {
 			w.mu.Lock()
 			ts.Forward(w.mu.frontier.Frontier())
+			// nolint:deferunlock
 			w.mu.Unlock()
 
 			ds := dss[i]
@@ -145,8 +146,8 @@ func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr
 	}()
 	resultCh := make(chan error, 1)
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.mu.frontierWaiters[ts] = append(w.mu.frontierWaiters[ts], resultCh)
-	w.mu.Unlock()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

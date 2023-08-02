@@ -1015,6 +1015,7 @@ func (cl candidateList) selectBest(randGen allocatorRand) *candidate {
 	}
 	randGen.Lock()
 	order := randGen.Perm(len(cl))
+	// nolint:deferunlock
 	randGen.Unlock()
 	best := &cl[order[0]]
 	for i := 1; i < allocatorRandomCount; i++ {
@@ -1037,6 +1038,7 @@ func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
 	}
 	randGen.Lock()
 	r := randGen.Intn(len(cl))
+	// nolint:deferunlock
 	randGen.Unlock()
 	c := &cl[r]
 	return c
@@ -1054,6 +1056,7 @@ func (cl candidateList) selectWorst(randGen allocatorRand) *candidate {
 	}
 	randGen.Lock()
 	order := randGen.Perm(len(cl))
+	// nolint:deferunlock
 	randGen.Unlock()
 	worst := &cl[order[0]]
 	for i := 1; i < allocatorRandomCount; i++ {

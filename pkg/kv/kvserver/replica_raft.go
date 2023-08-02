@@ -800,6 +800,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.applyingEntries = hasMsg(msgStorageApply)
 	pausedFollowers := r.mu.pausedFollowers
+	// nolint:deferunlock
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
@@ -954,6 +955,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				LastTerm:  r.mu.lastTermNotDurable,
 				ByteSize:  r.mu.raftLogSize,
 			}
+			// nolint:deferunlock
 			r.mu.RUnlock()
 
 			// We refresh pending commands after applying a snapshot because this
@@ -1025,6 +1027,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// previously the leader.
 		becameLeader = r.mu.leaderID == r.replicaID
 	}
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	// When becoming the leader, proactively add the replica to the replicate
@@ -1086,6 +1089,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if refreshReason != noReason {
 		r.mu.Lock()
 		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
+		// nolint:deferunlock
 		r.mu.Unlock()
 	}
 
@@ -1122,6 +1126,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return true, nil
 	})
 	r.mu.applyingEntries = false
+	// nolint:deferunlock
 	r.mu.Unlock()
 	if err != nil {
 		return stats, errors.Wrap(err, "during advance")
@@ -1244,6 +1249,7 @@ func (r *Replica) tick(
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
+	// nolint:deferunlock
 	r.unreachablesMu.Unlock()
 	for remoteReplica := range remotes {
 		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
@@ -1512,12 +1518,12 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	lagging laggingReplicaSet,
 ) bool {
 	var hbMap map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
+	r.store.coalescedMu.Lock()
+	defer r.store.coalescedMu.Unlock()
 	switch msg.Type {
 	case raftpb.MsgHeartbeat:
-		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeats
 	case raftpb.MsgHeartbeatResp:
-		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeatResponses
 	default:
 		return false
@@ -1540,7 +1546,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		NodeID:  toReplica.NodeID,
 	}
 	hbMap[toStore] = append(hbMap[toStore], beat)
-	r.store.coalescedMu.Unlock()
 	return true
 }
 
@@ -1683,6 +1688,7 @@ func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
 	r.localMsgs.Lock()
 	wasEmpty := len(r.localMsgs.active) == 0
 	r.localMsgs.active = append(r.localMsgs.active, msg)
+	// nolint:deferunlock
 	r.localMsgs.Unlock()
 	// If this is the first local message and the caller will not deliver local
 	// messages itself, schedule a Raft update check to inform Raft processing
@@ -1707,6 +1713,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 	if cap(r.localMsgs.recycled) > 16 {
 		r.localMsgs.recycled = nil
 	}
+	// nolint:deferunlock
 	r.localMsgs.Unlock()
 
 	// If we are in a test build, shuffle the local messages before delivering
@@ -1759,6 +1766,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 			}
 		})
 	}
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	if fromErr != nil {
@@ -1793,6 +1801,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	if !r.sendRaftMessageRequest(ctx, req) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
+		// nolint:deferunlock
 		r.mu.Unlock()
 		r.addUnreachableRemoteReplica(toReplica.ReplicaID)
 	}
@@ -1802,11 +1811,11 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 // as unreachable on the next tick.
 func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
 	r.unreachablesMu.Lock()
+	defer r.unreachablesMu.Unlock()
 	if r.unreachablesMu.remotes == nil {
 		r.unreachablesMu.remotes = make(map[roachpb.ReplicaID]struct{})
 	}
 	r.unreachablesMu.remotes[remoteReplica] = struct{}{}
-	r.unreachablesMu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
@@ -2431,6 +2440,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 	}
 	return subsumedRepls, func() {
 		for _, sr := range subsumedRepls {
+			// nolint:deferunlock
 			sr.raftMu.Unlock()
 		}
 	}

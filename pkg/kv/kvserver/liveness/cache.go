@@ -123,13 +123,13 @@ func (c *cache) storeGossipUpdate(_ string, content roachpb.Value) {
 		return
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	previousRec, found := c.mu.lastNodeUpdate[nodeID]
 	if !found {
 		previousRec = UpdateInfo{}
 	}
 	previousRec.lastUpdateTime = c.clock.Now()
 	c.mu.lastNodeUpdate[nodeID] = previousRec
-	c.mu.Unlock()
 }
 
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the
@@ -157,6 +157,7 @@ func (c *cache) maybeUpdate(ctx context.Context, newLivenessRec Record) {
 	if shouldReplace {
 		c.mu.nodes[newLivenessRec.NodeID] = newLivenessRec
 	}
+	// nolint:deferunlock
 	c.mu.Unlock()
 
 	if shouldReplace {

@@ -1524,10 +1524,10 @@ func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseS
 
 	var llHandle *leaseRequestHandle
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
 		llHandle = r.requestLeaseLocked(ctx, st, nil /* limiter */)
 	}
-	r.mu.Unlock()
 
 	if llHandle != nil {
 		select {
@@ -1579,6 +1579,7 @@ func (r *Replica) LeaseViolatesPreferences(ctx context.Context) bool {
 	r.mu.RLock()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	preferences := r.mu.conf.LeasePreferences
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	storeAttrs := r.store.Attrs()

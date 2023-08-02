@@ -332,7 +332,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
 			destroyReasonRemoved)
+		// nolint:deferunlock
 		rhsRepl.mu.Unlock()
+		// nolint:deferunlock
 		rhsRepl.readOnlyCmdMu.Unlock()
 
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
@@ -443,6 +445,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 				// !looselyCoupledTruncation code path.
 				b.r.mu.Lock()
 				b.r.mu.raftLogSizeTrusted = false
+				// nolint:deferunlock
 				b.r.mu.Unlock()
 			}
 		}
@@ -472,7 +475,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
 		span := b.r.descRLocked().RSpan()
+		// nolint:deferunlock
 		b.r.mu.Unlock()
+		// nolint:deferunlock
 		b.r.readOnlyCmdMu.Unlock()
 		b.changeRemovesReplica = true
 
@@ -580,6 +585,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	existingClosed := r.mu.state.RaftClosedTimestamp
 	newClosed := b.state.RaftClosedTimestamp
 	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) && raftClosedTimestampAssertionsEnabled {
+		// nolint:deferunlock
 		r.mu.Unlock()
 		return errors.AssertionFailedf(
 			"raft closed timestamp regression; replica has: %s, new batch has: %s.",
@@ -601,6 +607,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
+	// nolint:deferunlock
 	r.mu.Unlock()
 	if closedTimestampUpdated {
 		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)

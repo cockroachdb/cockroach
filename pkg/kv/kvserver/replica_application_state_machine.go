@@ -127,8 +127,8 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	mb := &sm.ephemeralBatch
 	mb.r = r
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	mb.state = r.mu.state
-	r.mu.RUnlock()
 	return mb
 }
 
@@ -140,11 +140,11 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.applyStats = &sm.applyStats
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	b.state = r.mu.state
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.mu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
-	r.mu.RUnlock()
 	b.start = timeutil.Now()
 	return b
 }
@@ -200,6 +200,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// TODO(sep-raft-log): either check only statemachine invariants or
 			// pass both engines in.
 			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+			// nolint:deferunlock
 			sm.r.mu.RUnlock()
 			sm.applyStats.stateAssertions++
 		}
@@ -245,6 +246,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		if higherReproposalsExist {
 			sm.r.mu.Lock()
 			delete(sm.r.mu.proposals, cmd.ID)
+			// nolint:deferunlock
 			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true

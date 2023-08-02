@@ -282,6 +282,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.mu.raftLogSizeTrusted
 	firstIndex := r.raftFirstIndexRLocked()
+	// nolint:deferunlock
 	r.mu.RUnlock()
 	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 
@@ -310,6 +311,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	input := truncateDecisionInput{
@@ -699,8 +701,10 @@ func (rlq *raftLogQueue) process(
 			r.mu.raftLogSize = n
 			r.mu.raftLogLastCheckSize = n
 			r.mu.raftLogSizeTrusted = true
+			// nolint:deferunlock
 			r.mu.Unlock()
 		}
+		// nolint:deferunlock
 		r.raftMu.Unlock()
 
 		if err != nil {

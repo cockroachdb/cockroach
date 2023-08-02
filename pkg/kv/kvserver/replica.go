@@ -190,6 +190,7 @@ func (mu *ReplicaMutex) Lock() {
 }
 
 func (mu *ReplicaMutex) Unlock() {
+	// nolint:deferunlock
 	(*syncutil.RWMutex)(mu).Unlock()
 }
 
@@ -206,6 +207,7 @@ func (mu *ReplicaMutex) AssertRHeld() {
 }
 
 func (mu *ReplicaMutex) RUnlock() {
+	// nolint:deferunlock
 	(*syncutil.RWMutex)(mu).RUnlock()
 }
 
@@ -1554,6 +1556,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	r.sideTransportClosedTimestamp.mu.Lock()
 	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
+	// nolint:deferunlock
 	r.sideTransportClosedTimestamp.mu.Unlock()
 	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
 		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
@@ -2210,8 +2213,11 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.mu.mergeComplete = nil
 		r.mu.mergeTxnID = uuid.UUID{}
 		close(mergeCompleteCh)
+		// nolint:deferunlock
 		r.mu.Unlock()
+		// nolint:deferunlock
 		r.readOnlyCmdMu.Unlock()
+		// nolint:deferunlock
 		r.raftMu.Unlock()
 	})
 	if errors.Is(err, stop.ErrUnavailable) {
