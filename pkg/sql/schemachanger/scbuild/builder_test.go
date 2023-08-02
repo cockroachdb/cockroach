@@ -300,6 +300,7 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
+
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `use defaultdb;`)
 	tdb.Exec(t, `select crdb_internal.generate_test_objects('test',  5000);`)

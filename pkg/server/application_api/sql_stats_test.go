@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -49,7 +48,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
@@ -323,10 +322,7 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: params,
-	})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServerProto := testCluster.Server(0)
@@ -386,13 +382,12 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
-				},
+				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
 				},
@@ -498,13 +493,12 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
-				},
+				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
 				},
@@ -669,13 +663,12 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
-				},
+				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true,
 				},

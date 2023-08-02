@@ -60,7 +60,6 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
 	testLogicCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
-	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 	testLogicCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
 	testLogicCmd.Flags().Bool(flexTypesFlag, false, "tolerate when a result column is produced with a different numeric type")
@@ -89,7 +88,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		showSQL        = mustGetFlagBool(cmd, showSQLFlag)
 		count          = mustGetFlagInt(cmd, countFlag)
 		stress         = mustGetFlagBool(cmd, stressFlag)
-		stressCmdArgs  = mustGetFlagString(cmd, stressArgsFlag)
 		testArgs       = mustGetFlagString(cmd, testArgsFlag)
 		showDiff       = mustGetFlagBool(cmd, showDiffFlag)
 		flexTypes      = mustGetFlagBool(cmd, flexTypesFlag)
@@ -220,9 +218,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	if bigtest {
 		args = append(args, "--test_arg", "-bigtest")
 	}
-	if count != 1 {
-		args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
-	}
 	if len(files) > 0 {
 		args = append(args, "--test_arg", "-show-sql")
 	}
@@ -248,9 +243,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	if showDiff {
 		args = append(args, "--test_arg", "-show-diff")
 	}
-	if timeout > 0 && !stress {
-		// If stress is specified, we'll pad the timeout differently below.
-
+	if timeout > 0 {
 		// The bazel timeout should be higher than the timeout passed to the
 		// test binary (giving it ample time to clean up, 5 seconds is probably
 		// enough).
@@ -261,10 +254,20 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		// -- --test_arg '-test.timeout=X', that'll take precedence further
 		// below.
 	}
-
 	if stress {
-		args = append(args, "--test_sharding_strategy=disabled")
-		args = append(args, d.getStressArgs(stressCmdArgs, timeout)...)
+		if count == 1 {
+			// Default to 500 unless a different count was provided.
+			// NB: Logic tests are generally big. We use 500 instead
+			// of 1000 (the default for `dev test`).
+			count = 500
+		}
+		args = append(args,
+			"--test_env=COCKROACH_STRESS=true",
+			"--notest_keep_going",
+		)
+	}
+	if count != 1 {
+		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
 	}
 	if testArgs != "" {
 		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
@@ -279,9 +282,12 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_filter", filesRegexp+"/"+subtests)
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
-	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
+	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
+	if stress {
+		d.warnAboutChangeInStressBehavior(timeout)
+	}
 	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 		return err
 	}

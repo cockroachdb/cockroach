@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -209,8 +208,7 @@ func TestSQLStatsInitialDelay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	srv := serverutils.StartServerOnly(t, params)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
@@ -237,12 +235,12 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	}
 	fakeTime.setTime(timeutil.Now())
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
 		StubTimeNow: fakeTime.Now,
 	}
 	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -303,9 +301,8 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	observer := s.SQLConn(t, "")
@@ -415,9 +412,8 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -459,9 +455,10 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
+	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -581,8 +578,10 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 		stubTime.setTime(parsedTime)
 	}
 
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = stubTime.Now
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = stubTime.Now
+	var params base.TestServerArgs
+	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 
 	ctx := context.Background()
 	srv, conn, _ := serverutils.StartServer(t, params)

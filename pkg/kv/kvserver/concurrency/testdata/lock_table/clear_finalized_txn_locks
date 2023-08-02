@@ -722,7 +722,7 @@ num=0
 # waiters.
 # -----------------------------------------------------------------------------
 
-new-request r=req11 txn=none ts=12,1 spans=exclusive@a
+new-request r=req11 txn=none ts=12,1 spans=intent@a
 ----
 
 scan r=req11
@@ -825,12 +825,12 @@ new-request r=req13 txn=txn6 ts=11,0 spans=exclusive@a+exclusive@b+exclusive@c+e
 new-request r=req14 txn=txn5 ts=11,0 spans=exclusive@a+exclusive@b
 ----
 
-# Non-locking, transactional request
+# Non-locking, transactional request.
 new-request r=req15 txn=txn5 ts=11,0 spans=none@c+none@d
 ----
 
-# Non-locking, transactional request
-new-request r=req16 txn=none ts=11,0 spans=exclusive@e+exclusive@f
+# Non-transactional write request.
+new-request r=req16 txn=none ts=11,0 spans=intent@e+intent@f
 ----
 
 acquire r=req13 k=a durability=u strength=exclusive

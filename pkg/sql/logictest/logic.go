@@ -1361,9 +1361,7 @@ func (t *logicTest) newCluster(
 			DeterministicExplain:            true,
 			UseTransactionalDescIDGenerator: true,
 		}
-		knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		}
+		knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 		if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
 			knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
 				BeforeStage: t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t()),

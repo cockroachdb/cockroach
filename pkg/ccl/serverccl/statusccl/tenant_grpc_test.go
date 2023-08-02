@@ -46,9 +46,7 @@ func TestTenantGRPCServices(t *testing.T) {
 
 	tenantID := serverutils.TestTenantID()
 	testingKnobs := base.TestingKnobs{
-		SQLStatsKnobs: &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		},
+		SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 	}
 	tenant, connTenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID:     tenantID,

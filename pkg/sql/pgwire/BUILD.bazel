@@ -138,7 +138,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

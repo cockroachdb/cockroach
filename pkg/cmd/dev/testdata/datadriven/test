@@ -150,3 +150,15 @@ exec
 dev test pkg/spanconfig/spanconfigstore --timeout=40s -- --test_arg '-test.timeout=0.5s'
 ----
 bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_timeout=45 --test_arg -test.timeout=40s --test_output errors --test_arg -test.timeout=0.5s --build_event_binary_file=/tmp/path
+
+exec
+dev test pkg/spanconfig/spanconfigstore --stress
+----
+getenv DEV_I_UNDERSTAND_ABOUT_STRESS
+bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=1000 --test_output errors --build_event_binary_file=/tmp/path
+
+exec
+dev test pkg/spanconfig/spanconfigstore --stress --count 250
+----
+getenv DEV_I_UNDERSTAND_ABOUT_STRESS
+bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=250 --test_output errors --build_event_binary_file=/tmp/path
