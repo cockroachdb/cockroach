@@ -1148,6 +1148,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	opts.EventListener = &el
 	p.wrappedIntentWriter = wrapIntentWriter(p)
 
+	// If both cfg.SharedStorage and cfg.RemoteStorageFactory are set, CRDB uses
+	// cfg.SharedStorage. Note that eventually we will enable using both at the
+	// same time, but we don't have the right abstractions in place to do that
+	// today.
+	//
+	// We prefer cfg.SharedStorage, since the Locator -> Storage mapping contained
+	// in it is needed for CRDB to function properly.
 	if cfg.SharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
 		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
@@ -1155,10 +1162,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		})
 		opts.Experimental.CreateOnShared = true
 		opts.Experimental.CreateOnSharedLocator = ""
-	}
-
-	if cfg.RemoteStorageFactory != nil {
-		opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
+	} else {
+		if cfg.RemoteStorageFactory != nil {
+			opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
+		}
 	}
 
 	// Read the current store cluster version.
