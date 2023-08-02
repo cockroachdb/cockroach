@@ -34,6 +34,7 @@ go_library(
     srcs = [
         "assert.go",
         "default_settings.go",
+        "output.go",
         "rand_framework.go",
         "rand_gen.go",
     ],
@@ -49,7 +50,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/util/log",
-        "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_montanaflynn_stats//:stats",
     ],
 )

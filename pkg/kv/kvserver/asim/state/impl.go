@@ -136,6 +136,29 @@ func (rm *rmap) initFirstRange() {
 	rm.rangeMap[rangeID] = rng
 }
 
+// PrettyPrint returns a pretty formatted string representation of the
+// state (more concise than String()).
+func (s *state) PrettyPrint() string {
+	builder := &strings.Builder{}
+	nStores := len(s.stores)
+	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		store := s.stores[storeID]
+		builder.WriteString(store.PrettyPrint())
+		if i < nStores-1 {
+			builder.WriteString(",")
+		}
+	}
+	builder.WriteString("]")
+	return builder.String()
+}
+
 // String returns a string containing a compact representation of the state.
 // TODO(kvoli,lidorcarmel): Add a unit test for this function.
 func (s *state) String() string {
@@ -1321,6 +1344,13 @@ type store struct {
 	storepool *storepool.StorePool
 	settings  *cluster.Settings
 	replicas  map[RangeID]ReplicaID
+}
+
+// PrettyPrint returns pretty formatted string representation of the store.
+func (s *store) PrettyPrint() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("s%dn%d=(replicas(%d))", s.storeID, s.nodeID, len(s.replicas)))
+	return builder.String()
 }
 
 // String returns a compact string representing the current state of the store.
