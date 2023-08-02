@@ -406,21 +406,23 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 
 		avgCPU := deltaCPU / deltaTime.Seconds()
 
-		c.mu.Lock()
-		// If total CPU usage is small (less than 3% of a single CPU by default)
-		// and there have been no recent read/write operations, then ignore the
-		// recent usage altogether. This is intended to minimize RU usage when the
-		// cluster is idle.
-		if deltaCPU < allowance*2 {
-			if c.mu.consumption.ReadBatches == c.run.consumption.ReadBatches &&
-				c.mu.consumption.WriteBatches == c.run.consumption.WriteBatches {
-				deltaCPU = 0
+		func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			// If total CPU usage is small (less than 3% of a single CPU by default)
+			// and there have been no recent read/write operations, then ignore the
+			// recent usage altogether. This is intended to minimize RU usage when the
+			// cluster is idle.
+			if deltaCPU < allowance*2 {
+				if c.mu.consumption.ReadBatches == c.run.consumption.ReadBatches &&
+					c.mu.consumption.WriteBatches == c.run.consumption.WriteBatches {
+					deltaCPU = 0
+				}
 			}
-		}
-		// Keep track of an exponential moving average of CPU usage.
-		c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
-		c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
-		c.mu.Unlock()
+			// Keep track of an exponential moving average of CPU usage.
+			c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
+			c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
+		}()
 	}
 	if deltaCPU < 0 {
 		deltaCPU = 0
@@ -436,12 +438,15 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	}
 
 	// KV RUs are not included here, these metrics correspond only to the SQL pod.
-	c.mu.Lock()
-	c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
-	c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
-	c.mu.consumption.RU += float64(ru)
-	newConsumption := c.mu.consumption
-	c.mu.Unlock()
+	var newConsumption kvpb.TenantConsumption
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
+		c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
+		c.mu.consumption.RU += float64(ru)
+		newConsumption = c.mu.consumption
+	}()
 
 	// Update the average RUs consumed per second, based on the latest stats.
 	delta := newConsumption.RU - c.run.consumption.RU
@@ -874,12 +879,12 @@ func (c *tenantSideCostController) onExternalIO(
 	}
 
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.mu.consumption.ExternalIOIngressBytes += uint64(usage.IngressBytes)
 	c.mu.consumption.ExternalIOEgressBytes += uint64(usage.EgressBytes)
 	if c.shouldAccountForExternalIORUs() {
 		c.mu.consumption.RU += float64(totalRU)
 	}
-	c.mu.Unlock()
 
 	return nil
 }

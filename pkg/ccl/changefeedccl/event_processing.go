@@ -644,9 +644,9 @@ func (c *parallelEventConsumer) workerLoop(
 
 func (c *parallelEventConsumer) incInFlight() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.mu.inFlight++
 	c.metrics.ParallelConsumerInFlightEvents.Update(int64(c.mu.inFlight))
-	c.mu.Unlock()
 }
 
 func (c *parallelEventConsumer) decInFlight() {
@@ -704,9 +704,9 @@ func (c *parallelEventConsumer) Flush(ctx context.Context) error {
 		return c.mu.termErr
 	case <-c.flushCh:
 		c.mu.Lock()
+		defer c.mu.Unlock()
 		c.mu.waiting = false
 		c.mu.flushFrontier = c.spanFrontier.Frontier()
-		c.mu.Unlock()
 		return nil
 	}
 }

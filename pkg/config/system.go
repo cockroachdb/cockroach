@@ -139,9 +139,12 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		panic(err)
 	}
 
-	testingLock.Lock()
-	_, ok := testingZoneConfig[ObjectID(id)]
-	testingLock.Unlock()
+	_, ok := func() (zonepb.ZoneConfig, bool) {
+		testingLock.Lock()
+		defer testingLock.Unlock()
+		zc, ok := testingZoneConfig[ObjectID(id)]
+		return zc, ok
+	}()
 
 	if ok {
 		// A test installed a zone config for this ID, but no descriptor.
