@@ -39,10 +39,41 @@ func (t testRandOptions) printRandOptions(w *tabwriter.Writer) {
 		"rand_options\tcluster=%t\tranges=%t\tload=%t\tstaticSettings=%t\tstaticEvents=%t\n", t.cluster, t.ranges, t.load, t.staticSettings, t.staticEvents)
 }
 
+// OutputFlags sets flags for what to output in tests. If you want to add a flag
+// here, please add after OutputNothing and before OutputAll.
+type OutputFlags int
+
+const (
+	OutputNothing      OutputFlags       = 0
+	OutputInitialState                   = 1 << (iota - 1) // 1 << 0: 0000 0001
+	OutputTestSettings                                     // 1 << 1: 0000 0010
+	OutputConfigGen                                        // 1 << 2: 0000 0100
+	OutputPlotHistory                                      // 1 << 3: 0000 1000
+	OutputAll          = (1 << iota) - 1                   // (1 << 4) - 1: 0000 1111
+)
+
+func (o OutputFlags) CreateFlags(inputs []string) OutputFlags {
+	dict := map[string]OutputFlags{"nothing": OutputNothing, "initial_state": OutputInitialState,
+		"test_settings": OutputTestSettings, "config_gen": OutputConfigGen, "plot_history": OutputPlotHistory, "all": OutputAll}
+	flag := OutputNothing
+	for _, input := range inputs {
+		flag = flag.set(dict[input])
+	}
+	return flag
+}
+
+func (o OutputFlags) set(f OutputFlags) OutputFlags {
+	return o | f
+}
+
+func (o OutputFlags) Has(f OutputFlags) bool {
+	return o&f != 0
+}
+
 type testSettings struct {
 	numIterations int
 	duration      time.Duration
-	verbose       bool
+	verbose       OutputFlags
 	randSource    *rand.Rand
 	assertions    []SimulationAssertion
 	randOptions   testRandOptions
@@ -51,7 +82,7 @@ type testSettings struct {
 }
 
 func (t testSettings) printTestSettings(w *tabwriter.Writer) {
-	_, _ = fmt.Fprintf(w, "settings\tnum_iterations=%v\tduration=%s\n", t.numIterations, t.duration.Round(time.Second))
+	_, _ = fmt.Fprintf(w, "SETTINGS\tnum_iterations=%v\tduration=%s\n", t.numIterations, t.duration.Round(time.Second))
 
 	t.randOptions.printRandOptions(w)
 	if t.randOptions.cluster {
@@ -139,6 +170,18 @@ func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	return gen.StaticEvents{}
 }
 
+func (f randTestingFramework) outputConfigGen(
+	duration time.Duration,
+	clusterGen gen.ClusterGen,
+	rangeGen gen.RangeGen,
+	loadGen gen.LoadGen,
+	eventGen gen.EventGen,
+	seed int64,
+) {
+	f.recordBuf.WriteString(fmt.Sprintf("CONFIG_GEN:\nduration=[%s]\nclusterGen=[%v]\nrangeGen=[%v]\nloadGen=[%v]\neventGen=[%v]\nseed=[%d]\n",
+		duration, clusterGen, rangeGen, loadGen, eventGen, seed))
+}
+
 // runRandTest creates randomized configurations based on the specified test
 // settings and runs one test using those configurations.
 func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
@@ -148,7 +191,14 @@ func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
 	load := f.getLoad()
 	staticSettings := f.getStaticSettings()
 	staticEvents := f.getStaticEvents()
-	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, f.s.randSource.Int63())
+	seed := f.s.randSource.Int63()
+	if f.s.verbose.Has(OutputConfigGen) {
+		f.outputConfigGen(f.s.duration, cluster, ranges, load, staticEvents, seed)
+	}
+	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
+	if f.s.verbose.Has(OutputInitialState) {
+		simulator.PrintState(f.recordBuf)
+	}
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
@@ -162,7 +212,9 @@ func (f randTestingFramework) runRandTestRepeated() {
 	numIterations := f.s.numIterations
 	runs := make([]asim.History, numIterations)
 	w := tabwriter.NewWriter(f.recordBuf, 4, 0, 2, ' ', 0)
-	f.s.printTestSettings(w)
+	if f.s.verbose.Has(OutputTestSettings) {
+		f.s.printTestSettings(w)
+	}
 	for i := 0; i < numIterations; i++ {
 		if i == 0 {
 			f.recordBuf.WriteString(fmt.Sprintln("----------------------------------"))
@@ -178,7 +230,7 @@ func (f randTestingFramework) runRandTestRepeated() {
 		f.recordBuf.WriteString(fmt.Sprintln("----------------------------------"))
 	}
 
-	if f.s.verbose {
+	if f.s.verbose.Has(OutputPlotHistory) {
 		plotAllHistory(runs, f.recordBuf)
 	}
 }
@@ -204,6 +256,7 @@ func loadClusterInfo(configName string) gen.LoadedCluster {
 func plotAllHistory(runs []asim.History, buf *strings.Builder) {
 	settings := defaultPlotSettings()
 	stat, height, width := settings.stat, settings.height, settings.width
+	buf.WriteString(fmt.Sprintln("PLOT"))
 	for i := 0; i < len(runs); i++ {
 		history := runs[i]
 		ts := metrics.MakeTS(history.Recorded)

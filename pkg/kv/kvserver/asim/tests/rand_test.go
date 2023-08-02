@@ -24,7 +24,7 @@ const (
 	defaultNumIterations = 3
 	defaultSeed          = int64(42)
 	defaultDuration      = 10 * time.Minute
-	defaultVerbosity     = false
+	defaultVerbosity     = OutputNothing
 )
 
 // TestRandomized is a randomized data-driven testing framework that validates

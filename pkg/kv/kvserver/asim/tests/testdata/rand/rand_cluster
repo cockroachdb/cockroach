@@ -1,0 +1,61 @@
+# In this test, we run the randomized testing framework with rand_cluster option
+# only. We expect that the range_gen configurations will be properly configured
+# and remain consistent across different runs. Meanwhile, the cluster_gen
+# configuration will vary according to the selected cluster_gen_type option.
+
+rand_cluster cluster_gen_type=single_region
+----
+
+
+eval duration=5m num_iterations=3 
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+----
+
+
+rand_cluster cluster_gen_type=multi_region
+----
+
+
+eval duration=5m num_iterations=3 
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+----
+
+rand_cluster cluster_gen_type=any_region
+----
+
+eval duration=5m num_iterations=3 
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
