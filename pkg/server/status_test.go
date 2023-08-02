@@ -78,25 +78,25 @@ import (
 )
 
 func getStatusJSONProto(
-	ts serverutils.TestServerInterface, path string, response protoutil.Message,
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message,
 ) error {
 	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
 }
 
 func postStatusJSONProto(
-	ts serverutils.TestServerInterface, path string, request, response protoutil.Message,
+	ts serverutils.TestTenantInterface, path string, request, response protoutil.Message,
 ) error {
 	return serverutils.PostJSONProto(ts, statusPrefix+path, request, response)
 }
 
 func getStatusJSONProtoWithAdminOption(
-	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+	ts serverutils.TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
 }
 
 func postStatusJSONProtoWithAdminOption(
-	ts serverutils.TestServerInterface,
+	ts serverutils.TestTenantInterface,
 	path string,
 	request, response protoutil.Message,
 	isAdmin bool,
@@ -2815,16 +2815,18 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
+	ts := s.TenantOrServer()
+
 	req := &serverpb.CreateStatementDiagnosticsReportRequest{
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+	if err := postStatusJSONProto(ts, "stmtdiagreports", req, &resp); err != nil {
 		t.Fatal(err)
 	}
 
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+	if err := getStatusJSONProto(ts, "stmtdiagreports", &respGet); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2841,10 +2843,12 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
-	ctx := context.Background()
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ts := s.TenantOrServer()
 
-	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
+	ctx := context.Background()
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+
+	if err := getStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
@@ -2866,11 +2870,11 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := postStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+	if err := postStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", req, &resp, false); err != nil {
 		t.Fatal(err)
 	}
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+	if err := getStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", &respGet, false); err != nil {
 		t.Fatal(err)
 	}
 	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
@@ -2896,12 +2900,12 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
 
-	if err := postStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+	if err := postStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", req, &resp, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
 	}
-	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+	if err := getStatusJSONProtoWithAdminOption(ts, "stmtdiagreports", &respGet, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
@@ -2926,6 +2930,8 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
+	ts := s.TenantOrServer()
+
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	if err != nil {
 		t.Fatal(err)
@@ -2935,7 +2941,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 		StatementFingerprint: "INSERT INTO test VALUES (_)",
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+	if err := postStatusJSONProto(ts, "stmtdiagreports", req, &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2945,7 +2951,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	}
 
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+	if err := getStatusJSONProto(ts, "stmtdiagreports", &respGet); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2955,7 +2961,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 
 	var diagRespGet serverpb.StatementDiagnosticsResponse
 	diagPath := fmt.Sprintf("stmtdiag/%d", respGet.Reports[0].StatementDiagnosticsId)
-	if err := getStatusJSONProto(s, diagPath, &diagRespGet); err != nil {
+	if err := getStatusJSONProto(ts, diagPath, &diagRespGet); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2968,6 +2974,8 @@ func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
+	ts := s.TenantOrServer()
+
 	statementFingerprint := "INSERT INTO test VALUES (_)"
 	expiresAfter := 5 * time.Millisecond
 
@@ -2978,7 +2986,7 @@ func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 		ExpiresAfter:         expiresAfter,
 	}
 	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+	if err := postStatusJSONProto(ts, "stmtdiagreports", req, &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2995,7 +3003,7 @@ WHERE statement_fingerprint = $1`, statementFingerprint)
 
 	// Check that expired report is not returned in API response.
 	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+	if err := getStatusJSONProto(ts, "stmtdiagreports", &respGet); err != nil {
 		t.Fatal(err)
 	}
 

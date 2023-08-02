@@ -927,13 +927,6 @@ func TestTenantLogic_group_join(
 	runLogicTest(t, "group_join")
 }
 
-func TestTenantLogic_guardrails(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "guardrails")
-}
-
 func TestTenantLogic_hash_join(
 	t *testing.T,
 ) {

@@ -113,6 +113,7 @@ export interface TransactionsPageStateProps {
   search: string;
   sortSetting: SortSetting;
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  requestTime: moment.Moment;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -132,6 +133,7 @@ export interface TransactionsPageDispatchProps {
     ascending: boolean,
   ) => void;
   onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
@@ -387,9 +389,6 @@ export class TransactionsPage extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
-    if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
-    }
     this.setState(prevState => ({ ...prevState, timeScale: ts }));
   };
 
@@ -410,8 +409,6 @@ export class TransactionsPage extends React.Component<
       this.props.onChangeReqSort(this.state.reqSortSetting);
     }
 
-    // Force an update on TimeScale to update the fixedWindowEnd
-    this.changeTimeScale(this.state.timeScale);
     if (this.props.timeScale !== this.state.timeScale) {
       this.props.onTimeScaleChange(this.state.timeScale);
     }
@@ -423,6 +420,7 @@ export class TransactionsPage extends React.Component<
         getSortLabel(this.state.reqSortSetting, "Transaction"),
       );
     }
+    this.props.onRequestTimeChange(moment());
     this.refreshData();
     const ss: SortSetting = {
       ascending: false,
@@ -539,7 +537,12 @@ export class TransactionsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = <FormattedTimescale ts={this.props.timeScale} />;
+    const period = (
+      <FormattedTimescale
+        ts={this.props.timeScale}
+        requestTime={moment(this.props.requestTime)}
+      />
+    );
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Transaction",

@@ -463,9 +463,12 @@ const (
 // ColumnTableDef represents a column definition within a CREATE TABLE
 // statement.
 type ColumnTableDef struct {
-	Name              Name
-	Type              ResolvableTypeReference
-	IsSerial          bool
+	Name     Name
+	Type     ResolvableTypeReference
+	IsSerial bool
+	// IsCreateAs is set to true if the Type is resolved after parsing.
+	// CREATE AS statements must not display column types during formatting.
+	IsCreateAs        bool
 	GeneratedIdentity struct {
 		IsGeneratedAsIdentity   bool
 		GeneratedAsIdentityType GeneratedIdentityType
@@ -745,7 +748,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 
 	// ColumnTableDef node type will not be specified if it represents a CREATE
 	// TABLE ... AS query.
-	if node.Type != nil {
+	if !node.IsCreateAs && node.Type != nil {
 		ctx.WriteByte(' ')
 		node.formatColumnType(ctx)
 	}
@@ -2154,7 +2157,7 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.As)
 }
 
-// CreateTenant represents a CREATE TENANT statement.
+// CreateTenant represents a CREATE VIRTUAL CLUSTER statement.
 type CreateTenant struct {
 	IfNotExists bool
 	TenantSpec  *TenantSpec
@@ -2163,7 +2166,7 @@ type CreateTenant struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenant) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE TENANT ")
+	ctx.WriteString("CREATE VIRTUAL CLUSTER ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -2171,7 +2174,7 @@ func (node *CreateTenant) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Like)
 }
 
-// LikeTenantSpec represents a LIKE clause in CREATE TENANT.
+// LikeTenantSpec represents a LIKE clause in CREATE VIRTUAL CLUSTER.
 type LikeTenantSpec struct {
 	OtherTenant *TenantSpec
 }
@@ -2184,7 +2187,7 @@ func (node *LikeTenantSpec) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.OtherTenant)
 }
 
-// CreateTenantFromReplication represents a CREATE TENANT...FROM REPLICATION
+// CreateTenantFromReplication represents a CREATE VIRTUAL CLUSTER...FROM REPLICATION
 // statement.
 type CreateTenantFromReplication struct {
 	IfNotExists bool
@@ -2206,7 +2209,7 @@ type CreateTenantFromReplication struct {
 	Like *LikeTenantSpec
 }
 
-// TenantReplicationOptions  options for the CREATE TENANT FROM REPLICATION command.
+// TenantReplicationOptions  options for the CREATE VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
 	Retention Expr
 }
@@ -2215,7 +2218,7 @@ var _ NodeFormatter = &TenantReplicationOptions{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE TENANT ")
+	ctx.WriteString("CREATE VIRTUAL CLUSTER ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -2228,7 +2231,15 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FROM REPLICATION OF ")
 		ctx.FormatNode(node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
+		_, canOmitParentheses := node.ReplicationSourceAddress.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
 		ctx.FormatNode(node.ReplicationSourceAddress)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
+
 	}
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH ")
@@ -2240,7 +2251,14 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 	if o.Retention != nil {
 		ctx.WriteString("RETENTION = ")
+		_, canOmitParentheses := o.Retention.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
 		ctx.FormatNode(o.Retention)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
 	}
 }
 

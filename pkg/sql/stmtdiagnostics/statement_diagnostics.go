@@ -36,7 +36,9 @@ var pollingInterval = settings.RegisterDurationSetting(
 	settings.TenantReadOnly,
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
-	10*time.Second)
+	10*time.Second,
+	settings.NonNegativeDuration,
+)
 
 var bundleChunkSize = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
@@ -158,19 +160,27 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 
 func (r *Registry) poll(ctx context.Context) {
 	var (
-		timer               timeutil.Timer
+		timer timeutil.Timer
+		// We need to store timer.C reference separately because timer.Stop()
+		// (called when polling is disabled) puts timer into the pool and
+		// prohibits further usage of stored timer.C.
+		timerC              = timer.C
 		lastPoll            time.Time
 		deadline            time.Time
 		pollIntervalChanged = make(chan struct{}, 1)
 		maybeResetTimer     = func() {
-			if interval := pollingInterval.Get(&r.st.SV); interval <= 0 {
-				// Setting the interval to a non-positive value stops the polling.
+			if interval := pollingInterval.Get(&r.st.SV); interval == 0 {
+				// Setting the interval to zero stops the polling.
 				timer.Stop()
+				// nil out the channel so that it'd block forever in the loop
+				// below (until the polling interval is changed).
+				timerC = nil
 			} else {
 				newDeadline := lastPoll.Add(interval)
 				if deadline.IsZero() || !deadline.Equal(newDeadline) {
 					deadline = newDeadline
 					timer.Reset(timeutil.Until(deadline))
+					timerC = timer.C
 				}
 			}
 		}
@@ -195,7 +205,7 @@ func (r *Registry) poll(ctx context.Context) {
 		select {
 		case <-pollIntervalChanged:
 			continue // go back around and maybe reset the timer
-		case <-timer.C:
+		case <-timerC:
 			timer.Read = true
 		case <-ctx.Done():
 			return

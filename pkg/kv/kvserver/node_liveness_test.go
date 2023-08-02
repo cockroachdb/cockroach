@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -158,11 +159,14 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
@@ -887,6 +891,8 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -909,8 +915,9 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 
@@ -1222,6 +1229,8 @@ func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, node
 func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -1244,8 +1253,9 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 

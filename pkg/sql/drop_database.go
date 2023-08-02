@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -141,7 +140,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		schemaToDelete := schemaWithDbDesc.schema
 		switch schemaToDelete.SchemaKind() {
 		case catalog.SchemaPublic:
-			b := &kv.Batch{}
+			b := p.Txn().NewBatch()
 			if err := p.Descriptors().DeleteDescriptorlessPublicSchemaToBatch(
 				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, b,
 			); err != nil {
@@ -151,7 +150,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 				return err
 			}
 		case catalog.SchemaTemporary:
-			b := &kv.Batch{}
+			b := p.Txn().NewBatch()
 			if err := p.Descriptors().DeleteTempSchemaToBatch(
 				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, schemaToDelete.GetName(), b,
 			); err != nil {

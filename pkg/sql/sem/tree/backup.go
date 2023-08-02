@@ -111,8 +111,9 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -196,8 +197,9 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.AsOf)
 	}
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -306,7 +308,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		maybeAddSep()
-		ctx.WriteString("include_all_secondary_tenants = ")
+		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
 }
@@ -356,7 +358,7 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_secondary_tenants specified multiple times")
+			return errors.New("include_all_virtual_clusters specified multiple times")
 		}
 	} else {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
@@ -457,7 +459,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		maybeAddSep()
-		ctx.WriteString("include_all_secondary_tenants = ")
+		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
 
@@ -469,13 +471,13 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.AsTenant != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant_name = ")
+		ctx.WriteString("virtual_cluster_name = ")
 		ctx.FormatNode(o.AsTenant)
 	}
 
 	if o.ForceTenantID != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant = ")
+		ctx.WriteString("virtual_cluster = ")
 		ctx.FormatNode(o.ForceTenantID)
 	}
 
@@ -598,7 +600,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	if o.ForceTenantID == nil {
 		o.ForceTenantID = other.ForceTenantID
 	} else if other.ForceTenantID != nil {
-		return errors.New("tenant option specified multiple times")
+		return errors.New("virtual_cluster option specified multiple times")
 	}
 
 	if o.SchemaOnly {
@@ -618,7 +620,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_secondary_tenants specified multiple times")
+			return errors.New("include_all_virtual_clusters specified multiple times")
 		}
 	} else {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
@@ -677,7 +679,7 @@ func (tl *BackupTargetList) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
 	} else if tl.TenantID.Specified {
-		ctx.WriteString("TENANT ")
+		ctx.WriteString("VIRTUAL CLUSTER ")
 		ctx.FormatNode(&tl.TenantID)
 	} else {
 		if tl.Tables.SequenceOnly {

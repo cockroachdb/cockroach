@@ -133,7 +133,7 @@ CREATE TENANT IF NOT EXISTS three
 statement ok
 set default_transaction_read_only = on;
 
-statement error cannot execute CREATE TENANT in a read-only transaction
+statement error cannot execute CREATE VIRTUAL CLUSTER in a read-only transaction
 CREATE TENANT four;
 
 statement ok
@@ -186,7 +186,7 @@ DROP TENANT "five-requiring-quotes"
 statement ok
 set default_transaction_read_only = on;
 
-statement error cannot execute DROP TENANT in a read-only transaction
+statement error cannot execute DROP VIRTUAL CLUSTER in a read-only transaction
 DROP TENANT three
 
 statement ok
@@ -415,11 +415,10 @@ EXCEPT SELECT capability_name, capability_value FROM [SHOW TENANT othertenant WI
 
 # Check that the setting overrides were copied.
 query TTTT rowsort
-SELECT variable, IF(variable='version','--',value), type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
+SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
 trace.debug.enable  true  b  per-tenant-override
-version             --    m  all-tenants-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
@@ -464,11 +463,10 @@ EXCEPT SELECT capability_name, capability_value FROM [SHOW TENANT othertenant WI
 
 # Check the setting overrides were taken over.
 query TTTT rowsort
-SELECT variable, IF(variable='version','--',value), type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
+SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
 trace.debug.enable  true  b  per-tenant-override
-version             --    m  all-tenants-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
@@ -488,10 +486,10 @@ DROP TENANT tmpl
 statement ok
 RESET CLUSTER SETTING sql.create_tenant.default_template
 
-subtest block_drop_tenant
+subtest block_drop_virtual_cluster
 
 statement ok
-SET disable_drop_tenant = 'true'
+SET disable_drop_virtual_cluster = 'true'
 
 statement ok
 CREATE TENANT nodelete
@@ -500,7 +498,7 @@ statement error rejected.*irreversible data loss
 DROP TENANT nodelete
 
 statement ok
-RESET disable_drop_tenant
+RESET disable_drop_virtual_cluster
 
 statement ok
 DROP TENANT nodelete

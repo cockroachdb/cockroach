@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -100,12 +101,12 @@ update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seq
 
  Updates locks for the named transaction.
 
-txn-finalized txn=<name> status=committed|aborted
+pushed-txn-updated txn=<name> status=committed|aborted|pending [ts=<ts>]
 ----
 
  Informs the lock table that the named transaction is finalized.
 
-add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-finalized-txn-cache=<bool>]
+add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-txn-status-cache=<bool>]
 ----
 <error string>
 
@@ -195,7 +196,9 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				ltImpl := newLockTable(int64(maxLocks), roachpb.RangeID(3), clock)
+				ltImpl := newLockTable(
+					int64(maxLocks), roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
+				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
@@ -257,7 +260,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return ""
 
-			case "txn-finalized":
+			case "pushed-txn-updated":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
 				txnMeta, ok := txnsByName[txnName]
@@ -274,10 +277,16 @@ func TestLockTableBasic(t *testing.T) {
 					txn.Status = roachpb.COMMITTED
 				case "aborted":
 					txn.Status = roachpb.ABORTED
+				case "pending":
+					txn.Status = roachpb.PENDING
 				default:
 					return fmt.Sprintf("unknown txn status %s", statusStr)
 				}
-				lt.TransactionIsFinalized(txn)
+				if d.HasArg("ts") {
+					ts := scanTimestamp(t, d)
+					txn.WriteTimestamp.Forward(ts)
+				}
+				lt.PushedTransactionUpdated(txn)
 				return ""
 
 			case "new-request":
@@ -463,13 +472,13 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
 				}
-				consultFinalizedTxnCache := false
-				if d.HasArg("consult-finalized-txn-cache") {
-					d.ScanArgs(t, "consult-finalized-txn-cache", &consultFinalizedTxnCache)
+				consultTxnStatusCache := false
+				if d.HasArg("consult-txn-status-cache") {
+					d.ScanArgs(t, "consult-txn-status-cache", &consultTxnStatusCache)
 				}
 				leaseSeq := roachpb.LeaseSequence(seq)
 				if _, err := lt.AddDiscoveredLock(
-					&intent, leaseSeq, consultFinalizedTxnCache, g); err != nil {
+					&intent, leaseSeq, consultTxnStatusCache, g); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -749,7 +758,9 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
-	lt := newLockTable(5, roachpb.RangeID(3), hlc.NewClockForTesting(nil))
+	lt := newLockTable(
+		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+	)
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -876,7 +887,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
-	lt := newLockTable(2, roachpb.RangeID(3), hlc.NewClockForTesting(nil))
+	lt := newLockTable(
+		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+	)
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -1112,7 +1125,9 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil))
+	lt := newLockTable(
+		maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+	)
 	lt.enabled = true
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
@@ -1675,7 +1690,12 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil))
+						lt := newLockTable(
+							maxLocks,
+							roachpb.RangeID(3),
+							hlc.NewClockForTesting(nil),
+							cluster.MakeTestingClusterSettings(),
+						)
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},
@@ -1715,7 +1735,12 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
 		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
 			const maxLocks = 100000
-			lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil))
+			lt := newLockTable(
+				maxLocks,
+				roachpb.RangeID(3),
+				hlc.NewClockForTesting(nil),
+				cluster.MakeTestingClusterSettings(),
+			)
 			lt.enabled = true
 
 			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}

@@ -18,7 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -475,9 +474,7 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 // statistics that the outbox is responsible for, nil is returned if stats are
 // not being collected.
 func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
-	flowCtx *execinfra.FlowCtx,
-	statsCollectors []colexecop.VectorizedStatsCollector,
-	originSQLInstanceID base.SQLInstanceID,
+	flowCtx *execinfra.FlowCtx, statsCollectors []colexecop.VectorizedStatsCollector,
 ) func(context.Context) []*execinfrapb.ComponentStats {
 	if !s.recordingStats {
 		return nil
@@ -497,7 +494,7 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 			// whole flow from parent monitors. These stats are added to a
 			// flow-level span.
 			result = append(result, &execinfrapb.ComponentStats{
-				Component: execinfrapb.FlowComponentID(originSQLInstanceID, flowCtx.ID),
+				Component: flowCtx.FlowComponentID(),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
@@ -1100,7 +1097,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// Set up an Outbox.
 		outbox, err := s.setupRemoteOutputStream(
 			ctx, flowCtx, pspec.ProcessorID, opWithMetaInfo, opOutputTypes, outputStream, factory,
-			s.makeGetStatsFnForOutbox(flowCtx, opWithMetaInfo.StatsCollectors, outputStream.OriginNodeID),
+			s.makeGetStatsFnForOutbox(flowCtx, opWithMetaInfo.StatsCollectors),
 		)
 		if err != nil {
 			return err

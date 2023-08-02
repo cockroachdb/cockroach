@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -43,7 +44,7 @@ func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.O
 	if err != nil {
 		return err
 	}
-	return runBackfiller(ctx, deps, tracker, backfillProgresses, mergeProgresses, tables)
+	return runBackfiller(ctx, deps, tracker, backfillProgresses, mergeProgresses, deps.TransactionalJobRegistry().CurrentJob(), tables)
 }
 
 func getTableDescriptorsForBackfillsAndMerges(
@@ -309,6 +310,7 @@ func runBackfiller(
 	tracker BackfillerTracker,
 	backfillProgresses []BackfillProgress,
 	mergeProgresses []MergeProgress,
+	job *jobs.Job,
 	tables map[descpb.ID]catalog.TableDescriptor,
 ) error {
 	if deps.GetTestingKnobs() != nil &&
@@ -324,10 +326,10 @@ func runBackfiller(
 	im := deps.IndexMerger()
 	const op = "run backfills and merges"
 	bf := func(ctx context.Context, p *BackfillProgress) error {
-		return runBackfill(ctx, deps.IndexSpanSplitter(), ib, *p, tracker, tables[p.TableID])
+		return runBackfill(ctx, deps.IndexSpanSplitter(), ib, *p, tracker, job, tables[p.TableID])
 	}
 	mf := func(ctx context.Context, p *MergeProgress) error {
-		return im.MergeIndexes(ctx, *p, tracker, tables[p.TableID])
+		return im.MergeIndexes(ctx, job, *p, tracker, tables[p.TableID])
 	}
 	if err := forEachProgressConcurrently(ctx, op, backfillProgresses, mergeProgresses, bf, mf); err != nil {
 		pgCode := pgerror.GetPGCode(err)
@@ -359,7 +361,8 @@ func runBackfill(
 	backfiller Backfiller,
 	progress BackfillProgress,
 	tracker BackfillerProgressWriter,
+	job *jobs.Job,
 	table catalog.TableDescriptor,
 ) error {
-	return backfiller.BackfillIndexes(ctx, progress, tracker, table)
+	return backfiller.BackfillIndexes(ctx, progress, tracker, job, table)
 }

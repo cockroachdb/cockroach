@@ -12,20 +12,17 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -33,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -44,134 +40,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-// TestTenantStreaming tests that tenants can stream changes end-to-end.
-func TestTenantStreaming(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "slow under race")
-
-	ctx := context.Background()
-
-	args := base.TestServerArgs{
-		// Disabling the test tenant because the test below assumes that
-		// when it's monitoring the streaming job, it's doing so from the system
-		// tenant and not from within a secondary tenant. When inside
-		// a secondary tenant, it won't be able to see the streaming job.
-		// This may also be impacted by the fact that we don't currently support
-		// tenant->tenant streaming. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
-	}
-
-	// Start the source server.
-	source, sourceDB, _ := serverutils.StartServer(t, args)
-	defer source.Stopper().Stop(ctx)
-
-	// Start tenant server in the source cluster.
-	sourceTenantID := serverutils.TestTenantID()
-	sourceTenantName := roachpb.TenantName("source-tenant")
-	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{
-		TenantID:   sourceTenantID,
-		TenantName: sourceTenantName,
-	})
-	defer func() {
-		require.NoError(t, tenantConn.Close())
-	}()
-	// sourceSQL refers to the tenant generating the data.
-	sourceSQL := sqlutils.MakeSQLRunner(tenantConn)
-
-	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
-	defer resetFreq()
-	// Set required cluster settings.
-	sourceDBRunner := sqlutils.MakeSQLRunner(sourceDB)
-	sourceDBRunner.ExecMultiple(t, strings.Split(`
-SET CLUSTER SETTING kv.rangefeed.enabled = true;
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
-SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms';
-`,
-		";")...)
-
-	// Start the destination server.
-	hDest, cleanupDest := replicationtestutils.NewReplicationHelper(t,
-		// Test fails when run from within the test tenant. More investigation
-		// is required. Tracked with #76378.
-		// TODO(ajstorm): This may be the right course of action here as the
-		//  replication is now being run inside a tenant.
-		base.TestServerArgs{DisableDefaultTestTenant: true})
-	defer cleanupDest()
-	// destSQL refers to the system tenant as that's the one that's running the
-	// job.
-	destSQL := hDest.SysSQL
-	destSQL.ExecMultiple(t, strings.Split(`
-SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
-SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
-SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
-SET CLUSTER SETTING stream_replication.job_checkpoint_frequency = '100ms';
-SET CLUSTER SETTING cross_cluster_replication.enabled = true;
-`,
-		";")...)
-
-	// Sink to read data from.
-	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanupSink()
-
-	var startTime string
-	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
-
-	destSQL.Exec(t,
-		fmt.Sprintf(`CREATE EXTERNAL CONNECTION "replication-source-addr" AS "%s"`,
-			pgURL.String()),
-	)
-
-	destSQL.Exec(t,
-		`CREATE TENANT "destination-tenant" FROM REPLICATION OF "source-tenant" ON $1`,
-		"external://replication-source-addr",
-	)
-	streamProducerJobID, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, destSQL, "destination-tenant")
-
-	sourceSQL.Exec(t, `
-CREATE DATABASE d;
-CREATE TABLE d.t1(i int primary key, a string, b string);
-CREATE TABLE d.t2(i int primary key);
-INSERT INTO d.t1 (i) VALUES (42);
-INSERT INTO d.t2 VALUES (2);
-`)
-
-	replicationtestutils.WaitUntilStartTimeReached(t, destSQL, jobspb.JobID(ingestionJobID))
-	var cutoverStr string
-	cutoverTime := timeutil.Now().Round(time.Microsecond)
-	destSQL.QueryRow(t, `ALTER TENANT "destination-tenant" COMPLETE REPLICATION TO SYSTEM TIME $1::string`,
-		hlc.Timestamp{WallTime: cutoverTime.UnixNano()}.AsOfSystemTime()).Scan(&cutoverStr)
-	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
-	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
-	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
-	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
-
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, destSQL, ingestionJobID)
-	require.Equal(t, cutoverTime, stats.IngestionProgress.CutoverTime.GoTime())
-	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, stats.ProducerStatus.StreamStatus)
-
-	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{
-		TenantID:            roachpb.MustMakeTenantID(2),
-		TenantName:          "destination-tenant",
-		DisableCreateTenant: true,
-	})
-	defer func() {
-		require.NoError(t, destTenantConn.Close())
-	}()
-	DestTenantSQL := sqlutils.MakeSQLRunner(destTenantConn)
-
-	query := "SELECT * FROM d.t1"
-	sourceData := sourceSQL.QueryStr(t, query)
-	destData := DestTenantSQL.QueryStr(t, query)
-	require.Equal(t, sourceData, destData)
-}
 
 func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()

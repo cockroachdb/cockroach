@@ -681,7 +681,7 @@ func backupPlanHook(
 		}
 
 		if includeAllSecondaryTenants && backupStmt.Coverage() != tree.AllDescriptors {
-			return errors.New("the include_all_secondary_tenants option is only supported for full cluster backups")
+			return errors.New("the include_all_virtual_clusters option is only supported for full cluster backups")
 		}
 
 		var asOfInterval int64

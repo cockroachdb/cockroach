@@ -108,6 +108,7 @@ vectorized: <hidden>
 rows read from KV: 1,000 (7.8 KiB, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
+regions: <hidden>
 ·
 • create statistics
 ·

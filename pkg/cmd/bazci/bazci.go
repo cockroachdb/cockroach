@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/xml"
@@ -350,8 +351,9 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
-	bazelCmd.Stdout = os.Stdout
-	bazelCmd.Stderr = os.Stderr
+	var stdout, stderr bytes.Buffer
+	bazelCmd.Stdout = io.MultiWriter(os.Stdout, bufio.NewWriter(&stdout))
+	bazelCmd.Stderr = io.MultiWriter(os.Stderr, bufio.NewWriter(&stderr))
 	bazelErr := bazelCmd.Run()
 	if bazelErr != nil {
 		fmt.Printf("got error %+v from bazel run\n", bazelErr)
@@ -363,6 +365,14 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Sending BEP data to beaver hub failed - %v\n", err)
 		}
 	}
+
+	removeEmergencyBallasts()
+	// Presumably a build failure.
+	if bazelErr != nil && len(server.testXmls) == 0 {
+		postBuildFailure(fmt.Sprintf("stdout: %s\n, stderr: %s", stdout.String(), stderr.String()))
+		return bazelErr
+	}
+
 	return errors.CombineErrors(processTestXmls(server.testXmls), bazelErr)
 }
 
@@ -457,27 +467,7 @@ func removeEmergencyBallasts() {
 }
 
 func processTestXmls(testXmls []string) error {
-	removeEmergencyBallasts()
-	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
-	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
-	if isReleaseBranch {
-		// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
-		// ever asked to post, so enforce that on all runs.
-		// The way this env var is made available here is quite tricky. The build
-		// calling this method is usually a build that is invoked from PRs, so it
-		// can't have secrets available to it (for the PR could modify
-		// build/teamcity-* to leak the secret). Instead, we provide the secrets
-		// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
-		// pass that env var through when it's there. This means we won't have the
-		// env var on PR builds, but we'll have it for builds that are triggered
-		// from the release branches.
-		if os.Getenv("GITHUB_API_TOKEN") == "" {
-			fmt.Println("GITHUB_API_TOKEN must be set to post results to GitHub; skipping error reporting")
-			// TODO(ricky): Certain jobs (nightlies) probably really
-			// do need to fail outright in this case rather than
-			// silently continuing here. How do we handle them?
-			return nil
-		}
+	if doPost() {
 		var postErrors []string
 		for _, testXml := range testXmls {
 			xmlFile, err := os.Open(testXml)
@@ -497,8 +487,39 @@ func processTestXmls(testXmls []string) error {
 		if len(postErrors) != 0 {
 			return errors.Newf("%s", strings.Join(postErrors, "\n"))
 		}
-	} else {
-		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
 	}
 	return nil
+}
+
+func postBuildFailure(logs string) {
+	if doPost() {
+		githubpost.PostGeneralFailure(githubPostFormatterName, logs)
+	}
+}
+
+func doPost() bool {
+	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
+	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
+	if !isReleaseBranch {
+		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
+		return false
+	}
+	// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
+	// ever asked to post, so enforce that on all runs.
+	// The way this env var is made available here is quite tricky. The build
+	// calling this method is usually a build that is invoked from PRs, so it
+	// can't have secrets available to it (for the PR could modify
+	// build/teamcity-* to leak the secret). Instead, we provide the secrets
+	// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
+	// pass that env var through when it's there. This means we won't have the
+	// env var on PR builds, but we'll have it for builds that are triggered
+	// from the release branches.
+	if os.Getenv("GITHUB_API_TOKEN") == "" {
+		fmt.Println("GITHUB_API_TOKEN must be set to post results to GitHub; skipping error reporting")
+		// TODO(ricky): Certain jobs (nightlies) probably really
+		// do need to fail outright in this case rather than
+		// silently continuing here. How do we handle them?
+		return false
+	}
+	return true
 }

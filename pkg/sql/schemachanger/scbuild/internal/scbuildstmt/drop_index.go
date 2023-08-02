@@ -116,6 +116,43 @@ func maybeDropIndex(
 	return sie
 }
 
+// panicIfColumnsAreNotStoredElseWhere detects if dropping an index will lose a stored
+// column. Previously, we had an issue where new columns were accidentally
+// added into secondary indexes. This could lead to wrong results and data
+// loss, so for safety we are going to block dropping these secondary indexes.
+func panicIfColumnsAreNotStoredElseWhere(b BuildCtx, sie *scpb.SecondaryIndex) {
+	tblElts := b.QueryByID(sie.TableID)
+	secondaryIdxElts := tblElts.Filter(hasIndexIDAttrFilter(sie.IndexID))
+	_, _, indexName := scpb.FindIndexName(secondaryIdxElts)
+	_, _, pie := scpb.FindPrimaryIndex(b.QueryByID(sie.TableID))
+	primaryIdxElts := tblElts.Filter(hasIndexIDAttrFilter(pie.IndexID))
+
+	foundColumns := make(map[catid.ColumnID]struct{})
+	primaryIdxElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		idxColumn, ok := (e).(*scpb.IndexColumn)
+		if !ok {
+			return
+		}
+		foundColumns[idxColumn.ColumnID] = struct{}{}
+	})
+	secondaryIdxElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		idxColumn, ok := (e).(*scpb.IndexColumn)
+		if !ok {
+			return
+		}
+		columnElts := tblElts.Filter(hasColumnIDAttrFilter(idxColumn.ColumnID))
+		// Skip columns that are virtual.
+		_, _, columnType := scpb.FindColumnType(columnElts)
+		if columnType.IsVirtual {
+			return
+		}
+		// Check if the column is stored in primary index.
+		if _, found := foundColumns[idxColumn.ColumnID]; !found {
+			panic(sqlerrors.NewSecondaryIndexDataLossError(indexName.Name))
+		}
+	})
+}
+
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
 // both in DROP INDEX and as a cascade from another operation.
 func dropSecondaryIndex(
@@ -125,6 +162,9 @@ func dropSecondaryIndex(
 	sie *scpb.SecondaryIndex,
 ) {
 	{
+		// Sanity: We had a pretty severe bug with a data loss risk, prevent
+		// dropping of any indexes that are the sole source for given data.
+		panicIfColumnsAreNotStoredElseWhere(b, sie)
 		next := b.WithNewSourceElementID()
 		// Maybe drop dependent views.
 		// If CASCADE and there are "dependent" views (i.e. views that use this
@@ -259,8 +299,8 @@ func maybeDropDependentFKConstraints(
 
 	// dropDependentFKConstraint is a helper function that drops a dependent
 	// FK constraint with ID `fkConstraintID`.
-	dropDependentFKConstraint := func(fkConstraintID catid.ConstraintID) {
-		b.BackReferences(tableID).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
+	dropDependentFKConstraint := func(fkTableID catid.DescID, fkConstraintID catid.ConstraintID) {
+		b.BackReferences(tableID).Filter(hasTableID(fkTableID)).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
 			ForEachElementStatus(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 			) {
@@ -268,7 +308,10 @@ func maybeDropDependentFKConstraints(
 			})
 	}
 
-	b.BackReferences(tableID).ForEachElementStatus(func(
+	// Iterate over all FKs inbound to this table and decide whether any other
+	// unique constraints will satisfy them if we were to drop the current unique
+	// constraint.
+	b.BackReferences(tableID).Filter(containsDescIDFilter(tableID)).ForEachElementStatus(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		switch t := e.(type) {
@@ -277,13 +320,13 @@ func maybeDropDependentFKConstraints(
 				return
 			}
 			ensureCascadeBehavior(t.TableID)
-			dropDependentFKConstraint(t.ConstraintID)
+			dropDependentFKConstraint(t.TableID, t.ConstraintID)
 		case *scpb.ForeignKeyConstraintUnvalidated:
 			if !shouldDropFK(t.ReferencedColumnIDs) {
 				return
 			}
 			ensureCascadeBehavior(t.TableID)
-			dropDependentFKConstraint(t.ConstraintID)
+			dropDependentFKConstraint(t.TableID, t.ConstraintID)
 		}
 	})
 }

@@ -1808,6 +1808,13 @@ var charts = []sectionDescription{
 					"leases.transfers.success",
 				},
 			},
+			{
+				Title: "Lease Preference Conformance",
+				Metrics: []string{
+					"leases.preferences.violating",
+					"leases.preferences.less-preferred",
+				},
+			},
 		},
 	},
 	{
@@ -1938,6 +1945,10 @@ var charts = []sectionDescription{
 			{
 				Title:   "Leader Transfers",
 				Metrics: []string{"range.raftleadertransfers"},
+			},
+			{
+				Title:   "Leader Removals",
+				Metrics: []string{"range.raftleaderremovals"},
 			},
 			{
 				Title:   "Leaders",
@@ -4121,6 +4132,18 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"kv.replica_read_batch_evaluate.dropped_latches_before_eval",
 					"kv.replica_read_batch_evaluate.without_interleaving_iter",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Raft reads"}},
+		Charts: []chartDescription{
+			{
+				Title: "raft.Storage.Engine Read bytes",
+				Metrics: []string{
+					"raft.storage.read_bytes",
+					"raft.entrycache.read_bytes",
 				},
 			},
 		},

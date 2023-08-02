@@ -20,15 +20,16 @@ import (
 type alias struct {
 	aliasTarget string
 	description string
+	hidden      bool
 }
 
 var aliases = map[string]alias{
 	"replication-source": {
-		aliasTarget: "multitenant+app+sharedservice+repl",
+		aliasTarget: "virtual+app+sharedservice+repl",
 		description: "configuration suitable for a replication source cluster",
 	},
 	"replication-target": {
-		aliasTarget: "multitenant+noapp+repl",
+		aliasTarget: "virtual+noapp+repl",
 		description: "configuration suitable for a replication target cluster",
 	},
 }
@@ -60,25 +61,25 @@ var staticProfiles = map[string]configProfile{
 			),
 		},
 	},
-	"multitenant+noapp": {
-		description: "multi-tenant cluster with no secondary tenant defined yet",
-		tasks:       multitenantClusterInitTasks,
+	"virtual+noapp": {
+		description: "virtualization enabled but no virtual cluster defined yet",
+		tasks:       virtClusterInitTasks,
 	},
-	"multitenant+noapp+repl": {
-		description: "multi-tenant cluster with no secondary tenant defined yet, with replication enabled",
-		tasks:       enableReplication(multitenantClusterInitTasks),
+	"virtual+noapp+repl": {
+		description: "virtualization enabled but no virtual cluster defined yet, with replication enabled",
+		tasks:       enableReplication(virtClusterInitTasks),
 	},
-	"multitenant+app+sharedservice": {
-		description: "multi-tenant cluster with one secondary tenant configured to serve SQL application traffic",
-		tasks:       multitenantClusterWithAppServiceInitTasks,
+	"virtual+app+sharedservice": {
+		description: "one virtual cluster configured to serve SQL application traffic",
+		tasks:       virtClusterWithAppServiceInitTasks,
 	},
-	"multitenant+app+sharedservice+repl": {
-		description: "multi-tenant cluster with one secondary tenant configured to serve SQL application traffic, with replication enabled",
-		tasks:       enableReplication(multitenantClusterWithAppServiceInitTasks),
+	"virtual+app+sharedservice+repl": {
+		description: "one virtual cluster configured to serve SQL application traffic, with replication enabled",
+		tasks:       enableReplication(virtClusterWithAppServiceInitTasks),
 	},
 }
 
-var multitenantClusterInitTasks = []autoconfigpb.Task{
+var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
 			// Disable trace redaction (this ought to be configurable per-tenant, but is not possible yet in v23.1).
@@ -91,26 +92,26 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 			// to range coalescing have not been solved yet).
 			"SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = false",
 			"SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = false",
-			// Make the operator double-check tenant deletions.
-			"SET CLUSTER SETTING sql.drop_tenant.enabled = false",
+			// Make the operator double-check virtual cluster deletions.
+			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
 		},
 		nil, /* txnSQL */
 	),
-	makeTask("create tenant template",
+	makeTask("create virtual cluster template",
 		nil, /* nonTxnSQL */
 		/* txnSQL */
 		[]string{
 			// Create a main secondary tenant template.
-			"CREATE TENANT template",
-			"ALTER TENANT template GRANT ALL CAPABILITIES",
+			"CREATE VIRTUAL CLUSTER template",
+			"ALTER VIRTUAL CLUSTER template GRANT ALL CAPABILITIES",
 			// Enable admin scatter/split in tenant SQL.
 			// TODO(knz): Move this to in-tenant config task.
-			"ALTER TENANT template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
-			"ALTER TENANT template SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled = true",
+			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
+			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled = true",
 		},
 	),
 	// Finally.
-	makeTask("use the application tenant template by default in CREATE TENANT",
+	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLSUTER",
 		/* nonTxnSQL */ []string{
 			"SET CLUSTER SETTING sql.create_tenant.default_template = 'template'",
 		},
@@ -118,18 +119,18 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 	),
 }
 
-var multitenantClusterWithAppServiceInitTasks = append(
-	multitenantClusterInitTasks,
-	makeTask("create an application tenant",
+var virtClusterWithAppServiceInitTasks = append(
+	virtClusterInitTasks,
+	makeTask("create an application virtual cluster",
 		nil, /* nonTxnSQL */
 		/* txnSQL */ []string{
 			// Create the app tenant record.
-			"CREATE TENANT application",
+			"CREATE VIRTUAL CLUSTER application",
 			// Run the service for the application tenant.
-			"ALTER TENANT application START SERVICE SHARED",
+			"ALTER VIRTUAL CLUSTER application START SERVICE SHARED",
 		},
 	),
-	makeTask("activate application tenant",
+	makeTask("activate application virtual cluster",
 		/* nonTxnSQL */ []string{
 			// Make the app tenant receive SQL connections by default.
 			"SET CLUSTER SETTING server.controller.default_tenant = 'application'",

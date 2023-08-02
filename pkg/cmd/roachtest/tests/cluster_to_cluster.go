@@ -381,6 +381,9 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 	destNode := dstCluster.SeededRandNode(rd.rng)
 
 	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
+	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
+	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
+
 	require.NoError(t, err)
 
 	srcDB := c.Conn(ctx, t.L(), srcNode[0])
@@ -853,7 +856,8 @@ func registerClusterToCluster(r registry.Registry) {
 type c2cPhase int
 
 const (
-	phaseInitialScan c2cPhase = iota
+	phaseNotReady c2cPhase = iota
+	phaseInitialScan
 	phaseSteadyState
 	phaseCutover
 )
@@ -918,8 +922,9 @@ func makeReplShutdownDriver(
 	rd := makeReplicationDriver(t, c, rsp.replicationSpec)
 	return replShutdownDriver{
 		replicationDriver: rd,
-		phase:             c2cPhase(rd.rng.Intn(int(phaseCutover) + 1)),
-		rsp:               rsp,
+		// choose either initialScan (1), SteadyState (2), or cutover (3)
+		phase: c2cPhase(rd.rng.Intn(int(phaseCutover)) + 1),
+		rsp:   rsp,
 	}
 }
 
@@ -964,6 +969,7 @@ func (rrd *replShutdownDriver) getTargetAndWatcherNodes(ctx context.Context) {
 		// shut down roachprod node 5.
 		coordinatorNode += rrd.rsp.srcNodes
 	}
+	rrd.t.L().Printf("node %d is coordinator for target job %d", coordinatorNode, int(jobID))
 
 	var targetNode int
 
@@ -991,7 +997,13 @@ func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
 
 	streamIngestProgress := getJobProgress(rd.t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
+
 	if streamIngestProgress.ReplicatedTime.IsEmpty() {
+		if len(streamIngestProgress.StreamAddresses) == 0 {
+			return phaseNotReady
+		}
+		// Only return phaseInitialScan once all available stream addresses from the
+		// source cluster have been persisted.
 		return phaseInitialScan
 	}
 	if streamIngestProgress.CutoverTime.IsEmpty() {

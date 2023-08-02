@@ -1,0 +1,96 @@
+Starting local Bazel server and connecting to it...
+Loading:
+Loading: 1 packages loaded
+Analyzing: target //pkg/cmd/bazci:bazci (2 packages loaded, 0 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (47 packages loaded, 291 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (47 packages loaded, 291 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (47 packages loaded, 291 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (48 packages loaded, 291 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (231 packages loaded, 9766 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (231 packages loaded, 9766 targets configured)
+Analyzing: target //pkg/cmd/bazci:bazci (231 packages loaded, 9766 targets configured)
+INFO: Analyzed target //pkg/cmd/bazci:bazci (652 packages loaded, 15004 targets configured).
+INFO: Found 1 target...
+[0 / 14] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+[166 / 686] Compiling src/google/protobuf/descriptor.cc; 7s processwrapper-sandbox ... (8 actions, 7 running)
+[214 / 686] Compiling src/google/protobuf/struct.pb.cc; 3s processwrapper-sandbox ... (8 actions, 7 running)
+[734 / 1,087] [Prepa] Creating symlink bazel-out/k8-opt-exec-2B5CBBC6/bin/external/go_sdk/builder_reset/builder
+[1,008 / 1,087] GoCompilePkg pkg/build/bazel/bes/bes.a; 1s processwrapper-sandbox ... (8 actions, 7 running)
+Target //pkg/cmd/bazci:bazci up-to-date:
+  _bazel/bin/pkg/cmd/bazci/bazci_/bazci
+INFO: Elapsed time: 102.835s, Critical Path: 20.70s
+INFO: 374 processes: 20 internal, 354 processwrapper-sandbox.
+INFO: Build completed successfully, 374 total actions
+INFO: Build completed successfully, 374 total actions
+++ bazel info bazel-bin --config=ci
++ BAZEL_BIN=/home/roach/.cache/bazel/_bazel_roach/c5a4e7d36696d9cd970af2045211a7df/execroot/com_github_cockroachdb_cockroach/bazel-out/k8-fastbuild/bin
++ ARTIFACTS_DIR=/artifacts
+++ bazel query 'attr(tags, "broken_in_bazel", //pkg/workload/workloadsql:workloadsql_test)'
+Loading: 0 packages loaded
+INFO: Empty results
+Loading: 1 packages loaded
+Loading: 1 packages loaded
++ [[ ! -z '' ]]
+++ bazel query 'attr(tags, "integration", //pkg/workload/workloadsql:workloadsql_test)'
+Loading: 0 packages loaded
+INFO: Empty results
+Loading: 0 packages loaded
+Loading: 0 packages loaded
++ [[ ! -z '' ]]
++ GOTESTTIMEOUTSECS=3655
++ COCKROACH_NIGHTLY_STRESS=true
++ /home/roach/.cache/bazel/_bazel_roach/c5a4e7d36696d9cd970af2045211a7df/execroot/com_github_cockroachdb_cockroach/bazel-out/k8-fastbuild/bin/pkg/cmd/bazci/bazci_/bazci -- test --config=ci //pkg/workload/workloadsql:workloadsql_test --test_env=COCKROACH_NIGHTLY_STRESS=true --test_env=GOTRACEBACK=all --test_timeout=3660 --test_arg=-test.timeout=3655s --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '\''XML_OUTPUT_FILE=/home/roach/.cache/bazel/_bazel_roach/c5a4e7d36696d9cd970af2045211a7df/execroot/com_github_cockroachdb_cockroach/bazel-out/k8-fastbuild/bin/pkg/cmd/bazci/bazci_/bazci merge-test-xmls'\'' -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 4' --define gotags=bazel,gss,deadlock --nocache_test_results --test_output streamed --test_sharding_strategy=disabled --jobs 4
+running bazel w/ args:  test --config=ci //pkg/workload/workloadsql:workloadsql_test --test_env=COCKROACH_NIGHTLY_STRESS=true --test_env=GOTRACEBACK=all --test_timeout=3660 --test_arg=-test.timeout=3655s --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=/home/roach/.cache/bazel/_bazel_roach/c5a4e7d36696d9cd970af2045211a7df/execroot/com_github_cockroachdb_cockroach/bazel-out/k8-fastbuild/bin/pkg/cmd/bazci/bazci_/bazci merge-test-xmls'"'"' -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 4' --define gotags=bazel,gss,deadlock --nocache_test_results --test_output streamed --test_sharding_strategy=disabled --jobs 4 --build_event_binary_file=/tmp/2331830669/beplog --bes_backend=grpc://127.0.0.1:8998
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading:
+Loading: 0 packages loaded
+INFO: Build options --//build/toolchains:crdb_test_flag, --define, --run_under, and 1 more have changed, discarding analysis cache.
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (83 packages loaded, 9686 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (164 packages loaded, 10962 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (338 packages loaded, 12683 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (437 packages loaded, 14258 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (514 packages loaded, 16015 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (585 packages loaded, 17081 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (733 packages loaded, 18537 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (780 packages loaded, 21133 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (836 packages loaded, 22924 targets configured)
+Analyzing: target //pkg/workload/workloadsql:workloadsql_test (906 packages loaded, 26808 targets configured)
+INFO: Analyzed target //pkg/workload/workloadsql:workloadsql_test (919 packages loaded, 27484 targets configured).
+INFO: Found 1 test target...
+[0 / 3] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+[73 / 252] GoCompilePkg external/co_honnef_go_tools/go/ir/ir.a; 1s processwrapper-sandbox ... (4 actions, 3 running)
+[241 / 319] GoCompilePkg external/com_github_gogo_protobuf/proto/proto.a; 0s processwrapper-sandbox ... (4 actions, 3 running)
+[325 / 372] GoCompilePkg external/com_github_gogo_protobuf/plugin/unmarshal/unmarshal.a; 0s processwrapper-sandbox ... (4 actions, 3 running)
+[460 / 488] GoLink pkg/util/log/eventpb/eventpbgen/eventpbgen_/eventpbgen; 0s processwrapper-sandbox ... (4 actions, 3 running)
+[895 / 1,690] GoCompilePkg external/in_gopkg_yaml_v3/yaml_v3.a; 0s processwrapper-sandbox ... (4 actions, 3 running)
+[988 / 1,690] GoCompilePkg external/com_github_gogo_protobuf/proto/proto.a; 0s processwrapper-sandbox ... (4 actions, 3 running)
+[1,059 / 1,690] GoCompilePkg external/com_github_datadog_zstd/zstd.a; 1s processwrapper-sandbox ... (4 actions, 3 running)
+[1,106 / 1,690] GoCompilePkg external/com_github_datadog_zstd/zstd.a; 7s processwrapper-sandbox ... (4 actions running)
+[1,205 / 1,690] GoCompilePkg external/com_github_gogo_protobuf/plugin/testgen/testgen.a; 0s processwrapper-sandbox ... (4 actions running)
+[1,342 / 1,720] GoCompilePkg external/com_github_cockroachdb_pebble/sstable/sstable.a; 1s processwrapper-sandbox ... (4 actions running)
+[1,661 / 2,072] GoCompilePkg external/org_golang_x_tools/go/ssa/ssa.a; 1s processwrapper-sandbox ... (4 actions running)
+[1,973 / 2,222] GoCompilePkg external/org_golang_x_mod/module/module.a; 0s processwrapper-sandbox ... (4 actions running)
+[2,133 / 2,222] GoCompilePkg external/com_github_dave_dst/decorator/decorator.a; 1s processwrapper-sandbox ... (4 actions running)
+[2,357 / 2,653] GoCompilePkg pkg/roachpb/roachpb.a; 2s processwrapper-sandbox ... (4 actions running)
+[2,734 / 3,112] GoCompilePkg external/com_github_dave_dst/decorator/decorator.a; 1s processwrapper-sandbox ... (4 actions running)
+[2,999 / 3,371] GoCompilePkg external/com_github_andybalholm_brotli/brotli.a; 3s processwrapper-sandbox ... (4 actions running)
+[3,157 / 3,471] GoCompilePkg pkg/sql/schemachanger/scpb/scpb.a; 0s processwrapper-sandbox ... (4 actions running)
+[3,219 / 3,471] GoCompilePkg pkg/sql/parser/parser.a; 20s processwrapper-sandbox
+[3,324 / 3,471] GoCompilePkg pkg/server/status/status.a; 1s processwrapper-sandbox ... (4 actions running)
+[3,366 / 3,471] GoCompilePkg pkg/sql/colexec/colexecjoin/colexecjoin.a; 10s processwrapper-sandbox ... (4 actions running)
+ERROR: /go/src/github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/BUILD.bazel:5:11: GoCompilePkg pkg/sql/sem/builtins/builtins.a failed: (Exit 1): builder failed: error executing command bazel-out/k8-opt-exec-2B5CBBC6/bin/external/go_sdk/builder_reset/builder compilepkg -sdk external/go_sdk -installsuffix linux_amd64 -tags bazel,gss,deadlock,bazel,gss,deadlock -src ... (remaining 299 arguments skipped)
+
+Use --sandbox_debug to see verbose messages from the sandbox and retain the sandbox build root for debugging
+pkg/sql/sem/builtins/builtins.go:6330:16: replicaMu.TryLock undefined (type *syncutil.RWMutex has no field or method TryLock)
+compilepkg: error running subcommand external/go_sdk/pkg/tool/linux_amd64/compile: exit status 2
+Target //pkg/workload/workloadsql:workloadsql_test failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+INFO: Elapsed time: 229.654s, Critical Path: 83.52s
+INFO: 2460 processes: 21 internal, 2439 processwrapper-sandbox.
+FAILED: Build did NOT complete successfully
+//pkg/workload/workloadsql:workloadsql_test                     FAILED TO BUILD
+
+Executed 0 out of 1 test: 1 fails to build.
+FAILED: Build did NOT complete successfully
+FAILED: Build did NOT complete successfully

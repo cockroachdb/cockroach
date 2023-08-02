@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
@@ -375,7 +376,7 @@ func makeVersionFixtureAndFatal(
 		useLocalBinary = true
 	}
 
-	predecessorVersion, err := version.PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	predecessorVersion, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +427,7 @@ func makeVersionFixtureAndFatal(
 			name := clusterupgrade.CheckpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-			binaryPath := clusterupgrade.BinaryPathFromVersion(makeFixtureVersion)
+			binaryPath := clusterupgrade.BinaryPathForVersion(t, makeFixtureVersion)
 			c.Run(ctx, c.All(), binaryPath, "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
@@ -454,7 +455,7 @@ done
 
 // importTPCCStep runs a TPCC import import on the first crdbNode (monitoring them all for
 // crashes during the import). If oldV is nil, this runs the import using the specified
-// version (for example "19.2.1", as provided by PredecessorVersion()) using the location
+// version (for example "19.2.1", as provided by LatestPredecessor()) using the location
 // used by c.Stage(). An empty oldV uses the main cockroach binary.
 func importTPCCStep(
 	oldV string, headroomWarehouses int, crdbNodes option.NodeListOption,

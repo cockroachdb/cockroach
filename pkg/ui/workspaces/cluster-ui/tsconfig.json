@@ -15,6 +15,7 @@
     "skipLibCheck": true,
     "sourceMap": false,
     "baseUrl": ".",
+    "preserveSymlinks": true,
     "paths": {
       "@cockroachlabs/crdb-protobuf-client": [
         "../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js",

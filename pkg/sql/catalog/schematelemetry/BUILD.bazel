@@ -49,6 +49,7 @@ go_test(
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/jobs/jobstest",
+        "//pkg/scheduledjobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

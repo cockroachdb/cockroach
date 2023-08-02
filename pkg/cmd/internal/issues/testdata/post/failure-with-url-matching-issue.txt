@@ -1,7 +1,7 @@
 post
 ----
 ----
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "cmd/roachtest: some-roachtest failed" label:branch-release-0.1 -label:X-noreuse: [github.Issue{Number:30, Title:"cmd/roachtest: some-roachtest failed", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]} github.Issue{Number:32, Title:"cmd/roachtest: some-roachtest-similar failed", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]}]
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "cmd/roachtest: some-roachtest failed" label:branch-release-0.1 -label:X-noreuse: [github.Issue{Number:30, Title:"cmd/roachtest: some-roachtest failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]} github.Issue{Number:32, Title:"cmd/roachtest: some-roachtest-similar failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]}]
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "cmd/roachtest: some-roachtest failed" -label:branch-release-0.1: []
 createComment owner=cockroachdb repo=cockroach issue=30:
 

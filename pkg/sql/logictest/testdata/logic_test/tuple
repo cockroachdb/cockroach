@@ -1248,3 +1248,10 @@ INSERT INTO t94092 VALUES (1);
 
 query error expected tuple \(\) to have a length of 2
 SELECT (c, 1) != (()) FROM t94092;
+
+# Regression test for #106303.
+statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
+SELECT (ROW() AS a) IS NOT UNKNOWN
+
+statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
+SELECT CASE WHEN False THEN ROW() ELSE (ROW() AS a) END

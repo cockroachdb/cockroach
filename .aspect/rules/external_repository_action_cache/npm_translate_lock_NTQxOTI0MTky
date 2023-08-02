@@ -1,6 +1,0 @@
-# Input hashes for repository rule npm_translate_lock(name = "npm_mirror_npm", pnpm_lock = "//pkg/cmd/mirror/npm:pnpm-lock.yaml").
-# This file should be checked into version control along with the pnpm-lock.yaml file.
-pkg/ui/.npmrc.pnpm=1714720514
-pkg/cmd/mirror/npm/pnpm-lock.yaml=1846455425
-pkg/cmd/mirror/npm/yarn.lock=762706174
-pkg/cmd/mirror/npm/package.json=253493674

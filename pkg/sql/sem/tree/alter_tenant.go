@@ -16,7 +16,7 @@ type ReplicationCutoverTime struct {
 	Latest    bool
 }
 
-// AlterTenantReplication represents an ALTER TENANT REPLICATION statement.
+// AlterTenantReplication represents an ALTER VIRTUAL CLUSTER REPLICATION statement.
 type AlterTenantReplication struct {
 	TenantSpec *TenantSpec
 	Command    JobCommand
@@ -28,7 +28,7 @@ var _ Statement = &AlterTenantReplication{}
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER TENANT ")
+	ctx.WriteString("ALTER VIRTUAL CLUSTER ")
 	ctx.FormatNode(n.TenantSpec)
 	ctx.WriteByte(' ')
 	if n.Cutover != nil {
@@ -54,7 +54,7 @@ type TenantCapability struct {
 	Value Expr
 }
 
-// AlterTenantCapability represents an ALTER TENANT CAPABILITY statement.
+// AlterTenantCapability represents an ALTER VIRTUAL CLUSTER CAPABILITY statement.
 type AlterTenantCapability struct {
 	TenantSpec   *TenantSpec
 	Capabilities []TenantCapability
@@ -67,7 +67,7 @@ var _ Statement = &AlterTenantCapability{}
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantCapability) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER TENANT ")
+	ctx.WriteString("ALTER VIRTUAL CLUSTER ")
 	ctx.FormatNode(n.TenantSpec)
 	if n.IsRevoke {
 		ctx.WriteString(" REVOKE ")
@@ -92,7 +92,7 @@ func (n *AlterTenantCapability) Format(ctx *FmtCtx) {
 	}
 }
 
-// TenantSpec designates a tenant for the ALTER TENANT statements.
+// TenantSpec designates a tenant for the ALTER VIRTUAL CLUSTER statements.
 type TenantSpec struct {
 	Expr   Expr
 	IsName bool
@@ -167,7 +167,7 @@ func (n *TenantSpec) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterTenantRename represents an ALTER TENANT RENAME statement.
+// AlterTenantRename represents an ALTER VIRTUAL CLUSTER RENAME statement.
 type AlterTenantRename struct {
 	TenantSpec *TenantSpec
 
@@ -183,19 +183,19 @@ var _ Statement = &AlterTenantRename{}
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantRename) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER TENANT ")
+	ctx.WriteString("ALTER VIRTUAL CLUSTER ")
 	ctx.FormatNode(n.TenantSpec)
 	ctx.WriteString(" RENAME TO ")
 	ctx.FormatNode(n.NewName)
 }
 
-// AlterTenantService represents an ALTER TENANT START/STOP SERVICE statement.
+// AlterTenantService represents an ALTER VIRTUAL CLUSTER START/STOP SERVICE statement.
 type AlterTenantService struct {
 	TenantSpec *TenantSpec
 	Command    TenantServiceCmd
 }
 
-// TenantServiceCmd represents a parameter to ALTER TENANT.
+// TenantServiceCmd represents a parameter to ALTER VIRTUAL CLUSTER.
 type TenantServiceCmd int8
 
 const (
@@ -211,7 +211,7 @@ var _ Statement = &AlterTenantService{}
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantService) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER TENANT ")
+	ctx.WriteString("ALTER VIRTUAL CLUSTER ")
 	ctx.FormatNode(n.TenantSpec)
 	switch n.Command {
 	case TenantStartServiceExternal:

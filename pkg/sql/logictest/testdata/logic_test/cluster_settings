@@ -289,7 +289,7 @@ statement error admission.kv.enabled is a system-only setting and must be set in
 ALTER TENANT [10] SET CLUSTER SETTING admission.kv.enabled=true
 
 onlyif config 3node-tenant-default-configs
-statement error ALTER TENANT can only be called by system operators
+statement error ALTER VIRTUAL CLUSTER can only be called by system operators
 ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs

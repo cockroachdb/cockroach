@@ -156,6 +156,13 @@ func TestLogic_gc_job_mixed(
 	runLogicTest(t, "gc_job_mixed")
 }
 
+func TestLogic_guardrails(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "guardrails")
+}
+
 func TestLogic_schema_locked_in_cluster_before_23_1(
 	t *testing.T,
 ) {

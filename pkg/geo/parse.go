@@ -264,6 +264,9 @@ func GeometryToEncodedPolyline(g Geometry, p int) (string, error) {
 	if gt.SRID() != 4326 {
 		return "", pgerror.Newf(pgcode.InvalidParameterValue, "only SRID 4326 is supported")
 	}
+	if _, ok := gt.(*geom.GeometryCollection); ok {
+		return "", pgerror.Newf(pgcode.InvalidParameterValue, "'GeometryCollection' geometry type not supported")
+	}
 
 	return encodePolylinePoints(gt.FlatCoords(), p), nil
 }

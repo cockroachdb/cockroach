@@ -134,8 +134,6 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("tenant_span_stats", func(t *testing.T) {
-		skip.UnderStressWithIssue(t, 99559)
-		skip.UnderDeadlockWithIssue(t, 99770)
 		testTenantSpanStats(ctx, t, testHelper)
 	})
 
@@ -212,18 +210,22 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 			return bytes.Join(keys, nil)
 		}
 
-		controlStats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  []roachpb.Span{aSpan},
-			})
-		require.NoError(t, err)
-
 		// Create a new range in this tenant.
-		_, _, err = helper.HostCluster().Server(0).SplitRange(makeKey(tPrefix, roachpb.Key("c")))
+		newRangeKey := makeKey(tPrefix, roachpb.Key("c"))
+		_, newDesc, err := helper.HostCluster().Server(0).SplitRange(newRangeKey)
 		require.NoError(t, err)
 
-		// Wait for the split to finish and propagate.
+		// Wait until the range split occurs.
+		testutils.SucceedsSoon(t, func() error {
+			desc, err := helper.HostCluster().LookupRange(newRangeKey)
+			require.NoError(t, err)
+			if !desc.StartKey.Equal(newDesc.StartKey) {
+				return errors.New("range has not split")
+			}
+			return nil
+		})
+
+		// Wait for the new range to replicate.
 		err = helper.HostCluster().WaitForFullReplication()
 		require.NoError(t, err)
 
@@ -236,19 +238,6 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 				t.Fatal(err)
 			}
 		}
-
-		stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  []roachpb.Span{aSpan},
-			})
-
-		require.NoError(t, err)
-
-		controlSpanStats := controlStats.SpanToStats[aSpan.String()]
-		testSpanStats := stats.SpanToStats[aSpan.String()]
-		require.Equal(t, controlSpanStats.RangeCount+1, testSpanStats.RangeCount)
-		require.Equal(t, controlSpanStats.TotalStats.LiveCount+int64(len(incKeys)), testSpanStats.TotalStats.LiveCount)
 
 		// Make a multi-span call
 		type spanCase struct {
@@ -301,19 +290,29 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 			spans = append(spans, sc.span)
 		}
 
-		stats, err = tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  spans,
-			})
+		testutils.SucceedsSoon(t, func() error {
+			stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+				&roachpb.SpanStatsRequest{
+					NodeID: "0", // 0 indicates we want stats from all nodes.
+					Spans:  spans,
+				})
 
-		require.NoError(t, err)
-		// Check each span has their expected values.
-		for _, sc := range spanCases {
-			spanStats := stats.SpanToStats[sc.span.String()]
-			require.Equal(t, spanStats.RangeCount, sc.expectedRangeCount, fmt.Sprintf("mismatch on expected range count for span case with span %v", sc.span.String()))
-			require.Equal(t, spanStats.TotalStats.LiveCount, sc.expectedLiveCount, fmt.Sprintf("mismatch on expected live count for span case with span %v", sc.span.String()))
-		}
+			require.NoError(t, err)
+
+			for _, sc := range spanCases {
+				spanStats := stats.SpanToStats[sc.span.String()]
+				if sc.expectedRangeCount != spanStats.RangeCount {
+					return errors.Newf("mismatch on expected range count for span case with span %v", sc.span.String())
+				}
+
+				if sc.expectedLiveCount != spanStats.TotalStats.LiveCount {
+					return errors.Newf("mismatch on expected live count for span case with span %v", sc.span.String())
+				}
+			}
+
+			return nil
+		})
+
 	})
 
 }
@@ -1384,7 +1383,6 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges pagination", func(t *testing.T) {
-		skip.UnderStressWithIssue(t, 92382)
 		ctx := context.Background()
 		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit: 1,

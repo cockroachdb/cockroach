@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1829,7 +1830,7 @@ func (t *logicTest) setup(
 		if err != nil {
 			t.Fatal(err)
 		}
-		bootstrapVersion, err := version.PredecessorVersion(*upgradeVersion)
+		bootstrapVersion, err := release.LatestPredecessor(upgradeVersion)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3103,8 +3104,8 @@ func (t *logicTest) maybeSkipOnRetry(err error) {
 func (t *logicTest) verifyError(
 	sql, pos, expectNotice, expectErr, expectErrCode string, err error,
 ) (bool, error) {
+	t.maybeSkipOnRetry(err)
 	if expectErr == "" && expectErrCode == "" && err != nil {
-		t.maybeSkipOnRetry(err)
 		return t.unexpectedError(sql, pos, err)
 	}
 	if expectNotice != "" {

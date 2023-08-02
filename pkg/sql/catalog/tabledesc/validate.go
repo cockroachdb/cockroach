@@ -753,7 +753,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateColumnFamilies(columnsByID),
 			desc.validateCheckConstraints(columnsByID),
 			desc.validateUniqueWithoutIndexConstraints(columnsByID),
-			desc.validateTableIndexes(columnsByID),
+			desc.validateTableIndexes(columnsByID, vea.HasExtraChecksForUpgrade()),
 			desc.validatePartitioning(),
 		}
 		hasErrs := false
@@ -1274,7 +1274,9 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalog.Column) error {
+func (desc *wrapper) validateTableIndexes(
+	columnsByID map[descpb.ColumnID]catalog.Column, upgradeChecks bool,
+) error {
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
@@ -1545,6 +1547,40 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 			if len(foundIn) > 1 {
 				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
 					idx.GetName(), colID, foundIn)
+			}
+		}
+		// Checks after this point are for future release. Also exclude system
+		// tables from these checks.
+		if !upgradeChecks {
+			continue
+		}
+		// Check that each non-virtual column is in the key or store columns of
+		// the primary index.
+		if idx.Primary() {
+			keyCols := idx.CollectKeyColumnIDs()
+			storeCols := idx.CollectPrimaryStoredColumnIDs()
+			for _, col := range desc.PublicColumns() {
+				if col.IsVirtual() {
+					if storeCols.Contains(col.GetID()) {
+						return errors.Newf(
+							"primary index %q store columns cannot contain virtual column ID %d",
+							idx.GetName(), col.GetID(),
+						)
+					}
+					// No need to check anything else for virtual columns.
+					continue
+				}
+				if !keyCols.Contains(col.GetID()) && !storeCols.Contains(col.GetID()) {
+					return errors.Newf(
+						"primary index %q must contain column ID %d in either key or store columns",
+						idx.GetName(), col.GetID(),
+					)
+				}
+			}
+		} else if len(desc.Mutations) == 0 && desc.DeclarativeSchemaChangerState == nil {
+			if idx.IndexDesc().EncodingType != catenumpb.SecondaryIndexEncoding {
+				return errors.AssertionFailedf("secondary index %q has invalid encoding type %d in proto, expected %d",
+					idx.GetName(), idx.IndexDesc().EncodingType, catenumpb.SecondaryIndexEncoding)
 			}
 		}
 	}

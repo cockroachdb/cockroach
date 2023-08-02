@@ -115,7 +115,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
-	github.com/cockroachdb/pebble v0.0.0-20230630143906-c0a2ede2b215
+	github.com/cockroachdb/pebble v0.0.0-20230725171526-016035d18238
 	github.com/cockroachdb/redact v1.1.4
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -430,6 +430,6 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 // Take etcd-io/raft from the branch corresponding to release-23.1 in our fork.
-replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20230615130413-b160e656b5ae
+replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20230718062839-336c0ec27d85
 
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c

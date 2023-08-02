@@ -37,9 +37,11 @@ var hibernateBlockList = blocklist{
 var hibernateSpatialIgnoreList = blocklist{
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
+	"org.hibernate.test.batch.BatchTest.testBatchInsertUpdate":                                           "flaky",
 }
 
 var hibernateIgnoreList = blocklist{
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
+	"org.hibernate.test.batch.BatchTest.testBatchInsertUpdate":                                           "flaky",
 }

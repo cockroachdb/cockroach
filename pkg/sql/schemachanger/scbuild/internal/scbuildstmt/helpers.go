@@ -407,6 +407,12 @@ func notAbsentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Eleme
 	return target != scpb.ToAbsent
 }
 
+func notAbsentOrTransientTargetFilter(
+	_ scpb.Status, target scpb.TargetStatus, _ scpb.Element,
+) bool {
+	return target != scpb.ToAbsent && target != scpb.Transient
+}
+
 func statusAbsentOrBackfillOnlyFilter(
 	status scpb.Status, _ scpb.TargetStatus, _ scpb.Element,
 ) bool {
@@ -415,6 +421,22 @@ func statusAbsentOrBackfillOnlyFilter(
 
 func statusPublicFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return status == scpb.Status_PUBLIC
+}
+
+func containsDescIDFilter(
+	descID catid.DescID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		return screl.ContainsDescID(e, descID)
+	}
+}
+
+func hasTableID(
+	tableID catid.DescID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		return screl.GetDescID(e) == tableID
+	}
 }
 
 func hasIndexIDAttrFilter(

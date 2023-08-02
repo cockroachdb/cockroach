@@ -291,18 +291,19 @@ func newRaftConfig(
 	strg raft.Storage, id uint64, appliedIndex uint64, storeCfg StoreConfig, logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
-		ID:                        id,
-		Applied:                   appliedIndex,
-		AsyncStorageWrites:        true,
-		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
-		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
-		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
-		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
-		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
-		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
-		MaxInflightBytes:          storeCfg.RaftMaxInflightBytes,
-		Storage:                   strg,
-		Logger:                    logger,
+		ID:                          id,
+		Applied:                     appliedIndex,
+		AsyncStorageWrites:          true,
+		ElectionTick:                storeCfg.RaftElectionTimeoutTicks,
+		HeartbeatTick:               storeCfg.RaftHeartbeatIntervalTicks,
+		MaxUncommittedEntriesSize:   storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:    storeCfg.RaftMaxCommittedSizePerReady,
+		DisableConfChangeValidation: true, // see https://github.com/cockroachdb/cockroach/issues/105797
+		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
+		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
+		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
+		Storage:                     strg,
+		Logger:                      logger,
 
 		PreVote: true,
 	}
@@ -2430,11 +2431,15 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 			// TODO(irfansharif): For symmetry with the system config span variant,
 			// we queue blindly; we could instead only queue it if we knew the
 			// range's keyspans has a split in there somewhere, or was now part of a
-			// larger range and eligible for a merge.
+			// larger range and eligible for a merge, or the span config implied a
+			// need for {up,down}replication.
 			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			return nil // more
@@ -2936,22 +2941,24 @@ func (s *Store) RangeFeed(
 // whenever availability changes.
 func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	var (
-		raftLeaderCount               int64
-		leaseHolderCount              int64
-		leaseExpirationCount          int64
-		leaseEpochCount               int64
-		leaseLivenessCount            int64
-		raftLeaderNotLeaseHolderCount int64
-		raftLeaderInvalidLeaseCount   int64
-		quiescentCount                int64
-		uninitializedCount            int64
-		averageQueriesPerSecond       float64
-		averageRequestsPerSecond      float64
-		averageReadsPerSecond         float64
-		averageWritesPerSecond        float64
-		averageReadBytesPerSecond     float64
-		averageWriteBytesPerSecond    float64
-		averageCPUNanosPerSecond      float64
+		raftLeaderCount                int64
+		leaseHolderCount               int64
+		leaseExpirationCount           int64
+		leaseEpochCount                int64
+		leaseLivenessCount             int64
+		leaseViolatingPreferencesCount int64
+		leaseLessPreferredCount        int64
+		raftLeaderNotLeaseHolderCount  int64
+		raftLeaderInvalidLeaseCount    int64
+		quiescentCount                 int64
+		uninitializedCount             int64
+		averageQueriesPerSecond        float64
+		averageRequestsPerSecond       float64
+		averageReadsPerSecond          float64
+		averageWritesPerSecond         float64
+		averageReadBytesPerSecond      float64
+		averageWriteBytesPerSecond     float64
+		averageCPUNanosPerSecond       float64
 
 		rangeCount                int64
 		unavailableRangeCount     int64
@@ -3015,6 +3022,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.LivenessLease {
 				leaseLivenessCount++
 			}
+			// NB: Can't be satisfying a less preferred preference, and also
+			// satisfying no preferences.
+			if metrics.ViolatingLeasePreferences {
+				leaseViolatingPreferencesCount++
+			} else if metrics.LessPreferredLease {
+				leaseLessPreferredCount++
+			}
 		}
 		if metrics.Quiescent {
 			quiescentCount++
@@ -3073,6 +3087,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
+	s.metrics.LeaseViolatingPreferencesCount.Update(leaseViolatingPreferencesCount)
+	s.metrics.LeaseLessPreferredCount.Update(leaseLessPreferredCount)
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)

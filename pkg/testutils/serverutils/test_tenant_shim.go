@@ -67,6 +67,9 @@ type TestTenantInterface interface {
 	// PGServer returns the tenant's *pgwire.Server as an interface{}.
 	PGServer() interface{}
 
+	// SQLServer returns the *sql.Server as an interface{}.
+	SQLServer() interface{}
+
 	// DiagnosticsReporter returns the tenant's *diagnostics.Reporter as an
 	// interface{}. The DiagnosticsReporter periodically phones home to report
 	// diagnostics and usage.
@@ -98,6 +101,10 @@ type TestTenantInterface interface {
 	// ExecutorConfig returns a copy of the tenant's ExecutorConfig.
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
+
+	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
+	// also implements isql.InternalExecutor if the test cannot depend on sql).
+	InternalExecutor() interface{}
 
 	// RangeFeedFactory returns the range feed factory used by the tenant.
 	// The real return type is *rangefeed.Factory.

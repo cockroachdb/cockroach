@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -271,6 +272,14 @@ type Node struct {
 
 	// Used to collect samples for the key visualizer.
 	spanStatsCollector *spanstatscollector.SpanStatsCollector
+
+	// versionUpdateMu is used by the TenantSettings endpoint
+	// to inform tenant servers of storage version changes.
+	versionUpdateMu struct {
+		syncutil.Mutex
+		encodedVersion string
+		updateCh       chan struct{}
+	}
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -438,6 +447,7 @@ func NewNode(
 		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
 	)
 	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
+	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -500,6 +510,11 @@ func (n *Node) start(
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
 	}
+
+	// Track changes to the version setting to inform the tenant connector.
+	n.storeCfg.Settings.Version.SetOnChange(n.notifyClusterVersionChange)
+	// Also update the encoded copy immediately.
+	n.notifyClusterVersionChange(ctx, n.storeCfg.Settings.Version.ActiveVersion(ctx))
 
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
@@ -1219,6 +1234,20 @@ func (n *Node) batchInternal(
 		tracing.SpanFromContext(ctx).MaybeRecordStackHistory(tStart)
 	}
 
+	// If the sender cancelled the context they may not wait around for the
+	// replica to notice the cancellation and return a response. For this reason,
+	// we log the server-side trace of the cancelled request to help debug what
+	// the request was doing at the time it noticed the cancellation.
+	if pErr != nil && ctx.Err() != nil {
+		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
+			recording := sp.GetConfiguredRecording()
+			if recording.Len() != 0 {
+				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
+					pErr.GoError(), recording)
+			}
+		}
+	}
+
 	n.metrics.callComplete(timeutil.Since(tStart), pErr)
 	br.Error = pErr
 
@@ -1889,11 +1918,11 @@ func (n *Node) TenantSettings(
 		})
 	}
 
-	send := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting) error {
-		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
+	send := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
+		log.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Precedence:  precedence,
-			Incremental: false,
+			Incremental: incremental,
 			Overrides:   overrides,
 		})
 	}
@@ -1911,26 +1940,40 @@ func (n *Node) TenantSettings(
 	// The protocol defines that there is one initial response per
 	// precedence value, with Incremental set to false. This is important:
 	// the client waits for at least one non-incremental message
-	// for each predecende before continuing.
+	// for each precedence before continuing.
 
 	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
+
+	// Inject the current storage logical version as an override; as the
+	// tenant server needs this to start up.
+	verSetting, versionUpdateCh := n.getVersionSettingWithUpdateCh(ctx)
+	allOverrides = append(allOverrides, verSetting)
+	if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 		return err
 	}
 
 	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
+	if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 		return err
 	}
 
 	for {
 		select {
+		case <-versionUpdateCh:
+			// The storage version has changed, send it again.
+			verSetting, versionUpdateCh = n.getVersionSettingWithUpdateCh(ctx)
+			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
+				[]kvpb.TenantSetting{verSetting},
+				true /* incremental */); err != nil {
+				return err
+			}
+
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
 			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
+			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 				return err
 			}
 
@@ -1939,7 +1982,7 @@ func (n *Node) TenantSettings(
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
 			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
+			if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 				return err
 			}
 
@@ -1950,6 +1993,43 @@ func (n *Node) TenantSettings(
 			return stop.ErrUnavailable
 		}
 	}
+}
+
+// getVersionSettingWithUpdateCh returns the current encoded cluster
+// version as a TenantSetting, and a channel that is closed whenever
+// the version changes.
+func (n *Node) getVersionSettingWithUpdateCh(
+	ctx context.Context,
+) (kvpb.TenantSetting, <-chan struct{}) {
+	n.versionUpdateMu.Lock()
+	defer n.versionUpdateMu.Unlock()
+
+	setting := kvpb.TenantSetting{
+		Name: clusterversion.KeyVersionSetting,
+		Value: settings.EncodedValue{
+			Type:  settings.VersionSettingValueType,
+			Value: n.versionUpdateMu.encodedVersion,
+		},
+	}
+
+	return setting, n.versionUpdateMu.updateCh
+}
+
+func (n *Node) notifyClusterVersionChange(
+	ctx context.Context, activeVersion clusterversion.ClusterVersion,
+) {
+	n.versionUpdateMu.Lock()
+	defer n.versionUpdateMu.Unlock()
+
+	encodedVersion, err := protoutil.Marshal(&activeVersion)
+	if err != nil {
+		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
+		return
+	}
+	n.versionUpdateMu.encodedVersion = string(encodedVersion)
+	// Notify listeners.
+	close(n.versionUpdateMu.updateCh)
+	n.versionUpdateMu.updateCh = make(chan struct{})
 }
 
 // Join implements the kvpb.InternalServer service. This is the

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -247,27 +248,31 @@ type lockTableImpl struct {
 	// instead of clearing everything.
 	minLocks int64
 
-	// finalizedTxnCache is a small LRU cache that tracks transactions that
-	// were pushed and found to be finalized (COMMITTED or ABORTED). It is
-	// used as an optimization to avoid repeatedly pushing the transaction
-	// record when cleaning up the intents of an abandoned transaction.
+	// txnStatusCache is a small LRU cache that tracks the status of
+	// transactions that have been successfully pushed.
 	//
-	// NOTE: it probably makes sense to maintain a single finalizedTxnCache
+	// NOTE: it probably makes sense to maintain a single txnStatusCache
 	// across all Ranges on a Store instead of an individual cache per
 	// Range. For now, we don't do this because we don't share any state
 	// between separate concurrency.Manager instances.
-	finalizedTxnCache txnCache
+	txnStatusCache txnStatusCache
 
 	// clock is used to track the lock hold and lock wait start times.
 	clock *hlc.Clock
+
+	// settings provides a handle to cluster settings.
+	settings *cluster.Settings
 }
 
 var _ lockTable = &lockTableImpl{}
 
-func newLockTable(maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock) *lockTableImpl {
+func newLockTable(
+	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+) *lockTableImpl {
 	lt := &lockTableImpl{
-		rID:   rangeID,
-		clock: clock,
+		rID:      rangeID,
+		clock:    clock,
+		settings: settings,
 	}
 	lt.setMaxLocks(maxLocks)
 	return lt
@@ -361,7 +366,7 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn                *enginepb.TxnMeta
+	txn                *roachpb.Transaction
 	ts                 hlc.Timestamp
 	spans              *spanset.SpanSet
 	waitPolicy         lock.WaitPolicy
@@ -595,7 +600,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			// Non-locking reads only care about locks, not reservations.
 			return false, nil
 		}
-		if g.isSameTxn(l.reservation.txn) {
+		if g.isSameTxn(l.reservation.txnMeta()) {
 			// Already reserved by this txn.
 			return false, nil
 		}
@@ -640,6 +645,17 @@ func (g *lockTableGuardImpl) doneWaitingAtLock(hasReservation bool, l *lockState
 	g.mu.Unlock()
 }
 
+func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
+	if g.txn == nil {
+		return nil
+	}
+	return &g.txn.TxnMeta
+}
+
+func (g *lockTableGuardImpl) hasUncertaintyInterval() bool {
+	return g.txn != nil && g.txn.ReadTimestamp.Less(g.txn.GlobalUncertaintyLimit)
+}
+
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
@@ -663,7 +679,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 		span = &spans[g.index]
 		resumingInSameSpan = true
 	}
-	// Locks that transition to free because of the finalizedTxnCache are GC'd
+	// Locks that transition to free because of the txnStatusCache are GC'd
 	// before returning. Note that these are only unreplicated locks. Replicated
 	// locks are handled via the g.toResolve.
 	var locksToGC [spanset.NumSpanScope][]*lockState
@@ -719,8 +735,20 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 		// we iterate over all the elements of toResolve and only keep the ones
 		// where removing the lock via the call to updateLockInternal is not a
 		// noop.
+		//
+		// For pushed transactions that are not finalized, we disable this
+		// deduplication and allow all resolution attempts to adjust the lock's
+		// timestamp to go through. This is because updating the lock ahead of
+		// resolution risks rediscovery loops where the lock is continually
+		// rediscovered at a lower timestamp than that in the lock table.
 		for i := range g.toResolve {
-			if heldByTxn := g.lt.updateLockInternal(&g.toResolve[i]); heldByTxn {
+			var doResolve bool
+			if g.toResolve[i].Status.IsFinalized() {
+				doResolve = g.lt.updateLockInternal(&g.toResolve[i])
+			} else {
+				doResolve = true
+			}
+			if doResolve {
 				g.toResolve[j] = g.toResolve[i]
 				j++
 			}
@@ -1043,8 +1071,8 @@ func (l *lockState) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 // safeFormat is a helper for SafeFormat and String methods.
-// REQUIRES: l.mu is locked. finalizedTxnCache can be nil.
-func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnCache) {
+// REQUIRES: l.mu is locked. txnStatusCache can be nil.
+func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStatusCache) {
 	sb.Printf(" lock: %s\n", l.key)
 	if l.isEmptyLock() {
 		sb.SafeString("  empty\n")
@@ -1073,8 +1101,8 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 			} else {
 				sb.SafeString("unrepl ")
 			}
-			if finalizedTxnCache != nil {
-				finalizedTxn, ok := finalizedTxnCache.get(h.txn.ID)
+			if txnStatusCache != nil {
+				finalizedTxn, ok := txnStatusCache.finalizedTxns.get(h.txn.ID)
 				if ok {
 					var statusStr string
 					switch finalizedTxn.Status {
@@ -1097,7 +1125,7 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 	txn, ts := l.getLockHolder()
 	if txn == nil {
 		sb.Printf("  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(sb, l.reservation.txn, l.reservation.ts)
+		writeResInfo(sb, l.reservation.txnMeta(), l.reservation.ts)
 	} else {
 		writeHolderInfo(sb, txn, ts)
 	}
@@ -1184,7 +1212,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	if hasReservation {
 		l.reservation.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   l.reservation.txn,
+			WaitingTxn:   l.reservation.txnMeta(),
 			ActiveWaiter: true,
 			Strength:     lock.Exclusive,
 			WaitDuration: now.Sub(l.reservation.mu.curLockWaitStart),
@@ -1197,7 +1225,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		readerGuard := e.Value.(*lockTableGuardImpl)
 		readerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   readerGuard.txn,
+			WaitingTxn:   readerGuard.txnMeta(),
 			ActiveWaiter: false,
 			Strength:     lock.None,
 			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
@@ -1211,7 +1239,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		writerGuard := qg.guard
 		writerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   writerGuard.txn,
+			WaitingTxn:   writerGuard.txnMeta(),
 			ActiveWaiter: qg.active,
 			Strength:     lock.Exclusive,
 			WaitDuration: now.Sub(writerGuard.mu.curLockWaitStart),
@@ -1281,7 +1309,7 @@ func (l *lockState) informActiveWaiters() {
 		waitForState.txn = lockHolderTxn
 		waitForState.held = true
 	} else {
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 		if !findDistinguished && l.distinguishedWaiter.isSameTxnAsReservation(waitForState) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
@@ -1369,7 +1397,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txn)) {
+			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txnMeta())) {
 				g = qg.guard
 				break
 			}
@@ -1521,11 +1549,12 @@ func (l *lockState) clearLockHolder() {
 // that case the channel is notified first and the call to tryActiveWait()
 // happens later in lockTableGuard.CurState().
 //
-// It uses the finalizedTxnCache to decide that the caller does not need to
-// wait on a lock of a transaction that is already finalized.
+// It uses the txnStatusCache to decide that the caller does not need to wait on
+// a lock of a transaction that is already finalized or is pending but pushed
+// above the request's read timestamp (for non-locking readers).
 //
-//   - For unreplicated locks, this method will silently remove the lock and
-//     proceed as normal.
+//   - For unreplicated locks, this method will silently remove (or update) the
+//     lock and proceed as normal.
 //
 //   - For replicated locks the behavior is more complicated since we need to
 //     resolve the intent. We desire:
@@ -1592,12 +1621,13 @@ func (l *lockState) tryActiveWait(
 
 	var replicatedLockFinalizedTxn *roachpb.Transaction
 	if lockHolderTxn != nil {
-		finalizedTxn, ok := g.lt.finalizedTxnCache.get(lockHolderTxn.ID)
+		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
 		if ok {
 			if l.holder.holder[lock.Replicated].txn == nil {
 				// Only held unreplicated. Release immediately.
-				l.clearLockHolder()
-				if l.lockIsFree() {
+				up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: l.key})
+				_, gc := l.tryUpdateLockLocked(up)
+				if gc {
 					// Empty lock.
 					return false, true
 				}
@@ -1619,6 +1649,40 @@ func (l *lockState) tryActiveWait(
 		if g.ts.Less(lockHolderTS) {
 			return false, false
 		}
+
+		// If the non-locking reader is reading at a higher timestamp than the lock
+		// holder, but it knows that the lock holder has been pushed above its read
+		// timestamp, it can proceed after rewriting the lock at its transaction's
+		// pushed timestamp. Intent resolution can be deferred to maximize batching
+		// opportunities.
+		//
+		// This fast-path is only enabled for readers without uncertainty intervals,
+		// as readers with uncertainty intervals must contend with the possibility
+		// of pushing a conflicting intent up into their uncertainty interval and
+		// causing more work for themselves, which is avoided with care by the
+		// lockTableWaiter but difficult to coordinate through the txnStatusCache.
+		// This limitation is acceptable because the most important case here is
+		// optimizing the Export requests issued by backup.
+		if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
+			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
+			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
+				up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: l.key})
+				if l.holder.holder[lock.Replicated].txn == nil {
+					// Only held unreplicated. Update lock directly in case other
+					// waiting readers can benefit from the pushed timestamp.
+					//
+					// TODO(arul): this case is only possible while non-locking reads
+					// block on Exclusive locks. Once non-locking reads start only
+					// blocking on intents, it can be removed and asserted against.
+					_, _ = l.tryUpdateLockLocked(up)
+				} else {
+					// Resolve to push the replicated intent.
+					g.toResolve = append(g.toResolve, up)
+				}
+				return false, false
+			}
+		}
+
 		g.mu.Lock()
 		_, alsoHasStrongerAccess := g.mu.locks[l]
 		g.mu.Unlock()
@@ -1664,7 +1728,7 @@ func (l *lockState) tryActiveWait(
 			// non-transactional request. Ignore the reservation.
 			return false, false
 		}
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
@@ -1817,7 +1881,7 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, sa spanset.SpanA
 		// Already locked by this txn.
 		return true
 	}
-	// NB: We do not look at the finalizedTxnCache in this optimistic evaluation
+	// NB: We do not look at the txnStatusCache in this optimistic evaluation
 	// path. A conflict with a finalized txn will be noticed when retrying
 	// pessimistically.
 
@@ -2180,9 +2244,14 @@ func removeIgnored(
 func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.tryUpdateLockLocked(*up)
+}
+
+// REQUIRES: l.mu is locked.
+func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bool) {
 	if l.isEmptyLock() {
 		// Already free. This can happen when an unreplicated lock is removed in
-		// tryActiveWait due to the txn being in the finalizedTxnCache.
+		// tryActiveWait due to the txn being in the txnStatusCache.
 		return false, true
 	}
 	if !l.isLockedBy(up.Txn.ID) {
@@ -2539,7 +2608,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
 	g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 	g.lt = t
-	g.txn = req.txnMeta()
+	g.txn = req.Txn
 	g.ts = req.Timestamp
 	g.spans = req.LockSpans
 	g.waitPolicy = req.WaitPolicy
@@ -2603,13 +2672,13 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 //
 // We discussed in
 // https://github.com/cockroachdb/cockroach/issues/62470#issuecomment-818374388
-// the possibility of consulting the finalizedTxnCache in AddDiscoveredLock,
+// the possibility of consulting the txnStatusCache in AddDiscoveredLock,
 // and not adding the lock if the txn is already finalized, and instead
 // telling the caller to do batched intent resolution before calling
 // ScanAndEnqueue.
 // This reduces memory pressure on the lockTableImpl in the extreme case of
 // huge numbers of discovered locks. Note that when there isn't memory
-// pressure, the consultation of the finalizedTxnCache in the ScanAndEnqueue
+// pressure, the consultation of the txnStatusCache in the ScanAndEnqueue
 // achieves the same batched intent resolution. Additionally, adding the lock
 // to the lock table allows it to coordinate the population of
 // lockTableGuardImpl.toResolve for different requests that encounter the same
@@ -2621,11 +2690,11 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 // For now we adopt the following heuristic: the caller calls DiscoveredLocks
 // with the count of locks discovered, prior to calling AddDiscoveredLock for
 // each of the locks. At that point a decision is made whether to consult the
-// finalizedTxnCache eagerly when adding discovered locks.
+// txnStatusCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
 	intent *roachpb.Intent,
 	seq roachpb.LeaseSequence,
-	consultFinalizedTxnCache bool,
+	consultTxnStatusCache bool,
 	guard lockTableGuard,
 ) (added bool, _ error) {
 	t.enabledMu.RLock()
@@ -2650,12 +2719,25 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	if err != nil {
 		return false, err
 	}
-	if consultFinalizedTxnCache {
-		finalizedTxn, ok := t.finalizedTxnCache.get(intent.Txn.ID)
+	if consultTxnStatusCache {
+		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(intent.Txn.ID)
 		if ok {
 			g.toResolve = append(
 				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
 			return true, nil
+		}
+
+		// If the discoverer is a non-locking read, also check whether the lock's
+		// holder is known to have been pushed above the reader's timestamp. See the
+		// comment in tryActiveWait for more details, including why we include the
+		// hasUncertaintyInterval condition.
+		if sa == spanset.SpanReadOnly && !g.hasUncertaintyInterval() && t.batchPushedLockResolution() {
+			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(intent.Txn.ID)
+			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
+				g.toResolve = append(
+					g.toResolve, roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: key}))
+				return true, nil
+			}
 		}
 	}
 	var l *lockState
@@ -2937,14 +3019,21 @@ func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 	return nil
 }
 
-// TransactionIsFinalized implements the lockTable interface.
-func (t *lockTableImpl) TransactionIsFinalized(txn *roachpb.Transaction) {
+// batchPushedLockResolution returns whether non-locking readers can defer and
+// batch resolution of conflicting locks whose holder is known to be pending and
+// have been pushed above the reader's timestamp.
+func (t *lockTableImpl) batchPushedLockResolution() bool {
+	return BatchPushedLockResolution.Get(&t.settings.SV)
+}
+
+// PushedTransactionUpdated implements the lockTable interface.
+func (t *lockTableImpl) PushedTransactionUpdated(txn *roachpb.Transaction) {
 	// TODO(sumeer): We don't take any action for requests that are already
 	// waiting on locks held by txn. They need to take some action, like
 	// pushing, and resume their scan, to notice the change to this txn. We
 	// could be more proactive if we knew which locks in lockTableImpl were held
 	// by txn.
-	t.finalizedTxnCache.add(txn)
+	t.txnStatusCache.add(txn)
 }
 
 // Enable implements the lockTable interface.
@@ -2975,9 +3064,9 @@ func (t *lockTableImpl) Clear(disable bool) {
 	}
 	// The numToClear=0 is arbitrary since it is unused when force=true.
 	t.tryClearLocks(true /* force */, 0)
-	// Also clear the finalized txn cache, since it won't be needed any time
+	// Also clear the txn status cache, since it won't be needed any time
 	// soon and consumes memory.
-	t.finalizedTxnCache.clear()
+	t.txnStatusCache.clear()
 }
 
 // QueryLockTableState implements the lockTable interface.
@@ -3084,7 +3173,7 @@ func (t *lockTableImpl) String() string {
 		for iter.First(); iter.Valid(); iter.Next() {
 			l := iter.Cur()
 			l.mu.Lock()
-			l.safeFormat(&sb, &t.finalizedTxnCache)
+			l.safeFormat(&sb, &t.txnStatusCache)
 			l.mu.Unlock()
 		}
 		tree.mu.RUnlock()

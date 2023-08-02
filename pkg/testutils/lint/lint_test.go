@@ -1367,7 +1367,10 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`nolint:yaml`),
+		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'yaml.UnmarshalStrict' instead", s)
 		}); err != nil {
 			t.Error(err)
@@ -1452,7 +1455,7 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}
-		ignore := `zcgo*|\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$`
+		ignore := `zcgo*|\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$|^sql/pgrepl/pgreplparser/pgrepl\.go$|^sql/plpgsql/parser/plpgsql\.go$`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)

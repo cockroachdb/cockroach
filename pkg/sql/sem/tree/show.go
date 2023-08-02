@@ -232,15 +232,15 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("CONCURRENTLY = ")
 		ctx.FormatNode(o.CheckConnectionConcurrency)
 	}
-	if o.CheckConnectionDuration != nil {
-		maybeAddSep()
-		ctx.WriteString("TIME = ")
-		ctx.FormatNode(o.CheckConnectionDuration)
-	}
 	if o.CheckConnectionTransferSize != nil {
 		maybeAddSep()
 		ctx.WriteString("TRANSFER = ")
 		ctx.FormatNode(o.CheckConnectionTransferSize)
+	}
+	if o.CheckConnectionDuration != nil {
+		maybeAddSep()
+		ctx.WriteString("TIME = ")
+		ctx.FormatNode(o.CheckConnectionDuration)
 	}
 }
 
@@ -1087,18 +1087,19 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 	ctx.WriteString("FOR TABLE ")
 	ctx.FormatNode(node.Table)
 	if len(node.Options) > 0 {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
-// ShowTenantOptions represents the WITH clause in SHOW TENANT.
+// ShowTenantOptions represents the WITH clause in SHOW VIRTUAL CLUSTER.
 type ShowTenantOptions struct {
 	WithReplication  bool
 	WithCapabilities bool
 }
 
-// ShowTenant represents a SHOW TENANT statement.
+// ShowTenant represents a SHOW VIRTUAL CLUSTER statement.
 type ShowTenant struct {
 	TenantSpec *TenantSpec
 	ShowTenantOptions
@@ -1106,7 +1107,7 @@ type ShowTenant struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTenant) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW TENANT ")
+	ctx.WriteString("SHOW VIRTUAL CLUSTER ")
 	ctx.FormatNode(node.TenantSpec)
 
 	withs := []string{}

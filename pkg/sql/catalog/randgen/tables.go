@@ -188,6 +188,16 @@ func (g *testSchemaGenerator) genOneTable(
 			colName := ng.GenerateOne(0)
 			tmpl.desc.Columns[i+1].Name = colName
 			tmpl.desc.Families[0].ColumnNames[i+1] = colName
+			for j := range tmpl.desc.PrimaryIndex.KeyColumnNames {
+				if tmpl.desc.PrimaryIndex.KeyColumnIDs[j] == tmpl.desc.Columns[i+1].ID {
+					tmpl.desc.PrimaryIndex.KeyColumnNames[j] = colName
+				}
+			}
+			for j := range tmpl.desc.PrimaryIndex.StoreColumnNames {
+				if tmpl.desc.PrimaryIndex.StoreColumnIDs[j] == tmpl.desc.Columns[i+1].ID {
+					tmpl.desc.PrimaryIndex.StoreColumnNames[j] = colName
+				}
+			}
 		}
 		ng := randident.NewNameGenerator(&nameGenCfg, g.rand, "primary")
 		idxName := ng.GenerateOne(0)

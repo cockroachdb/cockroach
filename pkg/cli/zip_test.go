@@ -297,6 +297,7 @@ create table defaultdb."../system"(x int);
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	skip.WithIssue(t, 107738, "flaky")
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
 	// unavailability.
@@ -374,8 +375,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `postgresql://...`)
 	re = regexp.MustCompile(`(?m)SQL address: .*$`)
 	out = re.ReplaceAllString(out, `SQL address: ...`)
-	re = regexp.MustCompile(`(?m)log file.*$`)
-	out = re.ReplaceAllString(out, `log file ...`)
+	re = regexp.MustCompile(`(?m)log file:.*$`)
+	out = re.ReplaceAllString(out, `log file: ...`)
 	re = regexp.MustCompile(`(?m)RPC connection to .*$`)
 	out = re.ReplaceAllString(out, `RPC connection to ...`)
 	re = regexp.MustCompile(`(?m)dial tcp .*$`)
@@ -392,6 +393,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `[node ?] ? heap profiles found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ goroutine dumps found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? goroutine dumps found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ log files found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? log files found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats).*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] writing profile.*$` + "\n")

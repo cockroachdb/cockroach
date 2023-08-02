@@ -31,4 +31,3 @@ GENYACC=$LANG-gen.y
         echo "$ret"; exit 1; \
       fi;
     rm $GENYACC
-    $6 -w $4

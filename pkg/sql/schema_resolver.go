@@ -489,7 +489,7 @@ func makeFunctionUndefinedError(
 ) error {
 	var lowerName tree.UnresolvedName
 	if fn.ExplicitSchema {
-		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]), strings.ToLower(name.Parts[1]))
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[1]), strings.ToLower(name.Parts[0]))
 	} else {
 		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
 	}

@@ -57,7 +57,7 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 	// - a per-store cache of recently detected abandoned transaction IDs
 	// - a per-range reverse index from transaction ID to locked keys
 	//
-	// EDIT: The finalizedTxnCache gets us part of the way here. It allows us to
+	// EDIT: The txnStatusCache gets us part of the way here. It allows us to
 	// pay the liveness push delay cost once per abandoned transaction per range
 	// instead of once per each of an abandoned transaction's locks. This helped
 	// us to feel comfortable increasing the default delay from the original
@@ -528,12 +528,10 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		return err
 	}
 
-	// If the transaction is finalized, add it to the finalizedTxnCache. This
-	// avoids needing to push it again if we find another one of its locks and
-	// allows for batching of intent resolution.
-	if pusheeTxn.Status.IsFinalized() {
-		w.lt.TransactionIsFinalized(pusheeTxn)
-	}
+	// If the transaction was pushed, add it to the txnStatusCache. This avoids
+	// needing to push it again if we find another one of its locks and allows for
+	// batching of intent resolution.
+	w.lt.PushedTransactionUpdated(pusheeTxn)
 
 	// If the push succeeded then the lock holder transaction must have
 	// experienced a state transition such that it no longer conflicts with
@@ -903,6 +901,40 @@ func watchForNotifications(ctx context.Context, cancel func(), newStateC chan st
 	}
 }
 
+// txnStatusCache is a small LRU cache that tracks the status of transactions
+// have been successfully pushed. The caches are partitioned into finalized and
+// pending transactions. Users are responsible for accessing the partition that
+// interests them.
+//
+// The zero value of this struct is ready for use.
+type txnStatusCache struct {
+	// finalizedTxns is a small LRU cache that tracks transactions that were
+	// pushed and found to be finalized (COMMITTED or ABORTED). It is used as an
+	// optimization to avoid repeatedly pushing the transaction record when
+	// cleaning up the intents of an abandoned transaction.
+	finalizedTxns txnCache
+
+	// pendingTxns is a small LRU cache that tracks transactions whose minimum
+	// commit timestamp was pushed but whose final status is not yet known. It is
+	// used an an optimization to avoid repeatedly pushing the transaction record
+	// when transaction priorities allow a pusher to move many intents of a
+	// lower-priority transaction.
+	pendingTxns txnCache
+}
+
+func (c *txnStatusCache) add(txn *roachpb.Transaction) {
+	if txn.Status.IsFinalized() {
+		c.finalizedTxns.add(txn)
+	} else {
+		c.pendingTxns.add(txn)
+	}
+}
+
+func (c *txnStatusCache) clear() {
+	c.finalizedTxns.clear()
+	c.pendingTxns.clear()
+}
+
 // txnCache is a small LRU cache that holds Transaction objects.
 //
 // The zero value of this struct is ready for use.
@@ -926,6 +958,11 @@ func (c *txnCache) add(txn *roachpb.Transaction) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
+		if curTxn := c.txns[idx]; txn.WriteTimestamp.Less(curTxn.WriteTimestamp) {
+			// If the new txn has a lower write timestamp than the cached txn,
+			// just move the cached txn to the front of the LRU cache.
+			txn = curTxn
+		}
 		c.moveFrontLocked(txn, idx)
 	} else {
 		c.insertFrontLocked(txn)

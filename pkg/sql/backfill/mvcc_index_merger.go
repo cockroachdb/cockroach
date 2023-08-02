@@ -136,11 +136,18 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 		return prog
 	}
 
+	var outputMu syncutil.Mutex
 	pushProgress := func() {
 		p := getStoredProgressForPush()
 		if p.CompletedSpans != nil {
 			log.VEventf(ctx, 2, "sending coordinator completed spans: %+v", p.CompletedSpans)
 		}
+		// Even though the contract of execinfra.RowReceiver says that Push is
+		// thread-safe, in reality it's not always the case, so we protect it
+		// with a mutex. At the time of writing, the only source of concurrency
+		// for Push()ing is present due to testing knobs though.
+		outputMu.Lock()
+		defer outputMu.Unlock()
 		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 

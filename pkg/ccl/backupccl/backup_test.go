@@ -791,7 +791,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP TO ($1,$2,$3) INCREMENTAL FROM $4", append(incrementals, backups[0])...)
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH incremental_location = ($4, $5, $6)",
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH OPTIONS (incremental_location = ($4, $5, $6))",
 		append(collections, incrementals...)...)
 
 	sqlDB.ExpectErr(t, "the incremental_location option must contain the same number of locality",
@@ -831,7 +831,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 				collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1,
 				collections[0], collections[1], collections[2])},
-			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
+			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
 				full1, collections[0], collections[1], collections[2], incrementals[0],
 				incrementals[1], incrementals[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') AS OF SYSTEM TIME '-1s'", asOf1, collections[0],
@@ -880,14 +880,14 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	resolvedAsOfCollectionURIs := getResolvedCollectionURIs(collections, asOf1)
 
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE'",
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE' ORDER BY created",
 		[][]string{
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				backups[0].(string), backups[1].(string), backups[2].(string))},
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
 				resolvedCollectionURIs[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1], resolvedCollectionURIs[2],
 				resolvedIncURIs[0], resolvedIncURIs[1], resolvedIncURIs[2])},
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
@@ -1291,7 +1291,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
-			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
+			`RESTORE TABLE bank FROM '%s', '%s' WITH OPTIONS (into_db = 'restoredb')`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
 		DescriptorIDs: descpb.IDs{
@@ -1378,7 +1378,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 				jobs.Record{
 					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
-						`BACKUP DATABASE data TO '%s' WITH %s`,
+						`BACKUP DATABASE data TO '%s' WITH OPTIONS (%s)`,
 						backupLoc1, sanitizedEncryptionOption),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
@@ -1397,7 +1397,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
-					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db = 'restoredb'`,
+					`RESTORE TABLE data.bank FROM '%s' WITH OPTIONS (%s, into_db = 'restoredb')`,
 					backupLoc1, sanitizedEncryptionOption,
 				),
 				DescriptorIDs: descpb.IDs{
@@ -3552,7 +3552,7 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO 'nodelocal://1/foo' WITH revision_history`)
 	require.Contains(t, fmt.Sprint(err), msg)
 
-	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://1/bar' WITH revision_history, include_all_secondary_tenants`)
+	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://1/bar' WITH revision_history, include_all_virtual_clusters`)
 	require.Contains(t, fmt.Sprint(err), msg)
 }
 
@@ -5687,8 +5687,8 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND description != 'updating privileges' ORDER BY description",
 		[][]string{
-			{"BACKUP DATABASE data TO 'nodelocal://1/foo' WITH revision_history = true"},
-			{"RESTORE TABLE data.bank FROM 'nodelocal://1/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
+			{"BACKUP DATABASE data TO 'nodelocal://1/foo' WITH OPTIONS (revision_history = true)"},
+			{"RESTORE TABLE data.bank FROM 'nodelocal://1/foo' WITH OPTIONS (into_db = 'data 2', skip_missing_foreign_keys)"},
 		},
 	)
 }
@@ -6683,7 +6683,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 		defer httpServerCleanup()
 
-		systemDB.Exec(t, `BACKUP TO $1 WITH include_all_secondary_tenants`, httpAddr)
+		systemDB.Exec(t, `BACKUP TO $1 WITH include_all_virtual_clusters`, httpAddr)
 
 		tenant20C2, cleanupT20C2 := makeTenant(srv2, 20)
 		defer cleanupT20C2()
@@ -6693,7 +6693,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 				// This is disallowed because the cluster restore includes other
 				// tenants, which can't be restored inside a tenant.
 				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
-					`RESTORE FROM $1 WITH include_all_secondary_tenants`, httpAddr)
+					`RESTORE FROM $1 WITH include_all_virtual_clusters`, httpAddr)
 			})
 
 			t.Run("with-no-tenant", func(t *testing.T) {
@@ -6753,13 +6753,13 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TO $1`, backup2HttpAddr)
 
 	t.Run("cluster-restore-into-tenant-with-tenant-settings-succeeds", func(t *testing.T) {
-		tenant2C2.Exec(t, `RESTORE FROM $1 WITH include_all_secondary_tenants`, backup2HttpAddr)
+		tenant2C2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
 	})
 
 	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupDB2()
 	t.Run("cluster-restore-into-cluster-with-tenant-settings-succeeds", func(t *testing.T) {
-		systemDB2.Exec(t, `RESTORE FROM $1 WITH include_all_secondary_tenants`, backup2HttpAddr)
+		systemDB2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
 		systemDB2.CheckQueryResults(t, `SELECT * FROM system.tenant_settings`, systemDB.QueryStr(t, `SELECT * FROM system.tenant_settings`))
 	})
 }
@@ -6862,7 +6862,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 		defer httpServerCleanup()
 
-		systemDB.Exec(t, `BACKUP TO $1 WITH include_all_secondary_tenants`, httpAddr)
+		systemDB.Exec(t, `BACKUP TO $1 WITH include_all_virtual_clusters`, httpAddr)
 
 		tenant20C2, cleanupT20C2 := makeTenant(srv2, 20, false)
 		defer cleanupT20C2()
@@ -6872,7 +6872,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 				// This is disallowed because the cluster restore includes other
 				// tenants, which can't be restored inside a tenant.
 				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
-					`RESTORE FROM $1 WITH include_all_secondary_tenants`, httpAddr)
+					`RESTORE FROM $1 WITH include_all_virtual_clusters`, httpAddr)
 			})
 
 			t.Run("with-no-tenant", func(t *testing.T) {
@@ -6973,12 +6973,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 	// BACKUP tenant 10 at ts1, before they created bar2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 	// Also create a full cluster backup. It should contain the tenant.
-	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_secondary_tenants", ts1))
+	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_virtual_clusters", ts1))
 
 	// Incrementally backup tenant 10 again, capturing up to ts2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts2)
 	// Run full cluster backup incrementally to ts2 as well.
-	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_secondary_tenants", ts2))
+	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_virtual_clusters", ts2))
 
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
@@ -7246,7 +7246,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 			})
-		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide' WITH include_all_secondary_tenants`)
+		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide' WITH include_all_virtual_clusters`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
@@ -7303,7 +7303,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `DROP TENANT [20] IMMEDIATE`)
 
-		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant_name = 'tenant-20'`)
+		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'tenant-20'`)
 		_, restoreConn20 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantName: "tenant-20", DisableCreateTenant: true},
 		)
@@ -7317,7 +7317,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		// Remove tenant 11, then confirm restoring 11 over 10 fails.
 		restoreDB.Exec(t, `DROP TENANT [11] IMMEDIATE`)
-		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant_name = 'tenant-10'`)
+		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'tenant-10'`)
 
 		// Verify tenant 20 is still unaffected.
 		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
@@ -9672,7 +9672,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 			MustMakeTenantID(10)})
 		require.NoError(t, err)
 	}
-	sqlDB.Exec(t, `BACKUP INTO $1 WITH include_all_secondary_tenants`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH include_all_virtual_clusters`, localFoo)
 
 	for _, subtest := range []struct {
 		name        string
@@ -9680,11 +9680,11 @@ func TestProtectRestoreTargets(t *testing.T) {
 	}{
 		{
 			name:        "tenant",
-			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant_name = 'tenant-20'`,
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, virtual_cluster_name = 'tenant-20'`,
 		},
 		{
 			name:        "tenantid",
-			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant = '20', tenant_name = 'othername'`,
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, virtual_cluster = '20', virtual_cluster_name = 'othername'`,
 		},
 		{
 			name:        "database",

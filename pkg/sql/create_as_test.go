@@ -137,9 +137,6 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW CREATE TABLE show_create_tbl",
 			setup: "CREATE TABLE show_create_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_create_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW CREATE FUNCTION show_create_fn",
@@ -157,23 +154,14 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW INDEXES FROM show_indexes_tbl",
 			setup: "CREATE TABLE show_indexes_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_indexes_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW COLUMNS FROM show_columns_tbl",
 			setup: "CREATE TABLE show_columns_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_columns_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW CONSTRAINTS FROM show_constraints_tbl",
 			setup: "CREATE TABLE show_constraints_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_constraints_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql: "SHOW PARTITIONS FROM DATABASE defaultdb",
@@ -181,16 +169,10 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW PARTITIONS FROM TABLE show_partitions_tbl",
 			setup: "CREATE TABLE show_partitions_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_partitions_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql:   "SHOW PARTITIONS FROM INDEX show_partitions_idx_tbl@show_partitions_idx_tbl_pkey",
 			setup: "CREATE TABLE show_partitions_idx_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `relation "show_partitions_idx_tbl" does not exist` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106260.
-			skip: true,
 		},
 		{
 			sql: "SHOW GRANTS",
@@ -216,9 +198,6 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW RANGE FROM TABLE show_ranges_tbl FOR ROW (0)",
 			setup: "CREATE TABLE show_ranges_tbl (id int PRIMARY KEY)",
-			// TODO(sql-foundations): Fix `invalid memory address or nil pointer dereference` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106397.
-			skip: true,
 		},
 		{
 			sql: "SHOW SURVIVAL GOAL FROM DATABASE",
@@ -320,4 +299,71 @@ FROM [SHOW JOBS]
 WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
 AND status != 'succeeded'`
 	sqlRunner.CheckQueryResultsRetry(t, query, [][]string{})
+}
+
+func TestFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		sql            string
+		setup          string
+		expectedFormat string
+	}{
+		{
+			sql:            "CREATE TABLE ctas_implicit_columns_tbl AS SELECT * FROM ctas_implicit_columns_source_tbl",
+			setup:          "CREATE TABLE ctas_implicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE TABLE defaultdb.public.ctas_implicit_columns_tbl (id) AS SELECT * FROM defaultdb.public.ctas_implicit_columns_source_tbl",
+		},
+		{
+			sql:            "CREATE TABLE ctas_explicit_columns_tbl (id) AS SELECT * FROM ctas_explicit_columns_source_tbl",
+			setup:          "CREATE TABLE ctas_explicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE TABLE defaultdb.public.ctas_explicit_columns_tbl (id) AS SELECT * FROM defaultdb.public.ctas_explicit_columns_source_tbl",
+		},
+		{
+			sql:            "CREATE MATERIALIZED VIEW cmvas_implicit_columns_tbl AS SELECT * FROM cmvas_implicit_columns_source_tbl",
+			setup:          "CREATE TABLE cmvas_implicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE MATERIALIZED VIEW defaultdb.public.cmvas_implicit_columns_tbl AS SELECT cmvas_implicit_columns_source_tbl.id FROM defaultdb.public.cmvas_implicit_columns_source_tbl WITH DATA",
+		},
+		{
+			sql:            "CREATE MATERIALIZED VIEW cmvas_explicit_columns_tbl (id2) AS SELECT * FROM cmvas_explicit_columns_source_tbl",
+			setup:          "CREATE TABLE cmvas_explicit_columns_source_tbl (id int PRIMARY KEY)",
+			expectedFormat: "CREATE MATERIALIZED VIEW defaultdb.public.cmvas_explicit_columns_tbl (id2) AS SELECT cmvas_explicit_columns_source_tbl.id FROM defaultdb.public.cmvas_explicit_columns_source_tbl WITH DATA",
+		},
+	}
+
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	var p parser.Parser
+
+	for _, tc := range testCases {
+		t.Run(tc.sql, func(t *testing.T) {
+			sqlRunner.Exec(t, tc.setup)
+			sqlRunner.Exec(t, tc.sql)
+
+			statements, err := p.Parse(tc.sql)
+			require.NoError(t, err)
+			require.Len(t, statements, 1)
+			var name string
+			switch stmt := statements[0].AST.(type) {
+			case *tree.CreateTable:
+				name = stmt.Table.Table()
+			case *tree.CreateView:
+				name = stmt.Name.Table()
+			default:
+				require.Failf(t, "missing case", "unexpected type %T", stmt)
+			}
+			// Filter description starting with CREATE to filter out CMVAS
+			// "updating view reference" job.
+			query := fmt.Sprintf(
+				`SELECT description
+FROM [SHOW JOBS]
+WHERE job_type IN ('SCHEMA CHANGE', 'NEW SCHEMA CHANGE')
+AND description LIKE 'CREATE%%%s%%'`,
+				name,
+			)
+			sqlRunner.CheckQueryResults(t, query, [][]string{{tc.expectedFormat}})
+		})
+	}
 }

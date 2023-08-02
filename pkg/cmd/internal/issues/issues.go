@@ -17,9 +17,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
@@ -113,7 +113,7 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 type poster struct {
 	*Options
 
-	l *logger.Logger
+	l Logger
 
 	createIssue func(ctx context.Context, owner string, repo string,
 		issue *github.IssueRequest) (*github.Issue, *github.Response, error)
@@ -129,7 +129,7 @@ type poster struct {
 		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
-func newPoster(l *logger.Logger, client *github.Client, opts *Options) *poster {
+func newPoster(l Logger, client *github.Client, opts *Options) *poster {
 	return &poster{
 		Options:           opts,
 		l:                 l,
@@ -331,7 +331,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		rRelated = &github.IssuesSearchResult{}
 	}
 
-	existingIssues := filterByExactTitleMatch(rExisting, title)
+	existingIssues := filterByPrefixTitleMatch(rExisting, title)
 	var foundIssue *int
 	if len(existingIssues) > 0 {
 		// We found an existing issue to post a comment into.
@@ -342,7 +342,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		data.MentionOnCreate = nil
 	}
 
-	data.RelatedIssues = filterByExactTitleMatch(rRelated, title)
+	data.RelatedIssues = filterByPrefixTitleMatch(rRelated, title)
 	data.InternalLog = ctx.Builder.String()
 	r := &Renderer{}
 	if err := formatter.Body(r, data); err != nil {
@@ -451,11 +451,20 @@ type PostRequest struct {
 	ProjectColumnID int
 }
 
+// Logger is an interface that allows callers to plug their own log
+// implementation when they post GitHub issues. It avoids us having to
+// link against heavy dependencies in certain cases (such as in
+// `bazci`) while still allowing other callers (such as `roachtest`)
+// to use other logger implementations.
+type Logger interface {
+	Printf(format string, args ...interface{})
+}
+
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, l *logger.Logger, formatter IssueFormatter, req PostRequest) error {
+func Post(ctx context.Context, l Logger, formatter IssueFormatter, req PostRequest) error {
 	opts := DefaultOptionsFromEnv()
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
@@ -492,18 +501,19 @@ func HelpCommandAsLink(title, href string) func(r *Renderer) {
 	}
 }
 
-// filterByExactTitleMatch filters the search result passed and
-// removes any issues where the title does not match the expected
-// title exactly. This is done because the GitHub API does not support
-// searching by exact title; as a consequence, without this function,
-// there is a chance we would group together test failures for two
-// similarly named tests. That is confusing and undesirable behavior.
-func filterByExactTitleMatch(
+// filterByPrefixTitleMatch filters the search result passed and removes any
+// issues where the title does not match the expected title, optionally followed
+// by whitespace. This is done because the GitHub API does not support searching
+// by exact title; as a consequence, without this function, there is a chance we
+// would group together test failures for two similarly named tests. That is
+// confusing and undesirable behavior.
+func filterByPrefixTitleMatch(
 	result *github.IssuesSearchResult, expectedTitle string,
 ) []github.Issue {
+	expectedTitleRegex := regexp.MustCompile(`^` + regexp.QuoteMeta(expectedTitle) + `(\s+|$)`)
 	var issues []github.Issue
 	for _, issue := range result.Issues {
-		if title := issue.Title; title != nil && *title == expectedTitle {
+		if title := issue.Title; title != nil && expectedTitleRegex.MatchString(*title) {
 			issues = append(issues, issue)
 		}
 	}

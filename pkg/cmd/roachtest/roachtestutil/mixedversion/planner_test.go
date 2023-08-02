@@ -45,20 +45,8 @@ var (
 
 	// Hardcode build and previous versions so that the test won't fail
 	// when new versions are released.
-	buildVersion = func() version.Version {
-		bv, err := version.Parse("v23.1.0")
-		if err != nil {
-			panic(err)
-		}
-		return *bv
-	}()
-	previousVersion = func() string {
-		pv, err := version.PredecessorVersion(buildVersion)
-		if err != nil {
-			panic(err)
-		}
-		return pv
-	}()
+	buildVersion       = version.MustParse("v23.1.0")
+	predecessorVersion = "22.2.8"
 )
 
 const (
@@ -119,8 +107,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 │   └── restart node 3 with binary version <current> (26)
 ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
 └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (28)
-`, previousVersion,
-	)
+`, predecessorVersion)
 
 	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
 	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
@@ -279,14 +266,22 @@ func newTest(options ...customOption) *Test {
 
 	prng := rand.New(rand.NewSource(seed))
 	return &Test{
-		ctx:           ctx,
-		logger:        nilLogger,
-		crdbNodes:     nodes,
-		options:       testOptions,
-		_buildVersion: buildVersion,
-		prng:          prng,
-		hooks:         &testHooks{prng: prng, crdbNodes: nodes},
+		ctx:             ctx,
+		logger:          nilLogger,
+		crdbNodes:       nodes,
+		options:         testOptions,
+		_buildVersion:   buildVersion,
+		prng:            prng,
+		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
+		predecessorFunc: testPredecessorFunc,
 	}
+}
+
+// Always use the same predecessor version to make this test
+// deterministic even as changes continue to happen in the
+// cockroach_releases.yaml file.
+func testPredecessorFunc(rng *rand.Rand, v *version.Version) (string, error) {
+	return predecessorVersion, nil
 }
 
 // requireConcurrentHooks asserts that the given step is a concurrent

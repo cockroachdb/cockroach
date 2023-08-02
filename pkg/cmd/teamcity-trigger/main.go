@@ -108,6 +108,17 @@ func main() {
 }
 
 func runTC(queueBuild func(string, map[string]string)) {
+	// queueBuildThenWait sets a limit on the rate at which we trigger TC stress
+	// build config to avoid overloading TC [see DEVINF-834].
+	currentTriggerCount := 0
+	queueBuildThenWait := func(buildID string, opts map[string]string) {
+		if currentTriggerCount == 20 {
+			currentTriggerCount = 0
+			time.Sleep(time.Minute * 10)
+		}
+		currentTriggerCount += 1
+		queueBuild(buildID, opts)
+	}
 	targets, err := exec.Command("bazel", "query", "kind(go_test, //pkg/...)", "--output=label").Output()
 	if err != nil {
 		log.Fatal(err)
@@ -115,6 +126,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 	// Queue stress builds. One per configuration per test target.
 	for _, testTarget := range strings.Split(string(targets), "\n") {
 		testTarget = strings.TrimSpace(testTarget)
+		if testTarget == "" {
+			continue
+		}
 		// By default, run each package for up to 100 iterations.
 		maxRuns := 100
 		maxTime := getMaxTime(testTarget)
@@ -163,11 +177,11 @@ func runTC(queueBuild func(string, map[string]string)) {
 
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, parallelism)
-		queueBuild(buildID, opts)
+		queueBuildThenWait(buildID, opts)
 
 		// Run non-race build with deadlock detection.
 		opts["env.TAGS"] = "deadlock"
-		queueBuild(buildID, opts)
+		queueBuildThenWait(buildID, opts)
 		delete(opts, "env.TAGS")
 
 		// Run race build. With run with -p 1 to avoid overloading the machine.
@@ -179,7 +193,7 @@ func runTC(queueBuild func(string, map[string]string)) {
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, noParallelism)
 		opts["env.TAGS"] = "race"
-		queueBuild(buildID, opts)
+		queueBuildThenWait(buildID, opts)
 		delete(opts, "env.TAGS")
 	}
 }

@@ -272,9 +272,6 @@ func TestClusterInflightTraces(t *testing.T) {
 				for i, s := range tc.Servers {
 					tenant, db, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
 					require.NoError(t, err)
-					defer func() {
-						require.NoError(t, db.Close())
-					}()
 					tenants[i] = tenant
 					dbs[i] = db
 				}

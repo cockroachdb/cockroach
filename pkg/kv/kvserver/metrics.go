@@ -163,6 +163,19 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaseViolatingPreferencesCount = metric.Metadata{
+		Name:        "leases.preferences.violating",
+		Help:        "Number of replica leaseholders which violate lease preferences",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseLessPreferredCount = metric.Metadata{
+		Name: "leases.preferences.less-preferred",
+		Help: "Number of replica leaseholders which satisfy a lease " +
+			"preference which is not the most preferred",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{
@@ -978,6 +991,12 @@ var (
 		Measurement: "Leader Transfers",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeRaftLeaderRemovals = metric.Metadata{
+		Name:        "range.raftleaderremovals",
+		Help:        "Number of times the current Raft leader was removed from a range",
+		Measurement: "Raft leader removals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeLossOfQuorumRecoveries = metric.Metadata{
 		Name: "range.recoveries",
 		Help: `Count of offline loss of quorum recovery operations performed on ranges.
@@ -1159,6 +1178,34 @@ of processing.
 		Help:        "Number of Raft replicas campaigning after missed heartbeats from leader",
 		Measurement: "Elections called after timeout",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftStorageReadBytes = metric.Metadata{
+		Name: "raft.storage.read_bytes",
+		Help: `Counter of raftpb.Entry.Size() read from pebble for raft log entries.
+
+These are the bytes returned from the (raft.Storage).Entries method that were not
+returned via the raft entry cache. This metric plus the raft.entrycache.read_bytes
+metric represent the total bytes returned from the Entries method.
+
+Since pebble might serve these entries from the block cache, only a fraction of this
+throughput might manifest in disk metrics.
+
+Entries tracked in this metric incur an unmarshalling-related CPU and memory
+overhead that would not be incurred would the entries be served from the raft
+entry cache.
+
+The bytes returned here do not correspond 1:1 to bytes read from pebble. This
+metric measures the in-memory size of the raftpb.Entry, whereas we read its
+encoded representation from pebble. As there is no compression involved, these
+will generally be comparable.
+
+A common reason for elevated measurements on this metric is that a store is
+falling behind on raft log application. The raft entry cache generally tracks
+entries that were recently appended, so if log application falls behind the
+cache will already have moved on to newer entries.
+`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
 	}
 
 	// Raft message metrics.
@@ -1970,14 +2017,16 @@ type StoreMetrics struct {
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
-	LeaseRequestSuccessCount  *metric.Counter
-	LeaseRequestErrorCount    *metric.Counter
-	LeaseRequestLatency       metric.IHistogram
-	LeaseTransferSuccessCount *metric.Counter
-	LeaseTransferErrorCount   *metric.Counter
-	LeaseExpirationCount      *metric.Gauge
-	LeaseEpochCount           *metric.Gauge
-	LeaseLivenessCount        *metric.Gauge
+	LeaseRequestSuccessCount       *metric.Counter
+	LeaseRequestErrorCount         *metric.Counter
+	LeaseRequestLatency            metric.IHistogram
+	LeaseTransferSuccessCount      *metric.Counter
+	LeaseTransferErrorCount        *metric.Counter
+	LeaseExpirationCount           *metric.Gauge
+	LeaseEpochCount                *metric.Gauge
+	LeaseLivenessCount             *metric.Gauge
+	LeaseViolatingPreferencesCount *metric.Gauge
+	LeaseLessPreferredCount        *metric.Gauge
 
 	// Storage metrics.
 	ResolveCommitCount *metric.Counter
@@ -2105,6 +2154,7 @@ type StoreMetrics struct {
 	RangeAdds                   *metric.Counter
 	RangeRemoves                *metric.Counter
 	RangeRaftLeaderTransfers    *metric.Counter
+	RangeRaftLeaderRemovals     *metric.Counter
 	RangeLossOfQuorumRecoveries *metric.Counter
 
 	// Range snapshot metrics.
@@ -2149,6 +2199,7 @@ type StoreMetrics struct {
 	RaftApplyCommittedLatency metric.IHistogram
 	RaftSchedulerLatency      metric.IHistogram
 	RaftTimeoutCampaign       *metric.Counter
+	RaftStorageReadBytes      *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -2571,13 +2622,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaLeaseRequestLatency,
 			Duration: histogramWindow,
-			Buckets:  metric.NetworkLatencyBuckets,
+			Buckets:  metric.IOLatencyBuckets,
 		}),
-		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
-		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
-		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
-		LeaseEpochCount:           metric.NewGauge(metaLeaseEpochCount),
-		LeaseLivenessCount:        metric.NewGauge(metaLeaseLivenessCount),
+		LeaseTransferSuccessCount:      metric.NewCounter(metaLeaseTransferSuccessCount),
+		LeaseTransferErrorCount:        metric.NewCounter(metaLeaseTransferErrorCount),
+		LeaseExpirationCount:           metric.NewGauge(metaLeaseExpirationCount),
+		LeaseEpochCount:                metric.NewGauge(metaLeaseEpochCount),
+		LeaseLivenessCount:             metric.NewGauge(metaLeaseLivenessCount),
+		LeaseViolatingPreferencesCount: metric.NewGauge(metaLeaseViolatingPreferencesCount),
+		LeaseLessPreferredCount:        metric.NewGauge(metaLeaseLessPreferredCount),
 
 		// Intent resolution metrics.
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
@@ -2713,6 +2766,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotSendTotalInProgress:             metric.NewGauge(metaRangeSnapshotSendTotalInProgress),
 		RangeSnapshotRecvTotalInProgress:             metric.NewGauge(metaRangeSnapshotRecvTotalInProgress),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeRaftLeaderRemovals:                      metric.NewCounter(metaRangeRaftLeaderRemovals),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 		DelegateSnapshotSendBytes:                    metric.NewCounter(metaDelegateSnapshotSendBytes),
 		DelegateSnapshotSuccesses:                    metric.NewCounter(metaDelegateSnapshotSuccesses),
@@ -2761,7 +2815,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
-		RaftTimeoutCampaign: metric.NewCounter(metaRaftTimeoutCampaign),
+		RaftTimeoutCampaign:  metric.NewCounter(metaRaftTimeoutCampaign),
+		RaftStorageReadBytes: metric.NewCounter(metaRaftStorageReadBytes),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{

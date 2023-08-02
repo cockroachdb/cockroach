@@ -84,8 +84,10 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
+	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
+	return ents, err
 }
 
 // raftEntriesLocked requires that r.mu is held for writing.
@@ -617,8 +619,10 @@ func (r *Replica) applySnapshot(
 	if isInitialSnap {
 		// NB: this will also call setDescLockedRaftMuLocked.
 		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
+			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
+			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 		}
 	} else {

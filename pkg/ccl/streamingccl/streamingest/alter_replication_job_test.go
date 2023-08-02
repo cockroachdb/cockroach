@@ -114,7 +114,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	cleanupTenant := c.CreateDestTenantSQL(ctx)
+	cleanupTenant := c.StartDestTenant(ctx)
 	defer func() {
 		require.NoError(t, cleanupTenant())
 	}()
@@ -133,8 +133,8 @@ func TestAlterTenantPauseResume(t *testing.T) {
 
 	t.Run("pause-resume-in-readonly-txn", func(t *testing.T) {
 		c.DestSysSQL.Exec(t, `set default_transaction_read_only = on;`)
-		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER TENANT REPLICATION in a read-only transaction", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
-		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER TENANT REPLICATION in a read-only transaction", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
+		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER VIRTUAL CLUSTER REPLICATION in a read-only transaction", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
+		c.DestSysSQL.ExpectErr(t, "cannot execute ALTER VIRTUAL CLUSTER REPLICATION in a read-only transaction", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 		c.DestSysSQL.Exec(t, `set default_transaction_read_only = off;`)
 	})
 

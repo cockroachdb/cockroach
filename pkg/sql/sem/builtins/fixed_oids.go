@@ -2384,6 +2384,7 @@ var builtinOidsArray = []string{
 	2452: `crdb_internal.repaired_descriptor(descriptor: bytes, valid_descriptor_ids: int[], valid_job_ids: int[]) -> bytes`,
 	2453: `crdb_internal.reset_activity_tables() -> bool`,
 	2455: `crdb_internal.repair_catalog_corruption(descriptor_id: int, corruption: string) -> bool`,
+	2456: `crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

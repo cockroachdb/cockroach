@@ -130,7 +130,7 @@ func (p *planner) maybeLogStatement(
 	queryStats *topLevelQueryStats,
 	statsCollector sqlstats.StatsCollector,
 ) {
-	p.maybeAuditRoleBasedAuditEvent(ctx)
+	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
 		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
@@ -164,8 +164,10 @@ func (p *planner) maybeLogStatementInternal(
 	auditEventsDetected := len(p.curPlan.auditEventBuilders) != 0
 	maxEventFrequency := TelemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
 
-	// We only consider non-internal SQL statements for telemetry logging.
-	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
+	// We only consider non-internal SQL statements for telemetry logging unless
+	// the telemetryInternalQueriesEnabled is true.
+	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) &&
+		(execType == executorTypeExec || telemetryInternalQueriesEnabled.Get(&p.execCfg.Settings.SV))
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -356,7 +358,7 @@ func (p *planner) maybeLogStatementInternal(
 				ApplyJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
 				ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
-				Regions:                               p.curPlan.instrumentation.regions,
+				Regions:                               queryLevelStats.Regions,
 				NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
