@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -241,6 +242,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 					}
 					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
+
+				// If the waiter has priority or an Error wait policy, resolve the
+				// conflict immediately without waiting.
 				if priorityPush || waitPolicyPush {
 					delay = 0
 				}
@@ -450,41 +454,12 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	h := w.pushHeader(req)
 	var pushType kvpb.PushTxnType
 	var beforePushObs roachpb.ObservedTimestamp
-	switch req.WaitPolicy {
-	case lock.WaitPolicy_Block:
-		// This wait policy signifies that the request wants to wait until the
-		// conflicting lock is released. For read-write conflicts, try to push
-		// the lock holder's timestamp forward so the read request can read
-		// under the lock. For write-write conflicts, try to abort the lock
-		// holder entirely so the write request can revoke and replace the lock
-		// with its own lock.
-		if ws.guardStrength == lock.None {
-			pushType = kvpb.PUSH_TIMESTAMP
-			beforePushObs = roachpb.ObservedTimestamp{
-				NodeID:    w.nodeDesc.NodeID,
-				Timestamp: w.clock.NowAsClockTimestamp(),
-			}
-			// TODO(nvanbenschoten): because information about the local_timestamp
-			// leading the MVCC timestamp of an intent is lost, we also need to push
-			// the intent up to the top of the transaction's local uncertainty limit
-			// on this node. This logic currently lives in pushHeader, but we could
-			// simplify it when removing synthetic timestamps and then move it out
-			// here.
-			//
-			// We could also explore adding a preserve_local_timestamp flag to
-			// MVCCValue that would explicitly storage the local timestamp even in
-			// cases where it would normally be omitted. This could be set during
-			// intent resolution when a push observation is provided. Or we could
-			// not persist this, but still preserve the local timestamp when the
-			// adjusting the intent, accepting that the intent would then no longer
-			// round-trip and would lose the local timestamp if rewritten later.
-			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.Short(), h.Timestamp)
-		} else {
-			pushType = kvpb.PUSH_ABORT
-			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.Short())
-		}
-
-	case lock.WaitPolicy_Error:
+	// For read-write conflicts, try to push the lock holder's timestamp forward
+	// so the read request can read under the lock. For write-write conflicts, try
+	// to abort the lock holder entirely so the write request can revoke and
+	// replace the lock with its own lock.
+	if req.WaitPolicy == lock.WaitPolicy_Error &&
+		!w.st.Version.IsActive(ctx, clusterversion.V23_2_RemoveLockTableWaiterTouchPush) {
 		// This wait policy signifies that the request wants to raise an error
 		// upon encountering a conflicting lock. We still need to push the lock
 		// holder to ensure that it is active and that this isn't an abandoned
@@ -492,9 +467,30 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// if the lock hold is still active.
 		pushType = kvpb.PUSH_TOUCH
 		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.Short())
-
-	default:
-		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
+	} else if ws.guardStrength == lock.None {
+		pushType = kvpb.PUSH_TIMESTAMP
+		beforePushObs = roachpb.ObservedTimestamp{
+			NodeID:    w.nodeDesc.NodeID,
+			Timestamp: w.clock.NowAsClockTimestamp(),
+		}
+		// TODO(nvanbenschoten): because information about the local_timestamp
+		// leading the MVCC timestamp of an intent is lost, we also need to push
+		// the intent up to the top of the transaction's local uncertainty limit
+		// on this node. This logic currently lives in pushHeader, but we could
+		// simplify it when removing synthetic timestamps and then move it out
+		// here.
+		//
+		// We could also explore adding a preserve_local_timestamp flag to
+		// MVCCValue that would explicitly storage the local timestamp even in
+		// cases where it would normally be omitted. This could be set during
+		// intent resolution when a push observation is provided. Or we could
+		// not persist this, but still preserve the local timestamp when the
+		// adjusting the intent, accepting that the intent would then no longer
+		// round-trip and would lose the local timestamp if rewritten later.
+		log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.Short(), h.Timestamp)
+	} else {
+		pushType = kvpb.PUSH_ABORT
+		log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.Short())
 	}
 
 	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
@@ -741,6 +737,7 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) kvpb.Header {
 	h := kvpb.Header{
 		Timestamp:    req.Timestamp,
 		UserPriority: req.NonTxnPriority,
+		WaitPolicy:   req.WaitPolicy,
 	}
 	if req.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to
@@ -839,9 +836,9 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 // The push may have timed out before this point due to a slow network, slow
 // CPU, or for some other reason. But just like with WaitPolicy_Error, we don't
 // want to throw a WriteIntentError on abandoned locks. So on timeout, we issue
-// a PUSH_TOUCH request (like we do for WaitPolicy_Error) that is not subject to
-// the lock_timeout to check with certainty whether the conflict is active or
-// not, but without blocking if it happens to be active.
+// a new request with WaitPolicy_Error that is not subject to the lock_timeout
+// to check with certainty whether the conflict is active or not, but without
+// blocking if it happens to be active.
 func doWithTimeoutAndFallback(
 	ctx context.Context,
 	timeout time.Duration,
