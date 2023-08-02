@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
@@ -88,7 +89,10 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 
 func (s *testStream) BlockSend() func() {
 	s.mu.Lock()
-	return s.mu.Unlock
+	var once sync.Once
+	return func() {
+		once.Do(s.mu.Unlock) // safe to call multiple times, e.g. defer and explicit
+	}
 }
 
 type testRegistration struct {
@@ -119,6 +123,7 @@ func newTestRegistration(
 		makeCatchUpIteratorConstructor(catchup),
 		withDiff,
 		5,
+		false, /* blockWhenFull */
 		NewMetrics(),
 		s,
 		func() {},

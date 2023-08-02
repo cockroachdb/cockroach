@@ -142,6 +142,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *kvpb.RangeFeedEve
 }
 
 const testProcessorEventCCap = 16
+const testProcessorEventCTimeout = 10 * time.Millisecond
 
 func newTestProcessorWithTxnPusher(
 	t *testing.T, rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
@@ -161,6 +162,7 @@ func newTestProcessorWithTxnPusher(
 		TxnPusher:        txnPusher,
 		PushTxnsInterval: pushTxnInterval,
 		PushTxnsAge:      pushTxnAge,
+		EventChanTimeout: testProcessorEventCTimeout,
 		EventChanCap:     testProcessorEventCCap,
 		Metrics:          NewMetrics(),
 	})
@@ -1128,6 +1130,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		PushTxnsInterval: pushTxnInterval,
 		PushTxnsAge:      pushTxnAge,
 		EventChanCap:     channelCapacity,
+		EventChanTimeout: time.Millisecond,
 		MemBudget:        fb,
 		Metrics:          NewMetrics(),
 	})
@@ -1218,6 +1221,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		PushTxnsInterval: pushTxnInterval,
 		PushTxnsAge:      pushTxnAge,
 		EventChanCap:     channelCapacity,
+		EventChanTimeout: time.Millisecond,
 		MemBudget:        fb,
 		Metrics:          NewMetrics(),
 	})
@@ -1297,6 +1301,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		PushTxnsInterval: pushTxnInterval,
 		PushTxnsAge:      pushTxnAge,
 		EventChanCap:     channelCapacity,
+		EventChanTimeout: time.Millisecond,
 		MemBudget:        fb,
 		Metrics:          NewMetrics(),
 	})
@@ -1457,4 +1462,82 @@ func TestSizeOfEvent(t *testing.T) {
 	var e event
 	size := int(unsafe.Sizeof(e))
 	require.Equal(t, 72, size)
+}
+
+// TestProcessorBackpressure tests that a processor with EventChanTimeout set to
+// 0 will backpressure senders when a consumer isn't keeping up.
+func TestProcessorBackpressure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
+
+	// Set up processor.
+	p := NewProcessor(Config{
+		AmbientContext:   log.MakeTestingAmbientContext(nil),
+		Clock:            hlc.NewClockForTesting(nil),
+		Metrics:          NewMetrics(),
+		Span:             span,
+		MemBudget:        newTestBudget(math.MaxInt64),
+		EventChanCap:     1,
+		EventChanTimeout: 0,
+	})
+	require.NoError(t, p.Start(stopper, nil))
+	defer p.Stop()
+
+	// Add a registration.
+	stream := newTestStream()
+	done := &future.ErrorFuture{}
+	ok, _ := p.Register(span, hlc.MinTimestamp, nil, false, stream, nil, done)
+	require.True(t, ok)
+
+	// Wait for the initial checkpoint.
+	p.syncEventAndRegistrations()
+	require.Len(t, stream.Events(), 1)
+
+	// Block the registration consumer, and spawn a goroutine to post events to
+	// the stream, which should block. The rangefeed pipeline buffers a few
+	// additional events in intermediate goroutines between channels, so post 10
+	// events to be sure.
+	unblock := stream.BlockSend()
+	defer unblock()
+
+	const numEvents = 10
+	doneC := make(chan struct{})
+	go func() {
+		for i := 0; i < numEvents; i++ {
+			assert.True(t, p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: int64(i + 1)}))
+		}
+		close(doneC)
+	}()
+
+	// The sender should be blocked for at least 3 seconds.
+	select {
+	case <-doneC:
+		t.Fatal("send unexpectely succeeded")
+	case <-time.After(3 * time.Second):
+	case <-ctx.Done():
+	}
+
+	// Unblock the sender, and wait for it to complete.
+	unblock()
+	select {
+	case <-doneC:
+	case <-time.After(time.Second):
+		t.Fatal("sender did not complete")
+	}
+
+	// Wait for the final checkpoint event.
+	p.syncEventAndRegistrations()
+	events := stream.Events()
+	require.Equal(t, &kvpb.RangeFeedEvent{
+		Checkpoint: &kvpb.RangeFeedCheckpoint{
+			Span:       span.AsRawSpanWithNoLocals(),
+			ResolvedTS: hlc.Timestamp{WallTime: numEvents},
+		},
+	}, events[len(events)-1])
 }
