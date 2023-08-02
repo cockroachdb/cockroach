@@ -63,6 +63,14 @@ type Simulator struct {
 	history History
 }
 
+func (s *Simulator) GetCurrTime() time.Time {
+	return s.curr
+}
+
+func (s *Simulator) GetState() state.State {
+	return s.state
+}
+
 // History contains recorded information that summarizes a simulation run.
 // Currently it only contains the store metrics of the run.
 // TODO(kvoli): Add a range log like structure to the history.
