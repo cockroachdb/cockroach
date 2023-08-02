@@ -36,7 +36,6 @@ const (
 
 func isWebhookSink(u *url.URL) bool {
 	switch u.Scheme {
-	// allow HTTP here but throw an error later to make it clear HTTPS is required
 	case changefeedbase.SinkSchemeWebhookHTTP, changefeedbase.SinkSchemeWebhookHTTPS:
 		return true
 	default:
@@ -118,7 +117,9 @@ func makeWebhookClient(
 			},
 		},
 	}
-
+	if u.Scheme == changefeedbase.SinkSchemeWebhookHTTP {
+		return client, nil
+	}
 	dialConfig := struct {
 		tlsSkipVerify bool
 		caCert        []byte
@@ -228,8 +229,8 @@ func (sc *webhookSinkClient) Close() error {
 func validateWebhookOpts(
 	u sinkURL, encodingOpts changefeedbase.EncodingOptions, opts changefeedbase.WebhookSinkOptions,
 ) error {
-	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
-		return errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
+	if !(u.Scheme == changefeedbase.SinkSchemeWebhookHTTPS || u.Scheme == changefeedbase.SinkSchemeWebhookHTTP) {
+		return errors.Errorf(`this sink requires %s or %s`, changefeedbase.SinkSchemeHTTPS, changefeedbase.SinkSchemeHTTP)
 	}
 
 	switch encodingOpts.Format {
