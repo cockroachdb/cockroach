@@ -359,7 +359,7 @@ func newTenantServer(
 	// Instantiate the migration API server.
 	tms := newTenantMigrationServer(sqlServer)
 	serverpb.RegisterMigrationServer(args.grpc.Server, tms)
-	sqlServer.migrationServer = tms // only for testing via TestTenant
+	sqlServer.migrationServer = tms // only for testing via testTenant
 
 	// Tell the authz server how to connect to SQL.
 	adminAuthzCheck.SetAuthzAccessorFactory(func(opName string) (sql.AuthorizationAccessor, func()) {
