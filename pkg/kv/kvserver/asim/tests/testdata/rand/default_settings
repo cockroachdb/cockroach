@@ -7,6 +7,10 @@ rand_cluster=false
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
@@ -30,6 +34,10 @@ rand_cluster=false
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass

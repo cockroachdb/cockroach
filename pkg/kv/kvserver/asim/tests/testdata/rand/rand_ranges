@@ -13,6 +13,10 @@ rand_ranges=true   range_gen_settings ->    placementType=random          replic
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
@@ -97,6 +101,10 @@ rand_ranges=true   range_gen_settings ->    placementType=random         replica
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
@@ -147,6 +155,10 @@ rand_ranges=true   range_gen_settings ->    placementType=random         replica
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
@@ -197,6 +209,10 @@ rand_ranges=true   range_gen_settings ->    placementType=random       replicati
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
@@ -247,6 +263,10 @@ rand_ranges=true   range_gen_settings ->    placementType=random          replic
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=3        stores_per_node=1  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
@@ -273,7 +293,7 @@ sample3: pass
 clear
 ----
 
-rand_cluster cluster_gen_type=single_region
+change_default stores_per_node=3 nodes=1
 ----
 
 rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
@@ -281,13 +301,17 @@ rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1
 
 eval duration=20m num_iterations=3
 ----
-settings           num_iterations=3         duration=20m0s
-rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region
-rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
+settings      num_iterations=3  duration=20m0s
+rand_options  cluster=false     ranges=true  load=false  staticSettings=false  staticEvents=false
+rand_cluster=false
+rand_ranges=true  range_gen_settings ->  placementType=weighted_rand  replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
 rand_load=false
 rand_events=false
 rand_settings=false
+default_settings
+num_iterations=3  seed=42                 duration=10m0s        verbose=false  nodes=1        stores_per_node=3  key_space=200000     
+rw_ratio=0.00     rate=0.00               min_block=1           max_block=1    min_key=1      max_key=200000     skewed_access=false  
+ranges=1          placement_type=uniform  replication_factor=3  bytes=0        stat=replicas  height=15          width=80             
 ----------------------------------
 sample1: start running
 sample1: pass
