@@ -45,7 +45,7 @@ func newChannelOrchestrator(
 
 // serverStateUsingChannels coordinates the lifecycle of a tenant
 // server. It ensures sane concurrent behavior between:
-// - requests to start a server manually, e.g. via TestServer;
+// - requests to start a server manually, e.g. via testServer;
 // - async changes to the tenant service mode;
 // - quiescence of the outer stopper;
 // - RPC drain requests on the tenant server;

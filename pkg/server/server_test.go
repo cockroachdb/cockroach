@@ -204,7 +204,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	// First, make sure that the TestServer's built-in client interface
+	// First, make sure that the testServer's built-in client interface
 	// still works in insecure mode.
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
