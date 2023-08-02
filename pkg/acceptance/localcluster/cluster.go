@@ -473,9 +473,11 @@ func (n *Node) Alive() bool {
 
 // StatusClient returns a StatusClient set up to talk to this node.
 func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
-	n.Lock()
-	existingClient := n.statusClient
-	n.Unlock()
+	existingClient := func() serverpb.StatusClient {
+		n.Lock()
+		defer n.Unlock()
+		return n.statusClient
+	}()
 
 	if existingClient != nil {
 		return existingClient
@@ -588,6 +590,7 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 		_ = errors.As(waitErr, &execErr)
 		n.Lock()
 		n.setNotRunningLocked(execErr)
+		// nolint:deferunlock
 		n.Unlock()
 	}(n.cmd)
 
@@ -695,7 +698,9 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		if n.cmd != nil {
 			pid = n.cmd.Process.Pid
 		}
+		// nolint:deferunlock
 		n.Unlock()
+
 		if pid == 0 {
 			log.Info(ctx, "process already quit")
 			return nil
@@ -715,15 +720,19 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		}
 
 		if n.Cfg.RPCPort == 0 {
-			n.Lock()
-			n.rpcPort = pgURL.Port()
-			n.Unlock()
+			func() {
+				n.Lock()
+				defer n.Unlock()
+				n.rpcPort = pgURL.Port()
+			}()
 		}
 
 		pgURL.Path = n.Cfg.DB
-		n.Lock()
-		n.pgURL = pgURL.String()
-		n.Unlock()
+		func() {
+			n.Lock()
+			defer n.Unlock()
+			n.pgURL = pgURL.String()
+		}()
 
 		var uiURL *url.URL
 
@@ -737,9 +746,11 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		//
 		// This can be improved by making the below code run opportunistically whenever the
 		// http port is required but isn't initialized yet.
-		n.Lock()
-		n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
-		n.Unlock()
+		func() {
+			n.Lock()
+			defer n.Unlock()
+			n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
+		}()
 
 		{
 			var uiStr string
@@ -767,9 +778,11 @@ func (n *Node) Kill() {
 	// Wait for the process to have been cleaned up (or a call to Start() could
 	// turn into an unintended no-op).
 	for ok := false; !ok; {
-		n.Lock()
-		ok = n.cmd == nil
-		n.Unlock()
+		func() {
+			n.Lock()
+			defer n.Unlock()
+			ok = n.cmd == nil
+		}()
 	}
 }
 
@@ -802,9 +815,11 @@ func (n *Node) Signal(s os.Signal) {
 // Wait waits for the process to terminate and returns its process' Wait(). This
 // is nil if the process terminated with a zero exit code.
 func (n *Node) Wait() *exec.ExitError {
-	n.Lock()
-	ch := n.notRunning
-	n.Unlock()
+	ch := func() chan struct{} {
+		n.Lock()
+		defer n.Unlock()
+		return n.notRunning
+	}()
 	if ch == nil {
 		log.Warning(context.Background(), "(*Node).Wait called when node was not running")
 		return nil

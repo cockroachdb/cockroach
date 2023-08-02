@@ -138,17 +138,21 @@ func newConfluentSchemaRegistry(
 		return nil, errors.Errorf("unsupported scheme: %q", u.Scheme)
 	}
 
-	schemaRegistrySingletons.mu.Lock()
-	src, ok := schemaRegistrySingletons.cachePerEndpoint[baseURL]
-	if !ok {
-		src = &schemaRegistryCache{entries: cache.NewUnorderedCache(
-			cache.Config{Policy: cache.CacheLRU, ShouldEvict: func(size int, _, _ interface{}) bool {
-				return size > 1023
-			}}),
+	var src *schemaRegistryCache
+	var ok bool
+	func() {
+		schemaRegistrySingletons.mu.Lock()
+		defer schemaRegistrySingletons.mu.Unlock()
+		src, ok = schemaRegistrySingletons.cachePerEndpoint[baseURL]
+		if !ok {
+			src = &schemaRegistryCache{entries: cache.NewUnorderedCache(
+				cache.Config{Policy: cache.CacheLRU, ShouldEvict: func(size int, _, _ interface{}) bool {
+					return size > 1023
+				}}),
+			}
+			schemaRegistrySingletons.cachePerEndpoint[baseURL] = src
 		}
-		schemaRegistrySingletons.cachePerEndpoint[baseURL] = src
-	}
-	schemaRegistrySingletons.mu.Unlock()
+	}()
 
 	s, err := getAndDeleteParams(u)
 	if err != nil {

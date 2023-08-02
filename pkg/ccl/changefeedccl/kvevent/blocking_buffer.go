@@ -148,9 +148,11 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 // notifyOutOfQuota is invoked by memQuota to notify blocking buffer that
 // event is blocked, waiting for more resources.
 func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
-	b.mu.Lock()
-	b.mu.canFlush = canFlush
-	b.mu.Unlock()
+	func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.mu.canFlush = canFlush
+	}()
 
 	if canFlush {
 		select {
@@ -164,8 +166,8 @@ func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
 // that producer is blocked.
 func (b *blockingBuffer) producerBlocked() {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.mu.numBlocked++
-	b.mu.Unlock()
 }
 
 // quotaAcquiredAfterWait is invoked by quota pool to notify blocking buffer
@@ -173,6 +175,7 @@ func (b *blockingBuffer) producerBlocked() {
 // NB: always called after producerBlocked
 func (b *blockingBuffer) quotaAcquiredAfterWait() {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.mu.numBlocked > 0 {
 		b.mu.numBlocked--
 	} else {
@@ -183,7 +186,6 @@ func (b *blockingBuffer) quotaAcquiredAfterWait() {
 		// Clear out canFlush since we know that producers no longer blocked.
 		b.mu.canFlush = false
 	}
-	b.mu.Unlock()
 }
 
 // Get implements kvevent.Reader interface.
