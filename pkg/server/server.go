@@ -1522,7 +1522,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Register the Migration service, to power internal crdb upgrades.
 	migrationServer := &migrationServer{server: s}
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
-	s.migrationServer = migrationServer // only for testing via TestServer
+	s.migrationServer = migrationServer // only for testing via testServer
 
 	// Register the KeyVisualizer Server
 	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.keyVisualizerServer)

@@ -46,7 +46,7 @@ func TestClusterConnectivity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(irfansharif): Teach TestServer to accept a list of join addresses
+	// TODO(irfansharif): Teach testServer to accept a list of join addresses
 	// instead of just one.
 
 	var testConfigurations = []struct {

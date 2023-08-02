@@ -32,7 +32,7 @@ func TestServerController(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.(*TestServer)
+	ts := s.(*testServer)
 
 	d, err := ts.serverController.getServer(ctx, "system")
 	require.NoError(t, err)

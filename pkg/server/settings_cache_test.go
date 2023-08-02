@@ -79,11 +79,11 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		},
 	}
 	var settingsCache []roachpb.KeyValue
-	testServer := serverutils.StartServerOnly(t, serverArgs)
-	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
+	ts := serverutils.StartServerOnly(t, serverArgs)
+	closedts.TargetDuration.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
 	testutils.SucceedsSoon(t, func() error {
-		store, err := testServer.GetStores().(*kvserver.Stores).GetStore(1)
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		settingsCache = settings
 		return nil
 	})
-	testServer.Stopper().Stop(context.Background())
+	ts.Stopper().Stop(context.Background())
 
 	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	{
 		getDialOpts := s.RPCContext().GRPCDialOptions
 
-		initConfig := newInitServerConfig(ctx, s.(*TestServer).Server.cfg, getDialOpts)
+		initConfig := newInitServerConfig(ctx, s.(*testServer).Server.cfg, getDialOpts)
 		inspectState, err := inspectEngines(
 			context.Background(),
 			s.Engines(),
