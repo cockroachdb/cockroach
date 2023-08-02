@@ -246,6 +246,16 @@ export class DatabaseTablePage extends React.Component<
 
   componentDidMount(): void {
     this.refresh();
+
+    this.props.refreshUserSQLRoles();
+
+    if (this.props.refreshSettings != null) {
+      this.props.refreshSettings();
+    }
+
+    if (this.props.refreshNodes != null) {
+      this.props.refreshNodes();
+    }
   }
 
   componentDidUpdate(prevProp: Readonly<DatabaseTablePageProps>): void {
@@ -258,11 +268,6 @@ export class DatabaseTablePage extends React.Component<
   }
 
   private refresh() {
-    this.props.refreshUserSQLRoles();
-    if (this.props.refreshNodes != null) {
-      this.props.refreshNodes();
-    }
-
     if (
       !this.props.details.loaded &&
       !this.props.details.loading &&
@@ -283,10 +288,6 @@ export class DatabaseTablePage extends React.Component<
         this.props.databaseName,
         this.props.name,
       );
-    }
-
-    if (this.props.refreshSettings != null) {
-      this.props.refreshSettings();
     }
   }
 
