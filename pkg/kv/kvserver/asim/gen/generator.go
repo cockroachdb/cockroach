@@ -37,6 +37,7 @@ type LoadGen interface {
 	// Generate returns a workload generator that is parameterized randomly by
 	// the seed and simulation settings provided.
 	Generate(seed int64, settings *config.SimulationSettings) []workload.Generator
+	String() string
 }
 
 // ClusterGen provides a method to generate the initial cluster state,  given a
@@ -46,6 +47,7 @@ type ClusterGen interface {
 	// Generate returns a new State that is parameterized randomly by the seed
 	// and simulation settings provided.
 	Generate(seed int64, settings *config.SimulationSettings) state.State
+	String() string
 }
 
 // RangeGen provides a method to generate the initial range splits, range
@@ -55,6 +57,7 @@ type RangeGen interface {
 	// simulation settings provided. In the updated state, ranges will have been
 	// created, replicas and leases assigned to stores in the cluster.
 	Generate(seed int64, settings *config.SimulationSettings, s state.State) state.State
+	String() string
 }
 
 // EventGen provides a  method to generate a list of events that will apply to
@@ -63,6 +66,7 @@ type RangeGen interface {
 type EventGen interface {
 	// Generate returns a list of events, which should be exectued at the delay specified.
 	Generate(seed int64) event.DelayedEventList
+	String() string
 }
 
 // GenerateSimulation is a utility function that creates a new allocation
@@ -113,6 +117,10 @@ type BasicLoad struct {
 	MinKey, MaxKey int64
 }
 
+func (bl BasicLoad) String() string {
+	return fmt.Sprintf("rw_ratio=%0.2f, rate=%0.2f, skewed_access=%t, min_block_size=%d, max_block_size=%d, min_key=%d, max_key=%d", bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize, bl.MinKey, bl.MaxKey)
+}
+
 // Generate returns a new list of workload generators where the generator
 // parameters are populated with the parameters from the generator and either a
 // uniform or zipfian key generator is created depending on whether
@@ -156,10 +164,18 @@ func (lc LoadedCluster) Generate(seed int64, settings *config.SimulationSettings
 	return state.LoadClusterInfo(lc.Info, settings)
 }
 
+func (lc LoadedCluster) String() string {
+	return fmt.Sprintf("loaded_cluster: %v", lc.Info)
+}
+
 // BasicCluster implements the ClusterGen interace.
 type BasicCluster struct {
 	Nodes         int
 	StoresPerNode int
+}
+
+func (bc BasicCluster) String() string {
+	return fmt.Sprintf("basic_cluster: nodes=%d, stores=%d", bc.Nodes, bc.StoresPerNode)
 }
 
 // Generate returns a new simulator state, where the cluster is created with all
@@ -174,6 +190,10 @@ func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings)
 // LoadedRanges implements the RangeGen interface.
 type LoadedRanges struct {
 	Info state.RangesInfo
+}
+
+func (lr LoadedRanges) String() string {
+	return fmt.Sprintf("loaded_ranges: number of ranges=%d", len(lr.Info))
 }
 
 // Generate returns an updated simulator state, where the cluster is loaded
@@ -238,6 +258,10 @@ type BaseRanges struct {
 	Bytes             int64
 }
 
+func (b BaseRanges) String() string {
+	return fmt.Sprintf("ranges=%d, key_space=%d, replication_factor=%d, bytes=%d", b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+}
+
 // GetRangesInfo generates and distributes ranges across stores based on
 // PlacementType while using other BaseRanges fields for range configuration.
 func (b BaseRanges) GetRangesInfo(
@@ -272,6 +296,10 @@ type BasicRanges struct {
 	PlacementType PlacementType
 }
 
+func (br BasicRanges) String() string {
+	return fmt.Sprintf("placement_type=%v, base_ranges=%v", br.PlacementType, br.BaseRanges)
+}
+
 // Generate returns an updated simulator state, where the cluster is loaded with
 // ranges generated based on the parameters specified in the fields of
 // BasicRanges.
@@ -290,6 +318,10 @@ func (br BasicRanges) Generate(
 // TODO(kvoli): introduce conditional events.
 type StaticEvents struct {
 	DelayedEvents event.DelayedEventList
+}
+
+func (se StaticEvents) String() string {
+	return fmt.Sprintf("len(delayed_event_list)=%d", len(se.DelayedEvents))
 }
 
 // Generate returns a list of events, exactly the same as the events

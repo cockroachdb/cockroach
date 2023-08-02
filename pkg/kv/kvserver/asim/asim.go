@@ -12,6 +12,8 @@ package asim
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -61,6 +63,10 @@ type Simulator struct {
 
 	metrics *metrics.Tracker
 	history History
+}
+
+func (s *Simulator) PrintState(buf *strings.Builder) {
+	buf.WriteString(fmt.Sprintf("STATE at %s:\n%s\n", s.curr.String(), s.state.PrettyPrint()))
 }
 
 // History contains recorded information that summarizes a simulation run.

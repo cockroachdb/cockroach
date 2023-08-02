@@ -140,6 +140,18 @@ func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	return gen.StaticEvents{}
 }
 
+func (f randTestingFramework) printAsimInputs(
+	duration time.Duration,
+	clusterGen gen.ClusterGen,
+	rangeGen gen.RangeGen,
+	loadGen gen.LoadGen,
+	eventGen gen.EventGen,
+	seed int64,
+) {
+	f.recordBuf.WriteString(fmt.Sprintf("INPUTS:\nduration=[%s]\nclusterGen=[%v]\nrangeGen=[%v]\nloadGen=[%v]\neventGen=[%v]\nseed=[%d]\n",
+		duration, clusterGen, rangeGen, loadGen, eventGen, seed))
+}
+
 // runRandTest creates randomized configurations based on the specified test
 // settings and runs one test using those configurations.
 func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
@@ -149,7 +161,10 @@ func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
 	load := f.getLoad()
 	staticSettings := f.getStaticSettings()
 	staticEvents := f.getStaticEvents()
-	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, f.s.randSource.Int63())
+	seed := f.s.randSource.Int63()
+	f.printAsimInputs(f.s.duration, cluster, ranges, load, staticEvents, seed)
+	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
+	simulator.PrintState(f.recordBuf)
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)

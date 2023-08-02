@@ -1,0 +1,212 @@
+# In this test, we run the randomized testing framework with the weighted_rand
+# option.  Note that due to the limited sample size, these may not be observed
+# accurately. But we expect the distribution of ranges across stores should be
+# roughly proportional to the weight.
+rand_cluster cluster_gen_type=single_region
+----
+
+# Due to replication factor of 3, it is impossible to satisfy the weighted rand
+# distribution. So number of ranges across the first three
+# stores(len(weightedRand)) remain the same.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
+----
+
+eval duration=20m num_iterations=3
+----
+----
+settings           num_iterations=3         duration=20m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=305, key_space=96760, replication_factor=3, bytes=0, weighted_rand=[0.1 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(305)),s2n1=(replicas(305)),s3n1=(replicas(305)),s4n1=(replicas(0)),s5n1=(replicas(0)),s6n2=(replicas(0)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(0)),s13n3=(replicas(0)),s14n3=(replicas(0)),s15n3=(replicas(0))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
+sample1: pass
+----------------------------------
+sample2: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=603, key_space=99075, replication_factor=3, bytes=0, weighted_rand=[0.1 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6603068123710785442]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(603)),s2n2=(replicas(603)),s3n3=(replicas(603)),s4n4=(replicas(0)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
+sample2: pass
+----------------------------------
+sample3: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=394, key_space=89281, replication_factor=3, bytes=0, weighted_rand=[0.1 0.2 0.7]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6656619927997724782]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(394)),s2n1=(replicas(394)),s3n1=(replicas(394)),s4n1=(replicas(0)),s5n1=(replicas(0)),s6n2=(replicas(0)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(0)),s13n3=(replicas(0)),s14n3=(replicas(0)),s15n3=(replicas(0))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
+sample3: pass
+----------------------------------
+----
+----
+
+clear
+____
+----
+
+rand_cluster cluster_gen_type=multi_region
+----
+
+# We expect ranges distributed to the third and fourth stores to be larger than
+# the first two stores.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.01, 0.04, 0.2, 0.75)
+----
+
+eval duration=5m num_iterations=3
+----
+----
+settings           num_iterations=3         duration=5m0s
+rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
+rand_ranges=true   range_gen_settings ->    placementType=weighted_rand  replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.01 0.04 0.2 0.75]
+rand_load=false
+rand_events=false
+rand_settings=false
+----------------------------------
+sample1: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US_East -> zones: US_East_1(nodes_count:1, stores_per_node:0) US_East_2(nodes_count:2, stores_per_node:0) US_East_3(nodes_count:3, stores_per_node:0) US_East_3(nodes_count:10, stores_per_node:0)region:US_West -> zones: US_West_1(nodes_count:2, stores_per_node:0)region:EU -> zones: EU_1(nodes_count:3, stores_per_node:0) EU_2(nodes_count:3, stores_per_node:0) EU_3(nodes_count:4, stores_per_node:0)]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=305, key_space=96760, replication_factor=3, bytes=0, weighted_rand=[0.01 0.04 0.2 0.75]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(28)=[s1n1=(replicas(112)),s2n2=(replicas(203)),s3n3=(replicas(295)),s4n4=(replicas(305)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0))] 
+topology:
+EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
+sample1: pass
+----------------------------------
+sample2: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US_East -> zones: US_East_1(nodes_count:4, stores_per_node:0) US_East_2(nodes_count:4, stores_per_node:0) US_East_3(nodes_count:4, stores_per_node:0)region:US_West -> zones: US_West_1(nodes_count:4, stores_per_node:0) US_West_2(nodes_count:4, stores_per_node:0) US_West_3(nodes_count:4, stores_per_node:0)region:EU -> zones: EU_1(nodes_count:4, stores_per_node:0) EU_2(nodes_count:4, stores_per_node:0) EU_3(nodes_count:4, stores_per_node:0)]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=603, key_space=99075, replication_factor=3, bytes=0, weighted_rand=[0.01 0.04 0.2 0.75]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6603068123710785442]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(36)=[s1n1=(replicas(212)),s2n2=(replicas(391)),s3n3=(replicas(603)),s4n4=(replicas(603)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0)),s29n29=(replicas(0)),s30n30=(replicas(0)),s31n31=(replicas(0)),s32n32=(replicas(0)),s33n33=(replicas(0)),s34n34=(replicas(0)),s35n35=(replicas(0)),s36n36=(replicas(0))] 
+topology:
+EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
+sample2: pass
+----------------------------------
+sample3: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US_East -> zones: US_East_1(nodes_count:1, stores_per_node:0) US_East_2(nodes_count:2, stores_per_node:0) US_East_3(nodes_count:3, stores_per_node:0) US_East_3(nodes_count:10, stores_per_node:0)region:US_West -> zones: US_West_1(nodes_count:2, stores_per_node:0)region:EU -> zones: EU_1(nodes_count:3, stores_per_node:0) EU_2(nodes_count:3, stores_per_node:0) EU_3(nodes_count:4, stores_per_node:0)]
+rangeGen=[placement_type=weighted_rand, base_ranges=ranges=394, key_space=89281, replication_factor=3, bytes=0, weighted_rand=[0.01 0.04 0.2 0.75]]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6656619927997724782]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(28)=[s1n1=(replicas(197)),s2n2=(replicas(197)),s3n3=(replicas(394)),s4n4=(replicas(394)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0))] 
+topology:
+EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
+sample3: pass
+----------------------------------
+----
+----

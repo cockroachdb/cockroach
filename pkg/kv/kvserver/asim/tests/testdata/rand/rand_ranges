@@ -1,10 +1,26 @@
+# In this test, we run the randomized testing framework with both the
+# rand_ranges and rand_cluster options. We anticipate that the range_gen and
+# cluster_gen configurations will change across iterations and runs.
+#
+# When a specific generator type is used, we expect the numbers generated to
+# form a distribution. Due to limited sample size, it can be hard to observe the
+# corresponding distribution pattern, but we can confirm that the parameters are
+# set correctly and they look roughly accurate.
+#
+# Other parameters, such as replication factor and placement type should also be
+# set and remain consistent across iterations.
 rand_cluster cluster_gen_type=single_region
 ----
 
+# We expect the placement of ranges across stores to be randomized with a
+# replication factor of 3. Both range∈[1, 1000] and keyspace∈[1, 200000]
+# configurations should be generated with an uniform distribution pattern across
+# iterations.
 rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=uniform
 ----
 
 eval duration=5m num_iterations=3 verbose=true
+----
 ----
 settings           num_iterations=3         duration=5m0s
 rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
@@ -15,12 +31,66 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=random, base_ranges=ranges=305, key_space=96760, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(38)),s2n1=(replicas(62)),s3n1=(replicas(87)),s4n1=(replicas(74)),s5n1=(replicas(98)),s6n2=(replicas(37)),s7n2=(replicas(111)),s8n2=(replicas(86)),s9n2=(replicas(61)),s10n2=(replicas(99)),s11n3=(replicas(25)),s12n3=(replicas(37)),s13n3=(replicas(25)),s14n3=(replicas(13)),s15n3=(replicas(62))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=random, base_ranges=ranges=944, key_space=150098, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2643318057788968173]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(191)),s2n2=(replicas(154)),s3n3=(replicas(38)),s4n4=(replicas(77)),s5n5=(replicas(344)),s6n6=(replicas(268)),s7n7=(replicas(345)),s8n8=(replicas(76)),s9n9=(replicas(76)),s10n10=(replicas(191)),s11n11=(replicas(0)),s12n12=(replicas(344)),s13n13=(replicas(307)),s14n14=(replicas(153)),s15n15=(replicas(268))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=random, base_ranges=ranges=479, key_space=199954, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6972490225919430754]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(80)),s2n2=(replicas(0)),s3n3=(replicas(120)),s4n4=(replicas(40)),s5n5=(replicas(80)),s6n6=(replicas(40)),s7n7=(replicas(180)),s8n8=(replicas(180)),s9n9=(replicas(160)),s10n10=(replicas(40)),s11n11=(replicas(180)),s12n12=(replicas(19)),s13n13=(replicas(39)),s14n14=(replicas(119)),s15n15=(replicas(160))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
 sample1
@@ -77,120 +147,116 @@ sample3
   12 ┤ ╭╯
    0 ┼─╯
                                           replicas
+----
+----
 
 clear
 ----
 
 
-rand_cluster cluster_gen_type=multi_region
+# We expect the placement of ranges across stores to be equally allocated with a
+# replication factor of 3. Range∈[1, 1000] should be generated with uniform
+# distribution while and keyspace∈[1, 200000] configurations should be generated
+# with zipf distribution across iterations.
+rand_cluster cluster_gen_type=single_region
 ----
 
-rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=zipf
+rand_ranges placement_type=even replication_factor=3 range_gen_type=uniform keyspace_gen_type=zipf
 ----
 
-eval duration=5m num_iterations=10
+eval duration=5m num_iterations=3
 ----
-settings           num_iterations=10        duration=5m0s
-rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
-rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=uniform  keySpaceGenType=zipf  weightedRand=[]
+----
+settings           num_iterations=3         duration=5m0s
+rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=even            replicationFactor=3  rangeGenType=uniform  keySpaceGenType=zipf  weightedRand=[]
 rand_load=false
 rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=even, base_ranges=ranges=305, key_space=1015, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(61)),s2n1=(replicas(61)),s3n1=(replicas(61)),s4n1=(replicas(61)),s5n1=(replicas(61)),s6n2=(replicas(61)),s7n2=(replicas(61)),s8n2=(replicas(61)),s9n2=(replicas(61)),s10n2=(replicas(61)),s11n3=(replicas(61)),s12n3=(replicas(61)),s13n3=(replicas(61)),s14n3=(replicas(61)),s15n3=(replicas(61))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=even, base_ranges=ranges=952, key_space=1001, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[3545887102062614208]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(191)),s2n1=(replicas(190)),s3n1=(replicas(190)),s4n1=(replicas(190)),s5n1=(replicas(191)),s6n2=(replicas(191)),s7n2=(replicas(191)),s8n2=(replicas(191)),s9n2=(replicas(191)),s10n2=(replicas(190)),s11n3=(replicas(190)),s12n3=(replicas(190)),s13n3=(replicas(190)),s14n3=(replicas(190)),s15n3=(replicas(190))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=even, base_ranges=ranges=705, key_space=1004, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2010156224608899041]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(141)),s2n2=(replicas(141)),s3n3=(replicas(141)),s4n4=(replicas(141)),s5n5=(replicas(141)),s6n6=(replicas(141)),s7n7=(replicas(141)),s8n8=(replicas(141)),s9n9=(replicas(141)),s10n10=(replicas(141)),s11n11=(replicas(141)),s12n12=(replicas(141)),s13n13=(replicas(141)),s14n14=(replicas(141)),s15n15=(replicas(141))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
-sample4: start running
-sample4: pass
-----------------------------------
-sample5: start running
-sample5: pass
-----------------------------------
-sample6: start running
-sample6: pass
-----------------------------------
-sample7: start running
-sample7: pass
-----------------------------------
-sample8: start running
-sample8: pass
-----------------------------------
-sample9: start running
-sample9: pass
-----------------------------------
-sample10: start running
-sample10: pass
-----------------------------------
+----
+----
 
 clear
 ----
 
-rand_cluster cluster_gen_type=multi_region
-----
-
-rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=uniform
-----
-
-eval duration=5m num_iterations=10
-----
-settings           num_iterations=10        duration=5m0s
-rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
-rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=zipf  keySpaceGenType=uniform  weightedRand=[]
-rand_load=false
-rand_events=false
-rand_settings=false
-----------------------------------
-sample1: start running
-sample1: pass
-----------------------------------
-sample2: start running
-sample2: pass
-----------------------------------
-sample3: start running
-sample3: pass
-----------------------------------
-sample4: start running
-sample4: pass
-----------------------------------
-sample5: start running
-sample5: pass
-----------------------------------
-sample6: start running
-sample6: pass
-----------------------------------
-sample7: start running
-sample7: pass
-----------------------------------
-sample8: start running
-sample8: pass
-----------------------------------
-sample9: start running
-sample9: pass
-----------------------------------
-sample10: start running
-sample10: pass
-----------------------------------
-
-clear
-----
-
+# We expect the placement of ranges across stores to be randomly allocated with
+# a replication factor of 3. Both Range∈[1, 1000] and keyspace∈[1, 200000]
+# should be generated with zipf distribution pattern across iterations.
 rand_cluster cluster_gen_type=any_region
 ----
 
 rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=zipf
 ----
 
-eval duration=5m num_iterations=10
+eval duration=5m num_iterations=3
 ----
-settings           num_iterations=10        duration=5m0s
+----
+settings           num_iterations=3         duration=5m0s
 rand_options       cluster=true             ranges=true                load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=any_region  
 rand_ranges=true   range_gen_settings ->    placementType=random       replicationFactor=3  rangeGenType=zipf  keySpaceGenType=zipf  weightedRand=[]
@@ -199,38 +265,82 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=random, base_ranges=ranges=492, key_space=1015, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(60)),s2n1=(replicas(99)),s3n1=(replicas(140)),s4n1=(replicas(120)),s5n1=(replicas(160)),s6n2=(replicas(60)),s7n2=(replicas(180)),s8n2=(replicas(140)),s9n2=(replicas(100)),s10n2=(replicas(160)),s11n3=(replicas(40)),s12n3=(replicas(59)),s13n3=(replicas(40)),s14n3=(replicas(19)),s15n3=(replicas(99))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=random, base_ranges=ranges=287, key_space=1357, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2643318057788968173]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(58)),s2n2=(replicas(46)),s3n3=(replicas(12)),s4n4=(replicas(23)),s5n5=(replicas(104)),s6n6=(replicas(82)),s7n7=(replicas(105)),s8n8=(replicas(23)),s9n9=(replicas(23)),s10n10=(replicas(59)),s11n11=(replicas(0)),s12n12=(replicas(105)),s13n13=(replicas(93)),s14n14=(replicas(46)),s15n15=(replicas(82))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+INPUTS:
+duration=[5m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=random, base_ranges=ranges=5, key_space=1003, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6972490225919430754]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(0)),s2n2=(replicas(0)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(0)),s7n7=(replicas(2)),s8n8=(replicas(2)),s9n9=(replicas(2)),s10n10=(replicas(0)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(0)),s14n14=(replicas(2)),s15n15=(replicas(2))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
-sample4: start running
-sample4: pass
-----------------------------------
-sample5: start running
-sample5: pass
-----------------------------------
-sample6: start running
-sample6: pass
-----------------------------------
-sample7: start running
-sample7: pass
-----------------------------------
-sample8: start running
-sample8: pass
-----------------------------------
-sample9: start running
-sample9: pass
-----------------------------------
-sample10: start running
-sample10: pass
-----------------------------------
+----
+----
 
 clear
 ----
+
+# We expect ranges to be randomly allocated across stores with a replication
+# factor of 1. Assertion failures on some samples are expected due to this
+# factor. When there is only one replica, the removal target in rebalancing is a
+# leaseholder, it is locked into the current replica distribution. The
+# rebalancer falls back to adding one replica, hoping the rebalancing would
+# happen next time this range is checked. This can create a rebalancing
+# deadlock, where settling is difficult.
+# occurs.
 
 rand_cluster cluster_gen_type=single_region
 ----
@@ -239,6 +349,7 @@ rand_ranges placement_type=random replication_factor=1
 ----
 
 eval duration=20m num_iterations=3
+----
 ----
 settings           num_iterations=3         duration=20m0s
 rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
@@ -249,9 +360,45 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:1, stores_per_node:5) US_2(nodes_count:1, stores_per_node:5) US_3(nodes_count:1, stores_per_node:5)]
+rangeGen=[placement_type=random, base_ranges=ranges=305, key_space=96760, replication_factor=1, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(13)),s2n1=(replicas(20)),s3n1=(replicas(29)),s4n1=(replicas(25)),s5n1=(replicas(32)),s6n2=(replicas(12)),s7n2=(replicas(37)),s8n2=(replicas(28)),s9n2=(replicas(21)),s10n2=(replicas(33)),s11n3=(replicas(9)),s12n3=(replicas(13)),s13n3=(replicas(8)),s14n3=(replicas(5)),s15n3=(replicas(20))] 
+topology:
+US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=random, base_ranges=ranges=944, key_space=150098, replication_factor=1, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2643318057788968173]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(64)),s2n2=(replicas(51)),s3n3=(replicas(12)),s4n4=(replicas(25)),s5n5=(replicas(115)),s6n6=(replicas(90)),s7n7=(replicas(114)),s8n8=(replicas(25)),s9n9=(replicas(26)),s10n10=(replicas(64)),s11n11=(replicas(0)),s12n12=(replicas(114)),s13n13=(replicas(103)),s14n14=(replicas(51)),s15n15=(replicas(90))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: failed assertion
   conformance unavailable=0 under=0 over=0 violating=0 
   actual unavailable=0 under=0, over=9 violating=0
@@ -267,34 +414,25 @@ over replicated:
   r875:000013{8966-9125} [(n3,s3):3, (n2,s2):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
 ----------------------------------
 sample3: start running
+INPUTS:
+duration=[20m0s]
+clusterGen=[loaded_cluster: region:US -> zones: US_1(nodes_count:5, stores_per_node:0) US_2(nodes_count:5, stores_per_node:0) US_3(nodes_count:5, stores_per_node:0)]
+rangeGen=[placement_type=random, base_ranges=ranges=479, key_space=199954, replication_factor=1, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6972490225919430754]
+STATE at 2022-03-21 11:00:00 +0000 UTC:
+stores(15)=[s1n1=(replicas(27)),s2n2=(replicas(1)),s3n3=(replicas(40)),s4n4=(replicas(13)),s5n5=(replicas(26)),s6n6=(replicas(13)),s7n7=(replicas(60)),s8n8=(replicas(60)),s9n9=(replicas(53)),s10n10=(replicas(14)),s11n11=(replicas(59)),s12n12=(replicas(6)),s13n13=(replicas(13)),s14n14=(replicas(40)),s15n15=(replicas(54))] 
+topology:
+US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
-
-clear
 ----
-
-rand_cluster cluster_gen_type=single_region
 ----
-
-rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
-----
-
-eval duration=20m num_iterations=3
-----
-settings           num_iterations=3         duration=20m0s
-rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
-rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
-rand_load=false
-rand_events=false
-rand_settings=false
-----------------------------------
-sample1: start running
-sample1: pass
-----------------------------------
-sample2: start running
-sample2: pass
-----------------------------------
-sample3: start running
-sample3: pass
-----------------------------------
