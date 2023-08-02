@@ -195,6 +195,30 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaActiveRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.rangefeed.count",
+		Help:        `Number of currently running RangeFeed streams`,
+		Measurement: "Count",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaTotalRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.rangefeed.recv",
+		Help:        `Total number of RangeFeed streams`,
+		Measurement: "Count",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaActiveMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.count",
+		Help:        `Number of currently running MuxRangeFeed streams`,
+		Measurement: "Count",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaTotalMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.recv",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Count",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // Cluster settings.
@@ -243,6 +267,10 @@ type nodeMetrics struct {
 	CrossRegionBatchResponseBytes *metric.Counter
 	CrossZoneBatchRequestBytes    *metric.Counter
 	CrossZoneBatchResponseBytes   *metric.Counter
+	NumRangeFeed                  *metric.Counter
+	ActiveRangeFeed               *metric.Gauge
+	NumMuxRangeFeed               *metric.Counter
+	ActiveMuxRangeFeed            *metric.Gauge
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -263,6 +291,10 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
 		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
+		ActiveRangeFeed:               metric.NewGauge(metaActiveRangeFeed),
+		NumRangeFeed:                  metric.NewCounter(metaTotalRangeFeed),
+		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
+		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
 	}
 
 	for i := range nm.MethodCounts {
@@ -1630,6 +1662,10 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
 
+	n.metrics.NumRangeFeed.Inc(1)
+	n.metrics.ActiveRangeFeed.Inc(1)
+	defer n.metrics.ActiveRangeFeed.Inc(-1)
+
 	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
@@ -1765,6 +1801,10 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	}
 	defer cleanup()
 
+	n.metrics.NumMuxRangeFeed.Inc(1)
+	n.metrics.ActiveMuxRangeFeed.Inc(1)
+	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -1782,9 +1822,11 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			wrapped:  muxStream,
 		}
 
-		// TODO(yevgeniy): Add observability into actively running rangefeeds.
+		n.metrics.NumMuxRangeFeed.Inc(1)
+		n.metrics.ActiveMuxRangeFeed.Inc(1)
 		f := n.stores.RangeFeed(req, &sink)
 		f.WhenReady(func(err error) {
+			n.metrics.ActiveMuxRangeFeed.Inc(-1)
 			if err == nil {
 				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
 				if !n.storeCfg.Settings.Version.IsActive(stream.Context(), clusterversion.V23_2) {
