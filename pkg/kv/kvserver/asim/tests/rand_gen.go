@@ -144,3 +144,28 @@ func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generator
 		panic(fmt.Sprintf("unexpected generator type %v", gType))
 	}
 }
+
+type rangeGenSettings struct {
+	placementType     gen.PlacementType
+	replicationFactor int
+	rangeGenType      generatorType
+	keySpaceGenType   generatorType
+	weightedRand      []float64
+}
+
+const (
+	defaultRangeGenType    = uniformGenerator
+	defaultKeySpaceGenType = uniformGenerator
+)
+
+var defaultWeightedRand []float64
+
+func defaultRangeGenSettings() rangeGenSettings {
+	return rangeGenSettings{
+		placementType:     defaultPlacementType,
+		replicationFactor: defaultReplicationFactor,
+		rangeGenType:      defaultRangeGenType,
+		keySpaceGenType:   defaultKeySpaceGenType,
+		weightedRand:      defaultWeightedRand,
+	}
+}
