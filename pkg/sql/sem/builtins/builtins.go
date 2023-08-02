@@ -11134,7 +11134,7 @@ func bitmaskOr(aStr, bStr string) (*tree.DBitArray, error) {
 }
 
 func bitmaskXor(aStr, bStr string) (*tree.DBitArray, error) {
-	return bitmaskOp(aStr, bStr, func(a, b byte) byte { return a ^ b })
+	return bitmaskOp(aStr, bStr, func(a, b byte) byte { return a ^ b + '0' })
 }
 
 // Perform bitwise operation on the 2 bit strings that may have different

@@ -817,7 +817,7 @@ func TestBitmaskOrAndXor(t *testing.T) {
 		{bitmaskXor, "001010010000", "0101010100", "001111000100"},
 		{bitmaskXor, "001010010000", "", "001010010000"},
 		{bitmaskXor, "", "01000100", "01000100"},
-		{bitmaskOr, "xfe8c", "1111", "0000000000000111"},
+		{bitmaskXor, "xfe8c", "1111", "1111111010000011"},
 	}
 	for _, tc := range testCases {
 		bitArray, err := tc.bitFn(tc.a, tc.b)
