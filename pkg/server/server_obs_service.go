@@ -31,7 +31,7 @@ import (
 // startEmbeddedObsService creates the schema for the Observability Service (if
 // it doesn't exist already), starts the internal RPC service for event
 // ingestion and hooks up the event exporter to talk to the local service.
-func (s *Server) startEmbeddedObsService(
+func (s *topLevelServer) startEmbeddedObsService(
 	ctx context.Context, knobs *obs.EventExporterTestingKnobs,
 ) error {
 	// Create the Obs Service schema.
