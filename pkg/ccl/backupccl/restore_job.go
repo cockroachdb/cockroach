@@ -316,6 +316,7 @@ func restore(
 		introducedSpanFrontier,
 		targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
 		progressTracker.useFrontier)
+	// nolint:deferunlock
 	progressTracker.mu.Unlock()
 	if err != nil {
 		return roachpb.RowCount{}, err
@@ -2129,10 +2130,10 @@ func insertStats(
 						return err
 					}
 					mu.Lock()
+					defer mu.Unlock()
 					mu.completedBatches++
 					remainingBatches := totalNumBatches - mu.completedBatches
 					completedBatches := mu.completedBatches
-					mu.Unlock()
 					if insertStatsProgress.ShouldLog() {
 						logStatsProgress(remainingBatches, completedBatches)
 					}

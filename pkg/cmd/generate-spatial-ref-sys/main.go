@@ -122,6 +122,7 @@ func buildData() embeddedproj.Data {
 						},
 					)
 				}
+				// nolint:deferunlock
 				mu.Unlock()
 
 				var bounds embeddedproj.Bounds
@@ -250,6 +251,7 @@ func buildData() embeddedproj.Data {
 						Spheroid: spheroidHash,
 					},
 				)
+				// nolint:deferunlock
 				mu.Unlock()
 			}
 			return nil

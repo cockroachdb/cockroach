@@ -130,6 +130,7 @@ func (c *client) startLocked(
 				} else {
 					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
+				// nolint:deferunlock
 				g.mu.RUnlock()
 			}
 		}
@@ -152,13 +153,13 @@ func (c *client) close() {
 // timestamps.
 func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.RLock()
+	defer g.mu.RUnlock()
 	args := &Request{
 		NodeID:          g.NodeID.Get(),
 		Addr:            g.mu.is.NodeAddr,
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 		ClusterID:       g.clusterID.Get(),
 	}
-	g.mu.RUnlock()
 
 	bytesSent := int64(args.Size())
 	c.clientMetrics.BytesSent.Inc(bytesSent)
@@ -171,6 +172,7 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 // the remote server's notion of other nodes' high water timestamps.
 func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool) error {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	delta := g.mu.is.delta(c.remoteHighWaterStamps)
 	if firstReq {
 		g.mu.is.populateMostDistantMarkers(delta)
@@ -206,11 +208,8 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool
 				log.Infof(ctx, "sending %s to %s", extractKeys(args.Delta), c.addr)
 			}
 		}
-
-		g.mu.Unlock()
 		return stream.Send(&args)
 	}
-	g.mu.Unlock()
 	return nil
 }
 

@@ -140,6 +140,7 @@ type ProgressUpdateBatcher struct {
 // new progress amount.
 func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 	p.Lock()
+	defer p.Unlock()
 	p.completed += delta
 	completed := p.completed
 	shouldReport := p.completed-p.reported > progressFractionThreshold
@@ -149,7 +150,6 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 		p.reported = p.completed
 		p.lastReported = timeutil.Now()
 	}
-	p.Unlock()
 
 	if shouldReport {
 		return p.Report(ctx, completed)
@@ -161,9 +161,9 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 // worrying about update frequency now that it is done.
 func (p *ProgressUpdateBatcher) Done(ctx context.Context) error {
 	p.Lock()
+	defer p.Unlock()
 	completed := p.completed
 	shouldReport := completed-p.reported > progressFractionThreshold
-	p.Unlock()
 
 	if shouldReport {
 		return p.Report(ctx, completed)

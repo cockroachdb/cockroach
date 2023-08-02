@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
+
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 )
@@ -484,8 +485,8 @@ func (n *Node) Alive() bool {
 // StatusClient returns a StatusClient set up to talk to this node.
 func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
 	n.Lock()
+	defer n.Unlock()
 	existingClient := n.statusClient
-	n.Unlock()
 
 	if existingClient != nil {
 		return existingClient
@@ -597,8 +598,8 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 		var execErr *exec.ExitError
 		_ = errors.As(waitErr, &execErr)
 		n.Lock()
+		defer n.Unlock()
 		n.setNotRunningLocked(execErr)
-		n.Unlock()
 	}(n.cmd)
 
 	return nil
@@ -699,13 +700,13 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		Multiplier:     2,
 		Closer:         closer,
 	}
+	n.Lock()
+	defer n.Unlock()
 	for r := retry.Start(opts); r.Next(); {
 		var pid int
-		n.Lock()
 		if n.cmd != nil {
 			pid = n.cmd.Process.Pid
 		}
-		n.Unlock()
 		if pid == 0 {
 			log.Info(ctx, "process already quit")
 			return nil
@@ -725,15 +726,11 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		}
 
 		if n.Cfg.RPCPort == 0 {
-			n.Lock()
 			n.rpcPort = pgURL.Port()
-			n.Unlock()
 		}
 
 		pgURL.Path = n.Cfg.DB
-		n.Lock()
 		n.pgURL = pgURL.String()
-		n.Unlock()
 
 		var uiURL *url.URL
 
@@ -747,9 +744,7 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		//
 		// This can be improved by making the below code run opportunistically whenever the
 		// http port is required but isn't initialized yet.
-		n.Lock()
 		n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
-		n.Unlock()
 
 		{
 			var uiStr string
@@ -776,10 +771,10 @@ func (n *Node) Kill() {
 	n.Signal(os.Kill)
 	// Wait for the process to have been cleaned up (or a call to Start() could
 	// turn into an unintended no-op).
+	n.Lock()
+	defer n.Unlock()
 	for ok := false; !ok; {
-		n.Lock()
 		ok = n.cmd == nil
-		n.Unlock()
 	}
 }
 
@@ -813,8 +808,8 @@ func (n *Node) Signal(s os.Signal) {
 // is nil if the process terminated with a zero exit code.
 func (n *Node) Wait() *exec.ExitError {
 	n.Lock()
+	defer n.Unlock()
 	ch := n.notRunning
-	n.Unlock()
 	if ch == nil {
 		log.Warning(context.Background(), "(*Node).Wait called when node was not running")
 		return nil

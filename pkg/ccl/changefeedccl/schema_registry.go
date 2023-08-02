@@ -148,6 +148,7 @@ func newConfluentSchemaRegistry(
 		}
 		schemaRegistrySingletons.cachePerEndpoint[baseURL] = src
 	}
+	// nolint:deferunlock
 	schemaRegistrySingletons.mu.Unlock()
 
 	s, err := getAndDeleteParams(u)

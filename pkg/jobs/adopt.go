@@ -449,6 +449,7 @@ func (r *Registry) runJob(
 	}
 	username := job.mu.payload.UsernameProto.Decode()
 	typ := job.mu.payload.Type()
+	// nolint:deferunlock
 	job.mu.Unlock()
 
 	// Make sure that we remove the job from the running set when this returns.

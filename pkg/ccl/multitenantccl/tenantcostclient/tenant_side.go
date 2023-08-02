@@ -429,6 +429,7 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 		// Keep track of an exponential moving average of CPU usage.
 		c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
 		c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
+		// nolint:deferunlock
 		c.mu.Unlock()
 	}
 	if deltaCPU < 0 {
@@ -450,6 +451,7 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
 	c.mu.consumption.RU += float64(ru)
 	newConsumption := c.mu.consumption
+	// nolint:deferunlock
 	c.mu.Unlock()
 
 	// Update the average RUs consumed per second, based on the latest stats.
@@ -881,12 +883,12 @@ func (c *tenantSideCostController) onExternalIO(
 	}
 
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.mu.consumption.ExternalIOIngressBytes += uint64(usage.IngressBytes)
 	c.mu.consumption.ExternalIOEgressBytes += uint64(usage.EgressBytes)
 	if c.shouldAccountForExternalIORUs() {
 		c.mu.consumption.RU += float64(totalRU)
 	}
-	c.mu.Unlock()
 
 	return nil
 }

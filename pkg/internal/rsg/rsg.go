@@ -67,6 +67,7 @@ func (r *RSG) Generate(root string, depth int) string {
 			} else {
 				s = ""
 			}
+			// nolint:deferunlock
 			r.lock.Unlock()
 		}
 		if s != "" {
@@ -178,9 +179,9 @@ func (r *RSG) GenerateRandomArg(typ *types.T) string {
 	}
 
 	r.lock.Lock()
+	defer r.lock.Unlock()
 	datum := randgen.RandDatumWithNullChance(r.Rnd, typ, 0, /* nullChance */
 		false /* favorCommonData */, false /* targetColumnIsUnique */)
-	r.lock.Unlock()
 
 	return tree.Serialize(datum)
 }
@@ -193,20 +194,20 @@ type lockedSource struct {
 
 func (r *lockedSource) Int63() (n int64) {
 	r.lk.Lock()
+	defer r.lk.Unlock()
 	n = r.src.Int63()
-	r.lk.Unlock()
 	return
 }
 
 func (r *lockedSource) Uint64() (n uint64) {
 	r.lk.Lock()
+	defer r.lk.Unlock()
 	n = r.src.Uint64()
-	r.lk.Unlock()
 	return
 }
 
 func (r *lockedSource) Seed(seed int64) {
 	r.lk.Lock()
+	defer r.lk.Unlock()
 	r.src.Seed(seed)
-	r.lk.Unlock()
 }

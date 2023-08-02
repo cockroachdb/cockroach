@@ -237,10 +237,12 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 		select {
 		case <-time.After(10 * time.Second):
 			fmt.Printf("TIMEOUT:\n%s\n", stmt)
+			// nolint:deferunlock
 			lock.RUnlock()
 			return nil
 		case <-done:
 		}
+		// nolint:deferunlock
 		lock.RUnlock()
 		if err != nil {
 			if strings.Contains(err.Error(), "internal error") {

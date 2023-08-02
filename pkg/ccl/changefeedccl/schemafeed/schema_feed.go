@@ -278,9 +278,7 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 }
 
 func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
-	tf.mu.Lock()
-	initialTableDescTs := tf.mu.highWater
-	tf.mu.Unlock()
+	initialTableDescTs := tf.highWater()
 	var initialDescs []catalog.Descriptor
 
 	initialTableDescsFn := func(
@@ -312,6 +310,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		tbl := desc.(catalog.TableDescriptor)
 		tf.mu.typeDeps.ingestTable(tbl)
 	}
+	// nolint:deferunlock
 	tf.mu.Unlock()
 
 	return tf.ingestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescs, tf.validateDescriptor)
@@ -509,8 +508,8 @@ func (tf *schemaFeed) pauseOrResumePolling(
 // highWater returns the current high-water timestamp.
 func (tf *schemaFeed) highWater() hlc.Timestamp {
 	tf.mu.Lock()
+	defer tf.mu.Unlock()
 	highWater := tf.mu.highWater
-	tf.mu.Unlock()
 	return highWater
 }
 
@@ -537,6 +536,7 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 		errCh = make(chan error, 1)
 		tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: errCh})
 	}
+	//
 	tf.mu.Unlock()
 	if fastPath {
 		if log.V(1) {

@@ -306,12 +306,12 @@ func New(
 	registry.AddMetric(g.outgoing.gauge)
 
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	// Add ourselves as a SystemConfig watcher.
 	g.mu.is.registerCallback(KeyDeprecatedSystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
-	g.mu.Unlock()
 
 	return g
 }
@@ -542,6 +542,7 @@ func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDesc
 // outgoing connections.
 func (g *Gossip) LogStatus() {
 	g.mu.RLock()
+	defer g.mu.RUnlock()
 	var n int
 	g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
 		n++
@@ -551,7 +552,6 @@ func (g *Gossip) LogStatus() {
 	if g.mu.is.getInfo(KeySentinel) == nil {
 		status = redact.SafeString("stalled")
 	}
-	g.mu.RUnlock()
 
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Health.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s",
@@ -944,8 +944,8 @@ func (g *Gossip) GetClusterID() (uuid.UUID, error) {
 // key does not exist or has expired.
 func (g *Gossip) GetInfo(key string) ([]byte, error) {
 	g.mu.RLock()
+	defer g.mu.RUnlock()
 	i := g.mu.is.getInfo(key)
-	g.mu.RUnlock()
 
 	if i != nil {
 		if err := i.Value.Verify([]byte(key)); err != nil {
@@ -1008,8 +1008,8 @@ func (g *Gossip) tryClearInfoWithTTL(key string, ttl time.Duration) (bool, error
 // is regossiped as soon as possible when its lease changes hands.
 func (g *Gossip) InfoOriginatedHere(key string) bool {
 	g.mu.RLock()
+	defer g.mu.RUnlock()
 	info := g.mu.is.getInfo(key)
-	g.mu.RUnlock()
 	return info != nil && info.NodeID == g.NodeID.Get()
 }
 
@@ -1071,12 +1071,12 @@ var Redundant redundantCallbacks
 // matched pattern. Returns a function to unregister the callback.
 func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...CallbackOption) func() {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	unregister := g.mu.is.registerCallback(pattern, method, opts...)
-	g.mu.Unlock()
 	return func() {
 		g.mu.Lock()
+		defer g.mu.Unlock()
 		unregister()
-		g.mu.Unlock()
 	}
 }
 
@@ -1316,10 +1316,12 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 							if log.V(1) {
 								g.clientsMu.Lock()
 								log.Dev.Infof(ctx, "couldn't find least useful client among %+v", g.clientsMu.clients)
+								// nolint:deferunlock
 								g.clientsMu.Unlock()
 							}
 						}
 					}
+					// nolint:deferunlock
 					g.mu.Unlock()
 				}()
 			case <-stallTimer.C:
@@ -1328,6 +1330,7 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 
 				g.mu.Lock()
 				g.maybeSignalStatusChangeLocked()
+				// nolint:deferunlock
 				g.mu.Unlock()
 			}
 		}
