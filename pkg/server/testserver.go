@@ -703,12 +703,12 @@ func (ts *testServer) Stop(ctx context.Context) {
 	ts.Server.stopper.Stop(ctx)
 }
 
-// TestTenant is an in-memory instantiation of the SQL-only process created for
-// each active Cockroach tenant. TestTenant provides tests with access to
+// testTenant is an in-memory instantiation of the SQL-only process created for
+// each active Cockroach tenant. testTenant provides tests with access to
 // internal methods and state on SQLServer. It is typically started in tests by
 // calling the TestServerInterface.StartTenant method or by calling the wrapper
 // serverutils.StartTenant method.
-type TestTenant struct {
+type testTenant struct {
 	sql    *SQLServer
 	Cfg    *BaseConfig
 	SQLCfg *SQLConfig
@@ -722,50 +722,50 @@ type TestTenant struct {
 	pgPreServer *pgwire.PreServeConnHandler
 }
 
-var _ serverutils.ApplicationLayerInterface = &TestTenant{}
+var _ serverutils.ApplicationLayerInterface = &testTenant{}
 
 // AnnotateCtx is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) AnnotateCtx(ctx context.Context) context.Context {
+func (t *testTenant) AnnotateCtx(ctx context.Context) context.Context {
 	return t.sql.AnnotateCtx(ctx)
 }
 
 // SQLInstanceID is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLInstanceID() base.SQLInstanceID {
+func (t *testTenant) SQLInstanceID() base.SQLInstanceID {
 	return t.sql.SQLInstanceID()
 }
 
 // AdvRPCAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) AdvRPCAddr() string {
+func (t *testTenant) AdvRPCAddr() string {
 	return t.Cfg.AdvertiseAddr
 }
 
 // AdvSQLAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) AdvSQLAddr() string {
+func (t *testTenant) AdvSQLAddr() string {
 	return t.Cfg.SQLAdvertiseAddr
 }
 
 // SQLAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLAddr() string {
+func (t *testTenant) SQLAddr() string {
 	return t.Cfg.SQLAddr
 }
 
 // HTTPAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) HTTPAddr() string {
+func (t *testTenant) HTTPAddr() string {
 	return t.Cfg.HTTPAddr
 }
 
 // RPCAddr is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) RPCAddr() string {
+func (t *testTenant) RPCAddr() string {
 	return t.Cfg.Addr
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
+func (t *testTenant) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
 	return t.SQLConnForUser(test, username.RootUser, dbName)
 }
 
 // SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLConnForUser(
+func (t *testTenant) SQLConnForUser(
 	test serverutils.TestFataler, userName, dbName string,
 ) *gosql.DB {
 	db, err := t.SQLConnForUserE(userName, dbName)
@@ -776,12 +776,12 @@ func (t *TestTenant) SQLConnForUser(
 }
 
 // SQLConnE is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLConnE(dbName string) (*gosql.DB, error) {
+func (t *testTenant) SQLConnE(dbName string) (*gosql.DB, error) {
 	return t.SQLConnForUserE(username.RootUser, dbName)
 }
 
 // SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
+func (t *testTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
 	return openTestSQLConn(userName, dbName, t.Stopper(),
 		t.pgL,
 		t.Cfg.SQLAdvertiseAddr,
@@ -790,18 +790,18 @@ func (t *TestTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB,
 }
 
 // DB is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) DB() *kv.DB {
+func (t *testTenant) DB() *kv.DB {
 	return t.sql.execCfg.DB
 }
 
 // PGServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) PGServer() interface{} {
+func (t *testTenant) PGServer() interface{} {
 	return t.sql.pgServer
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
 // the testServer.
-func (ts *TestTenant) PGPreServer() interface{} {
+func (ts *testTenant) PGPreServer() interface{} {
 	if ts != nil {
 		return ts.pgPreServer
 	}
@@ -809,150 +809,150 @@ func (ts *TestTenant) PGPreServer() interface{} {
 }
 
 // DiagnosticsReporter is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) DiagnosticsReporter() interface{} {
+func (t *testTenant) DiagnosticsReporter() interface{} {
 	return t.sql.diagnosticsReporter
 }
 
 // StatusServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) StatusServer() interface{} {
+func (t *testTenant) StatusServer() interface{} {
 	return t.t.status
 }
 
 // TenantStatusServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) TenantStatusServer() interface{} {
+func (t *testTenant) TenantStatusServer() interface{} {
 	return t.t.status
 }
 
 // SQLServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SQLServer() interface{} {
+func (t *testTenant) SQLServer() interface{} {
 	return t.sql.pgServer.SQLServer
 }
 
 // DistSQLServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) DistSQLServer() interface{} {
+func (t *testTenant) DistSQLServer() interface{} {
 	return t.sql.distSQLServer
 }
 
 // SetDistSQLSpanResolver is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SetDistSQLSpanResolver(spanResolver interface{}) {
+func (t *testTenant) SetDistSQLSpanResolver(spanResolver interface{}) {
 	t.sql.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
 // DistSenderI is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) DistSenderI() interface{} {
+func (t *testTenant) DistSenderI() interface{} {
 	return t.sql.execCfg.DistSender
 }
 
 // InternalDB is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) InternalDB() interface{} {
+func (t *testTenant) InternalDB() interface{} {
 	return t.sql.internalDB
 }
 
 // LeaseManager is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) LeaseManager() interface{} {
+func (t *testTenant) LeaseManager() interface{} {
 	return t.sql.leaseMgr
 }
 
 // InternalExecutor is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) InternalExecutor() interface{} {
+func (t *testTenant) InternalExecutor() interface{} {
 	return t.sql.internalExecutor
 }
 
 // RPCContext is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) RPCContext() *rpc.Context {
+func (t *testTenant) RPCContext() *rpc.Context {
 	return t.sql.execCfg.RPCContext
 }
 
 // JobRegistry is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) JobRegistry() interface{} {
+func (t *testTenant) JobRegistry() interface{} {
 	return t.sql.jobRegistry
 }
 
 // ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) ExecutorConfig() interface{} {
+func (t *testTenant) ExecutorConfig() interface{} {
 	return *t.sql.execCfg
 }
 
 // RangeFeedFactory is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) RangeFeedFactory() interface{} {
+func (t *testTenant) RangeFeedFactory() interface{} {
 	return t.sql.execCfg.RangeFeedFactory
 }
 
 // ClusterSettings is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) ClusterSettings() *cluster.Settings {
+func (t *testTenant) ClusterSettings() *cluster.Settings {
 	return t.Cfg.Settings
 }
 
 // Stopper is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) Stopper() *stop.Stopper {
+func (t *testTenant) Stopper() *stop.Stopper {
 	return t.sql.stopper
 }
 
 // Clock is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) Clock() *hlc.Clock {
+func (t *testTenant) Clock() *hlc.Clock {
 	return t.sql.execCfg.Clock
 }
 
 // AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
-func (t *TestTenant) AmbientCtx() log.AmbientContext {
+func (t *testTenant) AmbientCtx() log.AmbientContext {
 	return t.Cfg.AmbientCtx
 }
 
 // TestingKnobs is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
+func (t *testTenant) TestingKnobs() *base.TestingKnobs {
 	return &t.Cfg.TestingKnobs
 }
 
 // SpanConfigKVAccessor is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SpanConfigKVAccessor() interface{} {
+func (t *testTenant) SpanConfigKVAccessor() interface{} {
 	return t.sql.tenantConnect
 }
 
 // SpanConfigReporter is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SpanConfigReporter() interface{} {
+func (t *testTenant) SpanConfigReporter() interface{} {
 	return t.sql.tenantConnect
 }
 
 // SpanConfigReconciler is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SpanConfigReconciler() interface{} {
+func (t *testTenant) SpanConfigReconciler() interface{} {
 	return t.sql.spanconfigMgr.Reconciler
 }
 
 // SpanConfigSQLTranslatorFactory is part of the
 // serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SpanConfigSQLTranslatorFactory() interface{} {
+func (t *testTenant) SpanConfigSQLTranslatorFactory() interface{} {
 	return t.sql.spanconfigSQLTranslatorFactory
 }
 
 // SpanConfigSQLWatcher is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
+func (t *testTenant) SpanConfigSQLWatcher() interface{} {
 	return t.sql.spanconfigSQLWatcher
 }
 
 // SystemConfigProvider is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SystemConfigProvider() config.SystemConfigProvider {
+func (t *testTenant) SystemConfigProvider() config.SystemConfigProvider {
 	return t.sql.systemConfigWatcher
 }
 
 // DrainClients exports the drainClients() method for use by tests.
-func (t *TestTenant) DrainClients(ctx context.Context) error {
+func (t *testTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
 // Readiness is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) Readiness(ctx context.Context) error {
+func (t *testTenant) Readiness(ctx context.Context) error {
 	return t.t.admin.checkReadinessForHealthCheck(ctx)
 }
 
 // MustGetSQLCounter implements the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) MustGetSQLCounter(name string) int64 {
+func (t *testTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.sql.metricsRegistry, name)
 }
 
 // MustGetSQLNetworkCounter implements the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) MustGetSQLNetworkCounter(name string) int64 {
+func (t *testTenant) MustGetSQLNetworkCounter(name string) int64 {
 	reg := metric.NewRegistry()
 	for _, m := range t.sql.pgServer.Metrics() {
 		reg.AddMetricStruct(m)
@@ -961,39 +961,39 @@ func (t *TestTenant) MustGetSQLNetworkCounter(name string) int64 {
 }
 
 // RangeDescIteratorFactory implements the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) RangeDescIteratorFactory() interface{} {
+func (t *testTenant) RangeDescIteratorFactory() interface{} {
 	return t.sql.execCfg.RangeDescIteratorFactory
 }
 
 // Codec is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) Codec() keys.SQLCodec {
+func (t *testTenant) Codec() keys.SQLCodec {
 	return t.sql.execCfg.Codec
 }
 
 // Tracer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) Tracer() *tracing.Tracer {
+func (t *testTenant) Tracer() *tracing.Tracer {
 	return t.sql.ambientCtx.Tracer
 }
 
 // TracerI is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) TracerI() interface{} {
+func (t *testTenant) TracerI() interface{} {
 	return t.Tracer()
 }
 
 // ForceTableGC is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) ForceTableGC(
+func (t *testTenant) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
 	return internalForceTableGC(ctx, t, database, table, timestamp)
 }
 
 // DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) DefaultZoneConfig() zonepb.ZoneConfig {
+func (t *testTenant) DefaultZoneConfig() zonepb.ZoneConfig {
 	return *t.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
 }
 
 // SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SettingsWatcher() interface{} {
+func (t *testTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
 }
 
@@ -1099,7 +1099,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	hts.t.admin = sqlServerWrapper.tenantAdmin
 	hts.t.status = sqlServerWrapper.tenantStatus
 
-	testTenant := &TestTenant{
+	tt := &testTenant{
 		sql:            sqlServer,
 		Cfg:            sqlServer.cfg,
 		SQLCfg:         sqlServerWrapper.sqlCfg,
@@ -1113,7 +1113,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	if err != nil {
 		return nil, nil, err
 	}
-	return testTenant, sqlDB, err
+	return tt, sqlDB, err
 }
 
 // DisableStartTenant is part of the serverutils.TenantControlInterface.
@@ -1122,58 +1122,58 @@ func (ts *testServer) DisableStartTenant(reason error) {
 }
 
 // MigrationServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) MigrationServer() interface{} {
+func (t *testTenant) MigrationServer() interface{} {
 	return t.sql.migrationServer
 }
 
 // CollectionFactory is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) CollectionFactory() interface{} {
+func (t *testTenant) CollectionFactory() interface{} {
 	return t.sql.execCfg.CollectionFactory
 }
 
 // SystemTableIDResolver is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SystemTableIDResolver() interface{} {
+func (t *testTenant) SystemTableIDResolver() interface{} {
 	return t.sql.execCfg.SystemTableIDResolver
 }
 
 // QueryDatabaseID is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) QueryDatabaseID(
+func (t *testTenant) QueryDatabaseID(
 	ctx context.Context, userName username.SQLUsername, dbName string,
 ) (descpb.ID, error) {
 	return t.t.admin.queryDatabaseID(ctx, userName, dbName)
 }
 
 // QueryTableID is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) QueryTableID(
+func (t *testTenant) QueryTableID(
 	ctx context.Context, userName username.SQLUsername, dbName, tbName string,
 ) (descpb.ID, error) {
 	return t.t.admin.queryTableID(ctx, userName, dbName, tbName)
 }
 
 // StatsForSpans is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) StatsForSpan(
+func (t *testTenant) StatsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
 	return t.t.admin.statsForSpan(ctx, span)
 }
 
 // SetReady is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SetReady(ready bool) {
+func (t *testTenant) SetReady(ready bool) {
 	t.sql.isReady.Set(ready)
 }
 
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) SetAcceptSQLWithoutTLS(accept bool) {
+func (t *testTenant) SetAcceptSQLWithoutTLS(accept bool) {
 	t.Cfg.AcceptSQLWithoutTLS = accept
 }
 
 // PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) PrivilegeChecker() interface{} {
+func (t *testTenant) PrivilegeChecker() interface{} {
 	return t.t.admin.privilegeChecker
 }
 
 // HTTPAuthServer is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) HTTPAuthServer() interface{} {
+func (t *testTenant) HTTPAuthServer() interface{} {
 	return t.t.authentication
 }
 
@@ -1504,7 +1504,7 @@ func (ts *testServer) StartTenant(
 	hts.t.admin = sw.tenantAdmin
 	hts.t.status = sw.tenantStatus
 
-	return &TestTenant{
+	return &testTenant{
 		sql:            sw.sqlServer,
 		Cfg:            &baseCfg,
 		SQLCfg:         &sqlCfg,
@@ -2316,7 +2316,7 @@ func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.Sta
 }
 
 // NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) NewClientRPCContext(
+func (t *testTenant) NewClientRPCContext(
 	ctx context.Context, user username.SQLUsername,
 ) *rpc.Context {
 	return newClientRPCContext(ctx, user,
@@ -2327,7 +2327,7 @@ func (t *TestTenant) NewClientRPCContext(
 }
 
 // RPCClientConn is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) RPCClientConn(
+func (t *testTenant) RPCClientConn(
 	test serverutils.TestFataler, user username.SQLUsername,
 ) *grpc.ClientConn {
 	conn, err := t.RPCClientConnE(user)
@@ -2338,20 +2338,20 @@ func (t *TestTenant) RPCClientConn(
 }
 
 // RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
+func (t *testTenant) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
 	return rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
 	return serverpb.NewAdminClient(conn)
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (t *TestTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
 	return serverpb.NewStatusClient(conn)
 }
