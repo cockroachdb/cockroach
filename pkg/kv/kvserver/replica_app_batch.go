@@ -327,13 +327,15 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
 		// commits by handleMergeResult() to finish the removal.
-		rhsRepl.readOnlyCmdMu.Lock()
-		rhsRepl.mu.Lock()
-		rhsRepl.mu.destroyStatus.Set(
-			kvpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
-			destroyReasonRemoved)
-		rhsRepl.mu.Unlock()
-		rhsRepl.readOnlyCmdMu.Unlock()
+		func() {
+			rhsRepl.readOnlyCmdMu.Lock()
+			rhsRepl.mu.Lock()
+			defer rhsRepl.readOnlyCmdMu.Unlock()
+			defer rhsRepl.mu.Unlock()
+			rhsRepl.mu.destroyStatus.Set(
+				kvpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
+				destroyReasonRemoved)
+		}()
 
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
@@ -441,9 +443,11 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 				// our numbers.
 				// TODO(sumeer): this code will be deleted when there is no
 				// !looselyCoupledTruncation code path.
-				b.r.mu.Lock()
-				b.r.mu.raftLogSizeTrusted = false
-				b.r.mu.Unlock()
+				func() {
+					b.r.mu.Lock()
+					defer b.r.mu.Unlock()
+					b.r.mu.raftLogSizeTrusted = false
+				}()
 			}
 		}
 	}
@@ -466,14 +470,17 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		//
 		// NB: we must be holding the raftMu here because we're in the midst of
 		// application.
-		b.r.readOnlyCmdMu.Lock()
-		b.r.mu.Lock()
-		b.r.mu.destroyStatus.Set(
-			kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
-			destroyReasonRemoved)
-		span := b.r.descRLocked().RSpan()
-		b.r.mu.Unlock()
-		b.r.readOnlyCmdMu.Unlock()
+		var span roachpb.RSpan
+		func() {
+			b.r.readOnlyCmdMu.Lock()
+			b.r.mu.Lock()
+			defer b.r.readOnlyCmdMu.Unlock()
+			defer b.r.mu.Unlock()
+			b.r.mu.destroyStatus.Set(
+				kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
+				destroyReasonRemoved)
+			span = b.r.descRLocked().RSpan()
+		}()
 		b.changeRemovesReplica = true
 
 		// Delete all of the Replica's data. We're going to delete the hard state too.
@@ -580,6 +587,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	existingClosed := r.mu.state.RaftClosedTimestamp
 	newClosed := b.state.RaftClosedTimestamp
 	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) && raftClosedTimestampAssertionsEnabled {
+		// nolint:deferunlock
 		r.mu.Unlock()
 		return errors.AssertionFailedf(
 			"raft closed timestamp regression; replica has: %s, new batch has: %s.",
@@ -601,6 +609,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
+	// nolint:deferunlock
 	r.mu.Unlock()
 	if closedTimestampUpdated {
 		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)

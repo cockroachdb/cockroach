@@ -112,14 +112,18 @@ func (s *Store) tryGetReplica(
 
 	// The current replica is removed, go back around.
 	if repl.mu.destroyStatus.Removed() {
+		// nolint:deferunlock
 		repl.mu.RUnlock()
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
 
 	// Drop messages from replicas we know to be too old.
 	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
+		// nolint:deferunlock
 		repl.mu.RUnlock()
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, kvpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 	}
@@ -130,13 +134,14 @@ func (s *Store) tryGetReplica(
 			log.Infof(ctx, "found message for replica ID %d which is newer than %v",
 				replicaID, repl)
 		}
-
+		// nolint:deferunlock
 		repl.mu.RUnlock()
 		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			log.Fatalf(ctx, "failed to remove replica: %v", err)
 		}
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
@@ -146,6 +151,7 @@ func (s *Store) tryGetReplica(
 		// The sender is behind and is sending to an old replica.
 		// We could silently drop this message but this way we'll inform the
 		// sender that they may no longer exist.
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, &kvpb.RaftGroupDeletedError{}
 	}
@@ -183,14 +189,17 @@ func (s *Store) tryGetOrCreateReplica(
 	if _, ok := s.mu.creatingReplicas[rangeID]; ok {
 		// Lost the race - another goroutine is currently creating that replica. Let
 		// the caller retry so that they can eventually see it.
+		// nolint:deferunlock
 		s.mu.Unlock()
 		return nil, false, errRetry
 	}
 	s.mu.creatingReplicas[rangeID] = struct{}{}
+	// nolint:deferunlock
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		delete(s.mu.creatingReplicas, rangeID)
+		// nolint:deferunlock
 		s.mu.Unlock()
 	}()
 	// Now we are the only goroutine trying to create a replica for this rangeID.
@@ -230,11 +239,14 @@ func (s *Store) tryGetOrCreateReplica(
 	// snapshot is applied.
 	// TODO(pavelkalinnikov): make this branch error-less.
 	if err := s.addToReplicasByRangeIDLocked(repl); err != nil {
+		// nolint:deferunlock
 		s.mu.Unlock()
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, false, err
 	}
 	s.mu.uninitReplicas[repl.RangeID] = repl
+	// nolint:deferunlock
 	s.mu.Unlock()
 	// TODO(pavelkalinnikov): since we were holding s.mu anyway, consider
 	// dropping the extra Lock/Unlock in the defer deleting from creatingReplicas.

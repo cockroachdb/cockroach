@@ -289,9 +289,11 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 	waitQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		for _, shard := range s.shards {
-			shard.Lock()
-			shard.stopped = true
-			shard.Unlock()
+			func() {
+				shard.Lock()
+				defer shard.Unlock()
+				shard.stopped = true
+			}()
 			shard.cond.Broadcast()
 		}
 	}
@@ -368,6 +370,7 @@ func (ss *raftSchedulerShard) worker(
 		var id roachpb.RangeID
 		for {
 			if ss.stopped {
+				// nolint:deferunlock
 				ss.Unlock()
 				return
 			}
@@ -383,6 +386,7 @@ func (ss *raftSchedulerShard) worker(
 		// queue the range ID again.
 		state := ss.state[id]
 		ss.state[id] = raftScheduleState{flags: stateQueued}
+		// nolint:deferunlock
 		ss.Unlock()
 
 		// Record the scheduling latency for the range.
@@ -489,9 +493,11 @@ func (s *raftScheduler) enqueue1(addFlags raftScheduleFlags, id roachpb.RangeID)
 	_, hasPriority := s.priorityIDs.Load(int64(id))
 	shardIdx := shardIndex(id, len(s.shards), hasPriority)
 	shard := s.shards[shardIdx]
-	shard.Lock()
-	n := shard.enqueue1Locked(addFlags, id, now)
-	shard.Unlock()
+	n := func() int {
+		shard.Lock()
+		defer shard.Unlock()
+		return shard.enqueue1Locked(addFlags, id, now)
+	}()
 	shard.signal(n)
 }
 
@@ -506,16 +512,17 @@ func (ss *raftSchedulerShard) enqueueN(addFlags raftScheduleFlags, ids ...roachp
 
 	now := nowNanos()
 	ss.Lock()
+	defer ss.Unlock()
 	var count int
 	for i, id := range ids {
 		count += ss.enqueue1Locked(addFlags, id, now)
 		if (i+1)%enqueueChunkSize == 0 {
+			// nolint:deferunlock
 			ss.Unlock()
 			now = nowNanos()
 			ss.Lock()
 		}
 	}
-	ss.Unlock()
 	return count
 }
 

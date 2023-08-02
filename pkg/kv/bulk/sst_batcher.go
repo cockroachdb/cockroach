@@ -825,11 +825,13 @@ func (b *SSTBatcher) addSSTable(
 
 				if pErr == nil {
 					resp := br.Responses[0].GetInner().(*kvpb.AddSSTableResponse)
-					b.mu.Lock()
-					if b.writeAtBatchTS {
-						b.mu.maxWriteTS.Forward(br.Timestamp)
-					}
-					b.mu.Unlock()
+					func() {
+						b.mu.Lock()
+						defer b.mu.Unlock()
+						if b.writeAtBatchTS {
+							b.mu.maxWriteTS.Forward(br.Timestamp)
+						}
+					}()
 					// If this was sent async then, by the time the reply gets back, it
 					// might not be the last range anymore. We can just discard the last
 					// range reply in this case though because async sends are only used

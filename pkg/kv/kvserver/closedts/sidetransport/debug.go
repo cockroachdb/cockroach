@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -31,12 +32,15 @@ func (s *Receiver) HTML() string {
 	}
 
 	header("Incoming streams")
-	s.mu.RLock()
-	conns := make([]*incomingStream, 0, len(s.mu.conns))
-	for _, c := range s.mu.conns {
-		conns = append(conns, c)
-	}
-	s.mu.RUnlock()
+	conns := func() []*incomingStream {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		cs := make([]*incomingStream, 0, len(s.mu.conns))
+		for _, c := range s.mu.conns {
+			cs = append(cs, c)
+		}
+		return cs
+	}()
 	// Sort by node id.
 	sort.Slice(conns, func(i, j int) bool {
 		return conns[i].nodeID < conns[j].nodeID
@@ -46,12 +50,16 @@ func (s *Receiver) HTML() string {
 	}
 
 	header("Closed streams (most recent first; only one per node)")
-	s.historyMu.Lock()
-	closed := make([]streamCloseInfo, 0, len(s.historyMu.lastClosed))
-	for _, c := range s.historyMu.lastClosed {
-		closed = append(closed, c)
-	}
-	s.historyMu.Unlock()
+	closed := func() []streamCloseInfo {
+		s.historyMu.Lock()
+		defer s.historyMu.Unlock()
+		csi := make([]streamCloseInfo, 0, len(s.historyMu.lastClosed))
+
+		for _, c := range s.historyMu.lastClosed {
+			csi = append(csi, c)
+		}
+		return csi
+	}()
 	// Sort by disconnection time, descending.
 	sort.Slice(closed, func(i, j int) bool {
 		return closed[i].closeTime.After(closed[j].closeTime)
@@ -102,48 +110,55 @@ func (s *Sender) HTML() string {
 	}
 
 	header("Closed timestamps sender state")
-	s.leaseholdersMu.Lock()
-	fmt.Fprintf(sb, "leaseholders: %d\n", len(s.leaseholdersMu.leaseholders))
-	s.leaseholdersMu.Unlock()
+	func() {
+		s.leaseholdersMu.Lock()
+		defer s.leaseholdersMu.Unlock()
+		fmt.Fprintf(sb, "leaseholders: %d\n", len(s.leaseholdersMu.leaseholders))
+	}()
 
-	s.trackedMu.Lock()
-	lastMsgSeq := s.trackedMu.lastSeqNum
-	fmt.Fprint(sb, escape(s.trackedMu.streamState.String()))
+	var lastMsgSeq ctpb.SeqNum
+	func() {
+		s.trackedMu.Lock()
+		defer s.trackedMu.Unlock()
+		lastMsgSeq = s.trackedMu.lastSeqNum
+		fmt.Fprint(sb, escape(s.trackedMu.streamState.String()))
 
-	failed := 0
-	for reason := ReasonUnknown + 1; reason < MaxReason; reason++ {
-		failed += s.trackedMu.closingFailures[reason]
-	}
-	fmt.Fprintf(sb, "Failures to close during last cycle (%d ranges total): ", failed)
-	for reason := ReasonUnknown + 1; reason < MaxReason; reason++ {
-		if reason > ReasonUnknown+1 {
-			sb.WriteString(", ")
+		failed := 0
+		for reason := ReasonUnknown + 1; reason < MaxReason; reason++ {
+			failed += s.trackedMu.closingFailures[reason]
 		}
-		fmt.Fprintf(sb, "%s: %d", reason, s.trackedMu.closingFailures[reason])
-	}
-	s.trackedMu.Unlock()
+		fmt.Fprintf(sb, "Failures to close during last cycle (%d ranges total): ", failed)
+		for reason := ReasonUnknown + 1; reason < MaxReason; reason++ {
+			if reason > ReasonUnknown+1 {
+				sb.WriteString(", ")
+			}
+			fmt.Fprintf(sb, "%s: %d", reason, s.trackedMu.closingFailures[reason])
+		}
+	}()
 
 	// List connections
-	s.connsMu.Lock()
-	header(fmt.Sprintf("Connections (%d)", len(s.connsMu.conns)))
-	nids := make([]roachpb.NodeID, 0, len(s.connsMu.conns))
-	for nid := range s.connsMu.conns {
-		nids = append(nids, nid)
-	}
-	sort.Slice(nids, func(i, j int) bool {
-		return nids[i] < nids[j]
-	})
-	now := timeutil.Now()
-	for _, nid := range nids {
-		state := s.connsMu.conns[nid].getState()
-		fmt.Fprintf(sb, "n%d: ", nid)
-		if state.connected {
-			fmt.Fprintf(sb, "connected at: %s (%s ago)\n", state.connectedTime.Truncate(time.Millisecond), now.Sub(state.connectedTime).Truncate(time.Second))
-		} else {
-			fmt.Fprintf(sb, "disconnected at: %s (%s ago, err: %s)\n", state.lastDisconnectTime.Truncate(time.Millisecond), now.Sub(state.lastDisconnectTime).Truncate(time.Second), state.lastDisconnect)
+	func() {
+		s.connsMu.Lock()
+		defer s.connsMu.Unlock()
+		header(fmt.Sprintf("Connections (%d)", len(s.connsMu.conns)))
+		nids := make([]roachpb.NodeID, 0, len(s.connsMu.conns))
+		for nid := range s.connsMu.conns {
+			nids = append(nids, nid)
 		}
-	}
-	s.connsMu.Unlock()
+		sort.Slice(nids, func(i, j int) bool {
+			return nids[i] < nids[j]
+		})
+		now := timeutil.Now()
+		for _, nid := range nids {
+			state := s.connsMu.conns[nid].getState()
+			fmt.Fprintf(sb, "n%d: ", nid)
+			if state.connected {
+				fmt.Fprintf(sb, "connected at: %s (%s ago)\n", state.connectedTime.Truncate(time.Millisecond), now.Sub(state.connectedTime).Truncate(time.Second))
+			} else {
+				fmt.Fprintf(sb, "disconnected at: %s (%s ago, err: %s)\n", state.lastDisconnectTime.Truncate(time.Millisecond), now.Sub(state.lastDisconnectTime).Truncate(time.Second), state.lastDisconnect)
+			}
+		}
+	}()
 
 	header("Last message")
 	lastMsg, ok := s.buf.GetBySeq(context.Background(), lastMsgSeq)

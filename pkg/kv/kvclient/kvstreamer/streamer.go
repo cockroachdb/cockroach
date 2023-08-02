@@ -518,6 +518,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 	streamerLocked := false
 	defer func() {
 		if streamerLocked {
+			// nolint:deferunlock
 			s.mu.Unlock()
 		}
 	}()
@@ -662,6 +663,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 		// Per the contract of the budget's mutex (which must be acquired first,
 		// before the Streamer's mutex), we cannot hold the mutex of s when
 		// consuming below, so we have to unlock it.
+		// nolint:deferunlock
 		s.mu.Unlock()
 		streamerLocked = false
 	}
@@ -742,9 +744,11 @@ func (s *Streamer) Close(ctx context.Context) {
 	if s.coordinatorStarted {
 		s.coordinator.logStatistics(ctx)
 		s.coordinatorCtxCancel()
-		s.mu.Lock()
-		s.mu.done = true
-		s.mu.Unlock()
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.mu.done = true
+		}()
 		s.requestsToServe.close()
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
@@ -822,17 +826,19 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		// The higher the value of priority is, the lower the actual priority of
 		// spilling. Use the maximum value by default.
 		spillingPriority := math.MaxInt64
-		w.s.requestsToServe.Lock()
-		if !w.s.requestsToServe.emptyLocked() {
-			// If we already have minTargetBytes set on the first request to be
-			// issued, then use that.
-			atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
-			// The first request has the highest urgency among all current
-			// requests to serve, so we use its priority to spill everything
-			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.nextLocked().priority()
-		}
-		w.s.requestsToServe.Unlock()
+		func() {
+			if !w.s.requestsToServe.emptyLocked() {
+				w.s.requestsToServe.Lock()
+				defer w.s.requestsToServe.Unlock()
+				// If we already have minTargetBytes set on the first request to be
+				// issued, then use that.
+				atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
+				// The first request has the highest urgency among all current
+				// requests to serve, so we use its priority to spill everything
+				// with less urgency when necessary to free up the budget.
+				spillingPriority = w.s.requestsToServe.nextLocked().priority()
+			}
+		}()
 
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
@@ -899,10 +905,11 @@ func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		w.s.mu.Lock()
-		shouldExit := w.s.results.error() != nil || w.s.mu.done
-		w.s.mu.Unlock()
-		if shouldExit {
+		if shouldExit := func() bool {
+			w.s.mu.Lock()
+			defer w.s.mu.Unlock()
+			return w.s.results.error() != nil || w.s.mu.done
+		}(); shouldExit {
 			return nil
 		}
 		if buildutil.CrdbTestBuild {
@@ -1529,6 +1536,7 @@ func processSingleRangeResults(
 	if fp.numScanResults > 0 && !s.hints.SingleRowLookup {
 		defer s.mu.Unlock()
 	} else {
+		// nolint:deferunlock
 		s.mu.Unlock()
 	}
 

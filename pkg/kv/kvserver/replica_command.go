@@ -999,9 +999,12 @@ func (r *Replica) ChangeReplicas(
 		!knobs.DisableReplicateQueue &&
 		!knobs.AllowUnsynchronizedReplicationChanges {
 		bq := r.store.replicateQueue.baseQueue
-		bq.mu.Lock()
-		disabled := bq.mu.disabled
-		bq.mu.Unlock()
+		disabled := func() bool {
+			bq.mu.Lock()
+			defer bq.mu.Unlock()
+			return bq.mu.disabled
+		}()
+		// nolint:deferunlock
 		if !disabled {
 			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
 		}
@@ -2785,10 +2788,15 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
-	r.mu.RLock()
-	sender, err := r.getReplicaDescriptorRLocked()
-	_, destPaused := r.mu.pausedFollowers[recipient.ReplicaID]
-	r.mu.RUnlock()
+	var sender roachpb.ReplicaDescriptor
+	var err error
+	var destPaused bool
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		sender, err = r.getReplicaDescriptorRLocked()
+		_, destPaused = r.mu.pausedFollowers[recipient.ReplicaID]
+	}()
 
 	if err != nil {
 		return err
@@ -2967,10 +2975,14 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// Check the raft applied state index and term to determine if this replica
 	// is not too far behind the leaseholder. If the delegate is too far behind
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
-	r.mu.RLock()
-	replIdx := r.mu.state.RaftAppliedIndex + 1
-	status := r.raftStatusRLocked()
-	r.mu.RUnlock()
+	var replIdx kvpb.RaftIndex
+	var status *raft.Status
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		replIdx = r.mu.state.RaftAppliedIndex + 1
+		status = r.raftStatusRLocked()
+	}()
 
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that

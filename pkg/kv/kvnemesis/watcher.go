@@ -82,9 +82,11 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	w.g.GoCtx(func(ctx context.Context) error {
 		ts := startTs
 		for i := 0; ; i = (i + 1) % len(dbs) {
-			w.mu.Lock()
-			ts.Forward(w.mu.frontier.Frontier())
-			w.mu.Unlock()
+			func() {
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				ts.Forward(w.mu.frontier.Frontier())
+			}()
 
 			ds := dss[i]
 			err := ds.RangeFeed(ctx, []roachpb.Span{dataSpan}, ts, eventC, kvcoord.WithDiff())
@@ -144,9 +146,11 @@ func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr
 		}
 	}()
 	resultCh := make(chan error, 1)
-	w.mu.Lock()
-	w.mu.frontierWaiters[ts] = append(w.mu.frontierWaiters[ts], resultCh)
-	w.mu.Unlock()
+	func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.mu.frontierWaiters[ts] = append(w.mu.frontierWaiters[ts], resultCh)
+	}()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

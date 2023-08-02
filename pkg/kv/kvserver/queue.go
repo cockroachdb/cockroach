@@ -532,8 +532,8 @@ func (bq *baseQueue) PurgatoryLength() int {
 // SetDisabled turns queue processing off or on as directed.
 func (bq *baseQueue) SetDisabled(disabled bool) {
 	bq.mu.Lock()
+	defer bq.mu.Unlock()
 	bq.mu.disabled = disabled
-	bq.mu.Unlock()
 }
 
 // lockProcessing locks all processing in the baseQueue. It returns
@@ -657,9 +657,11 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		}
 	}
 
-	bq.mu.Lock()
-	stopped := bq.mu.stopped || bq.mu.disabled
-	bq.mu.Unlock()
+	stopped := func() bool {
+		bq.mu.Lock()
+		defer bq.mu.Unlock()
+		return bq.mu.stopped || bq.mu.disabled
+	}()
 
 	if stopped {
 		return
@@ -838,6 +840,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	done := func() {
 		bq.mu.Lock()
 		bq.mu.stopped = true
+		// nolint:deferunlock
 		bq.mu.Unlock()
 	}
 	if err := stopper.RunAsyncTaskEx(ctx,
@@ -1090,17 +1093,22 @@ func (bq *baseQueue) assertInvariants() {
 func (bq *baseQueue) finishProcessingReplica(
 	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, err error,
 ) {
-	bq.mu.Lock()
 	// Remove item from replica set completely. We may add it
 	// back in down below.
-	item := bq.mu.replicas[repl.GetRangeID()]
-	processing := item.processing
-	callbacks := item.callbacks
-	requeue := item.requeue
-	item.callbacks = nil
-	bq.removeFromReplicaSetLocked(repl.GetRangeID())
-	item = nil // prevent accidental use below
-	bq.mu.Unlock()
+	var processing bool
+	var callbacks []processCallback
+	var requeue bool
+	func() {
+		bq.mu.Lock()
+		defer bq.mu.Unlock()
+		item := bq.mu.replicas[repl.GetRangeID()]
+		processing = item.processing
+		callbacks = item.callbacks
+		requeue = item.requeue
+		item.callbacks = nil
+		bq.removeFromReplicaSetLocked(repl.GetRangeID())
+		item = nil // prevent accidental use below
+	}()
 
 	if !processing {
 		log.Fatalf(ctx, "%s: attempt to remove non-processing replica %v", bq.name, repl)
@@ -1127,8 +1135,8 @@ func (bq *baseQueue) finishProcessingReplica(
 		// purgatory.
 		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
+			defer bq.mu.Unlock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
-			bq.mu.Unlock()
 			return
 		}
 
@@ -1205,12 +1213,15 @@ func (bq *baseQueue) addToPurgatoryLocked(
 				}
 			case <-ticker.C:
 				// Report purgatory status.
-				bq.mu.Lock()
-				errMap := map[string]int{}
-				for _, err := range bq.mu.purgatory {
-					errMap[err.Error()]++
-				}
-				bq.mu.Unlock()
+				errMap := func() map[string]int {
+					bq.mu.Lock()
+					defer bq.mu.Unlock()
+					errs := map[string]int{}
+					for _, err := range bq.mu.purgatory {
+						errs[err.Error()]++
+					}
+					return errs
+				}()
 				for errStr, count := range errMap {
 					log.Errorf(ctx, "%d replicas failing with %q", count, errStr)
 				}
@@ -1233,18 +1244,21 @@ func (bq *baseQueue) processReplicasInPurgatory(
 		defer func() { <-bq.processSem }()
 
 		// Remove all items from purgatory into a copied slice.
-		bq.mu.Lock()
-		ranges := make([]*replicaItem, 0, len(bq.mu.purgatory))
-		for rangeID := range bq.mu.purgatory {
-			item := bq.mu.replicas[rangeID]
-			if item == nil {
-				log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
+		ranges := func() []*replicaItem {
+			bq.mu.Lock()
+			defer bq.mu.Unlock()
+			rs := make([]*replicaItem, 0, len(bq.mu.purgatory))
+			for rangeID := range bq.mu.purgatory {
+				item := bq.mu.replicas[rangeID]
+				if item == nil {
+					log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
+				}
+				item.setProcessing()
+				rs = append(rs, item)
+				bq.removeFromPurgatoryLocked(item)
 			}
-			item.setProcessing()
-			ranges = append(ranges, item)
-			bq.removeFromPurgatoryLocked(item)
-		}
-		bq.mu.Unlock()
+			return rs
+		}()
 
 		for _, item := range ranges {
 			repl, err := bq.getReplica(item.rangeID)
@@ -1265,13 +1279,12 @@ func (bq *baseQueue) processReplicasInPurgatory(
 
 	// Clean up purgatory, if empty.
 	bq.mu.Lock()
+	defer bq.mu.Unlock()
 	if len(bq.mu.purgatory) == 0 {
 		log.Infof(ctx, "purgatory is now empty")
 		bq.mu.purgatory = nil
-		bq.mu.Unlock()
 		return true /* purgatoryCleared */
 	}
-	bq.mu.Unlock()
 	return false /* purgatoryCleared */
 }
 
@@ -1283,6 +1296,7 @@ func (bq *baseQueue) pop() (replicaInQueue, float64) {
 	bq.mu.Lock()
 	for {
 		if bq.mu.priorityQ.Len() == 0 {
+			// nolint:deferunlock
 			bq.mu.Unlock()
 			return nil, 0
 		}
@@ -1294,6 +1308,7 @@ func (bq *baseQueue) pop() (replicaInQueue, float64) {
 		priority := item.priority
 		item.setProcessing()
 		bq.pending.Update(int64(bq.mu.priorityQ.Len()))
+		// nolint:deferunlock
 		bq.mu.Unlock()
 
 		repl, _ := bq.getReplica(item.rangeID)

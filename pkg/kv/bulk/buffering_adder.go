@@ -149,17 +149,19 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	if log.V(1) {
-		b.sink.mu.Lock()
-		if b.sink.mu.totalStats.BufferFlushes > 0 {
-			b.sink.mu.totalStats.LogTimings(ctx, b.name, "closing")
-			if log.V(3) {
-				b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
+		func() {
+			b.sink.mu.Lock()
+			defer b.sink.mu.Unlock()
+			if b.sink.mu.totalStats.BufferFlushes > 0 {
+				b.sink.mu.totalStats.LogTimings(ctx, b.name, "closing")
+				if log.V(3) {
+					b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
+				}
+				b.sink.mu.totalStats.LogFlushes(ctx, b.name, "closing", b.memAcc.Used(), b.sink.span)
+			} else {
+				log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
 			}
-			b.sink.mu.totalStats.LogFlushes(ctx, b.name, "closing", b.memAcc.Used(), b.sink.span)
-		} else {
-			log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
-		}
-		b.sink.mu.Unlock()
+		}()
 	}
 	b.sink.Close(ctx)
 
@@ -265,12 +267,14 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	var beforeSize int64
 	// Get the stats before flush by summing totalStats and currentStats
 	if log.V(3) {
-		b.sink.mu.Lock()
-		before = b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
-		before.Combine(&b.sink.mu.totalStats)
-		before.Combine(&b.sink.currentStats)
-		beforeSize = b.sink.mu.totalBulkOpSummary.DataSize
-		b.sink.mu.Unlock()
+		func() {
+			b.sink.mu.Lock()
+			defer b.sink.mu.Unlock()
+			before = b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
+			before.Combine(&b.sink.mu.totalStats)
+			before.Combine(&b.sink.currentStats)
+			beforeSize = b.sink.mu.totalBulkOpSummary.DataSize
+		}()
 	}
 
 	beforeSort := timeutil.Now()
@@ -320,12 +324,16 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	b.sink.currentStats.FlushWait += timeutil.Since(beforeFlush)
 
 	if log.V(3) && before != nil {
-		b.sink.mu.Lock()
-		written := b.sink.mu.totalBulkOpSummary.DataSize - beforeSize
-		afterStats := b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
-		afterStats.Combine(&b.sink.mu.totalStats)
-		afterStats.Combine(&b.sink.currentStats)
-		b.sink.mu.Unlock()
+		var written int64
+		var afterStats *bulkpb.IngestionPerformanceStats
+		func() {
+			b.sink.mu.Lock()
+			defer b.sink.mu.Unlock()
+			written = b.sink.mu.totalBulkOpSummary.DataSize - beforeSize
+			afterStats = b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
+			afterStats.Combine(&b.sink.mu.totalStats)
+			afterStats.Combine(&b.sink.currentStats)
+		}()
 
 		files := afterStats.Batches - before.Batches
 		dueToSplits := afterStats.BatchesDueToRange - before.BatchesDueToRange
@@ -346,18 +354,22 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 
 	if log.V(2) {
-		b.sink.mu.Lock()
-		b.sink.mu.totalStats.LogTimings(ctx, b.name, "flushed")
-		if log.V(3) {
-			b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
-		}
-		b.sink.mu.Unlock()
+		func() {
+			b.sink.mu.Lock()
+			defer b.sink.mu.Unlock()
+			b.sink.mu.totalStats.LogTimings(ctx, b.name, "flushed")
+			if log.V(3) {
+				b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
+			}
+		}()
 	}
 
 	if log.V(3) {
-		b.sink.mu.Lock()
-		b.sink.mu.totalStats.LogFlushes(ctx, b.name, "flushed", b.memAcc.Used(), b.sink.span)
-		b.sink.mu.Unlock()
+		func() {
+			b.sink.mu.Lock()
+			defer b.sink.mu.Unlock()
+			b.sink.mu.totalStats.LogFlushes(ctx, b.name, "flushed", b.memAcc.Used(), b.sink.span)
+		}()
 	}
 
 	if b.onFlush != nil {

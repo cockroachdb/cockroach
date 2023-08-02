@@ -190,6 +190,7 @@ func (mu *ReplicaMutex) Lock() {
 }
 
 func (mu *ReplicaMutex) Unlock() {
+	// nolint:deferunlock
 	(*syncutil.RWMutex)(mu).Unlock()
 }
 
@@ -206,6 +207,7 @@ func (mu *ReplicaMutex) AssertRHeld() {
 }
 
 func (mu *ReplicaMutex) RUnlock() {
+	// nolint:deferunlock
 	(*syncutil.RWMutex)(mu).RUnlock()
 }
 
@@ -1551,10 +1553,13 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		ri.TenantID = r.mu.tenantID.ToUint64()
 	}
 	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
-	r.sideTransportClosedTimestamp.mu.Lock()
-	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
-	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
-	r.sideTransportClosedTimestamp.mu.Unlock()
+	func() {
+		r.sideTransportClosedTimestamp.mu.Lock()
+		defer r.sideTransportClosedTimestamp.mu.Unlock()
+
+		ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
+		ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
+	}()
 	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
 		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
@@ -2195,24 +2200,26 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				}
 			}
 		}
-		r.raftMu.Lock()
-		r.readOnlyCmdMu.Lock()
-		r.mu.Lock()
-		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
-			// The merge committed but the left-hand replica on this store hasn't
-			// subsumed this replica yet. Mark this replica as destroyed so it
-			// doesn't serve requests when we close the mergeCompleteCh below.
-			r.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
-		}
-		// Unblock pending requests. If the merge committed, the requests will
-		// notice that the replica has been destroyed and return an appropriate
-		// error. If the merge aborted, the requests will be handled normally.
-		r.mu.mergeComplete = nil
-		r.mu.mergeTxnID = uuid.UUID{}
-		close(mergeCompleteCh)
-		r.mu.Unlock()
-		r.readOnlyCmdMu.Unlock()
-		r.raftMu.Unlock()
+		func() {
+			r.raftMu.Lock()
+			r.readOnlyCmdMu.Lock()
+			r.mu.Lock()
+			defer r.raftMu.Unlock()
+			defer r.readOnlyCmdMu.Unlock()
+			defer r.mu.Unlock()
+			if mergeCommitted && r.mu.destroyStatus.IsAlive() {
+				// The merge committed but the left-hand replica on this store hasn't
+				// subsumed this replica yet. Mark this replica as destroyed so it
+				// doesn't serve requests when we close the mergeCompleteCh below.
+				r.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
+			}
+			// Unblock pending requests. If the merge committed, the requests will
+			// notice that the replica has been destroyed and return an appropriate
+			// error. If the merge aborted, the requests will be handled normally.
+			r.mu.mergeComplete = nil
+			r.mu.mergeTxnID = uuid.UUID{}
+			close(mergeCompleteCh)
+		}()
 	})
 	if errors.Is(err, stop.ErrUnavailable) {
 		// We weren't able to launch a goroutine to watch for the merge's completion

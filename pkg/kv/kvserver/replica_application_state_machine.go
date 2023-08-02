@@ -127,8 +127,8 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	mb := &sm.ephemeralBatch
 	mb.r = r
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	mb.state = r.mu.state
-	r.mu.RUnlock()
 	return mb
 }
 
@@ -140,11 +140,11 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.applyStats = &sm.applyStats
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	b.state = r.mu.state
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.mu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
-	r.mu.RUnlock()
 	b.start = timeutil.Now()
 	return b
 }
@@ -196,11 +196,13 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		if shouldAssert {
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.r.mu.RLock()
-			// TODO(sep-raft-log): either check only statemachine invariants or
-			// pass both engines in.
-			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
-			sm.r.mu.RUnlock()
+			func() {
+				sm.r.mu.RLock()
+				defer sm.r.mu.RUnlock()
+				// TODO(sep-raft-log): either check only statemachine invariants or
+				// pass both engines in.
+				sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+			}()
 			sm.applyStats.stateAssertions++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
@@ -243,9 +245,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// that a later command in this batch referred to this proposal but it must
 		// have failed because it carried the same MaxLeaseIndex.
 		if higherReproposalsExist {
-			sm.r.mu.Lock()
-			delete(sm.r.mu.proposals, cmd.ID)
-			sm.r.mu.Unlock()
+			func() {
+				sm.r.mu.Lock()
+				defer sm.r.mu.Unlock()
+				delete(sm.r.mu.proposals, cmd.ID)
+			}()
 		}
 		cmd.proposal.applied = true
 	}

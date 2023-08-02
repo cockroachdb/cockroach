@@ -1523,12 +1523,13 @@ func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseS
 	}
 
 	var llHandle *leaseRequestHandle
-	r.mu.Lock()
-	if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
-		llHandle = r.requestLeaseLocked(ctx, st, nil /* limiter */)
-	}
-	r.mu.Unlock()
-
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
+			llHandle = r.requestLeaseLocked(ctx, st, nil /* limiter */)
+		}
+	}()
 	if llHandle != nil {
 		select {
 		case pErr := <-llHandle.C():
@@ -1574,10 +1575,14 @@ const (
 func (r *Replica) LeaseViolatesPreferences(ctx context.Context) bool {
 	storeID := r.store.StoreID()
 	now := r.Clock().NowAsClockTimestamp()
-	r.mu.RLock()
-	preferences := r.mu.conf.LeasePreferences
-	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
-	r.mu.RUnlock()
+	var preferences []roachpb.LeasePreference
+	var leaseStatus kvserverpb.LeaseStatus
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		preferences = r.mu.conf.LeasePreferences
+		leaseStatus = r.leaseStatusAtRLocked(ctx, now)
+	}()
 
 	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
 		// We can't determine if the lease preferences are being conformed to or

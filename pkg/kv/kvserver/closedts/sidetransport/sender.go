@@ -352,12 +352,15 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// quickly. We can't hold this mutex while calling into any replicas (and
 	// locking the replica) because replicas call into the Sender and take
 	// leaseholdersMu through Register/UnregisterLeaseholder.
-	s.leaseholdersMu.Lock()
-	leaseholders := make(map[roachpb.RangeID]leaseholder, len(s.leaseholdersMu.leaseholders))
-	for k, v := range s.leaseholdersMu.leaseholders {
-		leaseholders[k] = v
-	}
-	s.leaseholdersMu.Unlock()
+	leaseholders := func() map[roachpb.RangeID]leaseholder {
+		s.leaseholdersMu.Lock()
+		defer s.leaseholdersMu.Unlock()
+		lh := make(map[roachpb.RangeID]leaseholder, len(s.leaseholdersMu.leaseholders))
+		for k, v := range s.leaseholdersMu.leaseholders {
+			lh[k] = v
+		}
+		return lh
+	}()
 
 	// We'll accumulate all the nodes we need to connect to in order to check if
 	// we need to open new connections or close existing ones.
@@ -461,6 +464,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 				s.connsMu.conns[nodeID] = c
 			}
 		})
+		// nolint:deferunlock
 		s.connsMu.Unlock()
 	}
 
@@ -743,10 +747,10 @@ func (r *rpcConn) cleanupStream(err error) {
 	r.lastSent = 0
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.mu.state.connected = false
 	r.mu.state.lastDisconnect = err
 	r.mu.state.lastDisconnectTime = timeutil.Now()
-	r.mu.Unlock()
 }
 
 // close makes the connection stop sending messages. The run() goroutine will
@@ -867,9 +871,9 @@ func (r *rpcConn) getState() connState {
 
 func (r *rpcConn) recordConnect() {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.mu.state.connected = true
 	r.mu.state.connectedTime = timeutil.Now()
-	r.mu.Unlock()
 }
 
 func (s streamState) String() string {

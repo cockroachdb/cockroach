@@ -1095,11 +1095,12 @@ func newContentionEventTracer(sp *tracing.Span, clock *hlc.Clock) *contentionEve
 		oldContentionTag.mu.Lock()
 		waiting := oldContentionTag.mu.waiting
 		if waiting {
-			oldContentionTag.mu.Unlock()
+			defer oldContentionTag.mu.Unlock()
 			panic("span already contains contention tag in the waiting state")
 		}
 		t.tag.mu.numLocks = oldContentionTag.mu.numLocks
 		t.tag.mu.lockWait = oldContentionTag.mu.lockWait
+		// nolint:deferunlock
 		oldContentionTag.mu.Unlock()
 	}
 

@@ -102,6 +102,7 @@ func (s *Receiver) GetClosedTimestamp(
 ) (hlc.Timestamp, kvpb.LeaseAppliedIndex) {
 	s.mu.RLock()
 	conn, ok := s.mu.conns[leaseholderNode]
+	// nolint:deferunlock
 	s.mu.RUnlock()
 	if !ok {
 		return hlc.Timestamp{}, 0
@@ -151,13 +152,15 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 		// have been actually used to serve a read already, the info has been copied
 		// to the respective replica.
 		delete(s.mu.conns, nodeID)
-		s.historyMu.Lock()
-		s.historyMu.lastClosed[nodeID] = streamCloseInfo{
-			nodeID:    nodeID,
-			closeErr:  err,
-			closeTime: timeutil.Now(),
-		}
-		s.historyMu.Unlock()
+		func() {
+			s.historyMu.Lock()
+			defer s.historyMu.Unlock()
+			s.historyMu.lastClosed[nodeID] = streamCloseInfo{
+				nodeID:    nodeID,
+				closeErr:  err,
+				closeTime: timeutil.Now(),
+			}
+		}()
 	}
 }
 
@@ -244,16 +247,18 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		// remove from the stream. We can't do this with the mutex write-locked
 		// because replicas call GetClosedTimestamp() independently, with r.mu held
 		// (=> deadlock).
-		r.mu.RLock()
-		for _, rangeID := range msg.Removed {
-			info, ok := r.mu.tracked[rangeID]
-			if !ok {
-				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
+		func() {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			for _, rangeID := range msg.Removed {
+				info, ok := r.mu.tracked[rangeID]
+				if !ok {
+					log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
+				}
+				r.stores.ForwardSideTransportClosedTimestampForRange(
+					ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
 			}
-			r.stores.ForwardSideTransportClosedTimestampForRange(
-				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
-		}
-		r.mu.RUnlock()
+		}()
 	}
 
 	r.mu.Lock()

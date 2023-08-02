@@ -800,6 +800,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.applyingEntries = hasMsg(msgStorageApply)
 	pausedFollowers := r.mu.pausedFollowers
+	// nolint:deferunlock
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
@@ -948,14 +949,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// r.mu.lastIndexNotDurable, r.mu.lastTermNotDurable and r.mu.raftLogSize
 			// were updated in applySnapshot, but we also want to make sure we reflect
 			// these changes in the local variables we're tracking here.
-			r.mu.RLock()
-			state = logstore.RaftState{
-				LastIndex: r.mu.lastIndexNotDurable,
-				LastTerm:  r.mu.lastTermNotDurable,
-				ByteSize:  r.mu.raftLogSize,
-			}
-			r.mu.RUnlock()
-
+			state = func() logstore.RaftState {
+				r.mu.RLock()
+				defer r.mu.RUnlock()
+				return logstore.RaftState{
+					LastIndex: r.mu.lastIndexNotDurable,
+					LastTerm:  r.mu.lastTermNotDurable,
+					ByteSize:  r.mu.raftLogSize,
+				}
+			}()
 			// We refresh pending commands after applying a snapshot because this
 			// replica may have been temporarily partitioned from the Raft group and
 			// missed leadership changes that occurred. Suppose node A is the leader,
@@ -1025,6 +1027,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// previously the leader.
 		becameLeader = r.mu.leaderID == r.replicaID
 	}
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	// When becoming the leader, proactively add the replica to the replicate
@@ -1084,9 +1087,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		refreshReason = reasonNewLeaderOrConfigChange
 	}
 	if refreshReason != noReason {
-		r.mu.Lock()
-		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
-		r.mu.Unlock()
+		func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
+		}()
 	}
 
 	// NB: if we just processed a command which removed this replica from the
@@ -1122,6 +1127,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return true, nil
 	})
 	r.mu.applyingEntries = false
+	// nolint:deferunlock
 	r.mu.Unlock()
 	if err != nil {
 		return stats, errors.Wrap(err, "during advance")
@@ -1241,10 +1247,13 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	r.unreachablesMu.Lock()
-	remotes := r.unreachablesMu.remotes
-	r.unreachablesMu.remotes = nil
-	r.unreachablesMu.Unlock()
+	var remotes map[roachpb.ReplicaID]struct{}
+	func() {
+		r.unreachablesMu.Lock()
+		defer r.unreachablesMu.Unlock()
+		remotes = r.unreachablesMu.remotes
+		r.unreachablesMu.remotes = nil
+	}()
 	for remoteReplica := range remotes {
 		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
 	}
@@ -1512,12 +1521,12 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	lagging laggingReplicaSet,
 ) bool {
 	var hbMap map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
+	r.store.coalescedMu.Lock()
+	defer r.store.coalescedMu.Unlock()
 	switch msg.Type {
 	case raftpb.MsgHeartbeat:
-		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeats
 	case raftpb.MsgHeartbeatResp:
-		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeatResponses
 	default:
 		return false
@@ -1540,7 +1549,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		NodeID:  toReplica.NodeID,
 	}
 	hbMap[toStore] = append(hbMap[toStore], beat)
-	r.store.coalescedMu.Unlock()
 	return true
 }
 
@@ -1680,10 +1688,13 @@ func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
 	if msg.To != uint64(r.ReplicaID()) {
 		panic("incorrect message target")
 	}
-	r.localMsgs.Lock()
-	wasEmpty := len(r.localMsgs.active) == 0
-	r.localMsgs.active = append(r.localMsgs.active, msg)
-	r.localMsgs.Unlock()
+	var wasEmpty bool
+	func() {
+		r.localMsgs.Lock()
+		defer r.localMsgs.Unlock()
+		wasEmpty = len(r.localMsgs.active) == 0
+		r.localMsgs.active = append(r.localMsgs.active, msg)
+	}()
 	// If this is the first local message and the caller will not deliver local
 	// messages itself, schedule a Raft update check to inform Raft processing
 	// about the new local message. Everyone else can rely on the call that added
@@ -1700,14 +1711,17 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 ) {
 	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
-	r.localMsgs.Lock()
-	localMsgs := r.localMsgs.active
-	r.localMsgs.active, r.localMsgs.recycled = r.localMsgs.recycled, r.localMsgs.active[:0]
-	// Don't recycle large slices.
-	if cap(r.localMsgs.recycled) > 16 {
-		r.localMsgs.recycled = nil
-	}
-	r.localMsgs.Unlock()
+	var localMsgs []raftpb.Message
+	func() {
+		r.localMsgs.Lock()
+		defer r.localMsgs.Unlock()
+		localMsgs = r.localMsgs.active
+		r.localMsgs.active, r.localMsgs.recycled = r.localMsgs.recycled, r.localMsgs.active[:0]
+		// Don't recycle large slices.
+		if cap(r.localMsgs.recycled) > 16 {
+			r.localMsgs.recycled = nil
+		}
+	}()
 
 	// If we are in a test build, shuffle the local messages before delivering
 	// them. These are not required to be in order, so ensure that re-ordering is
@@ -1759,6 +1773,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 			}
 		})
 	}
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	if fromErr != nil {
@@ -1791,9 +1806,11 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		RangeStartKey: startKey, // usually nil
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
-		r.mu.Lock()
-		r.mu.droppedMessages++
-		r.mu.Unlock()
+		func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			r.mu.droppedMessages++
+		}()
 		r.addUnreachableRemoteReplica(toReplica.ReplicaID)
 	}
 }
@@ -1802,11 +1819,11 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 // as unreachable on the next tick.
 func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
 	r.unreachablesMu.Lock()
+	defer r.unreachablesMu.Unlock()
 	if r.unreachablesMu.remotes == nil {
 		r.unreachablesMu.remotes = make(map[roachpb.ReplicaID]struct{})
 	}
 	r.unreachablesMu.remotes[remoteReplica] = struct{}{}
-	r.unreachablesMu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
@@ -2431,6 +2448,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 	}
 	return subsumedRepls, func() {
 		for _, sr := range subsumedRepls {
+			// nolint:deferunlock
 			sr.raftMu.Unlock()
 		}
 	}

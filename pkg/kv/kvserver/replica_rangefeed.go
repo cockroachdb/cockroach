@@ -230,6 +230,7 @@ func (r *Replica) RangeFeed(
 	// the registration doesn't miss any events.
 	r.raftMu.Lock()
 	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
+		// nolint:deferunlock
 		r.raftMu.Unlock()
 		iterSemRelease()
 		return future.MakeCompletedErrorFuture(err)
@@ -253,6 +254,7 @@ func (r *Replica) RangeFeed(
 	p := r.registerWithRangefeedRaftMuLocked(
 		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, &done,
 	)
+	// nolint:deferunlock
 	r.raftMu.Unlock()
 
 	// This call is a no-op if we have successfully registered; but in case we
@@ -359,6 +361,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			// Update the rangefeed filter to avoid filtering ops
 			// that this new registration might be interested in.
 			r.setRangefeedFilterLocked(filter)
+			// nolint:deferunlock
 			r.rangefeedMu.Unlock()
 			return p
 		}
@@ -368,6 +371,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		r.unsetRangefeedProcessorLocked(p)
 		p = nil
 	}
+	// nolint:deferunlock
 	r.rangefeedMu.Unlock()
 
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
@@ -435,9 +439,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Set the rangefeed processor and filter reference.
 	r.setRangefeedProcessor(p)
-	r.rangefeedMu.Lock()
-	r.setRangefeedFilterLocked(filter)
-	r.rangefeedMu.Unlock()
+	func() {
+		r.rangefeedMu.Lock()
+		defer r.rangefeedMu.Unlock()
+		r.setRangefeedFilterLocked(filter)
+	}()
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.

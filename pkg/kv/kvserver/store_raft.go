@@ -560,6 +560,7 @@ func (s *Store) HandleRaftResponse(
 					!repl.mu.destroyStatus.IsAlive() ||
 					// Ignore if we want to test the replicaGC queue.
 					s.TestingKnobs().DisableEagerReplicaRemoval {
+					// nolint:deferunlock
 					repl.mu.Unlock()
 					return nil
 				}
@@ -572,7 +573,7 @@ func (s *Store) HandleRaftResponse(
 				if log.V(1) {
 					log.Infof(ctx, "setting local replica to destroyed due to ReplicaTooOld error")
 				}
-
+				// nolint:deferunlock
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
 				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, RemoveOptions{
@@ -743,10 +744,14 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(r *Replica) {
-		r.mu.RLock()
-		quiescent := r.mu.quiescent
-		lagging := r.mu.laggingFollowersOnQuiesce
-		r.mu.RUnlock()
+		var quiescent bool
+		var lagging laggingReplicaSet
+		func() {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			quiescent = r.mu.quiescent
+			lagging = r.mu.laggingFollowersOnQuiesce
+		}()
 		if quiescent && lagging.MemberStale(l) {
 			r.maybeUnquiesce(false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
@@ -774,6 +779,7 @@ func (s *Store) processRaft(ctx context.Context) {
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.VisitReplicas(func(r *Replica) (more bool) {
 			r.mu.Lock()
+			defer r.mu.Unlock()
 			r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 			for k, prop := range r.mu.proposals {
 				delete(r.mu.proposals, k)
@@ -782,7 +788,6 @@ func (s *Store) processRaft(ctx context.Context) {
 					makeProposalResultErr(
 						kvpb.NewAmbiguousResultErrorf("store is stopping")))
 			}
-			r.mu.Unlock()
 			return true
 		})
 	}))
@@ -801,17 +806,20 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			}
 			s.updateIOThresholdMap()
 
-			s.unquiescedReplicas.Lock()
 			// Why do we bother to ever queue a Replica on the Raft scheduler for
 			// tick processing? Couldn't we just call Replica.tick() here? Yes, but
 			// then a single bad/slow Replica can disrupt tick processing for every
 			// Replica on the store which cascades into Raft elections and more
 			// disruption.
-			batch := s.scheduler.NewEnqueueBatch()
-			for rangeID := range s.unquiescedReplicas.m {
-				batch.Add(rangeID)
-			}
-			s.unquiescedReplicas.Unlock()
+			batch := func() *raftSchedulerBatch {
+				s.unquiescedReplicas.Lock()
+				defer s.unquiescedReplicas.Unlock()
+				b := s.scheduler.NewEnqueueBatch()
+				for rangeID := range s.unquiescedReplicas.m {
+					b.Add(rangeID)
+				}
+				return b
+			}()
 
 			s.scheduler.EnqueueRaftTicks(batch)
 			batch.Close()
@@ -939,12 +947,16 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 }
 
 func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
-	s.coalescedMu.Lock()
-	heartbeats := s.coalescedMu.heartbeats
-	heartbeatResponses := s.coalescedMu.heartbeatResponses
-	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
-	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
-	s.coalescedMu.Unlock()
+	var heartbeats map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
+	var heartbeatResponses map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
+	func() {
+		s.coalescedMu.Lock()
+		defer s.coalescedMu.Unlock()
+		heartbeats = s.coalescedMu.heartbeats
+		heartbeatResponses = s.coalescedMu.heartbeatResponses
+		s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
+		s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
+	}()
 
 	var beatsSent int
 

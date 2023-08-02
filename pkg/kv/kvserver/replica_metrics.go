@@ -69,9 +69,12 @@ func (r *Replica) Metrics(
 	vitalityMap livenesspb.NodeVitalityMap,
 	clusterNodes int,
 ) ReplicaMetrics {
-	r.store.unquiescedReplicas.Lock()
-	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
-	r.store.unquiescedReplicas.Unlock()
+	var ticking bool
+	func() {
+		r.store.unquiescedReplicas.Lock()
+		defer r.store.unquiescedReplicas.Unlock()
+		_, ticking = r.store.unquiescedReplicas.m[r.RangeID]
+	}()
 
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
@@ -112,7 +115,7 @@ func (r *Replica) Metrics(
 		paused:                r.mu.pausedFollowers,
 		slowRaftProposalCount: r.mu.slowProposalCount,
 	}
-
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	return calcReplicaMetrics(input)

@@ -1013,9 +1013,12 @@ func (cl candidateList) selectBest(randGen allocatorRand) *candidate {
 	if len(cl) == 1 {
 		return &cl[0]
 	}
-	randGen.Lock()
-	order := randGen.Perm(len(cl))
-	randGen.Unlock()
+
+	order := func() []int {
+		randGen.Lock()
+		defer randGen.Unlock()
+		return randGen.Perm(len(cl))
+	}()
 	best := &cl[order[0]]
 	for i := 1; i < allocatorRandomCount; i++ {
 		if best.less(cl[order[i]]) {
@@ -1035,9 +1038,11 @@ func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
 	if len(cl) == 1 {
 		return &cl[0]
 	}
-	randGen.Lock()
-	r := randGen.Intn(len(cl))
-	randGen.Unlock()
+	r := func() int {
+		randGen.Lock()
+		defer randGen.Unlock()
+		return randGen.Intn(len(cl))
+	}()
 	c := &cl[r]
 	return c
 }
@@ -1052,9 +1057,11 @@ func (cl candidateList) selectWorst(randGen allocatorRand) *candidate {
 	if len(cl) == 1 {
 		return &cl[0]
 	}
-	randGen.Lock()
-	order := randGen.Perm(len(cl))
-	randGen.Unlock()
+	order := func() []int {
+		randGen.Lock()
+		defer randGen.Unlock()
+		return randGen.Perm(len(cl))
+	}()
 	worst := &cl[order[0]]
 	for i := 1; i < allocatorRandomCount; i++ {
 		if cl[order[i]].less(*worst) {

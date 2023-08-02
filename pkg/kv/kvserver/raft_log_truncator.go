@@ -345,10 +345,12 @@ func (t *raftLogTruncator) addPendingTruncation(
 		pendingTrunc.logDeltaBytes += pendingTruncs.mu.truncs[pos].logDeltaBytes
 		pendingTrunc.expectedFirstIndex = pendingTruncs.mu.truncs[pos].expectedFirstIndex
 	}
-	pendingTruncs.mu.Lock()
-	// Install the new pending truncation.
-	pendingTruncs.mu.truncs[pos] = pendingTrunc
-	pendingTruncs.mu.Unlock()
+	func() {
+		pendingTruncs.mu.Lock()
+		defer pendingTruncs.mu.Unlock()
+		// Install the new pending truncation.
+		pendingTruncs.mu.truncs[pos] = pendingTrunc
+	}()
 
 	if pos == 0 {
 		if mergeWithPending {
@@ -384,15 +386,17 @@ func (r rangesByRangeID) Swap(i, j int) {
 // deadlock (see storage.Engine.RegisterFlushCompletedCallback).
 func (t *raftLogTruncator) durabilityAdvancedCallback() {
 	runTruncation := false
-	t.mu.Lock()
-	if !t.mu.runningTruncation && len(t.mu.addRanges) > 0 {
-		runTruncation = true
-		t.mu.runningTruncation = true
-	}
-	if !runTruncation && len(t.mu.addRanges) > 0 {
-		t.mu.queuedDurabilityCB = true
-	}
-	t.mu.Unlock()
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if !t.mu.runningTruncation && len(t.mu.addRanges) > 0 {
+			runTruncation = true
+			t.mu.runningTruncation = true
+		}
+		if !runTruncation && len(t.mu.addRanges) > 0 {
+			t.mu.queuedDurabilityCB = true
+		}
+	}()
 	if !runTruncation {
 		return
 	}
@@ -401,14 +405,16 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 			for {
 				t.durabilityAdvanced(ctx)
 				shouldReturn := false
-				t.mu.Lock()
-				queued := t.mu.queuedDurabilityCB
-				t.mu.queuedDurabilityCB = false
-				if !queued {
-					t.mu.runningTruncation = false
-					shouldReturn = true
-				}
-				t.mu.Unlock()
+				func() {
+					t.mu.Lock()
+					defer t.mu.Unlock()
+					queued := t.mu.queuedDurabilityCB
+					t.mu.queuedDurabilityCB = false
+					if !queued {
+						t.mu.runningTruncation = false
+						shouldReturn = true
+					}
+				}()
 				if shouldReturn {
 					return
 				}
@@ -428,18 +434,21 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 
 // Synchronously does the work to truncate the queued replicas.
 func (t *raftLogTruncator) durabilityAdvanced(ctx context.Context) {
-	t.mu.Lock()
-	t.mu.addRanges, t.mu.drainRanges = t.mu.drainRanges, t.mu.addRanges
-	// If another pendingTruncation is added to this Replica, it will not be
-	// added to the addRanges map since the Replica already has pending
-	// truncations. That is ok: we will try to enact all pending truncations for
-	// that Replica below, since there typically will only be one pending, and
-	// if there are any remaining we will add it back to the addRanges map.
-	//
-	// We can modify drainRanges after releasing t.mu since we are guaranteed
-	// that there is at most one durabilityAdvanced running at a time.
-	drainRanges := t.mu.drainRanges
-	t.mu.Unlock()
+	var drainRanges map[roachpb.RangeID]struct{}
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.mu.addRanges, t.mu.drainRanges = t.mu.drainRanges, t.mu.addRanges
+		// If another pendingTruncation is added to this Replica, it will not be
+		// added to the addRanges map since the Replica already has pending
+		// truncations. That is ok: we will try to enact all pending truncations for
+		// that Replica below, since there typically will only be one pending, and
+		// if there are any remaining we will add it back to the addRanges map.
+		//
+		// We can modify drainRanges after releasing t.mu since we are guaranteed
+		// that there is at most one durabilityAdvanced running at a time.
+		drainRanges = t.mu.drainRanges
+	}()
 	if len(drainRanges) == 0 {
 		return
 	}
@@ -508,21 +517,23 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	truncState := r.getTruncatedState()
 	pendingTruncs := r.getPendingTruncs()
 	// Remove the noop pending truncations.
-	pendingTruncs.mu.Lock()
-	for !pendingTruncs.isEmptyLocked() {
-		pendingTrunc := pendingTruncs.frontLocked()
-		if pendingTrunc.Index <= truncState.Index {
-			// The pending truncation is a noop. Even though we avoid queueing
-			// noop truncations, this is possible because a snapshot could have
-			// been applied to the replica after enqueueing the truncations.
-			pendingTruncs.popLocked()
-		} else {
-			break
+	func() {
+		pendingTruncs.mu.Lock()
+		// NB: Unlocking but can keep reading pendingTruncs due to
+		// replicaForTruncator contract.
+		defer pendingTruncs.mu.Unlock()
+		for !pendingTruncs.isEmptyLocked() {
+			pendingTrunc := pendingTruncs.frontLocked()
+			if pendingTrunc.Index <= truncState.Index {
+				// The pending truncation is a noop. Even though we avoid queueing
+				// noop truncations, this is possible because a snapshot could have
+				// been applied to the replica after enqueueing the truncations.
+				pendingTruncs.popLocked()
+			} else {
+				break
+			}
 		}
-	}
-	// NB: Unlocking but can keep reading pendingTruncs due to
-	// replicaForTruncator contract.
-	pendingTruncs.mu.Unlock()
+	}()
 	if pendingTruncs.isEmptyLocked() {
 		// Nothing to do for this replica.
 		return
@@ -602,11 +613,13 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// truncations, a concurrent thread could race and compute a lower post
 	// truncation size. We ignore this race since it seems harmless, and closing
 	// it requires a more complicated replicaForTruncator interface.
-	pendingTruncs.mu.Lock()
-	for i := 0; i <= enactIndex; i++ {
-		pendingTruncs.popLocked()
-	}
-	pendingTruncs.mu.Unlock()
+	func() {
+		pendingTruncs.mu.Lock()
+		defer pendingTruncs.mu.Unlock()
+		for i := 0; i <= enactIndex; i++ {
+			pendingTruncs.popLocked()
+		}
+	}()
 	if !pendingTruncs.isEmptyLocked() {
 		t.enqueueRange(rangeID)
 	}
@@ -614,6 +627,6 @@ func (t *raftLogTruncator) tryEnactTruncations(
 
 func (t *raftLogTruncator) enqueueRange(rangeID roachpb.RangeID) {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.mu.addRanges[rangeID] = struct{}{}
-	t.mu.Unlock()
 }

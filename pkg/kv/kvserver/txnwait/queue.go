@@ -218,11 +218,13 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 		push := e.Value.(*waitingPush)
 		if id := push.req.PusherTxn.ID; id != (uuid.UUID{}) {
 			set[id] = struct{}{}
-			push.mu.Lock()
-			for txnID := range push.mu.dependents {
-				set[txnID] = struct{}{}
-			}
-			push.mu.Unlock()
+			func() {
+				push.mu.Lock()
+				defer push.mu.Unlock()
+				for txnID := range push.mu.dependents {
+					set[txnID] = struct{}{}
+				}
+			}()
 		}
 	}
 	return set
@@ -327,6 +329,7 @@ func (q *Queue) Clear(disable bool) {
 		q.mu.txns = map[uuid.UUID]*pendingTxn{}
 		q.mu.queries = map[uuid.UUID]*waitingQueries{}
 	}
+	// nolint:deferunlock
 	q.mu.Unlock()
 
 	// Send on the pending push waiter channels outside of the mutex lock.
@@ -399,18 +402,21 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 
 	if q.mu.txns == nil {
 		// Not enabled; do nothing.
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return
 	}
 
 	pending, ok := q.mu.txns[txn.ID]
 	if !ok {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return
 	}
 	waitingPushes := pending.takeWaitingPushes()
 	pending.txn.Store(txn)
 	delete(q.mu.txns, txn.ID)
+	// nolint:deferunlock
 	q.mu.Unlock()
 
 	metrics := q.cfg.Metrics
@@ -495,6 +501,7 @@ func (q *Queue) MaybeWaitForPush(
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
 	if q.mu.txns == nil || !q.RangeContainsKeyLocked(req.Key) {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return nil, nil
 	}
@@ -503,10 +510,12 @@ func (q *Queue) MaybeWaitForPush(
 	// already pushed, return push success.
 	pending, ok := q.mu.txns[req.PusheeTxn.ID]
 	if !ok {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return nil, nil
 	}
 	if txn := pending.getTxn(); isPushed(req, txn) {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return createPushTxnResponse(txn), nil
 	} else if ShouldPushImmediately(req, txn.Status) {
@@ -528,6 +537,7 @@ func (q *Queue) MaybeWaitForPush(
 	// indicate there is a new dependent and they should proceed
 	// to execute the QueryTxn command.
 	q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
+	// nolint:deferunlock
 	q.mu.Unlock()
 
 	// When we return, remove our push from the pending queue. This will be a
@@ -536,6 +546,7 @@ func (q *Queue) MaybeWaitForPush(
 	defer func() {
 		q.mu.Lock()
 		pending.waitingPushes.Remove(pushElem)
+		// nolint:deferunlock
 		q.mu.Unlock()
 	}()
 
@@ -723,29 +734,35 @@ func (q *Queue) waitForPush(
 			}
 
 			// Check for dependency cycle to find and break deadlocks.
-			push.mu.Lock()
-			_, haveDependency := push.mu.dependents[req.PusheeTxn.ID]
-			dependents := make([]string, 0, len(push.mu.dependents))
-			for id := range push.mu.dependents {
-				dependents = append(dependents, id.Short())
-			}
-			log.VEventf(
-				ctx,
-				2,
-				"%s (%d), pushing %s (%d), has dependencies=%s",
-				req.PusherTxn.ID.Short(),
-				pusherPriority,
-				req.PusheeTxn.ID.Short(),
-				pusheePriority,
-				dependents,
-			)
-			push.mu.Unlock()
+			var haveDependency bool
+			var dependents []string
+			func() {
+				push.mu.Lock()
+				defer push.mu.Unlock()
+				_, haveDependency = push.mu.dependents[req.PusheeTxn.ID]
+				dependents = make([]string, 0, len(push.mu.dependents))
+				for id := range push.mu.dependents {
+					dependents = append(dependents, id.Short())
+				}
+				log.VEventf(
+					ctx,
+					2,
+					"%s (%d), pushing %s (%d), has dependencies=%s",
+					req.PusherTxn.ID.Short(),
+					pusherPriority,
+					req.PusheeTxn.ID.Short(),
+					pusheePriority,
+					dependents,
+				)
+			}()
 
 			// Since the pusher has been updated, clear any waiting queries
 			// so that they continue with a query of new dependents added here.
-			q.mu.Lock()
-			q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
-			q.mu.Unlock()
+			func() {
+				q.mu.Lock()
+				defer q.mu.Unlock()
+				q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
+			}()
 
 			if haveDependency {
 				// Break the deadlock if the pusher has higher priority.
@@ -789,6 +806,7 @@ func (q *Queue) MaybeWaitForQuery(ctx context.Context, req *kvpb.QueryTxnRequest
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
 	if q.mu.txns == nil || !q.RangeContainsKeyLocked(req.Key) {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return nil
 	}
@@ -798,6 +816,7 @@ func (q *Queue) MaybeWaitForQuery(ctx context.Context, req *kvpb.QueryTxnRequest
 	// in turn waiting on it, and is _already_ updated from what the
 	// caller is expecting, return to query the updates immediately.
 	if pending, ok := q.mu.txns[req.Txn.ID]; ok && q.isTxnUpdated(pending, req) {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return nil
 	} else if !ok {
@@ -821,6 +840,7 @@ func (q *Queue) MaybeWaitForQuery(ctx context.Context, req *kvpb.QueryTxnRequest
 		}
 		q.mu.queries[req.Txn.ID] = query
 	}
+	// nolint:deferunlock
 	q.mu.Unlock()
 
 	// When we return, make sure to unregister the query. If the query's reference
@@ -833,6 +853,7 @@ func (q *Queue) MaybeWaitForQuery(ctx context.Context, req *kvpb.QueryTxnRequest
 		if query.count == 0 && query == q.mu.queries[req.Txn.ID] {
 			delete(q.mu.queries, req.Txn.ID)
 		}
+		// nolint:deferunlock
 		q.mu.Unlock()
 	}()
 
@@ -873,16 +894,19 @@ func (q *Queue) startQueryPusherTxn(
 ) (<-chan *roachpb.Transaction, <-chan *kvpb.Error) {
 	ch := make(chan *roachpb.Transaction, 1)
 	errCh := make(chan *kvpb.Error, 1)
-	push.mu.Lock()
 	var waitingTxns []uuid.UUID
-	if push.mu.dependents != nil {
-		waitingTxns = make([]uuid.UUID, 0, len(push.mu.dependents))
-		for txnID := range push.mu.dependents {
-			waitingTxns = append(waitingTxns, txnID)
+	var pusher *roachpb.Transaction
+	func() {
+		push.mu.Lock()
+		defer push.mu.Unlock()
+		if push.mu.dependents != nil {
+			waitingTxns = make([]uuid.UUID, 0, len(push.mu.dependents))
+			for txnID := range push.mu.dependents {
+				waitingTxns = append(waitingTxns, txnID)
+			}
 		}
-	}
-	pusher := push.req.PusherTxn.Clone()
-	push.mu.Unlock()
+		pusher = push.req.PusherTxn.Clone()
+	}()
 
 	if err := q.cfg.Stopper.RunAsyncTask(
 		ctx, "monitoring pusher txn",
@@ -913,14 +937,16 @@ func (q *Queue) startQueryPusherTxn(
 				// Update the pending pusher's set of dependents. These accumulate
 				// and are used to propagate the transitive set of dependencies for
 				// distributed deadlock detection.
-				push.mu.Lock()
-				if push.mu.dependents == nil {
-					push.mu.dependents = map[uuid.UUID]struct{}{}
-				}
-				for _, txnID := range waitingTxns {
-					push.mu.dependents[txnID] = struct{}{}
-				}
-				push.mu.Unlock()
+				func() {
+					push.mu.Lock()
+					defer push.mu.Unlock()
+					if push.mu.dependents == nil {
+						push.mu.dependents = map[uuid.UUID]struct{}{}
+					}
+					for _, txnID := range waitingTxns {
+						push.mu.dependents[txnID] = struct{}{}
+					}
+				}()
 
 				// Send an update of the pusher txn.
 				pusher.Update(updatedPusher)
@@ -1029,9 +1055,9 @@ func (q *Queue) forcePushAbort(
 func (q *Queue) TrackedTxns() map[uuid.UUID]struct{} {
 	m := make(map[uuid.UUID]struct{})
 	q.mu.RLock()
+	defer q.mu.RUnlock()
 	for k := range q.mu.txns {
 		m[k] = struct{}{}
 	}
-	q.mu.RUnlock()
 	return m
 }

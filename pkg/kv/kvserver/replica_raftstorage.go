@@ -234,9 +234,11 @@ func (r *Replica) GetSnapshot(
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
-	r.raftMu.Lock()
-	snap := r.store.TODOEngine().NewSnapshot()
-	r.raftMu.Unlock()
+	snap := func() storage.Reader {
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		return r.store.TODOEngine().NewSnapshot()
+	}()
 
 	defer func() {
 		if err != nil {
@@ -540,13 +542,15 @@ func (r *Replica) applySnapshot(
 		// We need to mark the replicas as being destroyed *before* we ingest the
 		// SSTs, so that, e.g., concurrent reads served by the replica don't
 		// erroneously return empty data.
-		sr.readOnlyCmdMu.Lock()
-		sr.mu.Lock()
-		sr.mu.destroyStatus.Set(
-			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
-			destroyReasonRemoved)
-		sr.mu.Unlock()
-		sr.readOnlyCmdMu.Unlock()
+		func() {
+			sr.readOnlyCmdMu.Lock()
+			sr.mu.Lock()
+			defer sr.readOnlyCmdMu.Unlock()
+			defer sr.mu.Unlock()
+			sr.mu.destroyStatus.Set(
+				kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
+				destroyReasonRemoved)
+		}()
 
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
@@ -643,9 +647,11 @@ func (r *Replica) applySnapshot(
 	if isInitialSnap {
 		// NB: this will also call setDescLockedRaftMuLocked.
 		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
+			// nolint:deferunlock
 			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
+			// nolint:deferunlock
 			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 		}
@@ -655,6 +661,7 @@ func (r *Replica) applySnapshot(
 	// NOTE: even though we acquired the store mutex first (according to the
 	// lock ordering rules described on Store.mu), it is safe to drop it first
 	// without risking a lock-ordering deadlock.
+	// nolint:deferunlock
 	r.store.mu.Unlock()
 
 	// We set the persisted last index to the last applied index. This is
@@ -701,7 +708,7 @@ func (r *Replica) applySnapshot(
 
 	// Inform the concurrency manager that this replica just applied a snapshot.
 	r.concMgr.OnReplicaSnapshotApplied()
-
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	// Assert that the in-memory and on-disk states of the Replica are congruent
@@ -710,6 +717,7 @@ func (r *Replica) applySnapshot(
 	// across both Replica.mu critical sections.
 	r.mu.RLock()
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to

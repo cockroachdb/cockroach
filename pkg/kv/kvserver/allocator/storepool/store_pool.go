@@ -446,19 +446,23 @@ func (sp *StorePool) storeDescriptorUpdate(storeDesc roachpb.StoreDescriptor) {
 
 	now := sp.clock.Now()
 
-	sp.DetailsMu.Lock()
-	detail := sp.GetStoreDetailLocked(storeID)
-	if detail.Desc != nil {
-		oldCapacity = detail.Desc.Capacity
-	}
-	detail.Desc = &storeDesc
-	detail.LastUpdatedTime = now
-	sp.DetailsMu.Unlock()
+	func() {
+		sp.DetailsMu.Lock()
+		defer sp.DetailsMu.Unlock()
+		detail := sp.GetStoreDetailLocked(storeID)
+		if detail.Desc != nil {
+			oldCapacity = detail.Desc.Capacity
+		}
+		detail.Desc = &storeDesc
+		detail.LastUpdatedTime = now
+	}()
 
-	sp.localitiesMu.Lock()
-	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
-		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
-	sp.localitiesMu.Unlock()
+	func() {
+		sp.localitiesMu.Lock()
+		defer sp.localitiesMu.Unlock()
+		sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
+			localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
+	}()
 
 	if oldCapacity != curCapacity {
 		sp.capacityChanged(storeID, curCapacity, oldCapacity)

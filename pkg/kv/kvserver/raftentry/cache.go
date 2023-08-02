@@ -152,26 +152,29 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 		bytesGuessed = 0
 	}
 
-	c.mu.Lock()
-	// Get p and move the partition to the front of the LRU.
-	p := c.getPartLocked(id, add /* create */, true /* recordUse */)
-	if bytesGuessed > 0 {
-		c.evictLocked(bytesGuessed)
-		if len(c.parts) == 0 { // Get p again if we evicted everything.
-			p = c.getPartLocked(id, true /* create */, false /* recordUse */)
-		}
-		// Use the atomic (load|set)Size partition methods to avoid a race condition
-		// on p.size and to ensure that p.size.bytes() reflects the number of bytes
-		// in c.bytes associated with p in the face of concurrent updates due to calls
-		// to c.recordUpdate.
-		for {
-			prev := p.loadSize()
-			if p.setSize(prev, prev.add(bytesGuessed, 0)) {
-				break
+	var p *partition
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		// Get p and move the partition to the front of the LRU.
+		p = c.getPartLocked(id, add /* create */, true /* recordUse */)
+		if bytesGuessed > 0 {
+			c.evictLocked(bytesGuessed)
+			if len(c.parts) == 0 { // Get p again if we evicted everything.
+				p = c.getPartLocked(id, true /* create */, false /* recordUse */)
+			}
+			// Use the atomic (load|set)Size partition methods to avoid a race condition
+			// on p.size and to ensure that p.size.bytes() reflects the number of bytes
+			// in c.bytes associated with p in the face of concurrent updates due to calls
+			// to c.recordUpdate.
+			for {
+				prev := p.loadSize()
+				if p.setSize(prev, prev.add(bytesGuessed, 0)) {
+					break
+				}
 			}
 		}
-	}
-	c.mu.Unlock()
+	}()
 	if p == nil {
 		// The partition did not exist and we did not create it.
 		// Only possible if !add.
@@ -200,13 +203,14 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 
 // Clear removes all entries on the given range with index less than hi.
 func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
-	c.mu.Lock()
-	p := c.getPartLocked(id, false /* create */, false /* recordUse */)
+	p := func() *partition {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.getPartLocked(id, false /* create */, false /* recordUse */)
+	}()
 	if p == nil {
-		c.mu.Unlock()
 		return
 	}
-	c.mu.Unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	bytesRemoved, entriesRemoved := p.clearTo(hi)
@@ -217,9 +221,11 @@ func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
 // value. If the index is not present in the cache, false is returned.
 func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
 	c.metrics.Accesses.Inc(1)
-	c.mu.Lock()
-	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
-	c.mu.Unlock()
+	p := func() *partition {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.getPartLocked(id, false /* create */, true /* recordUse */)
+	}()
 	if p == nil {
 		return e, false
 	}
@@ -243,9 +249,11 @@ func (c *Cache) Scan(
 	ents []raftpb.Entry, id roachpb.RangeID, lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
 	c.metrics.Accesses.Inc(1)
-	c.mu.Lock()
-	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
-	c.mu.Unlock()
+	p := func() *partition {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.getPartLocked(id, false /* create */, true /* recordUse */)
+	}()
 	if p == nil {
 		return ents, 0, lo, false
 	}

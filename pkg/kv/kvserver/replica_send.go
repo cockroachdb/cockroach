@@ -1114,10 +1114,14 @@ func (r *Replica) collectSpans(
 	_ error,
 ) {
 	latchSpans, lockSpans = spanset.New(), lockspanset.New()
-	r.mu.RLock()
-	desc := r.descRLocked()
-	liveCount := r.mu.state.Stats.LiveCount
-	r.mu.RUnlock()
+	var desc *roachpb.RangeDescriptor
+	var liveCount int64
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		desc = r.descRLocked()
+		liveCount = r.mu.state.Stats.LiveCount
+	}()
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).

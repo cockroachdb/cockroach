@@ -101,6 +101,7 @@ func (r *Replica) executeWriteBatch(
 	readOnlyCmdMu.RLock()
 	defer func() {
 		if readOnlyCmdMu != nil {
+			// nolint:deferunlock
 			readOnlyCmdMu.RUnlock()
 		}
 	}()
@@ -180,6 +181,7 @@ func (r *Replica) executeWriteBatch(
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
+			// nolint:deferunlock
 			readOnlyCmdMu.RUnlock()
 			readOnlyCmdMu = nil
 
@@ -194,6 +196,7 @@ func (r *Replica) executeWriteBatch(
 
 	// We are done with pre-Raft evaluation at this point, and have to release the
 	// read-only command lock to avoid deadlocks during Raft evaluation.
+	// nolint:deferunlock
 	readOnlyCmdMu.RUnlock()
 	readOnlyCmdMu = nil
 

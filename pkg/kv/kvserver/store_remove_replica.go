@@ -161,6 +161,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		// This is a fatal error because uninitialized replicas shouldn't make it
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
+		// nolint:deferunlock
 		s.mu.Unlock()
 		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item)
 	}
@@ -170,6 +171,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	s.metrics.subtractMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
+	// nolint:deferunlock
 	s.mu.Unlock()
 
 	// The replica will no longer exist, so cancel any rangefeed registrations.
@@ -252,13 +254,17 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		// because we should have already checked this under the raftMu
 		// before calling this method.
 		if rep.mu.destroyStatus.Removed() {
+			// nolint:deferunlock
 			rep.mu.Unlock()
+			// nolint:deferunlock
 			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
 		}
 
 		if rep.IsInitialized() {
+			// nolint:deferunlock
 			rep.mu.Unlock()
+			// nolint:deferunlock
 			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
 		}
@@ -266,8 +272,9 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		// Mark the replica as removed before deleting data.
 		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
-
+		// nolint:deferunlock
 		rep.mu.Unlock()
+		// nolint:deferunlock
 		rep.readOnlyCmdMu.Unlock()
 	}
 
@@ -302,9 +309,11 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 // store.mu must be held.
 func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachpb.RangeID) {
 	s.mu.AssertHeld()
-	s.unquiescedReplicas.Lock()
-	delete(s.unquiescedReplicas.m, rangeID)
-	s.unquiescedReplicas.Unlock()
+	func() {
+		s.unquiescedReplicas.Lock()
+		defer s.unquiescedReplicas.Unlock()
+		delete(s.unquiescedReplicas.m, rangeID)
+	}()
 	delete(s.mu.uninitReplicas, rangeID)
 	s.mu.replicasByRangeID.Delete(rangeID)
 	s.unregisterLeaseholderByID(ctx, rangeID)

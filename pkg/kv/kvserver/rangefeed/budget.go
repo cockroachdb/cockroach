@@ -210,15 +210,16 @@ func (f *FeedBudget) WaitAndGet(
 
 // Return returns amount to budget.
 func (f *FeedBudget) returnAllocation(ctx context.Context, amount int64) {
-	f.mu.Lock()
-	if f.mu.closed {
-		f.mu.Unlock()
-		return
-	}
-	if amount > 0 {
-		f.mu.memBudget.Shrink(ctx, amount)
-	}
-	f.mu.Unlock()
+	func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.mu.closed {
+			return
+		}
+		if amount > 0 {
+			f.mu.memBudget.Shrink(ctx, amount)
+		}
+	}()
 	select {
 	case f.replenishC <- struct{}{}:
 	default:
@@ -233,10 +234,10 @@ func (f *FeedBudget) Close(ctx context.Context) {
 	}
 	f.closed.Do(func() {
 		f.mu.Lock()
+		defer f.mu.Unlock()
 		f.mu.closed = true
 		f.mu.memBudget.Close(ctx)
 		close(f.stopC)
-		f.mu.Unlock()
 	})
 }
 

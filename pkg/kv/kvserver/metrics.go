@@ -2679,6 +2679,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			m.SysBytes = sm.SysBytes.AddChild(tenantIDStr)
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
 			m.AbortSpanBytes = sm.AbortSpanBytes.AddChild(tenantIDStr)
+			// nolint:deferunlock
 			m.mu.Unlock()
 			return &tenantMetricsRef{
 				_tenantID: tenantID,
@@ -2696,9 +2697,11 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		ref.assert(ctx) // this will fatal
 		return          // unreachable
 	}
-	ref._stack.Lock()
-	ref._stack.string = string(debug.Stack())
-	ref._stack.Unlock()
+	func() {
+		ref._stack.Lock()
+		defer ref._stack.Unlock()
+		ref._stack.string = string(debug.Stack())
+	}()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.refCount--
@@ -3340,10 +3343,13 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
 
 	// Update the maximum number of L0 sub-levels seen.
-	sm.l0SublevelsTracker.Lock()
-	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
-	curMax, _ := sm.l0SublevelsTracker.swag.Query(timeutil.Now())
-	sm.l0SublevelsTracker.Unlock()
+	var curMax float64
+	func() {
+		sm.l0SublevelsTracker.Lock()
+		defer sm.l0SublevelsTracker.Unlock()
+		sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
+		curMax, _ = sm.l0SublevelsTracker.swag.Query(timeutil.Now())
+	}()
 	syncutil.StoreFloat64(&sm.l0SublevelsWindowedMax, curMax)
 
 	for level, stats := range m.Levels {

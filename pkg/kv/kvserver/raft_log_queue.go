@@ -249,40 +249,49 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
-	r.mu.RLock()
-	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.mu.raftLogSize)
-	// A "cooperative" truncation (i.e. one that does not cut off followers from
-	// the log) takes place whenever there are more than
-	// RaftLogQueueStaleThreshold entries or the log's estimated size is above
-	// RaftLogQueueStaleSize bytes. This is fairly aggressive, so under normal
-	// conditions, the log is very small.
-	//
-	// If followers start falling behind, at some point the logs still need to
-	// be truncated. We do this either when the size of the log exceeds
-	// RaftLogTruncationThreshold (or, in eccentric configurations, the zone's
-	// RangeMaxBytes). This captures the heuristic that at some point, it's more
-	// efficient to catch up via a snapshot than via applying a long tail of log
-	// entries.
-	targetSize := r.store.cfg.RaftLogTruncationThreshold
-	if targetSize > r.mu.conf.RangeMaxBytes {
-		targetSize = r.mu.conf.RangeMaxBytes
-	}
-	raftStatus := r.raftStatusRLocked()
+	var raftLogSize int64
+	var targetSize int64
+	var raftStatus *raft.Status
+	var pendingSnapshotIndex kvpb.RaftIndex
+	var lastIndex kvpb.RaftIndex
+	var firstIndex kvpb.RaftIndex
+	var logSizeTrusted bool
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		raftLogSize = r.pendingLogTruncations.computePostTruncLogSize(r.mu.raftLogSize)
+		// A "cooperative" truncation (i.e. one that does not cut off followers from
+		// the log) takes place whenever there are more than
+		// RaftLogQueueStaleThreshold entries or the log's estimated size is above
+		// RaftLogQueueStaleSize bytes. This is fairly aggressive, so under normal
+		// conditions, the log is very small.
+		//
+		// If followers start falling behind, at some point the logs still need to
+		// be truncated. We do this either when the size of the log exceeds
+		// RaftLogTruncationThreshold (or, in eccentric configurations, the zone's
+		// RangeMaxBytes). This captures the heuristic that at some point, it's more
+		// efficient to catch up via a snapshot than via applying a long tail of log
+		// entries.
+		targetSize = r.store.cfg.RaftLogTruncationThreshold
+		if targetSize > r.mu.conf.RangeMaxBytes {
+			targetSize = r.mu.conf.RangeMaxBytes
+		}
+		raftStatus = r.raftStatusRLocked()
 
-	const anyRecipientStore roachpb.StoreID = 0
-	_, pendingSnapshotIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore, false /* initialOnly */)
-	lastIndex := r.mu.lastIndexNotDurable
-	// NB: raftLogSize above adjusts for pending truncations that have already
-	// been successfully replicated via raft, but logSizeTrusted does not see if
-	// those pending truncations would cause a transition from trusted =>
-	// !trusted. This is done since we don't want to trigger a recomputation of
-	// the raft log size while we still have pending truncations. Note that as
-	// soon as those pending truncations are enacted r.mu.raftLogSizeTrusted
-	// will become false and we will recompute the size -- so this cannot cause
-	// an indefinite delay in recomputation.
-	logSizeTrusted := r.mu.raftLogSizeTrusted
-	firstIndex := r.raftFirstIndexRLocked()
-	r.mu.RUnlock()
+		const anyRecipientStore roachpb.StoreID = 0
+		_, pendingSnapshotIndex = r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore, false /* initialOnly */)
+		lastIndex = r.mu.lastIndexNotDurable
+		// NB: raftLogSize above adjusts for pending truncations that have already
+		// been successfully replicated via raft, but logSizeTrusted does not see if
+		// those pending truncations would cause a transition from trusted =>
+		// !trusted. This is done since we don't want to trigger a recomputation of
+		// the raft log size while we still have pending truncations. Note that as
+		// soon as those pending truncations are enacted r.mu.raftLogSizeTrusted
+		// will become false and we will recompute the size -- so this cannot cause
+		// an indefinite delay in recomputation.
+		logSizeTrusted = r.mu.raftLogSizeTrusted
+		firstIndex = r.raftFirstIndexRLocked()
+	}()
 	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 
 	if raftStatus == nil {
@@ -300,17 +309,19 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	// For all our followers, overwrite the RecentActive field with our own
 	// activity check.
-	r.mu.RLock()
-	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
-	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
-	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
-		func(replicaID roachpb.ReplicaID) bool {
-			return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, now, r.store.cfg.RangeLeaseDuration)
-		},
-	)
-	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
-	r.mu.RUnlock()
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
+		log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
+		updateRaftProgressFromActivity(
+			ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
+			func(replicaID roachpb.ReplicaID) bool {
+				return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, now, r.store.cfg.RangeLeaseDuration)
+			},
+		)
+		log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
+	}()
 
 	input := truncateDecisionInput{
 		RaftStatus:           *raftStatus,
@@ -692,16 +703,22 @@ func (rlq *raftLogQueue) process(
 		// We need to hold raftMu both to access the sideloaded storage and to
 		// make sure concurrent Raft activity doesn't foul up our update to the
 		// cached in-memory values.
-		r.raftMu.Lock()
-		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.store.TODOEngine(), r.raftMu.sideloaded)
-		if err == nil {
-			r.mu.Lock()
-			r.mu.raftLogSize = n
-			r.mu.raftLogLastCheckSize = n
-			r.mu.raftLogSizeTrusted = true
-			r.mu.Unlock()
-		}
-		r.raftMu.Unlock()
+		var n int64
+		var err error
+		func() {
+			r.raftMu.Lock()
+			defer r.raftMu.Unlock()
+			n, err = ComputeRaftLogSize(ctx, r.RangeID, r.store.TODOEngine(), r.raftMu.sideloaded)
+			if err == nil {
+				func() {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					r.mu.raftLogSize = n
+					r.mu.raftLogLastCheckSize = n
+					r.mu.raftLogSizeTrusted = true
+				}()
+			}
+		}()
 
 		if err != nil {
 			return false, errors.Wrap(err, "recomputing raft log size")

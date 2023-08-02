@@ -142,10 +142,12 @@ func (c *Controller) Admit(
 	logged := false
 	tstart := c.clock.PhysicalTime()
 	for {
-		c.mu.Lock()
-		b := c.getBucketLocked(connection.Stream())
-		tokens := b.tokens[class]
-		c.mu.Unlock()
+		b, tokens := func() (bucket, kvflowcontrol.Tokens) {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			bt := c.getBucketLocked(connection.Stream())
+			return bt, bt.tokens[class]
+		}()
 
 		if tokens > 0 ||
 			// In addition to letting requests through when there are tokens
