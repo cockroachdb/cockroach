@@ -49,6 +49,8 @@ import {
 import moment from "moment-timezone";
 import { CockroachCloudContext } from "src/contexts";
 import { JobProfilerView } from "./jobProfilerView";
+import long from "long";
+import { UIConfigState } from "src/store";
 
 const { TabPane } = Tabs;
 
@@ -68,6 +70,7 @@ export interface JobDetailsStateProps {
   onDownloadExecutionFileClicked: (
     req: GetJobProfilerExecutionDetailRequest,
   ) => Promise<GetJobProfilerExecutionDetailResponse>;
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface JobDetailsDispatchProps {
@@ -75,6 +78,8 @@ export interface JobDetailsDispatchProps {
   refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
+  onRequestExecutionDetails: (jobID: long) => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export interface JobDetailsState {
@@ -113,6 +118,7 @@ export class JobDetails extends React.Component<
   }
 
   componentDidMount(): void {
+    this.props.refreshUserSQLRoles();
     if (!this.props.jobRequest.data) {
       this.refresh();
     }
@@ -144,6 +150,7 @@ export class JobDetails extends React.Component<
         onDownloadExecutionFileClicked={
           this.props.onDownloadExecutionFileClicked
         }
+        onRequestExecutionDetails={this.props.onRequestExecutionDetails}
       />
     );
   };
@@ -308,11 +315,15 @@ export class JobDetails extends React.Component<
                   <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
                     {this.renderOverviewTabContent(hasNextRun, nextRun, job)}
                   </TabPane>
-                  {!useContext(CockroachCloudContext) && (
-                    <TabPane tab={TabKeysEnum.PROFILER} key="advancedDebugging">
-                      {this.renderProfilerTabContent(job)}
-                    </TabPane>
-                  )}
+                  {!useContext(CockroachCloudContext) &&
+                    this.props.hasAdminRole && (
+                      <TabPane
+                        tab={TabKeysEnum.PROFILER}
+                        key="advancedDebugging"
+                      >
+                        {this.renderProfilerTabContent(job)}
+                      </TabPane>
+                    )}
                 </Tabs>
               </>
             )}
