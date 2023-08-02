@@ -822,7 +822,7 @@ func makeTenantServerWithOptions(
 			TestServer: TestServer{
 				DB:           tenantDB,
 				Server:       tenantServer,
-				TestingKnobs: tenantServer.(*server.TestTenant).Cfg.TestingKnobs,
+				TestingKnobs: *tenantServer.TestingKnobs(),
 				Codec:        keys.MakeSQLCodec(tenantID),
 			},
 			SystemDB:     systemDB,

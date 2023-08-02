@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,4 +82,30 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 
 	err = db.Ping()
 	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
+}
+
+func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const specialSize = 123123123
+
+	// Start a server with a custom temp storage limit.
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings:          st,
+		TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(st, specialSize),
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Start a shared process tenant server.
+	ts, _, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantName: "hello",
+	})
+	require.NoError(t, err)
+
+	tss := ts.(*testTenant)
+	require.Equal(t, int64(specialSize), tss.SQLCfg.TempStorageConfig.Mon.Limit())
 }

@@ -624,7 +624,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`\*testServer`,
+			`\*(testServer|testTenant)`,
 			"--",
 			"server/*_test.go",
 			":!server/server_special_test.go",
