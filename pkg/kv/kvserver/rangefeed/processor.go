@@ -64,9 +64,9 @@ type Config struct {
 	// EventChanCap specifies the capacity to give to the Processor's input
 	// channel.
 	EventChanCap int
-	// EventChanTimeout specifies the maximum duration that methods will
-	// wait to send on the Processor's input channel before giving up and
-	// shutting down the Processor. 0 for no timeout.
+	// EventChanTimeout specifies the maximum time to wait when sending on the
+	// Processor's input channel before giving up and shutting down the Processor.
+	// 0 disables the timeout, backpressuring writers up through Raft (for tests).
 	EventChanTimeout time.Duration
 
 	// Metrics is for production monitoring of RangeFeeds.
@@ -476,10 +476,10 @@ func (p *Processor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
+	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, disconnectFn, done,
-	)
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done)
 	select {
 	case p.regC <- r:
 		// Wait for response.
