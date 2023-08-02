@@ -4828,7 +4828,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?ca_cert=Zm9v`,
 	)
 	sqlDB.ExpectErr(
-		t, `sink requires https`,
+		t, `sink requires webhook-https`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-http://fake-host`,
 	)
 	sqlDB.ExpectErr(

@@ -729,6 +729,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer cleanup()
 	// Don't allow for replanning until the new nodes and scattered table have been created.
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
 
 	// Begin the job on a single source node.
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -746,7 +747,6 @@ func TestStreamingAutoReplan(t *testing.T) {
 
 	// Configure the ingestion job to replan eagerly.
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
 
 	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
 	require.Error(t, <-retryErrorChan, sql.ErrPlanChanged)

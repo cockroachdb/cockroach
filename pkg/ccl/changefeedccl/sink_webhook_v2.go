@@ -229,7 +229,7 @@ func validateWebhookOpts(
 	u sinkURL, encodingOpts changefeedbase.EncodingOptions, opts changefeedbase.WebhookSinkOptions,
 ) error {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
-		return errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
+		return errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
 	}
 
 	switch encodingOpts.Format {
