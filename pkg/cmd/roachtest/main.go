@@ -267,6 +267,29 @@ Examples:
 	listCmd.Flags().BoolVar(
 		&listBench, "bench", false, "list benchmarks instead of tests")
 
+	runFn := func(args []string, benchOnly bool) error {
+		if literalArtifacts == "" {
+			literalArtifacts = artifacts
+		}
+		return runTests(tests.RegisterTests, cliCfg{
+			args:                   args,
+			count:                  count,
+			cpuQuota:               cpuQuota,
+			runSkipped:             runSkipped,
+			debugMode:              debugModeFromOpts(),
+			skipInit:               skipInit,
+			httpPort:               httpPort,
+			promPort:               promPort,
+			parallelism:            parallelism,
+			artifactsDir:           artifacts,
+			literalArtifactsDir:    literalArtifacts,
+			user:                   getUser(username),
+			clusterID:              clusterID,
+			versionsBinaryOverride: versionsBinaryOverride,
+			selectProbability:      selectProbability,
+		}, benchOnly)
+	}
+
 	var runCmd = &cobra.Command{
 		// Don't display usage when tests fail.
 		SilenceUsage: true,
@@ -283,26 +306,7 @@ failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			if literalArtifacts == "" {
-				literalArtifacts = artifacts
-			}
-			return runTests(tests.RegisterTests, cliCfg{
-				args:                   args,
-				count:                  count,
-				cpuQuota:               cpuQuota,
-				runSkipped:             runSkipped,
-				debugMode:              debugModeFromOpts(),
-				skipInit:               skipInit,
-				httpPort:               httpPort,
-				promPort:               promPort,
-				parallelism:            parallelism,
-				artifactsDir:           artifacts,
-				literalArtifactsDir:    literalArtifacts,
-				user:                   username,
-				clusterID:              clusterID,
-				versionsBinaryOverride: versionsBinaryOverride,
-				selectProbability:      selectProbability,
-			}, false /* benchOnly */)
+			return runFn(args, false /* benchOnly */)
 		},
 	}
 
@@ -326,24 +330,7 @@ runner itself.
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
-			if literalArtifacts == "" {
-				literalArtifacts = artifacts
-			}
-			return runTests(tests.RegisterTests, cliCfg{
-				args:                   args,
-				count:                  count,
-				cpuQuota:               cpuQuota,
-				runSkipped:             runSkipped,
-				debugMode:              debugModeFromOpts(),
-				skipInit:               skipInit,
-				httpPort:               httpPort,
-				parallelism:            parallelism,
-				artifactsDir:           artifacts,
-				user:                   username,
-				clusterID:              clusterID,
-				versionsBinaryOverride: versionsBinaryOverride,
-				selectProbability:      selectProbability,
-			}, true /* benchOnly */)
+			return runFn(args, true /* benchOnly */)
 		},
 	}
 
@@ -483,10 +470,11 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	opt := clustersOpt{
 		typ:         clusterType,
 		clusterName: clusterName,
-		user:        getUser(cfg.user),
-		cpuQuota:    cfg.cpuQuota,
-		debugMode:   cfg.debugMode,
-		clusterID:   cfg.clusterID,
+		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
+		user:      cfg.user,
+		cpuQuota:  cfg.cpuQuota,
+		debugMode: cfg.debugMode,
+		clusterID: cfg.clusterID,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err
