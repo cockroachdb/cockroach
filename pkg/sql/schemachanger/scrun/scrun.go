@@ -107,6 +107,11 @@ func RunSchemaChangesInJob(
 	descriptorIDs []descpb.ID,
 	rollback bool,
 ) error {
+	if knobs != nil && knobs.RunBeforeMakingPostCommitPlan != nil {
+		if err := knobs.RunBeforeMakingPostCommitPlan(rollback); err != nil {
+			return err
+		}
+	}
 	state, err := makeState(ctx, jobID, descriptorIDs, rollback, func(
 		ctx context.Context, f catalogFunc,
 	) error {
