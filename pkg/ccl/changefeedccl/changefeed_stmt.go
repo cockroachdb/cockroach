@@ -1295,13 +1295,17 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 		}
 
+		flowErr = changefeedbase.MaybeAnnotate(flowErr)
+
 		// Terminate changefeed if needed.
 		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, flowErr); err != nil {
-			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
 			// Best effort -- update job status to make it clear why changefeed shut down.
 			// This won't always work if this node is being shutdown/drained.
 			if ctx.Err() == nil {
+				log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
 				b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", err)
+			} else {
+				log.Infof(ctx, "CHANGEFEED %d process exiting on this node with %v because %v", jobID, flowErr, ctx.Err())
 			}
 			return err
 		}

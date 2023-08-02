@@ -11,6 +11,7 @@ package changefeedbase
 import (
 	"context"
 
+	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/errors"
@@ -148,3 +149,17 @@ func AsTerminalError(ctx context.Context, dh drainHelper, cause error) (termErr 
 
 // ErrNodeDraining indicates that this node is being drained.
 var ErrNodeDraining = errors.New("node draining")
+
+// MaybeAnnotate wraps common generic errors that look more specific than they actually are,
+// in order to make it more obvious that the error is unhelpful.
+func MaybeAnnotate(e error) error {
+	is := func(refErr error) bool { return errors.Is(e, refErr) }
+	switch {
+	case is(context.Canceled):
+		return errors.Wrap(e, "An error occurred but the details and origin could not be recovered, resulting in this generic error")
+	case is(sarama.ErrOutOfBrokers):
+		return errors.Wrap(e, "Connecting to Kafka failed for unknown reasons, resulting in this generic error")
+	default:
+		return e
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -73,4 +74,47 @@ func TestAsTerminalError(t *testing.T) {
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
 		require.Regexp(t, cause.Error(), termErr)
 	})
+}
+
+func TestMaybeAnnotate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("context error", func(t *testing.T) {
+		canceledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		expectAnnotated := func(e error) {
+			annotated := changefeedbase.MaybeAnnotate(e)
+			require.Regexp(t, "An error occurred but the details and origin could not be recovered", annotated)
+		}
+
+		expectAnnotated(canceledCtx.Err())
+
+		expectAnnotated(errors.Wrap(canceledCtx.Err(), "wrapped error still gets annotated"))
+
+		// Wrapped error is still there.
+		require.True(t, errors.Is(changefeedbase.MaybeAnnotate(canceledCtx.Err()), context.Canceled))
+
+	})
+
+	t.Run("kafka error", func(t *testing.T) {
+
+		expectAnnotated := func(e error) {
+			annotated := changefeedbase.MaybeAnnotate(e)
+			require.Regexp(t, "Connecting to Kafka failed for unknown reasons", annotated)
+		}
+
+		expectAnnotated(sarama.ErrOutOfBrokers)
+
+		expectAnnotated(errors.Wrap(sarama.ErrOutOfBrokers, "wrapped error still gets annotated"))
+
+		// Wrapped error is still there.
+		require.True(t, errors.Is(changefeedbase.MaybeAnnotate(sarama.ErrOutOfBrokers), sarama.ErrOutOfBrokers))
+
+		// Similar errors don't get annotated.
+		require.Equal(t, sarama.ErrConcurrentTransactions, changefeedbase.MaybeAnnotate(sarama.ErrConcurrentTransactions))
+
+	})
+
 }
