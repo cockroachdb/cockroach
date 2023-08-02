@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -713,6 +714,7 @@ func (s *adminServer) getDatabaseStats(
 		select {
 		case response := <-responses:
 			if response.err != nil {
+				fmt.Printf("database stats - encountered error getting table span stats: %+v\n", response.err)
 				stats.MissingTables = append(
 					stats.MissingTables,
 					&serverpb.DatabaseDetailsResponse_Stats_MissingTable{
@@ -1328,16 +1330,9 @@ func (s *adminServer) statsForSpan(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	rSpan, err := keys.SpanAddr(span)
-	if err != nil {
-		return nil, err
-	}
-
 	// Get a list of nodeIDs, range counts, and replica counts per node
 	// for the specified span.
-	nodeIDs, rangeCount, replCounts, err := getNodeIDsRangeCountReplCountForSpan(
-		ctx, s.distSender, rSpan,
-	)
+	nodeIDs, rangeCount, replCounts, err := s.getSpanDetails(ctx, span)
 	if err != nil {
 		return nil, err
 	}
@@ -1450,25 +1445,29 @@ func (s *adminServer) statsForSpan(
 
 // Returns the list of node ids, range count,
 // and replica count for the specified span.
-func getNodeIDsRangeCountReplCountForSpan(
-	ctx context.Context, ds *kvcoord.DistSender, rSpan roachpb.RSpan,
+func (s *adminServer) getSpanDetails(
+	ctx context.Context, span roachpb.Span,
 ) (nodeIDList []roachpb.NodeID, rangeCount int64, replCounts map[roachpb.NodeID]int64, _ error) {
 	nodeIDs := make(map[roachpb.NodeID]struct{})
 	replCountForNodeID := make(map[roachpb.NodeID]int64)
-	ri := kvcoord.MakeRangeIterator(ds)
-	ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
-	for ; ri.Valid(); ri.Next(ctx) {
+	var it rangedesc.Iterator
+	var err error
+	if s.sqlServer.tenantConnect == nil {
+		it, err = s.sqlServer.execCfg.RangeDescIteratorFactory.NewIterator(ctx, span)
+	} else {
+		it, err = s.sqlServer.tenantConnect.NewIterator(ctx, span)
+	}
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	var rangeDesc roachpb.RangeDescriptor
+	for ; it.Valid(); it.Next() {
 		rangeCount++
-		for _, repl := range ri.Desc().Replicas().Descriptors() {
+		rangeDesc = it.CurRangeDescriptor()
+		for _, repl := range rangeDesc.Replicas().Descriptors() {
 			replCountForNodeID[repl.NodeID]++
 			nodeIDs[repl.NodeID] = struct{}{}
 		}
-		if !ri.NeedAnother(rSpan) {
-			break
-		}
-	}
-	if err := ri.Error(); err != nil {
-		return nil, 0, nil, err
 	}
 
 	nodeIDList = make([]roachpb.NodeID, 0, len(nodeIDs))
