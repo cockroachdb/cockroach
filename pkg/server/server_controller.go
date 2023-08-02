@@ -196,7 +196,7 @@ func (s *tenantServerWrapper) gracefulDrain(
 // We do not implement the onDemandServer interface methods on *Server
 // directly so as to not add noise to its go documentation.
 type systemServerWrapper struct {
-	server *Server
+	server *topLevelServer
 }
 
 var _ onDemandServer = (*systemServerWrapper)(nil)

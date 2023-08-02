@@ -38,7 +38,7 @@ import (
 // to be written to the DB.
 const maxBatchSize = 10000
 
-func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
+func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	// We don't want to do startup retries as this is not meant to be run in
 	// production.
 	ctx = startup.WithoutChecks(ctx)

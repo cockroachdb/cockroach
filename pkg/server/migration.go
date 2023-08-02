@@ -29,7 +29,7 @@ import (
 // migrationServer is an implementation of the Migration service. The RPCs here
 // are used to power the upgrades infrastructure in pkg/upgrades.
 type migrationServer struct {
-	server *Server
+	server *topLevelServer
 
 	// We use this mutex to serialize attempts to bump the cluster version.
 	syncutil.Mutex
