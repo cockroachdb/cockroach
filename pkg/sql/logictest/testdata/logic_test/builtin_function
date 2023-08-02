@@ -4137,33 +4137,32 @@ SELECT bitmask_xor('111', 'not binary')
 
 # Accept hex as well as binary inputs.
 query T
-SELECT bitmask_or('xfe8c', '1111')
+SELECT bitmask_or('xfe8c', '1111');
 ----
 1111111010001111
 
 query T
-SELECT bitmask_and('1111', 'xfe8c')
+SELECT bitmask_and('1111', 'xfe8c');
 ----
 0000000000001100
 
 query T
-SELECT bitmask_xor('xfe8c', '1111')
+SELECT bitmask_xor('xfe8c', '1111');
 ----
 0000000000000111
 
 # Test on a large (>64 bit) input.
-
 query T
-SELECT bitmask_or('xffffffffffffffffff', '010')
+SELECT bitmask_or('xffffffffffffffffff', '010');
 ----
 111111111111111111111111111111111111111111111111111111111111111111111111
 
 query T
-SELECT bitmask_and('xffffffffffffffffff', '010')
+SELECT bitmask_and('xffffffffffffffffff', '010');
 ----
 000000000000000000000000000000000000000000000000000000000000000000000010
 
 query T
-SELECT bitmask_xor('xffffffffffffffffff', '010')
+SELECT bitmask_xor('xffffffffffffffffff', '010');
 ----
 111111111111111111111111111111111111111111111111111111111111111111111101
