@@ -647,6 +647,7 @@ func DNSSafeAccount(account string) string {
 	return strings.Map(safe, account)
 }
 
+// SanitizeLabel returns a version of the string that can be used as a label.
 func SanitizeLabel(label string) string {
 	// Replace any non-alphanumeric characters with hyphens
 	re := regexp.MustCompile("[^a-zA-Z0-9]+")
