@@ -6,6 +6,7 @@ rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform ke
 
 eval duration=5m num_iterations=3 verbose=true
 ----
+----
 settings           num_iterations=3         duration=5m0s
 rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
@@ -15,12 +16,36 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(38)),s2n1=(replicas(62)),s3n1=(replicas(87)),s4n1=(replicas(74)),s5n1=(replicas(98)),s6n2=(replicas(37)),s7n2=(replicas(111)),s8n2=(replicas(86)),s9n2=(replicas(61)),s10n2=(replicas(99)),s11n3=(replicas(25)),s12n3=(replicas(37)),s13n3=(replicas(25)),s14n3=(replicas(13)),s15n3=(replicas(62))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(191)),s2n2=(replicas(154)),s3n3=(replicas(38)),s4n4=(replicas(77)),s5n5=(replicas(344)),s6n6=(replicas(268)),s7n7=(replicas(345)),s8n8=(replicas(76)),s9n9=(replicas(76)),s10n10=(replicas(191)),s11n11=(replicas(0)),s12n12=(replicas(344)),s13n13=(replicas(307)),s14n14=(replicas(153)),s15n15=(replicas(268))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(80)),s2n2=(replicas(0)),s3n3=(replicas(120)),s4n4=(replicas(40)),s5n5=(replicas(80)),s6n6=(replicas(40)),s7n7=(replicas(180)),s8n8=(replicas(180)),s9n9=(replicas(160)),s10n10=(replicas(40)),s11n11=(replicas(180)),s12n12=(replicas(19)),s13n13=(replicas(39)),s14n14=(replicas(119)),s15n15=(replicas(160))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
 sample1
@@ -77,6 +102,8 @@ sample3
   12 ┤ ╭╯
    0 ┼─╯
                                           replicas
+----
+----
 
 clear
 ----
@@ -90,6 +117,7 @@ rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform ke
 
 eval duration=5m num_iterations=10
 ----
+----
 settings           num_iterations=10        duration=5m0s
 rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
@@ -99,35 +127,233 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(21)),s2n2=(replicas(36)),s3n3=(replicas(50)),s4n4=(replicas(42)),s5n5=(replicas(57)),s6n6=(replicas(21)),s7n7=(replicas(64)),s8n8=(replicas(49)),s9n9=(replicas(36)),s10n10=(replicas(56)),s11n11=(replicas(15)),s12n12=(replicas(21)),s13n13=(replicas(14)),s14n14=(replicas(7)),s15n15=(replicas(36)),s16n16=(replicas(28)),s17n17=(replicas(15)),s18n18=(replicas(29)),s19n19=(replicas(28)),s20n20=(replicas(35)),s21n21=(replicas(28)),s22n22=(replicas(7)),s23n23=(replicas(14)),s24n24=(replicas(63)),s25n25=(replicas(50)),s26n26=(replicas(64)),s27n27=(replicas(14)),s28n28=(replicas(15))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(7)),s2n2=(replicas(11)),s3n3=(replicas(4)),s4n4=(replicas(12)),s5n5=(replicas(8)),s6n6=(replicas(12)),s7n7=(replicas(6)),s8n8=(replicas(1)),s9n9=(replicas(10)),s10n10=(replicas(4)),s11n11=(replicas(6)),s12n12=(replicas(4)),s13n13=(replicas(15)),s14n14=(replicas(14)),s15n15=(replicas(14)),s16n16=(replicas(4)),s17n17=(replicas(15)),s18n18=(replicas(2)),s19n19=(replicas(4)),s20n20=(replicas(9)),s21n21=(replicas(13)),s22n22=(replicas(1)),s23n23=(replicas(10)),s24n24=(replicas(11)),s25n25=(replicas(6)),s26n26=(replicas(13)),s27n27=(replicas(2)),s28n28=(replicas(10))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(55)),s2n2=(replicas(47)),s3n3=(replicas(56)),s4n4=(replicas(66)),s5n5=(replicas(1)),s6n6=(replicas(66)),s7n7=(replicas(0)),s8n8=(replicas(38)),s9n9=(replicas(9)),s10n10=(replicas(38)),s11n11=(replicas(28)),s12n12=(replicas(55)),s13n13=(replicas(83)),s14n14=(replicas(28)),s15n15=(replicas(28)),s16n16=(replicas(83)),s17n17=(replicas(56)),s18n18=(replicas(37)),s19n19=(replicas(47)),s20n20=(replicas(56)),s21n21=(replicas(28)),s22n22=(replicas(74)),s23n23=(replicas(19)),s24n24=(replicas(74)),s25n25=(replicas(9)),s26n26=(replicas(66)),s27n27=(replicas(28)),s28n28=(replicas(10))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample3: pass
 ----------------------------------
 sample4: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(38)),s2n2=(replicas(18)),s3n3=(replicas(37)),s4n4=(replicas(23)),s5n5=(replicas(37)),s6n6=(replicas(37)),s7n7=(replicas(10)),s8n8=(replicas(33)),s9n9=(replicas(1)),s10n10=(replicas(32)),s11n11=(replicas(38)),s12n12=(replicas(4)),s13n13=(replicas(42)),s14n14=(replicas(42)),s15n15=(replicas(42)),s16n16=(replicas(38)),s17n17=(replicas(33)),s18n18=(replicas(13)),s19n19=(replicas(4)),s20n20=(replicas(37)),s21n21=(replicas(14)),s22n22=(replicas(10)),s23n23=(replicas(0)),s24n24=(replicas(37)),s25n25=(replicas(13)),s26n26=(replicas(4)),s27n27=(replicas(23)),s28n28=(replicas(18)),s29n29=(replicas(13)),s30n30=(replicas(19)),s31n31=(replicas(38)),s32n32=(replicas(42)),s33n33=(replicas(19)),s34n34=(replicas(4)),s35n35=(replicas(18)),s36n36=(replicas(33))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample4: pass
 ----------------------------------
 sample5: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(95)),s2n2=(replicas(96)),s3n3=(replicas(173)),s4n4=(replicas(58)),s5n5=(replicas(20)),s6n6=(replicas(153)),s7n7=(replicas(76)),s8n8=(replicas(57)),s9n9=(replicas(38)),s10n10=(replicas(135)),s11n11=(replicas(173)),s12n12=(replicas(114)),s13n13=(replicas(57)),s14n14=(replicas(135)),s15n15=(replicas(19)),s16n16=(replicas(114)),s17n17=(replicas(39)),s18n18=(replicas(95)),s19n19=(replicas(57)),s20n20=(replicas(58)),s21n21=(replicas(154)),s22n22=(replicas(19)),s23n23=(replicas(39)),s24n24=(replicas(0)),s25n25=(replicas(19)),s26n26=(replicas(114)),s27n27=(replicas(58)),s28n28=(replicas(172))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample5: pass
 ----------------------------------
 sample6: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(26)),s2n2=(replicas(75)),s3n3=(replicas(58)),s4n4=(replicas(1)),s5n5=(replicas(75)),s6n6=(replicas(66)),s7n7=(replicas(51)),s8n8=(replicas(42)),s9n9=(replicas(75)),s10n10=(replicas(25)),s11n11=(replicas(50)),s12n12=(replicas(0)),s13n13=(replicas(66)),s14n14=(replicas(50)),s15n15=(replicas(76)),s16n16=(replicas(25)),s17n17=(replicas(50)),s18n18=(replicas(0)),s19n19=(replicas(58)),s20n20=(replicas(16)),s21n21=(replicas(0)),s22n22=(replicas(16)),s23n23=(replicas(58)),s24n24=(replicas(58)),s25n25=(replicas(41)),s26n26=(replicas(9)),s27n27=(replicas(50)),s28n28=(replicas(8))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample6: pass
 ----------------------------------
 sample7: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(93)),s2n2=(replicas(57)),s3n3=(replicas(12)),s4n4=(replicas(0)),s5n5=(replicas(104)),s6n6=(replicas(1)),s7n7=(replicas(82)),s8n8=(replicas(34)),s9n9=(replicas(82)),s10n10=(replicas(11)),s11n11=(replicas(12)),s12n12=(replicas(82)),s13n13=(replicas(69)),s14n14=(replicas(81)),s15n15=(replicas(0)),s16n16=(replicas(47)),s17n17=(replicas(81)),s18n18=(replicas(47)),s19n19=(replicas(23)),s20n20=(replicas(92)),s21n21=(replicas(57)),s22n22=(replicas(58)),s23n23=(replicas(92)),s24n24=(replicas(81)),s25n25=(replicas(58)),s26n26=(replicas(47)),s27n27=(replicas(34)),s28n28=(replicas(0))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample7: pass
 ----------------------------------
 sample8: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(48)),s2n2=(replicas(20)),s3n3=(replicas(0)),s4n4=(replicas(55)),s5n5=(replicas(34)),s6n6=(replicas(48)),s7n7=(replicas(27)),s8n8=(replicas(47)),s9n9=(replicas(61)),s10n10=(replicas(35)),s11n11=(replicas(55)),s12n12=(replicas(21)),s13n13=(replicas(62)),s14n14=(replicas(54)),s15n15=(replicas(6)),s16n16=(replicas(14)),s17n17=(replicas(1)),s18n18=(replicas(55)),s19n19=(replicas(54)),s20n20=(replicas(61)),s21n21=(replicas(20)),s22n22=(replicas(34)),s23n23=(replicas(1)),s24n24=(replicas(62)),s25n25=(replicas(55)),s26n26=(replicas(13)),s27n27=(replicas(34)),s28n28=(replicas(13)),s29n29=(replicas(34)),s30n30=(replicas(27)),s31n31=(replicas(13)),s32n32=(replicas(47)),s33n33=(replicas(40)),s34n34=(replicas(27)),s35n35=(replicas(28)),s36n36=(replicas(21))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample8: pass
 ----------------------------------
 sample9: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(1)),s2n2=(replicas(114)),s3n3=(replicas(57)),s4n4=(replicas(18)),s5n5=(replicas(132)),s6n6=(replicas(133)),s7n7=(replicas(19)),s8n8=(replicas(38)),s9n9=(replicas(114)),s10n10=(replicas(19)),s11n11=(replicas(37)),s12n12=(replicas(170)),s13n13=(replicas(151)),s14n14=(replicas(38)),s15n15=(replicas(18)),s16n16=(replicas(171)),s17n17=(replicas(0)),s18n18=(replicas(114)),s19n19=(replicas(132)),s20n20=(replicas(75)),s21n21=(replicas(18)),s22n22=(replicas(37)),s23n23=(replicas(76)),s24n24=(replicas(114)),s25n25=(replicas(38)),s26n26=(replicas(132)),s27n27=(replicas(76)),s28n28=(replicas(133)),s29n29=(replicas(1)),s30n30=(replicas(114)),s31n31=(replicas(76)),s32n32=(replicas(0)),s33n33=(replicas(171)),s34n34=(replicas(171)),s35n35=(replicas(94)),s36n36=(replicas(57))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample9: pass
 ----------------------------------
 sample10: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(4)),s2n2=(replicas(10)),s3n3=(replicas(1)),s4n4=(replicas(10)),s5n5=(replicas(6)),s6n6=(replicas(6)),s7n7=(replicas(6)),s8n8=(replicas(10)),s9n9=(replicas(1)),s10n10=(replicas(3)),s11n11=(replicas(12)),s12n12=(replicas(10)),s13n13=(replicas(7)),s14n14=(replicas(4)),s15n15=(replicas(5)),s16n16=(replicas(8)),s17n17=(replicas(9)),s18n18=(replicas(6)),s19n19=(replicas(0)),s20n20=(replicas(3)),s21n21=(replicas(7)),s22n22=(replicas(7)),s23n23=(replicas(6)),s24n24=(replicas(11)),s25n25=(replicas(9)),s26n26=(replicas(2)),s27n27=(replicas(0)),s28n28=(replicas(2)),s29n29=(replicas(7)),s30n30=(replicas(10)),s31n31=(replicas(9)),s32n32=(replicas(7)),s33n33=(replicas(6)),s34n34=(replicas(4)),s35n35=(replicas(4)),s36n36=(replicas(1))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample10: pass
 ----------------------------------
+----
+----
 
 clear
 ----
@@ -140,6 +366,7 @@ rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keysp
 
 eval duration=5m num_iterations=10
 ----
+----
 settings           num_iterations=10        duration=5m0s
 rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
@@ -149,35 +376,233 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(34)),s2n2=(replicas(57)),s3n3=(replicas(81)),s4n4=(replicas(68)),s5n5=(replicas(92)),s6n6=(replicas(34)),s7n7=(replicas(102)),s8n8=(replicas(81)),s9n9=(replicas(57)),s10n10=(replicas(92)),s11n11=(replicas(22)),s12n12=(replicas(34)),s13n13=(replicas(23)),s14n14=(replicas(12)),s15n15=(replicas(58)),s16n16=(replicas(46)),s17n17=(replicas(22)),s18n18=(replicas(45)),s19n19=(replicas(46)),s20n20=(replicas(58)),s21n21=(replicas(45)),s22n22=(replicas(11)),s23n23=(replicas(23)),s24n24=(replicas(103)),s25n25=(replicas(81)),s26n26=(replicas(103)),s27n27=(replicas(23)),s28n28=(replicas(23))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(0)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(9)),s2n2=(replicas(7)),s3n3=(replicas(8)),s4n4=(replicas(9)),s5n5=(replicas(0)),s6n6=(replicas(10)),s7n7=(replicas(0)),s8n8=(replicas(5)),s9n9=(replicas(1)),s10n10=(replicas(5)),s11n11=(replicas(4)),s12n12=(replicas(9)),s13n13=(replicas(12)),s14n14=(replicas(5)),s15n15=(replicas(4)),s16n16=(replicas(13)),s17n17=(replicas(8)),s18n18=(replicas(5)),s19n19=(replicas(6)),s20n20=(replicas(8)),s21n21=(replicas(4)),s22n22=(replicas(10)),s23n23=(replicas(2)),s24n24=(replicas(10)),s25n25=(replicas(1)),s26n26=(replicas(9)),s27n27=(replicas(5)),s28n28=(replicas(2))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample3: pass
 ----------------------------------
 sample4: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(0)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0)),s29n29=(replicas(0)),s30n30=(replicas(0)),s31n31=(replicas(0)),s32n32=(replicas(0)),s33n33=(replicas(0)),s34n34=(replicas(0)),s35n35=(replicas(0)),s36n36=(replicas(0))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample4: pass
 ----------------------------------
 sample5: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(25)),s2n2=(replicas(25)),s3n3=(replicas(44)),s4n4=(replicas(14)),s5n5=(replicas(5)),s6n6=(replicas(40)),s7n7=(replicas(20)),s8n8=(replicas(14)),s9n9=(replicas(10)),s10n10=(replicas(35)),s11n11=(replicas(45)),s12n12=(replicas(30)),s13n13=(replicas(15)),s14n14=(replicas(34)),s15n15=(replicas(5)),s16n16=(replicas(30)),s17n17=(replicas(10)),s18n18=(replicas(25)),s19n19=(replicas(14)),s20n20=(replicas(15)),s21n21=(replicas(39)),s22n22=(replicas(4)),s23n23=(replicas(10)),s24n24=(replicas(1)),s25n25=(replicas(5)),s26n26=(replicas(30)),s27n27=(replicas(14)),s28n28=(replicas(45))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample5: pass
 ----------------------------------
 sample6: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(0)),s2n2=(replicas(2)),s3n3=(replicas(1)),s4n4=(replicas(0)),s5n5=(replicas(3)),s6n6=(replicas(1)),s7n7=(replicas(1)),s8n8=(replicas(2)),s9n9=(replicas(2)),s10n10=(replicas(0)),s11n11=(replicas(2)),s12n12=(replicas(0)),s13n13=(replicas(2)),s14n14=(replicas(1)),s15n15=(replicas(2)),s16n16=(replicas(0)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(2)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(2)),s24n24=(replicas(2)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(0))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample6: pass
 ----------------------------------
 sample7: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(1)),s2n2=(replicas(0)),s3n3=(replicas(0)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(1)),s8n8=(replicas(0)),s9n9=(replicas(1)),s10n10=(replicas(1)),s11n11=(replicas(0)),s12n12=(replicas(2)),s13n13=(replicas(2)),s14n14=(replicas(2)),s15n15=(replicas(1)),s16n16=(replicas(0)),s17n17=(replicas(1)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(1)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(1)),s24n24=(replicas(2)),s25n25=(replicas(0)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(0))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample7: pass
 ----------------------------------
 sample8: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(4)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(4)),s5n5=(replicas(4)),s6n6=(replicas(4)),s7n7=(replicas(2)),s8n8=(replicas(5)),s9n9=(replicas(5)),s10n10=(replicas(4)),s11n11=(replicas(4)),s12n12=(replicas(1)),s13n13=(replicas(5)),s14n14=(replicas(4)),s15n15=(replicas(0)),s16n16=(replicas(1)),s17n17=(replicas(1)),s18n18=(replicas(5)),s19n19=(replicas(5)),s20n20=(replicas(6)),s21n21=(replicas(1)),s22n22=(replicas(4)),s23n23=(replicas(0)),s24n24=(replicas(6)),s25n25=(replicas(5)),s26n26=(replicas(1)),s27n27=(replicas(4)),s28n28=(replicas(1)),s29n29=(replicas(3)),s30n30=(replicas(3)),s31n31=(replicas(1)),s32n32=(replicas(5)),s33n33=(replicas(3)),s34n34=(replicas(2)),s35n35=(replicas(2)),s36n36=(replicas(1))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample8: pass
 ----------------------------------
 sample9: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(0)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(0)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0)),s29n29=(replicas(0)),s30n30=(replicas(0)),s31n31=(replicas(0)),s32n32=(replicas(0)),s33n33=(replicas(0)),s34n34=(replicas(0)),s35n35=(replicas(0)),s36n36=(replicas(0))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample9: pass
 ----------------------------------
 sample10: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(0)),s18n18=(replicas(0)),s19n19=(replicas(1)),s20n20=(replicas(0)),s21n21=(replicas(0)),s22n22=(replicas(0)),s23n23=(replicas(0)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(0)),s27n27=(replicas(0)),s28n28=(replicas(0)),s29n29=(replicas(0)),s30n30=(replicas(0)),s31n31=(replicas(0)),s32n32=(replicas(0)),s33n33=(replicas(0)),s34n34=(replicas(0)),s35n35=(replicas(0)),s36n36=(replicas(0))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample10: pass
 ----------------------------------
+----
+----
 
 clear
 ----
@@ -190,6 +615,7 @@ rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keysp
 
 eval duration=5m num_iterations=10
 ----
+----
 settings           num_iterations=10        duration=5m0s
 rand_options       cluster=true             ranges=true                load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=any_region  
@@ -199,35 +625,151 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(60)),s2n1=(replicas(99)),s3n1=(replicas(140)),s4n1=(replicas(120)),s5n1=(replicas(160)),s6n2=(replicas(60)),s7n2=(replicas(180)),s8n2=(replicas(140)),s9n2=(replicas(100)),s10n2=(replicas(160)),s11n3=(replicas(40)),s12n3=(replicas(59)),s13n3=(replicas(40)),s14n3=(replicas(19)),s15n3=(replicas(99))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(58)),s2n2=(replicas(46)),s3n3=(replicas(12)),s4n4=(replicas(23)),s5n5=(replicas(104)),s6n6=(replicas(82)),s7n7=(replicas(105)),s8n8=(replicas(23)),s9n9=(replicas(23)),s10n10=(replicas(59)),s11n11=(replicas(0)),s12n12=(replicas(105)),s13n13=(replicas(93)),s14n14=(replicas(46)),s15n15=(replicas(82))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(0)),s2n2=(replicas(0)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(0)),s7n7=(replicas(2)),s8n8=(replicas(2)),s9n9=(replicas(2)),s10n10=(replicas(0)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(0)),s14n14=(replicas(2)),s15n15=(replicas(2))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
 sample4: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(211)),s2n1=(replicas(27)),s3n1=(replicas(158)),s4n1=(replicas(133)),s5n1=(replicas(133)),s6n2=(replicas(159)),s7n2=(replicas(212)),s8n2=(replicas(158)),s9n2=(replicas(132)),s10n2=(replicas(159)),s11n3=(replicas(186)),s12n3=(replicas(0)),s13n3=(replicas(186)),s14n3=(replicas(0)),s15n3=(replicas(105))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample4: pass
 ----------------------------------
 sample5: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(123)),s2n1=(replicas(41)),s3n1=(replicas(42)),s4n1=(replicas(123)),s5n1=(replicas(82)),s6n2=(replicas(56)),s7n2=(replicas(69)),s8n2=(replicas(83)),s9n2=(replicas(42)),s10n2=(replicas(110)),s11n3=(replicas(28)),s12n3=(replicas(110)),s13n3=(replicas(13)),s14n3=(replicas(96)),s15n3=(replicas(41))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample5: pass
 ----------------------------------
 sample6: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(2)),s2n2=(replicas(7)),s3n3=(replicas(3)),s4n4=(replicas(8)),s5n5=(replicas(4)),s6n6=(replicas(7)),s7n7=(replicas(7)),s8n8=(replicas(1)),s9n9=(replicas(7)),s10n10=(replicas(0)),s11n11=(replicas(7)),s12n12=(replicas(7)),s13n13=(replicas(1)),s14n14=(replicas(8)),s15n15=(replicas(8)),s16n16=(replicas(9)),s17n17=(replicas(8)),s18n18=(replicas(7)),s19n19=(replicas(3)),s20n20=(replicas(0)),s21n21=(replicas(7)),s22n22=(replicas(2)),s23n23=(replicas(2)),s24n24=(replicas(0)),s25n25=(replicas(8)),s26n26=(replicas(2)),s27n27=(replicas(0)),s28n28=(replicas(4))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample6: pass
 ----------------------------------
 sample7: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(36)=[s1n1=(replicas(53)),s2n2=(replicas(23)),s3n3=(replicas(6)),s4n4=(replicas(23)),s5n5=(replicas(40)),s6n6=(replicas(53)),s7n7=(replicas(12)),s8n8=(replicas(18)),s9n9=(replicas(52)),s10n10=(replicas(29)),s11n11=(replicas(28)),s12n12=(replicas(52)),s13n13=(replicas(17)),s14n14=(replicas(6)),s15n15=(replicas(47)),s16n16=(replicas(23)),s17n17=(replicas(18)),s18n18=(replicas(12)),s19n19=(replicas(40)),s20n20=(replicas(52)),s21n21=(replicas(34)),s22n22=(replicas(18)),s23n23=(replicas(40)),s24n24=(replicas(5)),s25n25=(replicas(35)),s26n26=(replicas(12)),s27n27=(replicas(29)),s28n28=(replicas(18)),s29n29=(replicas(17)),s30n30=(replicas(47)),s31n31=(replicas(5)),s32n32=(replicas(11)),s33n33=(replicas(0)),s34n34=(replicas(6)),s35n35=(replicas(34)),s36n36=(replicas(18))] EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+
 sample7: pass
 ----------------------------------
 sample8: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(0)),s2n1=(replicas(0)),s3n1=(replicas(1)),s4n1=(replicas(2)),s5n1=(replicas(1)),s6n2=(replicas(2)),s7n2=(replicas(1)),s8n2=(replicas(1)),s9n2=(replicas(1)),s10n2=(replicas(2)),s11n3=(replicas(1)),s12n3=(replicas(2)),s13n3=(replicas(0)),s14n3=(replicas(2)),s15n3=(replicas(2))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample8: pass
 ----------------------------------
 sample9: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(1)),s2n1=(replicas(1)),s3n1=(replicas(1)),s4n1=(replicas(0)),s5n1=(replicas(0)),s6n2=(replicas(0)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(0)),s13n3=(replicas(0)),s14n3=(replicas(0)),s15n3=(replicas(0))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample9: pass
 ----------------------------------
 sample10: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(28)=[s1n1=(replicas(0)),s2n2=(replicas(1)),s3n3=(replicas(0)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(2)),s8n8=(replicas(0)),s9n9=(replicas(2)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(1)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(1)),s16n16=(replicas(1)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(2)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(0)),s23n23=(replicas(1)),s24n24=(replicas(0)),s25n25=(replicas(0)),s26n26=(replicas(1)),s27n27=(replicas(0)),s28n28=(replicas(2))] EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
 sample10: pass
 ----------------------------------
+----
+----
 
 clear
 ----
@@ -240,6 +782,7 @@ rand_ranges placement_type=random replication_factor=1
 
 eval duration=20m num_iterations=3
 ----
+----
 settings           num_iterations=3         duration=20m0s
 rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
@@ -249,9 +792,25 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(13)),s2n1=(replicas(20)),s3n1=(replicas(29)),s4n1=(replicas(25)),s5n1=(replicas(32)),s6n2=(replicas(12)),s7n2=(replicas(37)),s8n2=(replicas(28)),s9n2=(replicas(21)),s10n2=(replicas(33)),s11n3=(replicas(9)),s12n3=(replicas(13)),s13n3=(replicas(8)),s14n3=(replicas(5)),s15n3=(replicas(20))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(64)),s2n2=(replicas(51)),s3n3=(replicas(12)),s4n4=(replicas(25)),s5n5=(replicas(115)),s6n6=(replicas(90)),s7n7=(replicas(114)),s8n8=(replicas(25)),s9n9=(replicas(26)),s10n10=(replicas(64)),s11n11=(replicas(0)),s12n12=(replicas(114)),s13n13=(replicas(103)),s14n14=(replicas(51)),s15n15=(replicas(90))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: failed assertion
   conformance unavailable=0 under=0 over=0 violating=0 
   actual unavailable=0 under=0, over=9 violating=0
@@ -267,8 +826,18 @@ over replicated:
   r875:000013{8966-9125} [(n3,s3):3, (n2,s2):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(27)),s2n2=(replicas(1)),s3n3=(replicas(40)),s4n4=(replicas(13)),s5n5=(replicas(26)),s6n6=(replicas(13)),s7n7=(replicas(60)),s8n8=(replicas(60)),s9n9=(replicas(53)),s10n10=(replicas(14)),s11n11=(replicas(59)),s12n12=(replicas(6)),s13n13=(replicas(13)),s14n14=(replicas(40)),s15n15=(replicas(54))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample3: pass
 ----------------------------------
+----
+----
 
 clear
 ----
@@ -281,6 +850,7 @@ rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1
 
 eval duration=20m num_iterations=3
 ----
+----
 settings           num_iterations=3         duration=20m0s
 rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
@@ -290,11 +860,37 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(305)),s2n1=(replicas(305)),s3n1=(replicas(305)),s4n1=(replicas(0)),s5n1=(replicas(0)),s6n2=(replicas(0)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(0)),s13n3=(replicas(0)),s14n3=(replicas(0)),s15n3=(replicas(0))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(603)),s2n2=(replicas(603)),s3n3=(replicas(603)),s4n4=(replicas(0)),s5n5=(replicas(0)),s6n6=(replicas(0)),s7n7=(replicas(0)),s8n8=(replicas(0)),s9n9=(replicas(0)),s10n10=(replicas(0)),s11n11=(replicas(0)),s12n12=(replicas(0)),s13n13=(replicas(0)),s14n14=(replicas(0)),s15n15=(replicas(0))] US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(15)=[s1n1=(replicas(394)),s2n1=(replicas(394)),s3n1=(replicas(394)),s4n1=(replicas(0)),s5n1=(replicas(0)),s6n2=(replicas(0)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(0)),s13n3=(replicas(0)),s14n3=(replicas(0)),s15n3=(replicas(0))] US
+  US_1
+    └── [1]
+  US_2
+    └── [2]
+  US_3
+    └── [3]
+
 sample3: pass
 ----------------------------------
+----
+----

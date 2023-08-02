@@ -1,5 +1,6 @@
 eval
 ----
+----
 settings      num_iterations=3  duration=10m0s
 rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false
 rand_cluster=false
@@ -9,19 +10,37 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample3: pass
 ----------------------------------
+----
+----
 
 clear
 ----
 
 eval verbose=true duration=5m
+----
 ----
 settings      num_iterations=3  duration=5m0s
 rand_options  cluster=false     ranges=false  load=false  staticSettings=false  staticEvents=false
@@ -32,12 +51,27 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample1: pass
 ----------------------------------
 sample2: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample2: pass
 ----------------------------------
 sample3: start running
+state at 2022-03-21 11:00:00 +0000 UTC: stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))] 
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+
 sample3: pass
 ----------------------------------
 sample1
@@ -49,3 +83,5 @@ sample2
 sample3
  1.00 ┼───────────────────────────────────────────────────────────────────────────────
                                            replicas
+----
+----

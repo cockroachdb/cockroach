@@ -54,10 +54,7 @@ type testSettings struct {
 }
 
 func (t testSettings) printTestSettings(w *tabwriter.Writer) {
-	if _, err := fmt.Fprintf(w,
-		"settings\tnum_iterations=%v\tduration=%s\n", t.numIterations, t.duration.Round(time.Second)); err != nil {
-		panic(err)
-	}
+	_, _ = fmt.Fprintf(w, "settings\tnum_iterations=%v\tduration=%s\n", t.numIterations, t.duration.Round(time.Second))
 
 	t.randOptions.printRandOptions(w)
 	if t.randOptions.cluster {
@@ -147,6 +144,7 @@ func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
 	staticSettings := f.getStaticSettings()
 	staticEvents := f.getStaticEvents()
 	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, f.s.randSource.Int63())
+	simulator.PrintState(f.recordBuf)
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
