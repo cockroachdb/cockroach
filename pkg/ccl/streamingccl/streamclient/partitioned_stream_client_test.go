@@ -11,8 +11,6 @@ package streamclient_test
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -61,6 +58,48 @@ func (f *subscriptionFeedSource) Error() error {
 
 // Close implements the streamingtest.FeedSource interface.
 func (f *subscriptionFeedSource) Close(ctx context.Context) {}
+
+func TestPartitionedSpanConfigReplicationClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
+		base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	)
+
+	defer cleanup()
+
+	testTenantName := roachpb.TenantName("test-tenant")
+	tenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
+	defer cleanupTenant()
+
+	ctx := context.Background()
+
+	maybeInlineURL := h.MaybeGenerateInlineURL(t)
+	client, err := streamclient.NewPartitionedStreamClient(ctx, maybeInlineURL)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, client.Close(ctx))
+	}()
+
+	streamID, topology, err := client.SetupSpanConfigsStream(ctx, testTenantName)
+	require.NoError(t, err)
+
+	require.NotEqual(t, 0, streamID)
+	require.Equal(t, 1, len(topology.Partitions))
+	require.Equal(t, tenant.ID, topology.SourceTenantID)
+
+	// Since a span config replication stream does not create a job, the HeartBeat
+	// call will deem the stream inactive.
+	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
+	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
+}
 
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -96,28 +135,7 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	rng, _ := randutil.NewPseudoRand()
-	maybeGenerateInlineURL := func(orig *url.URL) *url.URL {
-		if rng.Float64() > 0.5 {
-			return orig
-		}
-
-		t.Log("using inline certificates")
-		ret := *orig
-		v := ret.Query()
-		for _, opt := range []string{"sslcert", "sslkey", "sslrootcert"} {
-			path := v.Get(opt)
-			content, err := os.ReadFile(path)
-			require.NoError(t, err)
-			v.Set(opt, string(content))
-
-		}
-		v.Set("sslinline", "true")
-		ret.RawQuery = v.Encode()
-		return &ret
-	}
-
-	maybeInlineURL := maybeGenerateInlineURL(&h.PGUrl)
+	maybeInlineURL := h.MaybeGenerateInlineURL(t)
 	client, err := streamclient.NewPartitionedStreamClient(ctx, maybeInlineURL)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
@@ -141,6 +159,11 @@ INSERT INTO d.t2 VALUES (2);
 	// Plan for a non-existent stream
 	_, err = client.Plan(ctx, 999)
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
+
+	var telemetryJobID int64
+	h.SysSQL.QueryRow(t, "SELECT crdb_internal.create_sql_schema_telemetry_job()").Scan(&telemetryJobID)
+	_, err = client.Plan(ctx, streampb.StreamID(telemetryJobID))
+	require.True(t, testutils.IsError(err, fmt.Sprintf("job with id %d is not a replication stream job", telemetryJobID)), err)
 
 	expectStreamState(streamID, jobs.StatusRunning)
 	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})

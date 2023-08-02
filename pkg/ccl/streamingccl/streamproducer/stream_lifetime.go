@@ -22,7 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,7 +68,7 @@ func startReplicationProducerJob(
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
 	}
-	deprecatedSpansToProtect := roachpb.Spans{*makeTenantSpan(tenantID)}
+	deprecatedSpansToProtect := roachpb.Spans{makeTenantSpan(tenantID)}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
@@ -184,7 +188,7 @@ func heartbeatReplicationStream(
 	// job progress.
 	if frontier == hlc.MaxTimestamp {
 		var status streampb.StreamReplicationStatus
-		pj, err := execConfig.JobRegistry.LoadJob(ctx, jobspb.JobID(streamID))
+		pj, err := execConfig.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 		if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
 			status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
 			return status, nil
@@ -215,41 +219,55 @@ func heartbeatReplicationStream(
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
 func getReplicationStreamSpec(
-	ctx context.Context, evalCtx *eval.Context, streamID streampb.StreamID,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
-	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(ctx, jobspb.JobID(streamID))
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "replication stream %d has error", streamID)
+		return nil, errors.Wrapf(err, "could not load job for replication stream %d", streamID)
 	}
 	if j.Status() != jobs.StatusRunning {
 		return nil, errors.Errorf("replication stream %d is not running", streamID)
 	}
+	details, ok := j.Details().(jobspb.StreamReplicationDetails)
+	if !ok {
+		return nil, errors.Errorf("job with id %d is not a replication stream job", streamID)
+	}
+	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans)
+
+}
+
+func buildReplicationStreamSpec(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	tenantID roachpb.TenantID,
+	forSpanConfigs bool,
+	targetSpans roachpb.Spans,
+) (*streampb.ReplicationStreamSpec, error) {
+	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
 	planCtx := dsp.NewPlanningCtx(ctx, jobExecCtx.ExtendedEvalContext(),
 		nil /* planner */, nil /* txn */, sql.DistributionTypeSystemTenantOnly)
 
-	details, ok := j.Details().(jobspb.StreamReplicationDetails)
-	if !ok {
-		return nil, errors.Errorf("job with id %d is not a replication stream job", streamID)
-	}
-	replicatedSpans := details.Spans
-	spans := make([]roachpb.Span, 0, len(replicatedSpans))
-	for _, span := range replicatedSpans {
-		spans = append(spans, *span)
-	}
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &streampb.ReplicationStreamSpec{
-		Partitions:     make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
-		SourceTenantID: details.TenantID,
+	var spanConfigsStreamID streampb.StreamID
+	if forSpanConfigs {
+		spanConfigsStreamID = streampb.StreamID(builtins.GenerateUniqueInt(builtins.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID())))
 	}
+
+	res := &streampb.ReplicationStreamSpec{
+		Partitions:         make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
+		SourceTenantID:     tenantID,
+		SpanConfigStreamID: spanConfigsStreamID,
+	}
+
 	for _, sp := range spanPartitions {
 		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SQLInstanceID)
 		if err != nil {
@@ -306,4 +324,36 @@ func completeReplicationStream(
 		}
 		return nil
 	})
+}
+
+func setupSpanConfigsStream(
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, tenantName roachpb.TenantName,
+) (*streampb.ReplicationStreamSpec, error) {
+
+	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Settings, txn, tenantName)
+	if err != nil {
+		return nil, err
+	}
+	tenantID := roachpb.MustMakeTenantID(tenantRecord.ID)
+	var spanConfigID descpb.ID
+	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+
+	if err := sql.DescsTxn(ctx, execConfig, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		g := col.ByName(txn.KV()).Get()
+		_, imm, err := descs.PrefixAndTable(ctx, g, systemschema.SpanConfigurationsTableName)
+		if err != nil {
+			return err
+		}
+		spanConfigID = imm.GetID()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	spanConfigKey := evalCtx.Codec.TablePrefix(uint32(spanConfigID))
+
+	// TODO(msbutler): crop this span to the keyspan within the span config
+	// table relevant to this specific tenant once I teach the client.Subscribe()
+	// to stream span configs, which will make testing easier.
+	span := roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
+	return buildReplicationStreamSpec(ctx, evalCtx, tenantID, true, roachpb.Spans{span})
 }

@@ -55,7 +55,7 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
 	ctx context.Context, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
-	return getReplicationStreamSpec(ctx, r.evalCtx, streamID)
+	return getReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
 }
 
 // CompleteReplicationStream implements ReplicationStreamManager interface.
@@ -63,6 +63,12 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
 	return completeReplicationStream(ctx, r.evalCtx, r.txn, streamID, successfulIngestion)
+}
+
+func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (*streampb.ReplicationStreamSpec, error) {
+	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
