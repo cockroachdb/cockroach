@@ -392,7 +392,6 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
 		KeyCols:      keyCols,
-		OpName:       h.mb.opName,
 	})
 }
 
