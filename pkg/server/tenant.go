@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
@@ -958,7 +959,7 @@ func (s *SQLServerWrapper) InitialStart() bool {
 
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
-func (s *SQLServerWrapper) ShutdownRequested() <-chan ShutdownRequest {
+func (s *SQLServerWrapper) ShutdownRequested() <-chan serverctl.ShutdownRequest {
 	return s.sqlServer.ShutdownRequested()
 }
 

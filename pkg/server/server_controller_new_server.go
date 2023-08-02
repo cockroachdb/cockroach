@@ -61,10 +61,10 @@ type tenantServerCreator interface {
 	) (onDemandServer, error)
 }
 
-var _ tenantServerCreator = &Server{}
+var _ tenantServerCreator = &topLevelServer{}
 
 // newTenantServer implements the tenantServerCreator interface.
-func (s *Server) newTenantServer(
+func (s *topLevelServer) newTenantServer(
 	ctx context.Context,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	tenantStopper *stop.Stopper,
@@ -103,7 +103,7 @@ func (errInvalidTenantMarker) Error() string { return "invalid tenant" }
 // is not shared.
 var ErrInvalidTenant error = errInvalidTenantMarker{}
 
-func (s *Server) getTenantID(
+func (s *topLevelServer) getTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (roachpb.TenantID, error) {
 	var rec *mtinfopb.TenantInfo
@@ -149,7 +149,7 @@ func newTenantServerInternal(
 	return newSharedProcessTenantServer(newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
 }
 
-func (s *Server) makeSharedProcessTenantConfig(
+func (s *topLevelServer) makeSharedProcessTenantConfig(
 	ctx context.Context, tenantID roachpb.TenantID, index int, stopper *stop.Stopper,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.

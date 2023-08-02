@@ -341,7 +341,7 @@ type testServer struct {
 	Cfg    *Config
 	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
-	*Server
+	*topLevelServer
 	// httpTestServer provides the HTTP APIs of the
 	// serverutils.ApplicationLayerInterface.
 	*httpTestServer
@@ -376,7 +376,7 @@ func (ts *testServer) Stopper() *stop.Stopper {
 
 // GossipI is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) GossipI() interface{} {
-	return ts.Server.gossip
+	return ts.topLevelServer.gossip
 }
 
 // RangeFeedFactory is part of serverutils.ApplicationLayerInterface.
@@ -496,7 +496,7 @@ func (ts *testServer) SQLConnE(dbName string) (*gosql.DB, error) {
 // SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
 	return openTestSQLConn(userName, dbName, ts.Stopper(),
-		ts.Server.loopbackPgL,
+		ts.topLevelServer.loopbackPgL,
 		ts.cfg.SQLAdvertiseAddr,
 		ts.cfg.Insecure,
 	)
@@ -666,19 +666,19 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 // Use testServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *testServer) Start(ctx context.Context) error {
-	if err := ts.Server.PreStart(ctx); err != nil {
+	if err := ts.topLevelServer.PreStart(ctx); err != nil {
 		return err
 	}
-	if err := ts.Server.AcceptInternalClients(ctx); err != nil {
+	if err := ts.topLevelServer.AcceptInternalClients(ctx); err != nil {
 		return err
 	}
 	// In tests we need some, but not all of RunInitialSQL functionality.
-	if err := ts.Server.RunInitialSQL(
+	if err := ts.topLevelServer.RunInitialSQL(
 		ctx, false /* startSingleNode */, "" /* adminUser */, "", /* adminPassword */
 	); err != nil {
 		return err
 	}
-	if err := ts.Server.AcceptClients(ctx); err != nil {
+	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
 		return err
 	}
 
@@ -692,8 +692,8 @@ func (ts *testServer) Start(ctx context.Context) error {
 		// If the server requests a shutdown, do that simply by stopping the
 		// stopper.
 		select {
-		case req := <-ts.Server.ShutdownRequested():
-			shutdownCtx := ts.Server.AnnotateCtx(context.Background())
+		case req := <-ts.topLevelServer.ShutdownRequested():
+			shutdownCtx := ts.topLevelServer.AnnotateCtx(context.Background())
 			log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
 			ts.Stopper().Stop(shutdownCtx)
 		case <-ts.Stopper().ShouldQuiesce():
@@ -704,8 +704,8 @@ func (ts *testServer) Start(ctx context.Context) error {
 
 // Stop is part of the serverutils.TestServerInterface.
 func (ts *testServer) Stop(ctx context.Context) {
-	ctx = ts.Server.AnnotateCtx(ctx)
-	ts.Server.stopper.Stop(ctx)
+	ctx = ts.topLevelServer.AnnotateCtx(ctx)
+	ts.topLevelServer.stopper.Stop(ctx)
 }
 
 // testTenant is an in-memory instantiation of the SQL-only process created for
@@ -1016,7 +1016,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 
 	// Save the args for use if the server needs to be created.
-	ts.Server.serverController.testArgs[args.TenantName] = args
+	ts.topLevelServer.serverController.testArgs[args.TenantName] = args
 
 	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
 		ctx, "testserver-check-tenant-active", nil, /* txn */
@@ -1095,7 +1095,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 
 	// Instantiate the tenant server.
-	s, err := ts.Server.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
+	s, err := ts.topLevelServer.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1608,7 +1608,7 @@ func (ts *testServer) Readiness(ctx context.Context) error {
 
 // SetReadyFn is part of TestServerInterface.
 func (ts *testServer) SetReadyFn(fn func(bool)) {
-	ts.Server.cfg.ReadyFn = fn
+	ts.topLevelServer.cfg.ReadyFn = fn
 }
 
 // WriteSummaries implements the serverutils.StorageLayerInterface.
@@ -1618,12 +1618,12 @@ func (ts *testServer) WriteSummaries() error {
 
 // UpdateChecker implements the serverutils.StorageLayerInterface.
 func (ts *testServer) UpdateChecker() interface{} {
-	return ts.Server.updates
+	return ts.topLevelServer.updates
 }
 
 // DiagnosticsReporter implements the serverutils.ApplicationLayerInterface.
 func (ts *testServer) DiagnosticsReporter() interface{} {
-	return ts.Server.sqlServer.diagnosticsReporter
+	return ts.topLevelServer.sqlServer.diagnosticsReporter
 }
 
 type v2AuthDecorator struct {
@@ -1683,17 +1683,17 @@ func (ts *testServer) DistSenderI() interface{} {
 
 // MigrationServer is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) MigrationServer() interface{} {
-	return ts.Server.migrationServer
+	return ts.topLevelServer.migrationServer
 }
 
 // SpanConfigKVAccessor is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) SpanConfigKVAccessor() interface{} {
-	return ts.Server.node.spanConfigAccessor
+	return ts.topLevelServer.node.spanConfigAccessor
 }
 
 // SpanConfigReporter is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) SpanConfigReporter() interface{} {
-	return ts.Server.node.spanConfigReporter
+	return ts.topLevelServer.node.spanConfigReporter
 }
 
 // SpanConfigReconciler is part of the serverutils.ApplicationLayerInterface.
@@ -1981,7 +1981,7 @@ func (ts *testServer) DefaultZoneConfig() zonepb.ZoneConfig {
 
 // DefaultSystemZoneConfig is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) DefaultSystemZoneConfig() zonepb.ZoneConfig {
-	return ts.Server.cfg.DefaultSystemZoneConfig
+	return ts.topLevelServer.cfg.DefaultSystemZoneConfig
 }
 
 // ScratchRange is part of the serverutils.StorageLayerInterface.
@@ -2080,7 +2080,7 @@ func (ts *testServer) BinaryVersionOverride() roachpb.Version {
 
 // KvProber is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) KvProber() *kvprober.Prober {
-	return ts.Server.kvProber
+	return ts.topLevelServer.kvProber
 }
 
 // QueryDatabaseID is part of the serverutils.ApplicationLayerInterface.
@@ -2203,12 +2203,12 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 		return nil, err
 	}
 
-	var err error
-	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
+	srv, err := NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		params.Stopper.Stop(ctx)
 		return nil, err
 	}
+	ts.topLevelServer = srv.(*topLevelServer)
 
 	// Create a breaker which never trips and never backs off to avoid
 	// introducing timing-based flakes.
@@ -2219,15 +2219,15 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 	}
 
 	// Our context must be shared with our server.
-	ts.Cfg = &ts.Server.cfg
+	ts.Cfg = &ts.topLevelServer.cfg
 
 	// The HTTP APIs on ApplicationLayerInterface are implemented by
 	// httpTestServer.
 	ts.httpTestServer = &httpTestServer{}
-	ts.httpTestServer.t.authentication = ts.Server.authentication
-	ts.httpTestServer.t.sqlServer = ts.Server.sqlServer
-	ts.httpTestServer.t.admin = ts.Server.admin.adminServer
-	ts.httpTestServer.t.status = ts.Server.status.statusServer
+	ts.httpTestServer.t.authentication = ts.topLevelServer.authentication
+	ts.httpTestServer.t.sqlServer = ts.topLevelServer.sqlServer
+	ts.httpTestServer.t.admin = ts.topLevelServer.admin.adminServer
+	ts.httpTestServer.t.status = ts.topLevelServer.status.statusServer
 
 	return ts, nil
 }
@@ -2289,9 +2289,9 @@ func (ts *testServer) NewClientRPCContext(
 	ctx context.Context, user username.SQLUsername,
 ) *rpc.Context {
 	return newClientRPCContext(ctx, user,
-		ts.Server.cfg.Config,
-		ts.Server.cfg.TestingKnobs.Server,
-		ts.Server.cfg.ClusterIDContainer,
+		ts.topLevelServer.cfg.Config,
+		ts.topLevelServer.cfg.TestingKnobs.Server,
+		ts.topLevelServer.cfg.ClusterIDContainer,
 		ts)
 }
 

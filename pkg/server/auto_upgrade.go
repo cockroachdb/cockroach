@@ -24,7 +24,7 @@ import (
 )
 
 // startAttemptUpgrade attempts to upgrade cluster version.
-func (s *Server) startAttemptUpgrade(ctx context.Context) error {
+func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 	return s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
 		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
@@ -120,7 +120,7 @@ const (
 
 // upgradeStatus lets the main checking loop know if we should do upgrade,
 // keep checking upgrade status, or stop attempting upgrade.
-func (s *Server) upgradeStatus(
+func (s *topLevelServer) upgradeStatus(
 	ctx context.Context, clusterVersion string,
 ) (st upgradeStatus, err error) {
 	nodes, err := s.status.ListNodesInternal(ctx, nil)
@@ -205,7 +205,7 @@ func (s *Server) upgradeStatus(
 // clusterVersion returns the current cluster version from the SQL subsystem
 // (which returns the version from the KV store as opposed to the possibly
 // lagging settings subsystem).
-func (s *Server) clusterVersion(ctx context.Context) (string, error) {
+func (s *topLevelServer) clusterVersion(ctx context.Context) (string, error) {
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "show-version", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
