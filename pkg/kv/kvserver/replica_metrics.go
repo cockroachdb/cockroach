@@ -149,8 +149,8 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		validLeaseType = d.leaseStatus.Lease.Type()
 		if validLeaseOwner {
 			livenessLease = keys.NodeLivenessSpan.Overlaps(d.desc.RSpan().AsRawSpanWithNoLocals())
-			switch makeLeasePreferenceStatus(
-				d.leaseStatus, d.storeID, d.storeAttrs, d.nodeAttrs,
+			switch checkStoreAgainstLeasePreferences(
+				d.storeID, d.storeAttrs, d.nodeAttrs,
 				d.nodeLocality, d.conf.LeasePreferences) {
 			case leasePreferencesViolating:
 				violatingLeasePreferences = true

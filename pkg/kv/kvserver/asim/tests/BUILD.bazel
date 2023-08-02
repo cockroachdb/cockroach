@@ -36,6 +36,7 @@ go_library(
         "assert.go",
         "default_settings.go",
         "rand_framework.go",
+        "rand_gen.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
     visibility = ["//visibility:public"],

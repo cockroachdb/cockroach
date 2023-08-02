@@ -963,7 +963,8 @@ func (rp ReplicaPlanner) shedLeaseTarget(
 		liveVoters, _ := rp.storePool.LiveAndDeadReplicas(
 			existingVoters, false /* includeSuspectAndDrainingStores */)
 		preferred := rp.allocator.PreferredLeaseholders(rp.storePool, conf, liveVoters)
-		if len(preferred) > 0 && repl.LeaseViolatesPreferences(ctx) {
+		if len(preferred) > 0 &&
+			repl.LeaseViolatesPreferences(ctx) {
 			return nil, CantTransferLeaseViolatingPreferencesError{RangeID: desc.RangeID}
 		}
 		return nil, nil
