@@ -494,9 +494,11 @@ func (m *RandomStreamClient) Subscribe(
 
 	// rand is not thread safe, so create a random source for each partition.
 	rng, _ := randutil.NewPseudoRand()
-	m.mu.Lock()
-	reg, err := newRandomEventGenerator(rng, partitionURL, config, m.mu.sstMaker)
-	m.mu.Unlock()
+	reg, err := func() (*randomEventGenerator, error) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return newRandomEventGenerator(rng, partitionURL, config, m.mu.sstMaker)
+	}()
 	if err != nil {
 		return nil, err
 	}
