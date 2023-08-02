@@ -41,6 +41,10 @@ type TestingKnobs struct {
 
 	// RunBeforeBackfill is called just before starting the backfill.
 	RunBeforeBackfill func() error
+
+	// RunBeforeMakingPostCommitPlan is called just before making the post commit
+	// plan.
+	RunBeforeMakingPostCommitPlan func(inRollback bool) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
