@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -99,6 +100,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
+		if strings.HasSuffix(path, "_v23_1") {
+			v := clusterversion.ByKey(clusterversion.V23_1)
+			st := clustersettings.MakeTestingClusterSettingsWithVersions(v, v, true)
+			c = newClusterWithSettings(st)
+		}
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
 		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
@@ -683,11 +689,15 @@ type txnPush struct {
 }
 
 func newCluster() *cluster {
+	return newClusterWithSettings(clustersettings.MakeTestingClusterSettings())
+}
+
+func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
-		st:        clustersettings.MakeTestingClusterSettings(),
+		st:        st,
 		manual:    manual,
 		clock:     hlc.NewClockForTesting(manual),
 
@@ -781,8 +791,8 @@ func (c *cluster) PushTransaction(
 			pusheeTxn, _ = pusheeRecord.asTxn()
 			return pusheeTxn, nil
 		}
-		// If PUSH_TOUCH, return error instead of waiting.
-		if pushType == kvpb.PUSH_TOUCH {
+		// If PUSH_TOUCH or WaitPolicy_Error, return error instead of waiting.
+		if pushType == kvpb.PUSH_TOUCH || h.WaitPolicy == lock.WaitPolicy_Error {
 			log.Eventf(ctx, "pushee not abandoned")
 			err := kvpb.NewTransactionPushError(*pusheeTxn)
 			return nil, kvpb.NewError(err)

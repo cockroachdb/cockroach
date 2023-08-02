@@ -288,6 +288,11 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	return testStoreConfig(clock, clusterversion.TestingBinaryVersion)
 }
 
+// TestStoreConfigWithVersion is the same as TestStoreConfig but allows to pass a cluster version.
+func TestStoreConfigWithVersion(clock *hlc.Clock, version roachpb.Version) StoreConfig {
+	return testStoreConfig(clock, version)
+}
+
 func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClockForTesting(nil)
