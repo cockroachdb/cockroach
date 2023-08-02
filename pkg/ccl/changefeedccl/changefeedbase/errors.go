@@ -11,6 +11,7 @@ package changefeedbase
 import (
 	"context"
 
+	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/errors"
@@ -148,3 +149,20 @@ func AsTerminalError(ctx context.Context, dh drainHelper, cause error) (termErr 
 
 // ErrNodeDraining indicates that this node is being drained.
 var ErrNodeDraining = errors.New("node draining")
+
+// AnnotationsForCommonLowLevelErrors lists meanings for common generic errors that look more specific than they actually are,
+// in order to make it more obvious that the error is unhelpful.
+var AnnotationsForCommonLowLevelErrors = map[error]string{
+	context.Canceled:       "An error was raised in a concurrent process, but the details and origin could not be recovered",
+	sarama.ErrOutOfBrokers: "Connecting to Kafka failed for unknown reasons",
+}
+
+// MaybeAnnotate wraps an error with its corresponding annotation in AnnotationsForCommonLowLevelErrors.
+func MaybeAnnotate(e error) error {
+	for refErr, annot := range AnnotationsForCommonLowLevelErrors {
+		if errors.Is(e, refErr) {
+			return errors.Wrapf(e, "%s. Generic error from library follows:", annot)
+		}
+	}
+	return e
+}

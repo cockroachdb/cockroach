@@ -1276,6 +1276,8 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 		}
 
+		flowErr = changefeedbase.MaybeAnnotate(flowErr)
+
 		// Terminate changefeed if needed.
 		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, flowErr); err != nil {
 			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
