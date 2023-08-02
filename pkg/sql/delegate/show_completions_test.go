@@ -11,8 +11,9 @@
 package delegate
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompletions(t *testing.T) {
@@ -30,8 +31,7 @@ func TestCompletions(t *testing.T) {
 			expectedCompletions: []string{"CREATE", "CREATEDB", "CREATELOGIN", "CREATEROLE"},
 		},
 		{
-			stmt:                "creat ",
-			expectedCompletions: []string{},
+			stmt: "creat ",
 		},
 		{
 			stmt:                "SHOW CREAT",
@@ -68,9 +68,8 @@ func TestCompletions(t *testing.T) {
 			offset:              2,
 		},
 		{
-			stmt:                "select ",
-			expectedCompletions: []string{},
-			offset:              7,
+			stmt:   "select ",
+			offset: 7,
 		},
 		{
 			stmt:                "你好，我的名字是鲍勃 SELECT",
@@ -78,9 +77,8 @@ func TestCompletions(t *testing.T) {
 			offset:              2,
 		},
 		{
-			stmt:                "你好，我的名字是鲍勃 SELECT",
-			expectedCompletions: []string{},
-			offset:              11,
+			stmt:   "你好，我的名字是鲍勃 SELECT",
+			offset: 11,
 		},
 		{
 			stmt:                "你好，我的名字是鲍勃 SELECT",
@@ -88,28 +86,30 @@ func TestCompletions(t *testing.T) {
 			offset:              12,
 		},
 		{
-			stmt:                "😋😋😋 😋😋😋",
-			expectedCompletions: []string{},
-			offset:              25,
+			stmt:   "😋😋😋 😋😋😋",
+			offset: 25,
 		},
 		{
-			stmt:                "Jalapeño",
-			expectedCompletions: []string{},
-			offset:              9,
+			stmt:   "Jalapeño",
+			offset: 9,
+		},
+		// Test an offset greater than the number of runes in the string, but less
+		// than or equal to the number of bytes in the string.
+		// 🦹 has 1 rune and 4 bytes.
+		{
+			stmt:   "🦹",
+			offset: 2,
 		},
 	}
 	for _, tc := range tests {
-		offset := tc.offset
-		if tc.offset == 0 {
-			offset = len(tc.stmt)
-		}
-		completions, err := RunShowCompletions(tc.stmt, offset)
-		if err != nil {
-			t.Error(err)
-		}
-		if !(len(completions) == 0 && len(tc.expectedCompletions) == 0) &&
-			!reflect.DeepEqual(completions, tc.expectedCompletions) {
-			t.Errorf("expected %v, got %v", tc.expectedCompletions, completions)
-		}
+		t.Run(tc.stmt, func(t *testing.T) {
+			offset := tc.offset
+			if tc.offset == 0 {
+				offset = len([]rune(tc.stmt))
+			}
+			actualCompletions, err := RunShowCompletions(tc.stmt, offset)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedCompletions, actualCompletions)
+		})
 	}
 }
