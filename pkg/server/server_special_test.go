@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Tests in this file have a linter exception against casting to *TestServer.
+// Tests in this file have a linter exception against casting to *testServer.
 
 func TestPanicRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -39,7 +39,7 @@ func TestPanicRecovery(t *testing.T) {
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+	ts := s.(*testServer)
 
 	// Enable a test-only endpoint that induces a panic.
 	ts.http.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -109,7 +109,7 @@ func TestSocketAutoNumbering(t *testing.T) {
 	_, expectedPort, err := addr.SplitHostPort(s.SQLAddr(), "")
 	require.NoError(t, err)
 
-	if socketPath := s.(*TestServer).Cfg.SocketFile; !strings.HasSuffix(socketPath, "."+expectedPort) {
+	if socketPath := s.(*testServer).Cfg.SocketFile; !strings.HasSuffix(socketPath, "."+expectedPort) {
 		t.Errorf("expected unix socket ending with port %q, got %q", expectedPort, socketPath)
 	}
 }
@@ -127,7 +127,7 @@ func TestInternalSQL(t *testing.T) {
 	conf.User = "root"
 	// Configure pgx to connect on the loopback listener.
 	conf.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return s.(*TestServer).Server.loopbackPgL.Connect(ctx)
+		return s.(*testServer).Server.loopbackPgL.Connect(ctx)
 	}
 	conn, err := pgx.ConnectConfig(ctx, conf)
 	require.NoError(t, err)

@@ -109,7 +109,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.SSLCertsDir = certnames.EmbeddedCertsDir
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port. May be overridden later (as in
-	// makeTestConfigFromParams). Call TestServer.AdvRPCAddr() and
+	// makeTestConfigFromParams). Call testServer.AdvRPCAddr() and
 	// .AdvSQLAddr() for the full address (including bound port).
 	baseCfg.Addr = util.TestAddr.String()
 	baseCfg.AdvertiseAddr = util.TestAddr.String()
@@ -283,7 +283,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			// one specific test must have requested it. A failure is returned if
 			// the Path field is empty, which means the test is then forced to pick
 			// the dir (and the test is then responsible for cleaning it up, not
-			// TestServer).
+			// testServer).
 
 			// HeapProfileDirName and GoroutineDumpDirName are normally set by the
 			// cli, once, to the path of the first store.
@@ -328,16 +328,16 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	return cfg
 }
 
-// A TestServer encapsulates an in-memory instantiation of a cockroach node with
+// A testServer encapsulates an in-memory instantiation of a cockroach node with
 // a single store. It provides tests with access to Server internals.
 // Where possible, it should be used through the
 // serverutils.TestServerInterface.
 //
-// Example usage of a TestServer:
+// Example usage of a testServer:
 //
 //	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 //	defer s.Stopper().Stop()
-type TestServer struct {
+type testServer struct {
 	Cfg    *Config
 	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
@@ -357,38 +357,38 @@ type TestServer struct {
 	disableStartTenantError error
 }
 
-var _ serverutils.TestServerInterface = &TestServer{}
+var _ serverutils.TestServerInterface = &testServer{}
 
 // Node returns the Node as an interface{}.
-func (ts *TestServer) Node() interface{} {
+func (ts *testServer) Node() interface{} {
 	return ts.node
 }
 
 // NodeID returns the ID of this node within its cluster.
-func (ts *TestServer) NodeID() roachpb.NodeID {
+func (ts *testServer) NodeID() roachpb.NodeID {
 	return ts.rpcContext.NodeID.Get()
 }
 
 // Stopper returns the embedded server's Stopper.
-func (ts *TestServer) Stopper() *stop.Stopper {
+func (ts *testServer) Stopper() *stop.Stopper {
 	return ts.stopper
 }
 
 // GossipI is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) GossipI() interface{} {
+func (ts *testServer) GossipI() interface{} {
 	return ts.Server.gossip
 }
 
 // RangeFeedFactory is part of serverutils.ApplicationLayerInterface.
-func (ts *TestServer) RangeFeedFactory() interface{} {
+func (ts *testServer) RangeFeedFactory() interface{} {
 	if ts != nil {
 		return ts.sqlServer.execCfg.RangeFeedFactory
 	}
 	return (*rangefeed.Factory)(nil)
 }
 
-// Clock returns the clock used by the TestServer.
-func (ts *TestServer) Clock() *hlc.Clock {
+// Clock returns the clock used by the testServer.
+func (ts *testServer) Clock() *hlc.Clock {
 	if ts != nil {
 		return ts.clock
 	}
@@ -396,7 +396,7 @@ func (ts *TestServer) Clock() *hlc.Clock {
 }
 
 // SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
-func (ts *TestServer) SQLLivenessProvider() interface{} {
+func (ts *testServer) SQLLivenessProvider() interface{} {
 	if ts != nil {
 		return ts.sqlServer.execCfg.SQLLiveness
 	}
@@ -404,24 +404,24 @@ func (ts *TestServer) SQLLivenessProvider() interface{} {
 }
 
 // JobRegistry returns the *jobs.Registry as an interface{}.
-func (ts *TestServer) JobRegistry() interface{} {
+func (ts *testServer) JobRegistry() interface{} {
 	if ts != nil {
 		return ts.sqlServer.jobRegistry
 	}
 	return nil
 }
 
-// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
+// NodeLiveness exposes the NodeLiveness instance used by the testServer as an
 // interface{}.
-func (ts *TestServer) NodeLiveness() interface{} {
+func (ts *testServer) NodeLiveness() interface{} {
 	if ts != nil {
 		return ts.nodeLiveness
 	}
 	return nil
 }
 
-// NodeDialer returns the NodeDialer used by the TestServer.
-func (ts *TestServer) NodeDialer() interface{} {
+// NodeDialer returns the NodeDialer used by the testServer.
+func (ts *testServer) NodeDialer() interface{} {
 	if ts != nil {
 		return ts.nodeDialer
 	}
@@ -429,7 +429,7 @@ func (ts *TestServer) NodeDialer() interface{} {
 }
 
 // HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
-func (ts *TestServer) HeartbeatNodeLiveness() error {
+func (ts *testServer) HeartbeatNodeLiveness() error {
 	if ts == nil {
 		return errors.New("no node liveness instance")
 	}
@@ -450,35 +450,35 @@ func (ts *TestServer) HeartbeatNodeLiveness() error {
 }
 
 // SQLInstanceID is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLInstanceID() base.SQLInstanceID {
+func (ts *testServer) SQLInstanceID() base.SQLInstanceID {
 	return ts.sqlServer.sqlIDContainer.SQLInstanceID()
 }
 
 // StatusServer is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) StatusServer() interface{} {
+func (ts *testServer) StatusServer() interface{} {
 	return ts.status
 }
 
-// RPCContext returns the rpc context used by the TestServer.
-func (ts *TestServer) RPCContext() *rpc.Context {
+// RPCContext returns the rpc context used by the testServer.
+func (ts *testServer) RPCContext() *rpc.Context {
 	if ts != nil {
 		return ts.rpcContext
 	}
 	return nil
 }
 
-// TsDB returns the ts.DB instance used by the TestServer.
-func (ts *TestServer) TsDB() interface{} {
+// TsDB returns the ts.DB instance used by the testServer.
+func (ts *testServer) TsDB() interface{} {
 	return ts.tsDB
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
+func (ts *testServer) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
 	return ts.SQLConnForUser(test, username.RootUser, dbName)
 }
 
 // SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLConnForUser(
+func (ts *testServer) SQLConnForUser(
 	test serverutils.TestFataler, userName, dbName string,
 ) *gosql.DB {
 	db, err := ts.SQLConnForUserE(userName, dbName)
@@ -489,12 +489,12 @@ func (ts *TestServer) SQLConnForUser(
 }
 
 // SQLConnE is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLConnE(dbName string) (*gosql.DB, error) {
+func (ts *testServer) SQLConnE(dbName string) (*gosql.DB, error) {
 	return ts.SQLConnForUserE(username.RootUser, dbName)
 }
 
 // SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
+func (ts *testServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
 	return openTestSQLConn(userName, dbName, ts.Stopper(),
 		ts.Server.loopbackPgL,
 		ts.cfg.SQLAdvertiseAddr,
@@ -502,17 +502,17 @@ func (ts *TestServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB
 	)
 }
 
-// DB returns the client.DB instance used by the TestServer.
-func (ts *TestServer) DB() *kv.DB {
+// DB returns the client.DB instance used by the testServer.
+func (ts *testServer) DB() *kv.DB {
 	if ts != nil {
 		return ts.db
 	}
 	return nil
 }
 
-// PGServer exposes the pgwire.Server instance used by the TestServer as an
+// PGServer exposes the pgwire.Server instance used by the testServer as an
 // interface{}.
-func (ts *TestServer) PGServer() interface{} {
+func (ts *testServer) PGServer() interface{} {
 	if ts != nil {
 		return ts.sqlServer.pgServer
 	}
@@ -520,8 +520,8 @@ func (ts *TestServer) PGServer() interface{} {
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
-// the TestServer.
-func (ts *TestServer) PGPreServer() interface{} {
+// the testServer.
+func (ts *testServer) PGPreServer() interface{} {
 	if ts != nil {
 		return ts.pgPreServer
 	}
@@ -529,7 +529,7 @@ func (ts *TestServer) PGPreServer() interface{} {
 }
 
 // RaftTransport is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) RaftTransport() interface{} {
+func (ts *testServer) RaftTransport() interface{} {
 	if ts != nil {
 		return ts.raftTransport
 	}
@@ -539,35 +539,35 @@ func (ts *TestServer) RaftTransport() interface{} {
 // AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
-func (ts *TestServer) AmbientCtx() log.AmbientContext {
+func (ts *testServer) AmbientCtx() log.AmbientContext {
 	return ts.Cfg.AmbientCtx
 }
 
-// TestingKnobs returns the TestingKnobs used by the TestServer.
-func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
+// TestingKnobs returns the TestingKnobs used by the testServer.
+func (ts *testServer) TestingKnobs() *base.TestingKnobs {
 	if ts != nil {
 		return &ts.Cfg.TestingKnobs
 	}
 	return nil
 }
 
-// TenantStatusServer returns the TenantStatusServer used by the TestServer.
-func (ts *TestServer) TenantStatusServer() interface{} {
+// TenantStatusServer returns the TenantStatusServer used by the testServer.
+func (ts *testServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
 // TestTenants provides information to tenant(s) that _may_ have been created
-func (ts *TestServer) TestTenants() []serverutils.ApplicationLayerInterface {
+func (ts *testServer) TestTenants() []serverutils.ApplicationLayerInterface {
 	return ts.testTenants
 }
 
 // DefaultTestTenantDisabled is part of the serverutils.TenantControlInterface.
-func (ts *TestServer) DefaultTestTenantDisabled() bool {
+func (ts *testServer) DefaultTestTenantDisabled() bool {
 	return ts.cfg.DisableDefaultTestTenant
 }
 
 // DisableDefaultTestTenant is part of the serverutils.TenantControlInterface.
-func (ts *TestServer) DisableDefaultTestTenant() {
+func (ts *testServer) DisableDefaultTestTenant() {
 	ts.cfg.DisableDefaultTestTenant = true
 }
 
@@ -577,7 +577,7 @@ func (ts *TestServer) DisableDefaultTestTenant() {
 // currently only attempt to start a test tenant if we're running in an
 // enterprise enabled build. This is due to licensing restrictions on the MT
 // capabilities.
-func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	// If the flag has been set to disable the default test tenant, don't start
 	// it here.
 	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() || ts.cfg.DisableDefaultTestTenant {
@@ -654,13 +654,13 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	return nil
 }
 
-// Start starts the TestServer by bootstrapping an in-memory store
+// Start starts the testServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.AdvRPCAddr() after Start() for client connections.
-// Use TestServer.Stopper().Stop() to shutdown the server after the test
+// testServer.AdvRPCAddr() after Start() for client connections.
+// Use testServer.Stopper().Stop() to shutdown the server after the test
 // completes.
-func (ts *TestServer) Start(ctx context.Context) error {
+func (ts *testServer) Start(ctx context.Context) error {
 	if err := ts.Server.PreStart(ctx); err != nil {
 		return err
 	}
@@ -679,7 +679,7 @@ func (ts *TestServer) Start(ctx context.Context) error {
 
 	if err := ts.maybeStartDefaultTestTenant(ctx); err != nil {
 		// We're failing the call to this function but we've already started
-		// the TestServer above. Stop it here to avoid leaking the server.
+		// the testServer above. Stop it here to avoid leaking the server.
 		ts.Stopper().Stop(context.Background())
 		return err
 	}
@@ -698,7 +698,7 @@ func (ts *TestServer) Start(ctx context.Context) error {
 }
 
 // Stop is part of the serverutils.TestServerInterface.
-func (ts *TestServer) Stop(ctx context.Context) {
+func (ts *testServer) Stop(ctx context.Context) {
 	ctx = ts.Server.AnnotateCtx(ctx)
 	ts.Server.stopper.Stop(ctx)
 }
@@ -800,7 +800,7 @@ func (t *TestTenant) PGServer() interface{} {
 }
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
-// the TestServer.
+// the testServer.
 func (ts *TestTenant) PGPreServer() interface{} {
 	if ts != nil {
 		return ts.pgPreServer
@@ -998,7 +998,7 @@ func (t *TestTenant) SettingsWatcher() interface{} {
 }
 
 // StartSharedProcessTenant is part of the serverutils.TenantControlInterface.
-func (ts *TestServer) StartSharedProcessTenant(
+func (ts *testServer) StartSharedProcessTenant(
 	ctx context.Context, args base.TestSharedProcessTenantArgs,
 ) (serverutils.ApplicationLayerInterface, *gosql.DB, error) {
 	if err := args.TenantName.IsValid(); err != nil {
@@ -1117,7 +1117,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 }
 
 // DisableStartTenant is part of the serverutils.TenantControlInterface.
-func (ts *TestServer) DisableStartTenant(reason error) {
+func (ts *testServer) DisableStartTenant(reason error) {
 	ts.disableStartTenantError = reason
 }
 
@@ -1177,7 +1177,7 @@ func (t *TestTenant) HTTPAuthServer() interface{} {
 	return t.t.authentication
 }
 
-func (ts *TestServer) waitForTenantReadinessImpl(
+func (ts *testServer) waitForTenantReadinessImpl(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) error {
 	_, infoWatcher, err := ts.node.waitForTenantWatcherReadiness(ctx)
@@ -1221,7 +1221,7 @@ func (ts *TestServer) waitForTenantReadinessImpl(
 }
 
 // WaitForTenantReadiness is part of serverutils.TenantControlInterface..
-func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
+func (ts *testServer) WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error {
 	// Two minutes should be sufficient for the in-RAM caches to be hydrated with
 	// the tenant record.
 	return timeutil.RunWithTimeout(ctx, "waitForTenantReadiness", 2*time.Minute, func(ctx context.Context) error {
@@ -1230,7 +1230,7 @@ func (ts *TestServer) WaitForTenantReadiness(ctx context.Context, tenantID roach
 }
 
 // StartTenant is part of the serverutils.TenantControlInterface.
-func (ts *TestServer) StartTenant(
+func (ts *testServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.ApplicationLayerInterface, error) {
 	if ts.disableStartTenantError != nil {
@@ -1519,7 +1519,7 @@ func (ts *TestServer) StartTenant(
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
 // process.
-func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
+func (ts *testServer) ExpectedInitialRangeCount() (int, error) {
 	return ExpectedInitialRangeCount(
 		ts.sqlServer.execCfg.Codec,
 		&ts.cfg.DefaultZoneConfig,
@@ -1540,79 +1540,79 @@ func ExpectedInitialRangeCount(
 }
 
 // GetStores is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) GetStores() interface{} {
+func (ts *testServer) GetStores() interface{} {
 	return ts.node.stores
 }
 
 // ClusterSettings returns the ClusterSettings.
-func (ts *TestServer) ClusterSettings() *cluster.Settings {
+func (ts *testServer) ClusterSettings() *cluster.Settings {
 	return ts.Cfg.Settings
 }
 
 // SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SettingsWatcher() interface{} {
+func (ts *testServer) SettingsWatcher() interface{} {
 	return ts.sqlServer.settingsWatcher
 }
 
-// Engines returns the TestServer's engines.
-func (ts *TestServer) Engines() []storage.Engine {
+// Engines returns the testServer's engines.
+func (ts *testServer) Engines() []storage.Engine {
 	return ts.engines
 }
 
 // AdvRPCAddr returns the server's RPC address. Should be used by clients.
-func (ts *TestServer) AdvRPCAddr() string {
+func (ts *testServer) AdvRPCAddr() string {
 	return ts.cfg.AdvertiseAddr
 }
 
 // AdvSQLAddr returns the server's SQL address. Should be used by clients.
-func (ts *TestServer) AdvSQLAddr() string {
+func (ts *testServer) AdvSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
 }
 
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
-func (ts *TestServer) HTTPAddr() string {
+func (ts *testServer) HTTPAddr() string {
 	return ts.cfg.HTTPAddr
 }
 
 // RPCAddr returns the server's listening RPC address.
 // Note: use AdvRPCAddr() instead unless there is a specific reason not to.
-func (ts *TestServer) RPCAddr() string {
+func (ts *testServer) RPCAddr() string {
 	return ts.cfg.Addr
 }
 
 // SQLAddr returns the server's listening SQL address.
 // Note: use AdvSQLAddr() instead unless there is a specific reason not to.
-func (ts *TestServer) SQLAddr() string {
+func (ts *testServer) SQLAddr() string {
 	return ts.cfg.SQLAddr
 }
 
 // DrainClients exports the drainClients() method for use by tests.
-func (ts *TestServer) DrainClients(ctx context.Context) error {
+func (ts *testServer) DrainClients(ctx context.Context) error {
 	return ts.drain.drainClients(ctx, nil /* reporter */)
 }
 
 // Readiness is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) Readiness(ctx context.Context) error {
+func (ts *testServer) Readiness(ctx context.Context) error {
 	return ts.admin.checkReadinessForHealthCheck(ctx)
 }
 
 // SetReadyFn is part of TestServerInterface.
-func (ts *TestServer) SetReadyFn(fn func(bool)) {
+func (ts *testServer) SetReadyFn(fn func(bool)) {
 	ts.Server.cfg.ReadyFn = fn
 }
 
 // WriteSummaries implements the serverutils.StorageLayerInterface.
-func (ts *TestServer) WriteSummaries() error {
+func (ts *testServer) WriteSummaries() error {
 	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)
 }
 
 // UpdateChecker implements the serverutils.StorageLayerInterface.
-func (ts *TestServer) UpdateChecker() interface{} {
+func (ts *testServer) UpdateChecker() interface{} {
 	return ts.Server.updates
 }
 
 // DiagnosticsReporter implements the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) DiagnosticsReporter() interface{} {
+func (ts *testServer) DiagnosticsReporter() interface{} {
 	return ts.Server.sqlServer.diagnosticsReporter
 }
 
@@ -1628,12 +1628,12 @@ func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // MustGetSQLCounter implements serverutils.ApplicationLayerInterface.
-func (ts *TestServer) MustGetSQLCounter(name string) int64 {
+func (ts *testServer) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(ts.registry, name)
 }
 
 // MustGetSQLNetworkCounter implements the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
+func (ts *testServer) MustGetSQLNetworkCounter(name string) int64 {
 	reg := metric.NewRegistry()
 	for _, m := range ts.sqlServer.pgServer.Metrics() {
 		reg.AddMetricStruct(m)
@@ -1642,52 +1642,52 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 }
 
 // Locality is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) Locality() *roachpb.Locality {
+func (ts *testServer) Locality() *roachpb.Locality {
 	return &ts.cfg.Locality
 }
 
 // LeaseManager is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) LeaseManager() interface{} {
+func (ts *testServer) LeaseManager() interface{} {
 	return ts.sqlServer.leaseMgr
 }
 
 // InternalExecutor is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) InternalExecutor() interface{} {
+func (ts *testServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
 
 // InternalDB is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) InternalDB() interface{} {
+func (ts *testServer) InternalDB() interface{} {
 	return ts.sqlServer.internalDB
 }
 
 // GetNode exposes the Server's Node.
-func (ts *TestServer) GetNode() *Node {
+func (ts *testServer) GetNode() *Node {
 	return ts.node
 }
 
 // DistSenderI is part of DistSenderInterface.
-func (ts *TestServer) DistSenderI() interface{} {
+func (ts *testServer) DistSenderI() interface{} {
 	return ts.distSender
 }
 
 // MigrationServer is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) MigrationServer() interface{} {
+func (ts *testServer) MigrationServer() interface{} {
 	return ts.Server.migrationServer
 }
 
 // SpanConfigKVAccessor is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) SpanConfigKVAccessor() interface{} {
+func (ts *testServer) SpanConfigKVAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
 }
 
 // SpanConfigReporter is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) SpanConfigReporter() interface{} {
+func (ts *testServer) SpanConfigReporter() interface{} {
 	return ts.Server.node.spanConfigReporter
 }
 
 // SpanConfigReconciler is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SpanConfigReconciler() interface{} {
+func (ts *testServer) SpanConfigReconciler() interface{} {
 	if ts.sqlServer.spanconfigMgr == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
@@ -1695,7 +1695,7 @@ func (ts *TestServer) SpanConfigReconciler() interface{} {
 }
 
 // SpanConfigSQLTranslatorFactory is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SpanConfigSQLTranslatorFactory() interface{} {
+func (ts *testServer) SpanConfigSQLTranslatorFactory() interface{} {
 	if ts.sqlServer.spanconfigSQLTranslatorFactory == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
@@ -1703,7 +1703,7 @@ func (ts *TestServer) SpanConfigSQLTranslatorFactory() interface{} {
 }
 
 // SpanConfigSQLWatcher is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
+func (ts *testServer) SpanConfigSQLWatcher() interface{} {
 	if ts.sqlServer.spanconfigSQLWatcher == nil {
 		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
@@ -1711,22 +1711,22 @@ func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
 }
 
 // SQLServer is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SQLServer() interface{} {
+func (ts *testServer) SQLServer() interface{} {
 	return ts.sqlServer.pgServer.SQLServer
 }
 
 // DistSQLServer is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) DistSQLServer() interface{} {
+func (ts *testServer) DistSQLServer() interface{} {
 	return ts.sqlServer.distSQLServer
 }
 
 // SetDistSQLSpanResolver is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SetDistSQLSpanResolver(spanResolver interface{}) {
+func (ts *testServer) SetDistSQLSpanResolver(spanResolver interface{}) {
 	ts.sqlServer.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
+func (ts *testServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
 	err := ts.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		if firstStoreID == -1 {
@@ -1741,7 +1741,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 }
 
 // LookupRange returns the descriptor of the range containing key.
-func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
+func (ts *testServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rs, _, err := kv.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, kvpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
@@ -1752,7 +1752,7 @@ func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, err
 }
 
 // MergeRanges merges the range containing leftKey with the range to its right.
-func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
+func (ts *testServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
 
 	ctx := context.Background()
 	mergeReq := kvpb.AdminMergeRequest{
@@ -1770,7 +1770,7 @@ func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor,
 }
 
 // SplitRangeWithExpiration is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) SplitRangeWithExpiration(
+func (ts *testServer) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
@@ -1842,14 +1842,14 @@ func (ts *TestServer) SplitRangeWithExpiration(
 
 // SplitRange is exactly like SplitRangeWithExpiration, except that it creates a
 // split with a sticky bit that never expires.
-func (ts *TestServer) SplitRange(
+func (ts *testServer) SplitRange(
 	splitKey roachpb.Key,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	return ts.SplitRangeWithExpiration(splitKey, hlc.MaxTimestamp)
 }
 
 // GetRangeLease is part of severutils.StorageLayerInterface.
-func (ts *TestServer) GetRangeLease(
+func (ts *testServer) GetRangeLease(
 	ctx context.Context, key roachpb.Key, queryPolicy roachpb.LeaseInfoOpt,
 ) (_ roachpb.LeaseInfo, now hlc.ClockTimestamp, _ error) {
 	leaseReq := kvpb.LeaseInfoRequest{
@@ -1892,17 +1892,17 @@ func (ts *TestServer) GetRangeLease(
 }
 
 // ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) ExecutorConfig() interface{} {
+func (ts *testServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
 // StartedDefaultTestTenant is part of the serverutils.TenantControlInterface.
-func (ts *TestServer) StartedDefaultTestTenant() bool {
+func (ts *testServer) StartedDefaultTestTenant() bool {
 	return len(ts.testTenants) > 0
 }
 
 // ApplicationLayer is part of the serverutils.TestServerInterface.
-func (ts *TestServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
+func (ts *testServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
 	if ts.StartedDefaultTestTenant() {
 		return ts.testTenants[0]
 	}
@@ -1910,32 +1910,32 @@ func (ts *TestServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
 }
 
 // StorageLayer is part of the serverutils.TestServerInterface.
-func (ts *TestServer) StorageLayer() serverutils.StorageLayerInterface {
+func (ts *testServer) StorageLayer() serverutils.StorageLayerInterface {
 	return ts
 }
 
 // TenantController is part of the serverutils.TestServerInterface.
-func (ts *TestServer) TenantController() serverutils.TenantControlInterface {
+func (ts *testServer) TenantController() serverutils.TenantControlInterface {
 	return ts
 }
 
 // SystemLayer is part of the serverutils.TestServerInterface.
-func (ts *TestServer) SystemLayer() serverutils.ApplicationLayerInterface {
+func (ts *testServer) SystemLayer() serverutils.ApplicationLayerInterface {
 	return ts
 }
 
 // TracerI is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) TracerI() interface{} {
+func (ts *testServer) TracerI() interface{} {
 	return ts.Tracer()
 }
 
 // Tracer is like TracerI(), but returns the actual type.
-func (ts *TestServer) Tracer() *tracing.Tracer {
+func (ts *testServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
 // ForceTableGC is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) ForceTableGC(
+func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
 	return internalForceTableGC(ctx, ts.SystemLayer(), database, table, timestamp)
@@ -1965,17 +1965,17 @@ func internalForceTableGC(
 }
 
 // DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) DefaultZoneConfig() zonepb.ZoneConfig {
+func (ts *testServer) DefaultZoneConfig() zonepb.ZoneConfig {
 	return *ts.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
 }
 
 // DefaultSystemZoneConfig is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) DefaultSystemZoneConfig() zonepb.ZoneConfig {
+func (ts *testServer) DefaultSystemZoneConfig() zonepb.ZoneConfig {
 	return ts.Server.cfg.DefaultSystemZoneConfig
 }
 
 // ScratchRange is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
+func (ts *testServer) ScratchRange() (roachpb.Key, error) {
 	_, desc, err := ts.ScratchRangeEx()
 	if err != nil {
 		return nil, err
@@ -1984,13 +1984,13 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 }
 
 // ScratchRangeEx is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
+func (ts *testServer) ScratchRangeEx() (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	scratchKey := keys.ScratchRangeMin
 	return ts.SplitRange(scratchKey)
 }
 
 // ScratchRangeWithExpirationLease is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
+func (ts *testServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
 	_, desc, err := ts.ScratchRangeWithExpirationLeaseEx()
 	if err != nil {
 		return nil, err
@@ -1999,7 +1999,7 @@ func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
 }
 
 // ScratchRangeWithExpirationLeaseEx is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
+func (ts *testServer) ScratchRangeWithExpirationLeaseEx() (
 	roachpb.RangeDescriptor,
 	roachpb.RangeDescriptor,
 	error,
@@ -2010,57 +2010,57 @@ func (ts *TestServer) ScratchRangeWithExpirationLeaseEx() (
 }
 
 // RaftConfig is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) RaftConfig() base.RaftConfig {
+func (ts *testServer) RaftConfig() base.RaftConfig {
 	return ts.Cfg.RaftConfig
 }
 
 // MetricsRecorder periodically records node-level and store-level metrics.
-func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
+func (ts *testServer) MetricsRecorder() *status.MetricsRecorder {
 	return ts.node.recorder
 }
 
 // CollectionFactory is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) CollectionFactory() interface{} {
+func (ts *testServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
 }
 
 // SystemTableIDResolver is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SystemTableIDResolver() interface{} {
+func (ts *testServer) SystemTableIDResolver() interface{} {
 	return ts.sqlServer.execCfg.SystemTableIDResolver
 }
 
 // SpanConfigKVSubscriber is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
+func (ts *testServer) SpanConfigKVSubscriber() interface{} {
 	return ts.node.storeCfg.SpanConfigSubscriber
 }
 
 // SystemConfigProvider is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
+func (ts *testServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
 }
 
 // KVFlowController is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) KVFlowController() interface{} {
+func (ts *testServer) KVFlowController() interface{} {
 	return ts.node.storeCfg.KVFlowController
 }
 
 // KVFlowHandles is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) KVFlowHandles() interface{} {
+func (ts *testServer) KVFlowHandles() interface{} {
 	return ts.node.storeCfg.KVFlowHandles
 }
 
 // Codec is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) Codec() keys.SQLCodec {
+func (ts *testServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
 }
 
 // RangeDescIteratorFactory is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) RangeDescIteratorFactory() interface{} {
+func (ts *testServer) RangeDescIteratorFactory() interface{} {
 	return ts.sqlServer.execCfg.RangeDescIteratorFactory
 }
 
 // BinaryVersionOverride is part of the serverutils.TestServerInterface.
-func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
+func (ts *testServer) BinaryVersionOverride() roachpb.Version {
 	knobs := ts.TestingKnobs().Server
 	if knobs == nil {
 		return roachpb.Version{}
@@ -2069,48 +2069,48 @@ func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
 }
 
 // KvProber is part of the serverutils.StorageLayerInterface.
-func (ts *TestServer) KvProber() *kvprober.Prober {
+func (ts *testServer) KvProber() *kvprober.Prober {
 	return ts.Server.kvProber
 }
 
 // QueryDatabaseID is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) QueryDatabaseID(
+func (ts *testServer) QueryDatabaseID(
 	ctx context.Context, userName username.SQLUsername, dbName string,
 ) (descpb.ID, error) {
 	return ts.admin.queryDatabaseID(ctx, userName, dbName)
 }
 
 // QueryTableID is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) QueryTableID(
+func (ts *testServer) QueryTableID(
 	ctx context.Context, userName username.SQLUsername, dbName, tbName string,
 ) (descpb.ID, error) {
 	return ts.admin.queryTableID(ctx, userName, dbName, tbName)
 }
 
 // StatsForSpans is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) StatsForSpan(
+func (ts *testServer) StatsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
 	return ts.admin.statsForSpan(ctx, span)
 }
 
 // SetReady is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SetReady(ready bool) {
+func (ts *testServer) SetReady(ready bool) {
 	ts.sqlServer.isReady.Set(ready)
 }
 
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) SetAcceptSQLWithoutTLS(accept bool) {
+func (ts *testServer) SetAcceptSQLWithoutTLS(accept bool) {
 	ts.Cfg.AcceptSQLWithoutTLS = accept
 }
 
 // PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) PrivilegeChecker() interface{} {
+func (ts *testServer) PrivilegeChecker() interface{} {
 	return ts.admin.privilegeChecker
 }
 
 // HTTPAuthServer is part of the ApplicationLayerInterface.
-func (ts *TestServer) HTTPAuthServer() interface{} {
+func (ts *testServer) HTTPAuthServer() interface{} {
 	return ts.t.authentication
 }
 
@@ -2176,7 +2176,7 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 	}
 
 	cfg := makeTestConfigFromParams(params)
-	ts := &TestServer{Cfg: &cfg, params: params}
+	ts := &testServer{Cfg: &cfg, params: params}
 
 	if params.Stopper == nil {
 		params.Stopper = stop.NewStopper()
@@ -2275,7 +2275,7 @@ func TestingMakeLoggingContexts(
 }
 
 // NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) NewClientRPCContext(
+func (ts *testServer) NewClientRPCContext(
 	ctx context.Context, user username.SQLUsername,
 ) *rpc.Context {
 	return newClientRPCContext(ctx, user,
@@ -2286,7 +2286,7 @@ func (ts *TestServer) NewClientRPCContext(
 }
 
 // RPCClientConn is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) RPCClientConn(
+func (ts *testServer) RPCClientConn(
 	test serverutils.TestFataler, user username.SQLUsername,
 ) *grpc.ClientConn {
 	conn, err := ts.RPCClientConnE(user)
@@ -2297,20 +2297,20 @@ func (ts *TestServer) RPCClientConn(
 }
 
 // RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
+func (ts *testServer) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
 	return rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), rpc.DefaultClass).Connect(ctx)
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
+func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
 	return serverpb.NewAdminClient(conn)
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *TestServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
+func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
 	return serverpb.NewStatusClient(conn)
 }
