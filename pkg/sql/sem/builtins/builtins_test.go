@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/bits"
 	"math/rand"
 	"testing"
@@ -97,8 +98,8 @@ func TestMapToUniqueUnorderedID(t *testing.T) {
 }
 
 // TestSerialNormalizationWithUniqueUnorderedID makes sure that serial
-// normalization can use unique_unordered_id() and a split in a table followed
-// by insertions guarantees a (somewhat) uniform distribution of the data.
+// normalization can use unique_unordered_id() and a large number of
+// insertions guarantees a (somewhat) uniform distribution of the data.
 func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -107,7 +108,7 @@ func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 		"assumes large N")
 
 	ctx := context.Background()
-	const attempts = 2
+	const attempts = 3
 	// This test can flake when the random data is not distributed evenly.
 	err := retry.WithMaxAttempts(ctx, retry.Options{}, attempts, func() error {
 
@@ -134,7 +135,7 @@ CREATE TABLE t (
   j INT
 )`)
 
-		numberOfRows := 100000
+		numberOfRows := 800000
 
 		// Insert rows.
 		tdb.Exec(t, fmt.Sprintf(`
@@ -156,8 +157,8 @@ INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
 		var keyCounts pq.Int64Array
 		tdb.QueryRow(t, `
   WITH boundaries AS (
-                     SELECT i << (64 - $1) AS p FROM ROWS FROM (generate_series(0, (1<<($1-1)) -1)) AS t (i)
-                     UNION ALL SELECT (((1 << 62) - 1) << 1)+1 -- int63 max value
+                     SELECT i << (64 - $1) AS p FROM ROWS FROM (generate_series(0, (1 << ($1 - 1)) - 1)) AS t (i)
+                     UNION ALL SELECT (((1 << 62) - 1) << 1) + 1 -- int63 max value
                   ),
        groups AS (
                 SELECT *
@@ -167,7 +168,7 @@ INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
        counts AS (
                   SELECT count(i) AS c
                     FROM t, groups
-                   WHERE low <= i AND high > i
+                   WHERE low < i AND i <= high
                 GROUP BY (low, high)
               )
 SELECT array_agg(c)
@@ -183,7 +184,7 @@ SELECT array_agg(c)
 		// chi-square goodness of fit statistic. We'll set our null hypothesis as
 		// 'each range in the distribution should have the same probability of getting
 		// a row inserted' and we'll check if we can reject the null hypothesis if
-		// chi-square is greater than the critical value we currently set as 35.2585,
+		// chi-squared is greater than the critical value we currently set as 35.2585,
 		// a deliberate choice that gives us a p-value of 0.00001 according to
 		// https://www.fourmilab.ch/rpkp/experiments/analysis/chiCalc.html. If we are
 		// able to reject the null hypothesis, then the distribution is not uniform,
@@ -203,19 +204,17 @@ SELECT array_agg(c)
 // discreteUniformChiSquared calculates the chi-squared statistic (ref:
 // https://www.itl.nist.gov/div898/handbook/eda/section3/eda35f.htm) to be used
 // in our hypothesis testing for the distribution of rows among ranges.
-func discreteUniformChiSquared(counts []int64) float64 {
+func discreteUniformChiSquared(buckets []int64) float64 {
 	var n int64
-	for _, c := range counts {
+	for _, c := range buckets {
 		n += c
 	}
-	p := float64(1) / float64(len(counts))
-	var stat float64
-	for _, c := range counts {
-		oSubE := float64(c)/float64(n) - p
-		stat += (oSubE * oSubE) / p
+	expectedPerBucket := float64(n) / float64(len(buckets))
+	var chiSquared float64
+	for _, c := range buckets {
+		chiSquared += math.Pow(float64(c)-expectedPerBucket, 2) / expectedPerBucket
 	}
-	stat *= float64(n)
-	return stat
+	return chiSquared
 }
 
 func TestStringToArrayAndBack(t *testing.T) {
