@@ -117,7 +117,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manualClock,
 		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */)
-	cfg := kvserver.TestStoreConfig(clock)
+	var cfg kvserver.StoreConfig
+	if ltc.StoreTestingKnobs != nil && ltc.StoreTestingKnobs.InitialReplicaVersionOverride != nil {
+		cfg = kvserver.TestStoreConfigWithVersion(clock, *ltc.StoreTestingKnobs.InitialReplicaVersionOverride)
+	} else {
+		cfg = kvserver.TestStoreConfig(clock)
+	}
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
 	ltc.Manual = manualClock
