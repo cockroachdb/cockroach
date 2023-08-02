@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -175,7 +176,7 @@ func (s *tenantServerWrapper) getInstanceID() base.SQLInstanceID {
 	return s.server.sqlServer.sqlIDContainer.SQLInstanceID()
 }
 
-func (s *tenantServerWrapper) shutdownRequested() <-chan ShutdownRequest {
+func (s *tenantServerWrapper) shutdownRequested() <-chan serverctl.ShutdownRequest {
 	return s.server.sqlServer.ShutdownRequested()
 }
 
@@ -196,7 +197,7 @@ func (s *tenantServerWrapper) gracefulDrain(
 // We do not implement the onDemandServer interface methods on *Server
 // directly so as to not add noise to its go documentation.
 type systemServerWrapper struct {
-	server *Server
+	server *topLevelServer
 }
 
 var _ onDemandServer = (*systemServerWrapper)(nil)
@@ -236,7 +237,7 @@ func (s *systemServerWrapper) getInstanceID() base.SQLInstanceID {
 	return base.SQLInstanceID(s.server.nodeIDContainer.Get())
 }
 
-func (s *systemServerWrapper) shutdownRequested() <-chan ShutdownRequest {
+func (s *systemServerWrapper) shutdownRequested() <-chan serverctl.ShutdownRequest {
 	return nil
 }
 

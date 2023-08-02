@@ -45,7 +45,7 @@ var (
 
 // startMonitoringForwardClockJumps starts a background task to monitor forward
 // clock jumps based on a cluster setting.
-func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
+func (s *topLevelServer) startMonitoringForwardClockJumps(ctx context.Context) error {
 	forwardJumpCheckEnabled := make(chan bool, 1)
 	s.stopper.AddCloser(stop.CloserFn(func() { close(forwardJumpCheckEnabled) }))
 
@@ -69,7 +69,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 // checkHLCUpperBoundExists determines whether there's an HLC
 // upper bound that will need to refreshed/persisted after
 // the server has initialized.
-func (s *Server) checkHLCUpperBoundExistsAndEnsureMonotonicity(
+func (s *topLevelServer) checkHLCUpperBoundExistsAndEnsureMonotonicity(
 	ctx context.Context, initialStart bool,
 ) (hlcUpperBoundExists bool, err error) {
 	if initialStart {
@@ -238,7 +238,9 @@ func periodicallyPersistHLCUpperBound(
 //
 // tickCallback is called whenever persistHLCUpperBoundCh or a ticker tick is
 // processed
-func (s *Server) startPersistingHLCUpperBound(ctx context.Context, hlcUpperBoundExists bool) error {
+func (s *topLevelServer) startPersistingHLCUpperBound(
+	ctx context.Context, hlcUpperBoundExists bool,
+) error {
 	tickerFn := time.NewTicker
 	persistHLCUpperBoundFn := func(t int64) error { /* function to persist upper bound of HLC to all stores */
 		return s.node.SetHLCUpperBound(context.Background(), t)

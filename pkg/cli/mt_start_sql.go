@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
@@ -78,7 +79,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
 		// Beware of not writing simply 'return server.NewServer()'. This is
 		// because it would cause the serverStartupInterface reference to
 		// always be non-nil, even if NewServer returns a nil pointer (and

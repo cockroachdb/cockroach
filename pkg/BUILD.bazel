@@ -1544,6 +1544,7 @@ GO_TARGETS = [
     "//pkg/server/profiler:profiler",
     "//pkg/server/profiler:profiler_test",
     "//pkg/server/rangetestutils:rangetestutils",
+    "//pkg/server/serverctl:serverctl",
     "//pkg/server/serverpb:serverpb",
     "//pkg/server/serverpb:serverpb_test",
     "//pkg/server/serverrules:serverrules",

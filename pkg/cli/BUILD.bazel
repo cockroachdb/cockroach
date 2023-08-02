@@ -148,6 +148,7 @@ go_library(
         "//pkg/server/autoconfig/acprovider",
         "//pkg/server/pgurl",
         "//pkg/server/profiler",
+        "//pkg/server/serverctl",
         "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/server/status/statuspb",

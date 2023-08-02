@@ -93,7 +93,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	ctx context.Context,
 	ie isql.Executor,
 	stores *kvserver.Stores,
-	server *Server,
+	server *topLevelServer,
 	stopper *stop.Stopper,
 ) {
 	publishCtx, publishCancel := stopper.WithCancelOnQuiesce(ctx)
