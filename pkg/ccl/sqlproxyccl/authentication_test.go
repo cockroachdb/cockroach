@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
@@ -98,14 +99,14 @@ func TestAuthenticateClearText(t *testing.T) {
 func TestAuthenticateThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	server := func(t *testing.T, be *pgproto3.Backend, authResponse pgproto3.BackendMessage) {
+	server := func(t *testing.T, be *pgproto3.Backend) {
 		require.NoError(t, be.Send(&pgproto3.AuthenticationCleartextPassword{}))
 
 		msg, err := be.Receive()
 		require.NoError(t, err)
 		require.Equal(t, msg, &pgproto3.PasswordMessage{Password: "password"})
 
-		require.NoError(t, be.Send(authResponse))
+		require.NoError(t, be.Send(&pgproto3.ErrorResponse{Message: "wrong password"}))
 	}
 
 	client := func(t *testing.T, fe *pgproto3.Frontend) {
@@ -130,44 +131,79 @@ func TestAuthenticateThrottled(t *testing.T) {
 		require.Error(t, err)
 	}
 
-	type testCase struct {
-		name           string
-		result         pgproto3.BackendMessage
-		expectedStatus throttler.AttemptStatus
-	}
-	for _, tc := range []testCase{
-		{
-			name:           "AuthenticationOkay",
-			result:         &pgproto3.AuthenticationOk{},
-			expectedStatus: throttler.AttemptOK,
-		},
-		{
-			name:           "AuthenticationError",
-			result:         &pgproto3.ErrorResponse{Message: "wrong password"},
-			expectedStatus: throttler.AttemptInvalidCredentials,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			proxyToServer, serverToProxy := net.Pipe()
-			proxyToClient, clientToProxy := net.Pipe()
-			sqlServer := pgproto3.NewBackend(pgproto3.NewChunkReader(serverToProxy), serverToProxy)
-			sqlClient := pgproto3.NewFrontend(pgproto3.NewChunkReader(clientToProxy), clientToProxy)
+	proxyToServer, serverToProxy := net.Pipe()
+	proxyToClient, clientToProxy := net.Pipe()
+	sqlServer := pgproto3.NewBackend(pgproto3.NewChunkReader(serverToProxy), serverToProxy)
+	sqlClient := pgproto3.NewFrontend(pgproto3.NewChunkReader(clientToProxy), clientToProxy)
 
-			go server(t, sqlServer, &pgproto3.AuthenticationOk{})
-			go client(t, sqlClient)
+	go server(t, sqlServer)
+	go client(t, sqlClient)
 
-			_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
-				func(status throttler.AttemptStatus) error {
-					require.Equal(t, throttler.AttemptOK, status)
-					return throttledError
-				})
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "connection attempt throttled")
-
-			proxyToServer.Close()
-			proxyToClient.Close()
+	_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
+		func(status throttler.AttemptStatus) error {
+			require.Equal(t, throttler.AttemptInvalidCredentials, status)
+			return throttledError
 		})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "connection attempt throttled")
+
+	proxyToServer.Close()
+	proxyToClient.Close()
+}
+
+func TestErrorFollowingAuthenticateNotThrottled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	server := func(t *testing.T, be *pgproto3.Backend) {
+		require.NoError(t, be.Send(&pgproto3.AuthenticationCleartextPassword{}))
+
+		msg, err := be.Receive()
+		require.NoError(t, err)
+		require.Equal(t, msg, &pgproto3.PasswordMessage{Password: "password"})
+
+		require.NoError(t, be.Send(&pgproto3.ErrorResponse{
+			Code:    pgcode.TooManyConnections.String(),
+			Message: "sorry, too many clients already"}))
 	}
+
+	client := func(t *testing.T, fe *pgproto3.Frontend) {
+		msg, err := fe.Receive()
+		require.NoError(t, err)
+		require.Equal(t, msg, &pgproto3.AuthenticationCleartextPassword{})
+
+		require.NoError(t, fe.Send(&pgproto3.PasswordMessage{Password: "password"}))
+
+		// Try reading from the connection. This check ensures authorize
+		// swallowed the OK/Error response from the sql server.
+		msg, err = fe.Receive()
+		require.NoError(t, err)
+		require.Equal(t, msg, &pgproto3.ErrorResponse{
+			Code:    pgcode.TooManyConnections.String(),
+			Message: "sorry, too many clients already"})
+	}
+
+	proxyToServer, serverToProxy := net.Pipe()
+	proxyToClient, clientToProxy := net.Pipe()
+	sqlServer := pgproto3.NewBackend(pgproto3.NewChunkReader(serverToProxy), serverToProxy)
+	sqlClient := pgproto3.NewFrontend(pgproto3.NewChunkReader(clientToProxy), clientToProxy)
+
+	go server(t, sqlServer)
+	go client(t, sqlClient)
+
+	var throttleCallCount int
+	_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
+		func(status throttler.AttemptStatus) error {
+			throttleCallCount++
+			require.Equal(t, throttler.AttemptOK, status)
+			return nil
+		})
+	require.Equal(t, 1, throttleCallCount)
+	require.Error(t, err)
+	require.Contains(t, err.Error(),
+		"codeAuthFailed: authentication failed: sorry, too many clients already")
+
+	proxyToServer.Close()
+	proxyToClient.Close()
 }
 
 func TestAuthenticateError(t *testing.T) {
