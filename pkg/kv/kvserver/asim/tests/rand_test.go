@@ -24,7 +24,7 @@ const (
 	defaultNumIterations = 3
 	defaultSeed          = int64(42)
 	defaultDuration      = 10 * time.Minute
-	defaultVerbosity     = false
+	defaultVerbosity     = OutputNothing
 )
 
 // TestRandomized is a randomized data-driven testing framework that validates
@@ -79,8 +79,8 @@ const (
 //    number of stores 4. sum of weights in the array should be equal to 1
 
 // 3. "eval" [seed=<int64>] [num_iterations=<int>] [duration=<time.Duration>]
-// [verbose=<bool>]
-// e.g. eval seed=20 duration=30m2s verbose=true
+// [verbose=(<[]("nothing","test_settings","initial_state","config_gen":,"plot_history","all")>)]
+// e.g. eval seed=20 duration=30m2s verbose=(test_settings,initial_state)
 //  - eval: generates a simulation based on the configuration set with the given
 //    commands
 //  - seed(default value is int64(42)): used to create a new random number
@@ -88,8 +88,16 @@ const (
 //	- num_iterations(default value is 3): specifies the number of simulations to
 //	  run
 //	- duration(default value is 10m): defines duration of each iteration
-//	- verbose(default value is false): if set to true, plots all stat(as
-//	  specified by defaultStat) history
+//	- verbose(default value is OutputNothing): used to set flags on what to
+//    show in the test output messages
+//    - nothing: only shows whether the test passed or failed, along with any
+//    failure messages
+//    - test_settings: displays settings used for the repeated tests
+//    - initial_state: displays the initial state of each test iteration
+//    - config_gen: displays the input configurations generated for each test
+//    iteration
+//    - plot_history: shows plots of the history stat (default: replicas) for
+//    all iterations
 
 // RandTestingFramework is initialized with specified testSetting and maintains
 // its state across all iterations. It repeats the test with different random

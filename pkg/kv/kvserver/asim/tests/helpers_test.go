@@ -24,6 +24,10 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 	switch dest := dest.(type) {
 	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64:
 		d.ScanArgs(t, key, dest)
+	case *OutputFlags:
+		var flagsTmp []string
+		d.ScanArgs(t, key, &flagsTmp)
+		*dest = dest.ScanFlags(flagsTmp)
 	case *gen.PlacementType:
 		d.ScanArgs(t, key, &tmp)
 		*dest = dest.GetGeneratorType(tmp)

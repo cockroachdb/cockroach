@@ -1,0 +1,50 @@
+# In this test, we run the randomized testing framework with the weighted_rand
+# option.  Note that due to the limited sample size, these may not be observed
+# accurately. But we expect the distribution of ranges across stores should be
+# roughly proportional to the weight.
+rand_cluster cluster_gen_type=single_region
+----
+
+# Due to replication factor of 3, it is impossible to satisfy the weighted rand
+# distribution. So number of ranges across the first three
+# stores(len(weightedRand)) remain the same.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
+----
+
+eval duration=20m num_iterations=3
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+____
+----
+
+rand_cluster cluster_gen_type=multi_region
+----
+
+# We expect ranges distributed to the third and fourth stores to be larger than
+# the first two stores.
+rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.01, 0.04, 0.2, 0.75)
+----
+
+eval duration=5m num_iterations=3
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------

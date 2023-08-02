@@ -12,6 +12,8 @@ package asim
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -61,6 +63,19 @@ type Simulator struct {
 
 	metrics *metrics.Tracker
 	history History
+}
+
+// PrintState outputs the string representation of the current state to the
+// given buf.
+// For example,
+// STATE at 2022-03-21 11:00:00 +0000 UTC:
+// stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))]
+// topology:
+// AU_EAST
+// AU_EAST_1
+// └── [1 2 3]
+func (s *Simulator) PrintState(buf *strings.Builder) {
+	buf.WriteString(fmt.Sprintf("STATE at %s:\n%s\n", s.curr.String(), s.state.PrettyPrint()))
 }
 
 // History contains recorded information that summarizes a simulation run.

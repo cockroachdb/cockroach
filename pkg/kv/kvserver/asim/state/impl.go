@@ -136,6 +136,39 @@ func (rm *rmap) initFirstRange() {
 	rm.rangeMap[rangeID] = rng
 }
 
+// PrettyPrint returns a pretty formatted string representation of the
+// state (more concise than String()).
+// For example,
+// stores(3)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1))]
+// topology:
+// AU_EAST
+// AU_EAST_1
+// └── [1 2 3]
+// There are three nodes locating in AU_EAST. Each of the three nodes hosts a
+// single store, and each store contains one replica.
+func (s *state) PrettyPrint() string {
+	builder := &strings.Builder{}
+	nStores := len(s.stores)
+	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		store := s.stores[storeID]
+		builder.WriteString(store.PrettyPrint())
+		if i < nStores-1 {
+			builder.WriteString(",")
+		}
+	}
+	builder.WriteString("] \n")
+	topology := s.Topology()
+	builder.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
+	return builder.String()
+}
+
 // String returns a string containing a compact representation of the state.
 // TODO(kvoli,lidorcarmel): Add a unit test for this function.
 func (s *state) String() string {
@@ -149,7 +182,6 @@ func (s *state) String() string {
 	})
 
 	nStores := len(s.stores)
-	iterStores := 0
 	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
 
 	// Sort the unordered map storeIDs by its key to ensure deterministic
@@ -160,13 +192,12 @@ func (s *state) String() string {
 	}
 	sort.Sort(storeIDs)
 
-	for _, storeID := range storeIDs {
+	for i, storeID := range storeIDs {
 		store := s.stores[storeID]
 		builder.WriteString(store.String())
-		if iterStores < nStores-1 {
+		if i < nStores-1 {
 			builder.WriteString(",")
 		}
-		iterStores++
 	}
 	builder.WriteString("] ")
 
@@ -1323,6 +1354,15 @@ type store struct {
 	storepool *storepool.StorePool
 	settings  *cluster.Settings
 	replicas  map[RangeID]ReplicaID
+}
+
+// PrettyPrint returns pretty formatted string representation of the store.
+// For example,
+// s1n1=(replicas(1)) - store(storeID=1,nodeID=1) contains one replica.
+func (s *store) PrettyPrint() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("s%dn%d=(replicas(%d))", s.storeID, s.nodeID, len(s.replicas)))
+	return builder.String()
 }
 
 // String returns a compact string representing the current state of the store.

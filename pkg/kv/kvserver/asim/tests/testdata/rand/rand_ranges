@@ -1,238 +1,148 @@
 # In this test, we run the randomized testing framework with both the
-# rand_ranges and rand_cluster options.
+# rand_ranges and rand_cluster options. We expect that the range_gen and
+# cluster_gen configurations will change across iterations and runs.
+#
+# When a specific generator type is used, we expect the numbers generated to
+# form a distribution. Due to limited sample size, it can be hard to observe the
+# corresponding distribution pattern, but we can confirm that the parameters are
+# set correctly and numbers generated look roughly accurate.
+#
+# Other parameters, such as replication factor and placement type should also be
+# set and remain consistent across iterations.
 rand_cluster cluster_gen_type=single_region
 ----
 
-rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=uniform
-----
-
-eval duration=5m num_iterations=3 verbose=true
-----
-settings           num_iterations=3         duration=5m0s
-rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
-rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]
-rand_load=false
-rand_events=false
-rand_settings=false
-----------------------------------
-sample1: start running
-sample1: pass
-----------------------------------
-sample2: start running
-sample2: pass
-----------------------------------
-sample3: start running
-sample3: pass
-----------------------------------
-sample1
- 111 ┼─╮
- 104 ┤ ╰╮
-  98 ┼──╮─╮
-  91 ┤  ╰──╮╮
-  85 ┼────╮╰──╮
-  78 ┤    ╰───╰──╮
-  72 ┼─────╮  ╰─╰╰────╮
-  65 ┤     ╰─╮    ╰─╭╭╮╭╮╭╭╮╮─╮─╭╮─╭────╮─────╭─╮─╭─╮─╮  ╭──╮  ╭──────╮     ╭────╮───
-  59 ┼───╮───────╭╭────╯╰───────╯╰────────────────╯─╰────────────────────────────────
-  52 ┤   ╰───╮╭───╯╯   ╰╯
-  46 ┤     ╭╭╰╯╯╯
-  39 ┼───╭───╯
-  33 ┤  ╭╯╯
-  26 ┼──│
-  20 ┤╭─╯
-  13 ┼╯
-                                          replicas
-sample2
- 345 ┼───╮
- 322 ┤  ╰╰─────╮
- 299 ┼──────╮╰─╰─────╮
- 276 ┼──╮──╮╰──────────────╮
- 253 ┤  ╰────────────────╮─╰───────╮╮
- 230 ┤                 ╰─╰─────────────────╮╮
- 207 ┤                                    ╰╰─────────────────────────────────────────
- 184 ┼─────────────────────────────────────────╭─────────────────────────────────────
- 161 ┼─────────────────────────────────────────╯╯╯
- 138 ┤                     ╭─────────╯╯
- 115 ┤              ╭──────╯╯
-  92 ┤   ╭─────╭────╯╯
-  69 ┼───╯╯╭───╯
-  46 ┼───╭─╯
-  23 ┤ ╭─╯
-   0 ┼─╯
-                                          replicas
-sample3
- 180 ┼─╮╮
- 168 ┤ ╰──╮╮
- 156 ┼───────╮╮
- 144 ┤       ╰───╮╮╮
- 132 ┤           ╰───╮╮╮
- 120 ┼───────╮      ╰╰────╮╮
- 108 ┤   ╰───╰────────╮───╰───────╮
-  96 ┤                ╰───────────╰──────────────────────────────────────────────────
-  84 ┼─────────────────╭╭──────╯╯
-  72 ┤             ╭────╯╯
-  60 ┤       ╭─╭───╯
-  48 ┤╭╭───────╯
-  36 ┼─╯╭──╯
-  24 ┼──╯╯
-  12 ┤ ╭╯
-   0 ┼─╯
-                                          replicas
-
-clear
-----
-
-
-rand_cluster cluster_gen_type=multi_region
-----
-
+# We expect the placement of ranges across stores to be randomized with a
+# replication factor of 3. range∈[1, 1000] should be generated with an uniform
+# distribution pattern across iterations. The numbers generated are
+# (305,944,479,487,285,611,271,502,865,787) - randomly distributed within [1,
+# 1000]. keyspace∈[1000, 200000] should be generated with a zipf distribution
+# pattern across iterations (1015,2357,1003,2171,1060,1000,1439,1198,1427.1001)
+# - numbers close to 1000 are expected to occur frequently. configurations
+# should be generated with an uniform distribution pattern across iterations.
 rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform keyspace_gen_type=zipf
 ----
 
-eval duration=5m num_iterations=10
+eval duration=5m num_iterations=10 verbose=(test_settings,config_gen)
 ----
-settings           num_iterations=10        duration=5m0s
-rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
-rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=uniform  keySpaceGenType=zipf  weightedRand=[]
+SETTINGS           num_iterations=10        duration=5m0s
+rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
+rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=3  rangeGenType=uniform  keySpaceGenType=zipf  weightedRand=[]
 rand_load=false
 rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=305, key_space=1015, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
 sample1: pass
 ----------------------------------
 sample2: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(5nodes,0stores)][zone=US_2(5nodes,0stores)][zone=US_3(5nodes,0stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=944, key_space=1357, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2643318057788968173]
 sample2: pass
 ----------------------------------
 sample3: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(5nodes,0stores)][zone=US_2(5nodes,0stores)][zone=US_3(5nodes,0stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=479, key_space=1003, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6972490225919430754]
 sample3: pass
 ----------------------------------
 sample4: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=487, key_space=2171, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[8427801741804500990]
 sample4: pass
 ----------------------------------
 sample5: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=285, key_space=1060, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[8063729658764635782]
 sample5: pass
 ----------------------------------
 sample6: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=611, key_space=1000, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[3814222400681984302]
 sample6: pass
 ----------------------------------
 sample7: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=271, key_space=1439, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[13013938835543503]
 sample7: pass
 ----------------------------------
 sample8: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=502, key_space=1198, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2207144605302255518]
 sample8: pass
 ----------------------------------
 sample9: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=865, key_space=1427, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[5888461606762344739]
 sample9: pass
 ----------------------------------
 sample10: start running
+CONFIG_GEN:
+duration=[5m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=787, key_space=1001, replication_factor=3, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6738330972202035110]
 sample10: pass
 ----------------------------------
 
 clear
 ----
 
-rand_cluster cluster_gen_type=multi_region
-----
-
-rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=uniform
-----
-
-eval duration=5m num_iterations=10
-----
-settings           num_iterations=10        duration=5m0s
-rand_options       cluster=true             ranges=true                  load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=multi_region  
-rand_ranges=true   range_gen_settings ->    placementType=random         replicationFactor=3  rangeGenType=zipf  keySpaceGenType=uniform  weightedRand=[]
-rand_load=false
-rand_events=false
-rand_settings=false
-----------------------------------
-sample1: start running
-sample1: pass
-----------------------------------
-sample2: start running
-sample2: pass
-----------------------------------
-sample3: start running
-sample3: pass
-----------------------------------
-sample4: start running
-sample4: pass
-----------------------------------
-sample5: start running
-sample5: pass
-----------------------------------
-sample6: start running
-sample6: pass
-----------------------------------
-sample7: start running
-sample7: pass
-----------------------------------
-sample8: start running
-sample8: pass
-----------------------------------
-sample9: start running
-sample9: pass
-----------------------------------
-sample10: start running
-sample10: pass
-----------------------------------
-
-clear
-----
-
-rand_cluster cluster_gen_type=any_region
-----
-
-rand_ranges placement_type=random replication_factor=3 range_gen_type=zipf keyspace_gen_type=zipf
-----
-
-eval duration=5m num_iterations=10
-----
-settings           num_iterations=10        duration=5m0s
-rand_options       cluster=true             ranges=true                load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=any_region  
-rand_ranges=true   range_gen_settings ->    placementType=random       replicationFactor=3  rangeGenType=zipf  keySpaceGenType=zipf  weightedRand=[]
-rand_load=false
-rand_events=false
-rand_settings=false
-----------------------------------
-sample1: start running
-sample1: pass
-----------------------------------
-sample2: start running
-sample2: pass
-----------------------------------
-sample3: start running
-sample3: pass
-----------------------------------
-sample4: start running
-sample4: pass
-----------------------------------
-sample5: start running
-sample5: pass
-----------------------------------
-sample6: start running
-sample6: pass
-----------------------------------
-sample7: start running
-sample7: pass
-----------------------------------
-sample8: start running
-sample8: pass
-----------------------------------
-sample9: start running
-sample9: pass
-----------------------------------
-sample10: start running
-sample10: pass
-----------------------------------
-
-clear
-----
+# We expect ranges to be randomly allocated across stores with a replication
+# factor of 1. Assertion failures on some samples are expected due to this
+# factor. When there is only one replica, the removal target in rebalancing is a
+# leaseholder, it is locked into the current replica distribution. The
+# rebalancer falls back to adding one replica, hoping the rebalancing would
+# happen next time this range is checked. This can case thrashing where settling
+# is difficult.
 
 rand_cluster cluster_gen_type=single_region
 ----
@@ -240,10 +150,9 @@ rand_cluster cluster_gen_type=single_region
 rand_ranges placement_type=random replication_factor=1
 ----
 
-eval duration=20m num_iterations=3
+eval duration=20m num_iterations=3 verbose=(test_settings,config_gen)
 ----
-settings           num_iterations=3         duration=20m0s
-rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
+SETTINGS           num_iterations=3         duration=20m0s
 rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
 rand_ranges=true   range_gen_settings ->    placementType=random          replicationFactor=1  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[]
 rand_load=false
@@ -251,9 +160,23 @@ rand_events=false
 rand_settings=false
 ----------------------------------
 sample1: start running
+CONFIG_GEN:
+duration=[20m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(1nodes,5stores)][zone=US_2(1nodes,5stores)][zone=US_3(1nodes,5stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=305, key_space=96760, replication_factor=1, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[1926012586526624009]
 sample1: pass
 ----------------------------------
 sample2: start running
+CONFIG_GEN:
+duration=[20m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(5nodes,0stores)][zone=US_2(5nodes,0stores)][zone=US_3(5nodes,0stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=944, key_space=150098, replication_factor=1, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[2643318057788968173]
 sample2: failed assertion
   conformance unavailable=0 under=0 over=0 violating=0 
   actual unavailable=0 under=0, over=9 violating=0
@@ -269,34 +192,12 @@ over replicated:
   r875:000013{8966-9125} [(n3,s3):3, (n2,s2):4] applying ttl_seconds=0 num_replicas=1 num_voters=1
 ----------------------------------
 sample3: start running
-sample3: pass
-----------------------------------
-
-clear
-----
-
-rand_cluster cluster_gen_type=single_region
-----
-
-rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0.1, 0.2, 0.7)
-----
-
-eval duration=20m num_iterations=3
-----
-settings           num_iterations=3         duration=20m0s
-rand_options       cluster=true             ranges=true                   load=false  staticSettings=false  staticEvents=false
-rand_cluster=true  cluster_gen_settings ->  clusterGenType=single_region  
-rand_ranges=true   range_gen_settings ->    placementType=weighted_rand   replicationFactor=3  rangeGenType=uniform  keySpaceGenType=uniform  weightedRand=[0.1 0.2 0.7]
-rand_load=false
-rand_events=false
-rand_settings=false
-----------------------------------
-sample1: start running
-sample1: pass
-----------------------------------
-sample2: start running
-sample2: pass
-----------------------------------
-sample3: start running
+CONFIG_GEN:
+duration=[20m0s]
+clusterGen=[loaded_cluster: [region:US][zone=US_1(5nodes,0stores)][zone=US_2(5nodes,0stores)][zone=US_3(5nodes,0stores)]]
+rangeGen=[placement_type=random, base_ranges=ranges=479, key_space=199954, replication_factor=1, bytes=0]
+loadGen=[rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000]
+eventGen=[len(delayed_event_list)=0]
+seed=[6972490225919430754]
 sample3: pass
 ----------------------------------
