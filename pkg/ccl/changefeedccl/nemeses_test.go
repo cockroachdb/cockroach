@@ -32,7 +32,7 @@ func TestChangefeedNemeses(t *testing.T) {
 		t.Logf("random seed: %d", seed)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		withLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB, rng)
+		withLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
 		// `RunNemesis` for details.
 		isSinkless := strings.Contains(t.Name(), "sinkless")
