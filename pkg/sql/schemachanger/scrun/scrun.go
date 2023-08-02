@@ -118,6 +118,11 @@ func RunSchemaChangesInJob(
 	descriptorIDs []descpb.ID,
 	rollbackCause error,
 ) error {
+	if knobs != nil && knobs.RunBeforeMakingPostCommitPlan != nil {
+		if err := knobs.RunBeforeMakingPostCommitPlan(rollbackCause != nil); err != nil {
+			return err
+		}
+	}
 	p, err := makePostCommitPlan(ctx, deps, jobID, descriptorIDs, rollbackCause)
 	if err != nil {
 		if knobs != nil && knobs.OnPostCommitPlanError != nil {
