@@ -27,12 +27,20 @@ FROM crdb_internal.create_function_statements
 WHERE schema_name = %[1]s
 AND function_name = %[2]s
 `
-	un, ok := n.Name.FunctionReference.(*tree.UnresolvedName)
+	resolvableFunctionReference := &n.Name
+	un, ok := resolvableFunctionReference.FunctionReference.(*tree.UnresolvedName)
 	if !ok {
 		return nil, errors.AssertionFailedf("not a valid function name")
 	}
 
-	fn, err := d.catalog.ResolveFunction(d.ctx, un, &d.evalCtx.SessionData().SearchPath)
+	searchPath := &d.evalCtx.SessionData().SearchPath
+	var fn *tree.ResolvedFunctionDefinition
+	var err error
+	if d.qualifyDataSourceNamesInAST {
+		fn, err = resolvableFunctionReference.Resolve(d.ctx, searchPath, d.catalog)
+	} else {
+		fn, err = d.catalog.ResolveFunction(d.ctx, un, searchPath)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -41,10 +49,24 @@ AND function_name = %[2]s
 	for _, o := range fn.Overloads {
 		if o.IsUDF {
 			udfSchema = o.Schema
+			break
 		}
 	}
 	if udfSchema == "" {
 		return nil, errors.Errorf("function %s does not exist", tree.AsString(un))
+	}
+
+	if d.qualifyDataSourceNamesInAST {
+		referenceByName := resolvableFunctionReference.ReferenceByName
+		if !referenceByName.HasExplicitSchema() {
+			referenceByName.Parts[1] = udfSchema
+		}
+		if !referenceByName.HasExplicitCatalog() {
+			referenceByName.Parts[2] = d.evalCtx.SessionData().Database
+		}
+		if referenceByName.NumParts < 3 {
+			referenceByName.NumParts = 3
+		}
 	}
 
 	fullQuery := fmt.Sprintf(query, lexbase.EscapeSQLString(udfSchema), lexbase.EscapeSQLString(un.Parts[0]))

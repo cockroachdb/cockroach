@@ -55,30 +55,26 @@ func (c DataConversionConfig) GetFloatPrec(typ *types.T) int {
 }
 
 func (m VectorizeExecMode) String() string {
-	switch m {
-	case VectorizeOn, VectorizeUnset:
-		return "on"
-	case VectorizeExperimentalAlways:
-		return "experimental_always"
-	case VectorizeOff:
-		return "off"
-	default:
+	if m == VectorizeUnset {
+		m = VectorizeOn
+	}
+	name, ok := VectorizeExecMode_name[int32(m)]
+	if !ok {
 		return fmt.Sprintf("invalid (%d)", m)
 	}
+	return name
 }
 
 // VectorizeExecModeFromString converts a string into a VectorizeExecMode.
 // False is returned if the conversion was unsuccessful.
 func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
-	var m VectorizeExecMode
-	switch strings.ToUpper(val) {
-	case "ON":
-		m = VectorizeOn
-	case "EXPERIMENTAL_ALWAYS":
-		m = VectorizeExperimentalAlways
-	case "OFF":
-		m = VectorizeOff
-	default:
+	lowerVal := strings.ToLower(val)
+	mInt, ok := VectorizeExecMode_value[lowerVal]
+	if !ok {
+		return 0, false
+	}
+	m := VectorizeExecMode(mInt)
+	if m == VectorizeUnset {
 		return 0, false
 	}
 	return m, true

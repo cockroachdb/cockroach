@@ -71,6 +71,7 @@ func (p *planner) createDropDatabaseJob(
 			DroppedFunctions:  funcIDs,
 			DroppedDatabaseID: databaseID,
 			FormatVersion:     jobspb.DatabaseJobFormatVersion,
+			SessionData:       &p.SessionData().SessionData,
 		},
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
@@ -92,6 +93,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 		Details: jobspb.SchemaChangeDetails{
 			DescID:        databaseID,
 			FormatVersion: jobspb.DatabaseJobFormatVersion,
+			SessionData:   &p.SessionData().SessionData,
 		},
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
@@ -163,6 +165,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 				// The version distinction for database jobs doesn't matter for jobs on
 				// tables.
 				FormatVersion: jobspb.DatabaseJobFormatVersion,
+				SessionData:   &p.SessionData().SessionData,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 			// Mark jobs without a mutation ID as non-cancellable,
@@ -193,6 +196,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		// The version distinction for database jobs doesn't matter for jobs on
 		// tables.
 		FormatVersion: jobspb.DatabaseJobFormatVersion,
+		SessionData:   &p.SessionData().SessionData,
 	}
 	if oldDetails.TableMutationID != descpb.InvalidMutationID {
 		// The previous queued schema change job was associated with a mutation,

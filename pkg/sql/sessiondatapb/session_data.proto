@@ -139,16 +139,16 @@ enum VectorizeExecMode {
   // VectorizeUnset means the VectorizeExecMode wasn't explicitly set. Having
   // the first enum value as zero is required by proto3. This is mapped to
   // VectorizeOn.
-  VectorizeUnset = 0;
+  unset = 0 [(gogoproto.enumvalue_customname) = "VectorizeUnset"];
   reserved 1;
   // VectorizeOn means that any supported queries will be run using the
   // columnar execution.
-  VectorizeOn = 2;
+  on = 2 [(gogoproto.enumvalue_customname) = "VectorizeOn"];
   // VectorizeExperimentalAlways means that we attempt to vectorize all
   // queries; unsupported queries will fail. Mostly used for testing.
-  VectorizeExperimentalAlways = 3;
+  experimental_always = 3 [(gogoproto.enumvalue_customname) = "VectorizeExperimentalAlways"];
   // VectorizeOff means that columnar execution is disabled.
-  VectorizeOff = 4;
+  off = 4 [(gogoproto.enumvalue_customname) = "VectorizeOff"];
 }
 
 // SequenceState is used to marshall the sessiondata.SequenceState struct.

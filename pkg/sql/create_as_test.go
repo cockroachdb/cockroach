@@ -129,7 +129,6 @@ func TestCreateAsShow(t *testing.T) {
 	testCases := []struct {
 		sql   string
 		setup string
-		skip  bool
 	}{
 		{
 			sql: "SHOW CLUSTER SETTINGS",
@@ -165,9 +164,6 @@ func TestCreateAsShow(t *testing.T) {
 		{
 			sql:   "SHOW CREATE FUNCTION show_create_fn",
 			setup: "CREATE FUNCTION show_create_fn(i int) RETURNS INT AS 'SELECT i' LANGUAGE SQL",
-			// TODO(sql-foundations): Fix `unknown function: show_create_fn(): function undefined` error in job.
-			//  See https://github.com/cockroachdb/cockroach/issues/106268.
-			skip: true,
 		},
 		{
 			sql: "SHOW CREATE ALL TYPES",
@@ -294,9 +290,6 @@ func TestCreateAsShow(t *testing.T) {
 
 	for i, testCase := range testCases {
 		t.Run(testCase.sql, func(t *testing.T) {
-			if testCase.skip {
-				return
-			}
 			if testCase.setup != "" {
 				if s.StartedDefaultTestTenant() && strings.Contains(testCase.setup, "create_tenant") {
 					// Only the system tenant has the ability to create other

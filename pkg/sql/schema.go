@@ -73,6 +73,7 @@ func (p *planner) writeSchemaDescChange(
 				// The version distinction for database jobs doesn't matter for schema
 				// jobs.
 				FormatVersion: jobspb.DatabaseJobFormatVersion,
+				SessionData:   &p.SessionData().SessionData,
 			},
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
