@@ -1534,6 +1534,7 @@ func GetBackupManifests(
 			}
 
 			memMu.Lock()
+			defer memMu.Unlock()
 			err = memMu.mem.Grow(ctx, size)
 
 			if err == nil {
@@ -1541,7 +1542,6 @@ func GetBackupManifests(
 				manifests[i] = desc
 			}
 			subMem.Shrink(ctx, size)
-			memMu.Unlock()
 
 			return err
 		})
