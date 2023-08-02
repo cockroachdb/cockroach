@@ -447,6 +447,11 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 			WaitPolicy: lock.WaitPolicy_Error,
 		}
 	}
+	makeHighPriReq := func() Request {
+		req := makeReq()
+		req.Txn.Priority = enginepb.MaxTxnPriority
+		return req
+	}
 
 	// NOTE: lockTableWaiterTestClock < uncertaintyLimit
 	expPushTS := lockTableWaiterTestClock
@@ -454,6 +459,10 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
 			testErrorWaitPush(t, waitFor, makeReq, expPushTS, reasonWaitPolicy)
+		})
+
+		t.Run("waitFor high priority", func(t *testing.T) {
+			testErrorWaitPush(t, waitFor, makeHighPriReq, expPushTS, reasonWaitPolicy)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
@@ -518,10 +527,11 @@ func testErrorWaitPush(
 			}
 			g.notify()
 
-			// If the lock is not held or expPushTS is empty, expect an error
-			// immediately. The one exception to this is waitElsewhere, which
-			// expects no error.
-			if !lockHeld || expPushTS == dontExpectPush {
+			// If the request is expected to push based on the logic in
+			// lock_table_waiter, or expPushTS is empty, expect an error immediately.
+			// The one exception to this is waitElsewhere, which expects no error.
+			shouldPush := lockHeld || canPushWithPriority(req, g.state)
+			if !shouldPush || expPushTS == dontExpectPush {
 				err := w.WaitOn(ctx, req, g)
 				if k == waitElsewhere {
 					require.Nil(t, err)
@@ -543,7 +553,7 @@ func testErrorWaitPush(
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
 				require.Equal(t, req.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
-				require.Equal(t, kvpb.PUSH_TOUCH, pushType)
+				require.Equal(t, kvpb.PUSH_TIMESTAMP, pushType)
 
 				resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 				if pusheeActive {
@@ -729,7 +739,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						return nil, kvpb.NewError(ctx.Err())
 					}
 
-					require.Equal(t, kvpb.PUSH_TOUCH, pushType)
+					require.Equal(t, kvpb.PUSH_ABORT, pushType)
 					_, hasDeadline := ctx.Deadline()
 					require.False(t, hasDeadline)
 					sawNonBlockingPush = true

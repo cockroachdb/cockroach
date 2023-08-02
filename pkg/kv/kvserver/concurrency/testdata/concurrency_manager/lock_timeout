@@ -105,7 +105,7 @@ sequence req=reqTimeout1
 [4] sequence reqTimeout1: waiting in lock wait-queues
 [4] sequence reqTimeout1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
 [4] sequence reqTimeout1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = true, priority enforcement = false
-[4] sequence reqTimeout1: pushing txn 00000001 to check if abandoned
+[4] sequence reqTimeout1: pushing timestamp of txn 00000001 above 12.000000000,1
 [4] sequence reqTimeout1: pushee not abandoned
 [4] sequence reqTimeout1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence reqTimeout1: sequencing complete, returned error: conflicting intents on ‹"k"› [reason=lock_timeout]
@@ -198,7 +198,7 @@ sequence req=reqTimeout3
 [9] sequence reqTimeout3: waiting in lock wait-queues
 [9] sequence reqTimeout3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k4"› (queuedWriters: 0, queuedReaders: 1)
 [9] sequence reqTimeout3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = true, priority enforcement = false
-[9] sequence reqTimeout3: pushing txn 00000002 to check if abandoned
+[9] sequence reqTimeout3: pushing timestamp of txn 00000002 above 12.000000000,1
 [9] sequence reqTimeout3: pushee not abandoned
 [9] sequence reqTimeout3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
 [9] sequence reqTimeout3: sequencing complete, returned error: conflicting intents on ‹"k4"› [reason=lock_timeout]
