@@ -79,9 +79,7 @@ func TestColdStartLatency(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		args := base.TestServerArgs{
-			// This test creates a tenant explicitly below.
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Locality:          localities[i],
+			Locality: localities[i],
 		}
 		signalAfter[i] = make(chan struct{})
 		serverKnobs := &server.TestingKnobs{
@@ -122,7 +120,8 @@ func TestColdStartLatency(t *testing.T) {
 		ParallelStart:     true,
 		ServerArgsPerNode: perServerArgs,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// This test creates a tenant explicitly below.
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	})
 	go func() {

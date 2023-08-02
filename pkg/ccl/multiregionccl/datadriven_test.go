@@ -134,6 +134,22 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				d.ScanArgs(t, "issue-num", &issue)
 				skip.WithIssue(t, issue)
 				return ""
+			case "skip-under-default-test-tenant":
+				if ds.tc == nil {
+					t.Fatal("cluster doesn't exist, create cluster before attempting to skip")
+				}
+				if ds.tc.StartedDefaultTestTenant() {
+					var unimplemented bool
+					var issue int
+					_ = d.MaybeScanArgs(t, "unimplemented", &unimplemented)
+					d.ScanArgs(t, "issue-num", &issue)
+					if unimplemented {
+						skip.Unimplemented(t, issue)
+					} else {
+						skip.WithIssue(t, issue)
+					}
+					return ""
+				}
 			case "sleep-for-follower-read":
 				time.Sleep(time.Second)
 			case "new-cluster":
@@ -212,7 +228,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 
 				// Set the cluster setting to enable secondary tenants to use
 				// the multi-region SQL abstractions.
-				scConn := tc.StorageClusterConn()
+				scConn := tc.SystemLayer(0).SQLConn(t, "")
 				for _, tenantStmt := range strings.Split(`
 ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true;
 ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms';
@@ -323,8 +339,9 @@ ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.
 				if err != nil {
 					return err.Error()
 				}
-				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-				codec := ds.tc.Server(idx).TenantOrServer().ExecutorConfig().(sql.ExecutorConfig).Codec
+				s := ds.tc.Server(idx).ApplicationLayer()
+				cache := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+				codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
 				tablePrefix := keys.MustAddr(codec.TablePrefix(tableID))
 				entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
 				if entry == nil {
@@ -333,7 +350,7 @@ ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.
 				return entry.ClosedTimestampPolicy().String()
 
 			case "wait-for-zone-config-changes":
-				lookupKey, err := getRangeKeyForInput(t, d, ds.tc)
+				lookupKey, err := getRangeKeyForInput(t, d, ds.tc.ApplicationLayer(0))
 				if err != nil {
 					return err.Error()
 				}
@@ -512,7 +529,7 @@ func (d *datadrivenTestState) getSQLConn(idx int) (*gosql.DB, error) {
 	if idx < 0 || idx >= d.tc.NumServers() {
 		return nil, errors.Newf("invalid idx, must be in range [0, %d)", d.tc.NumServers())
 	}
-	return d.tc.ServerConn(idx), nil
+	return d.tc.ApplicationLayer(idx).SQLConnE("")
 }
 
 func mustHaveArgOrFatal(t *testing.T, d *datadriven.TestData, arg string) {
@@ -550,7 +567,8 @@ func checkReadServedLocallyInSimpleRecording(
 					errors.New("recording contains > 1 dist sender send messages")
 			}
 			foundDistSenderSend = true
-			servedLocally = tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg)
+			servedLocally = tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg) ||
+				tracing.LogsContainMsg(sp, kvbase.RoutingRequestToSameRegionAndZoneMsg)
 			// Check the child span to find out if the query was served using a
 			// follower read.
 			for _, span := range rec {
@@ -757,7 +775,7 @@ func (r *replicaPlacement) getReplicaType(nodeIdx int) replicaType {
 }
 
 func getRangeKeyForInput(
-	t *testing.T, d *datadriven.TestData, tc serverutils.TestClusterInterface,
+	t *testing.T, d *datadriven.TestData, s serverutils.ApplicationLayerInterface,
 ) (roachpb.Key, error) {
 	mustHaveArgOrFatal(t, d, dbName)
 	mustHaveArgOrFatal(t, d, tableName)
@@ -767,7 +785,7 @@ func getRangeKeyForInput(
 	var db string
 	d.ScanArgs(t, dbName, &db)
 
-	execCfg := tc.Server(0).TenantOrServer().ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	tableDesc, err := lookupTable(&execCfg, db, tbName)
 	if err != nil {

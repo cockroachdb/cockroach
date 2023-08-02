@@ -140,6 +140,9 @@ func (n *Dialer) DialInternalClient(
 		}
 	}
 
+	// FIXME: Fix this by checking that the locality of the node we're going
+	//  to matches the locality of the SQL server?
+
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolver error")
