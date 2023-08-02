@@ -14,10 +14,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1009,8 +1013,16 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate   map[roachpb.StoreID]base.ProvisionedRateSpec
+	// diskNameToStoreID maps between attached disk names (/dev/sdb and
+	// /dev/nvme1n1 for example, from GCP PD and AWS EBS respectively) to
+	// corresponding store IDs.
 	diskNameToStoreID map[string]roachpb.StoreID
+	// provisionedRate is passed through using
+	// --store=provisioned-rate=disk-name=sdb:bandwidth=250MiB/s.
+	//
+	// TODO(irfansharif): Use something like github.com/irfansharif/probe to
+	// measure this empirically on process start, if not explicitly passed in.
+	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
@@ -1048,28 +1060,110 @@ func (dsm *diskStatsMap) empty() bool {
 	return len(dsm.provisionedRate) == 0
 }
 
-func (dsm *diskStatsMap) initDiskStatsMap(specs []base.StoreSpec, engines []storage.Engine) error {
+// TODO(irfansharif): Is this platform specific? (Seems to work on M1s,
+// gceworkers, GCP/AWS instances with/without attached storage devices).
+func getDeviceIDsToNames() (map[uint64]string, error) {
+	dir, err := ioutil.ReadDir("/dev")
+	if err != nil {
+		return nil, err
+	}
+
+	devices := make([]string, 0)
+	for _, f := range dir {
+		if strings.HasPrefix(f.Name(), "loop") ||
+			strings.HasPrefix(f.Name(), "tty") ||
+			strings.HasPrefix(f.Name(), "pty") ||
+			strings.HasPrefix(f.Name(), "vcs") {
+			// Skip over pseudo devices (loop devices, {pseudo,}terminals,
+			// scrollback buffers).
+			continue
+		}
+		devices = append(devices, filepath.Join("/dev", f.Name()))
+	}
+
+	deviceIDToName := make(map[uint64]string)
+	for _, device := range devices {
+		di, err := os.Stat(device)
+		if err != nil {
+			return nil, err
+		}
+		if di.Sys() != nil {
+			if stat, ok := di.Sys().(*syscall.Stat_t); ok {
+				// st_rdev is the device ID (https://linux.die.net/man/2/stat).
+				// The names are specifically what comes after /dev/.
+				deviceIDToName[uint64(stat.Rdev)] = di.Name()
+			}
+		}
+	}
+
+	return deviceIDToName, nil
+}
+
+func (dsm *diskStatsMap) maybeInitDiskStatsMap(
+	ctx context.Context, specs []base.StoreSpec, engines []storage.Engine,
+) error {
 	*dsm = diskStatsMap{
 		provisionedRate:   make(map[roachpb.StoreID]base.ProvisionedRateSpec),
 		diskNameToStoreID: make(map[string]roachpb.StoreID),
 	}
+
+	deviceIDToName := make(map[uint64]string)
+	if mapping, err := getDeviceIDsToNames(); err != nil {
+		log.Errorf(ctx, "unable to retrieve mapping between device ID to name: %v", err)
+		return nil // nolint:returnerrcheck
+	} else {
+		deviceIDToName = mapping
+	}
+
 	for i := range engines {
-		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
+		storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[i])
 		if err != nil {
 			return err
 		}
-		if len(specs[i].ProvisionedRateSpec.DiskName) > 0 {
-			dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
-			dsm.diskNameToStoreID[specs[i].ProvisionedRateSpec.DiskName] = id.StoreID
+
+		// STORAGE_MIN_VERSION is guaranteed to exist for initialized stores.
+		// We'll look at its file metadata to see what device contains the file
+		// (st_dev specifically, see https://linux.die.net/man/2/stat),
+		// and match it against the list of device IDs retrieved earlier.
+		fi, err := engines[i].Stat(engines[i].PathJoin(specs[i].Path, storage.MinVersionFilename))
+		if err != nil {
+			return err
 		}
+
+		if fi.Sys() != nil {
+			if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+				if name, ok := deviceIDToName[uint64(stat.Dev)]; ok {
+					dsm.diskNameToStoreID[name] = storeIdent.StoreID
+				}
+			}
+		}
+
+		if len(specs[i].ProvisionedRateSpec.DiskName) > 0 {
+			// If users specify disk names manually, compare the automatically
+			// observed data against what they spelled out.
+			dsm.provisionedRate[storeIdent.StoreID] = specs[i].ProvisionedRateSpec
+
+			diskName := specs[i].ProvisionedRateSpec.DiskName
+			if storeID, found := dsm.diskNameToStoreID[diskName]; found {
+				if storeID != storeIdent.StoreID {
+					return errors.Newf("mismatched store ID for disk %s, expected %d got %d",
+						diskName, storeID, storeIdent.StoreID)
+				}
+			} else {
+				dsm.diskNameToStoreID[diskName] = storeIdent.StoreID
+			}
+		}
+	}
+	for diskName, storeID := range dsm.diskNameToStoreID {
+		log.Infof(ctx, "s%d mapped to disk %s", storeID, diskName)
 	}
 	return nil
 }
 
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine,
+	ctx context.Context, specs []base.StoreSpec, engines []storage.Engine,
 ) error {
-	return n.diskStatsMap.initDiskStatsMap(specs, engines)
+	return n.diskStatsMap.maybeInitDiskStatsMap(ctx, specs, engines)
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
@@ -1081,6 +1175,7 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
+		return nil
 	}
 	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
@@ -1093,7 +1188,8 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 			StoreID:         store.StoreID(),
 			Metrics:         m.Metrics,
 			WriteStallCount: m.WriteStallCount,
-			DiskStats:       diskStats})
+			DiskStats:       diskStats,
+		})
 		return nil
 	})
 	return metrics

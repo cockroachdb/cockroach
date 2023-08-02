@@ -162,23 +162,16 @@ func (ss *SizeSpec) Set(value string) error {
 }
 
 // ProvisionedRateSpec is an optional part of the StoreSpec.
-//
-// TODO(sumeer): We should map the file path specified in the store spec to
-// the disk name. df can be used to map paths to names like /dev/nvme1n1 and
-// /dev/sdb (these examples are from AWS EBS and GCP PD respectively) and the
-// corresponding names produced by disk_counters.go are nvme1n1 and sdb
-// respectively. We need to find or write a platform independent library --
-// see the discussion on
-// https://github.com/cockroachdb/cockroach/pull/86063#pullrequestreview-1074487018.
-// With that change, the ProvisionedRateSpec would only be needed to override
-// the cluster setting when there are heterogenous bandwidth limits in a
-// cluster (there would be no more DiskName field).
 type ProvisionedRateSpec struct {
 	// DiskName is the name of the disk observed by the code in disk_counters.go
-	// when retrieving stats for this store.
+	// when retrieving stats for this store. They look like /dev/nvme1n1 or
+	// /dev/sdb on AWS EBS and GCP PD respectively. (The names in
+	// disk_counters.go omit the /dev suffix). It's optionally passed in using
+	// --store=provisioned-rate=disk-name=nvme1n1.
 	DiskName string
 	// ProvisionedBandwidth is the bandwidth provisioned for this store in
-	// bytes/s.
+	// bytes/s. It's optionally passed in using
+	// --store=provisioned-rate=bandwidth=250MiB/s.
 	ProvisionedBandwidth int64
 }
 
