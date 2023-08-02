@@ -424,8 +424,27 @@ func (ih *instrumentationHelper) Finish(
 			if pwe, ok := retPayload.(payloadWithError); ok {
 				payloadErr = pwe.errorCause()
 			}
+			bundleCtx := ctx
+			if bundleCtx.Err() != nil {
+				// The only two possible errors on the context are the context
+				// cancellation or the context deadline being exceeded. The
+				// former seems more likely, and the cancellation is most likely
+				// to have occurred due to a statement timeout, so we still want
+				// to proceed with saving the statement bundle. Thus, we
+				// override the canceled context, but first we'll log the error
+				// as a warning.
+				log.Warningf(
+					bundleCtx, "context has an error when saving the bundle, proceeding "+
+						"with the background one (with deadline of 10 seconds): %v", bundleCtx.Err(),
+				)
+				// We want to be conservative, so we add a deadline of 10
+				// seconds on top of the background context.
+				var cancel context.CancelFunc
+				bundleCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // nolint:context
+				defer cancel()
+			}
 			bundle = buildStatementBundle(
-				ctx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan,
+				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan,
 				ob.BuildString(), trace, placeholders, res.Err(), payloadErr, retErr,
 				&p.extendedEvalCtx.Settings.SV,
 			)
@@ -434,7 +453,7 @@ func (ih *instrumentationHelper) Finish(
 			// to the current user and aren't included into the bundle.
 			warnings = append(warnings, bundle.errorStrings...)
 			bundle.insert(
-				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
 			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
