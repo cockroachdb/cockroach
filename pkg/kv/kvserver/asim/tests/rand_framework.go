@@ -50,7 +50,7 @@ func (f randTestingFramework) getCluster() gen.ClusterGen {
 	if !f.s.randOptions.cluster {
 		return defaultBasicClusterGen()
 	}
-	return gen.BasicCluster{}
+	return f.randomClusterInfoGen(f.s.randSource)
 }
 
 func (f randTestingFramework) getRanges() gen.RangeGen {

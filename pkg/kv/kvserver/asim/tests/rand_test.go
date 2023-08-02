@@ -70,7 +70,7 @@ func defaultSettings(randOptions testRandOptions) testSettings {
 // default
 func TestRandomized(t *testing.T) {
 	randOptions := testRandOptions{
-		cluster:        false,
+		cluster:        true,
 		ranges:         false,
 		load:           false,
 		staticSettings: false,
