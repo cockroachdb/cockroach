@@ -109,7 +109,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	{
 		getDialOpts := s.RPCContext().GRPCDialOptions
 
-		initConfig := newInitServerConfig(ctx, s.(*testServer).Server.cfg, getDialOpts)
+		initConfig := newInitServerConfig(ctx, s.(*testServer).topLevelServer.cfg, getDialOpts)
 		inspectState, err := inspectEngines(
 			context.Background(),
 			s.Engines(),

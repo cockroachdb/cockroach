@@ -130,7 +130,7 @@ type systemAdminServer struct {
 	*adminServer
 
 	nodeLiveness *liveness.NodeLiveness
-	server       *Server
+	server       *topLevelServer
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -161,7 +161,7 @@ func newSystemAdminServer(
 	distSender *kvcoord.DistSender,
 	grpc *grpcServer,
 	drainServer *drainServer,
-	s *Server,
+	s *topLevelServer,
 ) *systemAdminServer {
 	adminServer := newAdminServer(
 		sqlServer,
