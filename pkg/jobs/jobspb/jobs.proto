@@ -887,7 +887,9 @@ message SchemaChangeDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
-  // Next id 13.
+  sessiondatapb.SessionData session_data = 13;
+
+  // Next id 14.
 }
 
 message SchemaChangeProgress {
