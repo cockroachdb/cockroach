@@ -407,6 +407,12 @@ func notAbsentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Eleme
 	return target != scpb.ToAbsent
 }
 
+func notAbsentOrTransientTargetFilter(
+	_ scpb.Status, target scpb.TargetStatus, _ scpb.Element,
+) bool {
+	return target != scpb.ToAbsent && target != scpb.Transient
+}
+
 func statusAbsentOrBackfillOnlyFilter(
 	status scpb.Status, _ scpb.TargetStatus, _ scpb.Element,
 ) bool {
