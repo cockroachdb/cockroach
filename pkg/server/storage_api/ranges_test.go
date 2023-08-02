@@ -32,10 +32,8 @@ func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer kvserver.EnableLeaseHistoryForTesting(100)()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	ts := s.(*server.TestServer)
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(context.Background())
 
 	t.Run("test ranges response", func(t *testing.T) {
 		// Perform a scan to ensure that all the raft groups are initialized.
@@ -106,9 +104,8 @@ func TestTenantRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	ts := s.(*server.TestServer)
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
 
 	t.Run("returns error when TenantID not set in ctx", func(t *testing.T) {
 		rpcStopper := stop.NewStopper()

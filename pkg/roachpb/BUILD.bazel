@@ -9,6 +9,7 @@ go_library(
         "data.go",
         "index_usage_stats.go",
         "internal.go",
+        "leaseinfo.go",
         "merge_spans.go",
         "metadata.go",
         "metadata_replicas.go",

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,60 +35,72 @@ func TestHealthAPI(t *testing.T) {
 
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(ctx)
-	ts := s.(*server.TestServer)
+	t.Run("sql", func(t *testing.T) {
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		ts := s.ApplicationLayer()
 
-	// We need to retry because the node ID isn't set until after
-	// bootstrapping.
-	testutils.SucceedsSoon(t, func() error {
+		// We need to retry because the node ID isn't set until after
+		// bootstrapping.
+		testutils.SucceedsSoon(t, func() error {
+			var resp serverpb.HealthResponse
+			return srvtestutils.GetAdminJSONProto(ts, "health", &resp)
+		})
+
+		// Make the SQL listener appear unavailable. Verify that health fails after that.
+		ts.SetReady(false)
 		var resp serverpb.HealthResponse
-		return srvtestutils.GetAdminJSONProto(s, "health", &resp)
-	})
-
-	// Make the SQL listener appear unavailable. Verify that health fails after that.
-	ts.TestingSetReady(false)
-	var resp serverpb.HealthResponse
-	err := srvtestutils.GetAdminJSONProto(s, "health?ready=1", &resp)
-	if err == nil {
-		t.Error("server appears ready even though SQL listener is not")
-	}
-	ts.TestingSetReady(true)
-	err = srvtestutils.GetAdminJSONProto(s, "health?ready=1", &resp)
-	if err != nil {
-		t.Errorf("server not ready after SQL listener is ready again: %v", err)
-	}
-
-	// Expire this node's liveness record by pausing heartbeats and advancing the
-	// server's clock.
-	nl := ts.NodeLiveness().(*liveness.NodeLiveness)
-	defer nl.PauseAllHeartbeatsForTest()()
-	self, ok := nl.Self()
-	assert.True(t, ok)
-	s.Clock().Update(self.Expiration.ToTimestamp().Add(1, 0).UnsafeToClockTimestamp())
-
-	testutils.SucceedsSoon(t, func() error {
-		err := srvtestutils.GetAdminJSONProto(s, "health?ready=1", &resp)
+		err := srvtestutils.GetAdminJSONProto(ts, "health?ready=1", &resp)
 		if err == nil {
-			return errors.New("health OK, still waiting for unhealth")
+			t.Error("server appears ready even though SQL listener is not")
 		}
-
-		t.Logf("observed error: %v", err)
-		if !testutils.IsError(err, `(?s)503 Service Unavailable.*"error": "node is not healthy"`) {
-			return err
+		ts.SetReady(true)
+		err = srvtestutils.GetAdminJSONProto(ts, "health?ready=1", &resp)
+		if err != nil {
+			t.Errorf("server not ready after SQL listener is ready again: %v", err)
 		}
-		return nil
 	})
 
-	// After the node reports an error with `?ready=1`, the health
-	// endpoint must still succeed without error when `?ready=1` is not specified.
-	if err := srvtestutils.GetAdminJSONProto(s, "health", &resp); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("liveness", func(t *testing.T) {
+		s := serverutils.StartServerOnly(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		})
+		defer s.Stopper().Stop(ctx)
+
+		// Pre-warm the web session cookie for this server before the
+		// actual test below.
+		var resp serverpb.HealthResponse
+		if err := srvtestutils.GetAdminJSONProto(s, "health", &resp); err != nil {
+			t.Fatal(err)
+		}
+
+		// Expire this node's liveness record by pausing heartbeats and advancing the
+		// server's clock.
+		nl := s.NodeLiveness().(*liveness.NodeLiveness)
+		defer nl.PauseAllHeartbeatsForTest()()
+		self, ok := nl.Self()
+		assert.True(t, ok)
+		s.Clock().Update(self.Expiration.ToTimestamp().Add(1, 0).UnsafeToClockTimestamp())
+
+		testutils.SucceedsSoon(t, func() error {
+			err := srvtestutils.GetAdminJSONProto(s, "health?ready=1", &resp)
+			if err == nil {
+				return errors.New("health OK, still waiting for unhealth")
+			}
+
+			t.Logf("observed error: %v", err)
+			if !testutils.IsError(err, `(?s)503 Service Unavailable.*"error": "node is not healthy"`) {
+				return err
+			}
+			return nil
+		})
+
+		// After the node reports an error with `?ready=1`, the health
+		// endpoint must still succeed without error when `?ready=1` is not specified.
+		if err := srvtestutils.GetAdminJSONProto(s, "health", &resp); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestLivenessAPI(t *testing.T) {

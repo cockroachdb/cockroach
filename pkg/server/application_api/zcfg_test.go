@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -39,10 +38,9 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(context.Background())
-	ts := s.(*server.TestServer)
 
 	// Create database and table.
-	ac := ts.AmbientCtx()
+	ac := s.AmbientCtx()
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	setupQueries := []string{
@@ -108,14 +106,14 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	}
 
 	// Verify zone matches cluster default.
-	verifyDbZone(s.(*server.TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
-	verifyTblZone(s.(*server.TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
+	verifyDbZone(s.DefaultZoneConfig(), serverpb.ZoneConfigurationLevel_CLUSTER)
+	verifyTblZone(s.DefaultZoneConfig(), serverpb.ZoneConfigurationLevel_CLUSTER)
 
-	databaseID, err := ts.QueryDatabaseID(ctx, username.RootUserName(), "test")
+	databaseID, err := s.QueryDatabaseID(ctx, username.RootUserName(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableID, err := ts.QueryTableID(ctx, username.RootUserName(), "test", "tbl")
+	tableID, err := s.QueryTableID(ctx, username.RootUserName(), "test", "tbl")
 	if err != nil {
 		t.Fatal(err)
 	}

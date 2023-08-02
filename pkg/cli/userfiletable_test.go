@@ -471,7 +471,7 @@ func TestUserFileUploadRecursive(t *testing.T) {
 						if err != nil {
 							return err
 						}
-						checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
+						checkUserFileContent(ctx, t, c.Server.ExecutorConfig(), username.RootUserName(),
 							destinationFileURI, fileContent)
 						return nil
 					})
@@ -529,7 +529,7 @@ func TestUserFileUpload(t *testing.T) {
 					destination))
 				require.NoError(t, err)
 
-				checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
+				checkUserFileContent(ctx, t, c.Server.ExecutorConfig(), username.RootUserName(),
 					constructUserfileDestinationURI("", destination, username.RootUserName()),
 					tc.fileContent)
 			})
@@ -540,7 +540,7 @@ func TestUserFileUpload(t *testing.T) {
 					destination))
 				require.NoError(t, err)
 
-				checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
+				checkUserFileContent(ctx, t, c.Server.ExecutorConfig(), username.RootUserName(),
 					destination, tc.fileContent)
 			})
 
@@ -552,7 +552,7 @@ func TestUserFileUpload(t *testing.T) {
 					destination))
 				require.NoError(t, err)
 
-				checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
+				checkUserFileContent(ctx, t, c.Server.ExecutorConfig(), username.RootUserName(),
 					destination, tc.fileContent)
 			})
 
@@ -607,7 +607,7 @@ func TestUserFileUploadExistingFile(t *testing.T) {
 	require.Contains(t, out, "successfully uploaded to userfile://defaultdb.public.foo/test/file.csv")
 
 	checkUserFileContent(
-		ctx, t, c.ExecutorConfig(), username.RootUserName(), destination, contents,
+		ctx, t, c.Server.ExecutorConfig(), username.RootUserName(), destination, contents,
 	)
 
 	out, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath, destination))
@@ -846,7 +846,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 	err := os.WriteFile(localFilePath, []byte("a"), 0666)
 	require.NoError(t, err)
 
-	rootURL, cleanup := sqlutils.PGUrl(t, c.AdvSQLAddr(), t.Name(),
+	rootURL, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(),
 		url.User(username.RootUser))
 	defer cleanup()
 
@@ -885,7 +885,8 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			err = conn.Exec(ctx, privsUserQuery)
 			require.NoError(t, err)
 
-			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.AdvSQLAddr(), t.Name(),
+			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t,
+				c.Server.AdvSQLAddr(), t.Name(),
 				url.UserPassword(tc.username, "a"), false)
 			defer cleanup2()
 
@@ -896,7 +897,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			user, err := username.MakeSQLUsernameFromUserInput(tc.username, username.PurposeCreation)
 			require.NoError(t, err)
 			uri := constructUserfileDestinationURI("", tc.name, user)
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), user, uri, fileContent)
+			checkUserFileContent(ctx, t, c.Server.ExecutorConfig(), user, uri, fileContent)
 
 			checkListedFiles(t, c, "", fmt.Sprintf("--url=%s", userURL.String()), []string{tc.name})
 

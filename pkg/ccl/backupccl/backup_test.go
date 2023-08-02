@@ -69,7 +69,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -7150,7 +7149,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		tenantID := roachpb.MustMakeTenantID(10)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -7242,7 +7241,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		tenantID := roachpb.MustMakeTenantID(10)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -7316,7 +7315,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		tenantID := roachpb.MustMakeTenantID(10)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -7334,7 +7333,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.write_payload_cost_per_mebibyte`, [][]string{{"456"}})
 
 		tenantID = roachpb.MustMakeTenantID(11)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -7355,7 +7354,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster = '20', virtual_cluster_name = 'tenant-20'`)
 
 		tenantID = roachpb.MustMakeTenantID(20)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -7392,7 +7391,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 
 		tenantID := roachpb.MustMakeTenantID(10)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 
@@ -7418,7 +7417,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 20 FROM 'nodelocal://1/t20'`)
 
 		tenantID := roachpb.MustMakeTenantID(20)
-		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 			t.Fatal(err)
 		}
 

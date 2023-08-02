@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -70,7 +71,7 @@ func TestDecommission(t *testing.T) {
 			attempt++
 			desc := tc.LookupRangeOrFatal(t, k)
 			for _, rDesc := range desc.Replicas().VoterDescriptors() {
-				store, err := tc.Servers[int(rDesc.NodeID-1)].Stores().GetStore(rDesc.StoreID)
+				store, err := tc.Servers[int(rDesc.NodeID-1)].GetStores().(*kvserver.Stores).GetStore(rDesc.StoreID)
 				require.NoError(t, err)
 				if err := store.ForceReplicationScanAndProcess(); err != nil {
 					return err

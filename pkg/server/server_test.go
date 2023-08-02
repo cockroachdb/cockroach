@@ -16,15 +16,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -55,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -63,7 +59,6 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -84,43 +79,6 @@ func TestSelfBootstrap(t *testing.T) {
 	}
 }
 
-func TestPanicRecovery(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.ScopeWithoutShowLogs(t).Close(t)
-
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
-
-	// Enable a test-only endpoint that induces a panic.
-	ts.http.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		panic("induced panic for testing")
-	}))
-
-	// Create a request.
-	req, err := http.NewRequest(http.MethodGet, ts.AdminURL().WithPath("/panic").String(), nil /* body */)
-	require.NoError(t, err)
-
-	// Create a ResponseRecorder to record the response.
-	rr := httptest.NewRecorder()
-	require.NotPanics(t, func() {
-		ts.http.baseHandler(rr, req)
-	})
-
-	// Check that the status code is correct.
-	require.Equal(t, http.StatusInternalServerError, rr.Code)
-
-	// Check that the panic has been reported.
-	entries, err := log.FetchEntriesFromFiles(
-		0, /* startTimestamp */
-		math.MaxInt64,
-		10000, /* maxEntries */
-		regexp.MustCompile("a panic has occurred!"),
-		log.WithMarkedSensitiveData)
-	require.NoError(t, err)
-	require.NotEmpty(t, entries, "no log entries matching the regexp")
-}
-
 // TestHealthCheck runs a basic sanity check on the health checker.
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -139,7 +97,7 @@ func TestHealthCheck(t *testing.T) {
 
 	ctx := context.Background()
 
-	recorder := s.(*TestServer).Server.recorder
+	recorder := s.MetricsRecorder()
 
 	{
 		summary := *recorder.GenerateNodeStatus(ctx)
@@ -149,7 +107,7 @@ func TestHealthCheck(t *testing.T) {
 		}
 	}
 
-	store, err := s.(*TestServer).Server.node.stores.GetStore(1)
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +204,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	// First, make sure that the TestServer's built-in client interface
+	// First, make sure that the testServer's built-in client interface
 	// still works in insecure mode.
 	var data serverpb.JSONResponse
 	testutils.SucceedsSoon(t, func() error {
@@ -286,11 +244,11 @@ func TestPlainHTTPServer(t *testing.T) {
 func TestSecureHTTPRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	ts := s.(*TestServer)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
-	httpClient, err := s.GetUnauthenticatedHTTPClient()
+	httpClient, err := ts.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,8 +257,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		return http.ErrUseLastResponse
 	}
 
-	origURL := "http://" + ts.Cfg.HTTPAddr
-	expURL := url.URL{Scheme: "https", Host: ts.Cfg.HTTPAddr, Path: "/"}
+	origURL := "http://" + ts.HTTPAddr()
+	expURL := url.URL{Scheme: "https", Host: ts.HTTPAddr(), Path: "/"}
 
 	if resp, err := httpClient.Get(origURL); err != nil {
 		t.Fatal(err)
@@ -746,13 +704,13 @@ func TestServeIndexHTML(t *testing.T) {
 	}
 
 	t.Run("Insecure mode", func(t *testing.T) {
-		s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Insecure: true,
 		})
-		defer s.Stopper().Stop(ctx)
-		tsrv := s.(*TestServer)
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
-		client, err := tsrv.GetUnauthenticatedHTTPClient()
+		client, err := s.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
 		t.Run("short build", func(t *testing.T) {
@@ -813,13 +771,13 @@ Binary built without web UI.
 	t.Run("Secure mode", func(t *testing.T) {
 		linkInFakeUI()
 		defer unlinkFakeUI()
-		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
-		tsrv := s.(*TestServer)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
-		loggedInClient, err := tsrv.GetAdminHTTPClient()
+		loggedInClient, err := s.GetAdminHTTPClient()
 		require.NoError(t, err)
-		loggedOutClient, err := tsrv.GetUnauthenticatedHTTPClient()
+		loggedOutClient, err := s.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
 		cases := []struct {
@@ -896,13 +854,13 @@ Binary built without web UI.
 			ui.Assets = nil
 		}()
 
-		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
-		tsrv := s.(*TestServer)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
-		loggedInClient, err := tsrv.GetAdminHTTPClient()
+		loggedInClient, err := s.GetAdminHTTPClient()
 		require.NoError(t, err)
-		loggedOutClient, err := tsrv.GetUnauthenticatedHTTPClient()
+		loggedOutClient, err := s.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 
 		cases := []struct {
@@ -1162,71 +1120,4 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 			require.True(t, testutils.IsError(err, tt.expErr), "%+v didn't match expectation %s", err, tt.expErr)
 		})
 	}
-}
-
-// TestSocketAutoNumbering checks that a socket name
-// ending with `.0` in the input config gets auto-assigned
-// the actual TCP port number.
-func TestSocketAutoNumbering(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	socketName := "foo.0"
-	// We need a temp directory in which we'll create the unix socket.
-	// On BSD, binding to a socket is limited to a path length of 104 characters
-	// (including the NUL terminator). In glibc, this limit is 108 characters.
-	// macOS has a tendency to produce very long temporary directory names, so
-	// we are careful to keep all the constants involved short.
-	baseTmpDir := os.TempDir()
-	if len(baseTmpDir) >= 104-1-len(socketName)-1-4-len("TestSocketAutoNumbering")-10 {
-		t.Logf("temp dir name too long: %s", baseTmpDir)
-		t.Logf("using /tmp instead.")
-		// Note: /tmp might fail in some systems, that's why we still prefer
-		// os.TempDir() if available.
-		baseTmpDir = "/tmp"
-	}
-	tempDir, err := os.MkdirTemp(baseTmpDir, "TestSocketAutoNumbering")
-	require.NoError(t, err)
-	defer func() { _ = os.RemoveAll(tempDir) }()
-
-	socketFile := filepath.Join(tempDir, socketName)
-
-	ctx := context.Background()
-
-	params := base.TestServerArgs{
-		Insecure:   true,
-		SocketFile: socketFile,
-	}
-	s := serverutils.StartServerOnly(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	_, expectedPort, err := addr.SplitHostPort(s.SQLAddr(), "")
-	require.NoError(t, err)
-
-	if socketPath := s.(*TestServer).Cfg.SocketFile; !strings.HasSuffix(socketPath, "."+expectedPort) {
-		t.Errorf("expected unix socket ending with port %q, got %q", expectedPort, socketPath)
-	}
-}
-
-// Test that connections using the internal SQL loopback listener work.
-func TestInternalSQL(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	conf, err := pgx.ParseConfig("")
-	require.NoError(t, err)
-	conf.User = "root"
-	// Configure pgx to connect on the loopback listener.
-	conf.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return s.(*TestServer).Server.loopbackPgL.Connect(ctx)
-	}
-	conn, err := pgx.ConnectConfig(ctx, conf)
-	require.NoError(t, err)
-	// Run a random query to check that it all works.
-	r := conn.QueryRow(ctx, "SELECT count(*) FROM system.sqlliveness")
-	var count int
-	require.NoError(t, r.Scan(&count))
 }

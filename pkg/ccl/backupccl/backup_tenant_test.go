@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -87,7 +86,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+	if err := tc.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
 		t.Fatal(err)
 	}
 

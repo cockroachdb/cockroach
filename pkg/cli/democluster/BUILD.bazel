@@ -36,7 +36,7 @@ go_library(
         "//pkg/server/status",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/distsql",
+        "//pkg/sql/isql",
         "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/serverutils/regionlatency",

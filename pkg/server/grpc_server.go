@@ -11,9 +11,12 @@
 package server
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -66,6 +69,22 @@ func (s *grpcServer) setMode(mode serveMode) {
 func (s *grpcServer) operational() bool {
 	sMode := s.mode.get()
 	return sMode == modeOperational || sMode == modeDraining
+}
+
+func (s *grpcServer) health(ctx context.Context) error {
+	sm := s.mode.get()
+	switch sm {
+	case modeInitializing:
+		return grpcstatus.Error(codes.Unavailable, "node is waiting for cluster initialization")
+	case modeDraining:
+		// grpc.mode is set to modeDraining when the Drain(DrainMode_CLIENT) has
+		// been called (client connections are to be drained).
+		return grpcstatus.Errorf(codes.Unavailable, "node is shutting down")
+	case modeOperational:
+		return nil
+	default:
+		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
+	}
 }
 
 var rpcsAllowedWhileBootstrapping = map[string]struct{}{

@@ -411,7 +411,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 	// Reader goroutines: perform bounded-staleness reads that hit the server-side
 	// negotiation fast-path.
 	for _, s := range tc.Servers {
-		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
 		tracer := s.Tracer()
 		g.Go(func() error {

@@ -29,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// httpTestServer is embedded in TestServer / TenantServer to
+// httpTestServer is embedded in testServer / TenantServer to
 // provide the HTTP API subset of ApplicationLayerInterface.
 type httpTestServer struct {
 	t struct {
 		// We need a sub-struct to avoid ambiguous overlap with the fields
-		// of *Server, which are also embedded in TestServer.
+		// of *Server, which are also embedded in testServer.
 		authentication authserver.Server
 		sqlServer      *SQLServer
 		tenantName     roachpb.TenantName

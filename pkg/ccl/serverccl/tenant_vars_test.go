@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +47,7 @@ func TestTenantVars(t *testing.T) {
 			})
 		} else {
 			var err error
-			tenant, _, err = srv.(*server.TestServer).StartSharedProcessTenant(ctx,
+			tenant, _, err = srv.TenantController().StartSharedProcessTenant(ctx,
 				base.TestSharedProcessTenantArgs{
 					TenantName: roachpb.TenantName("test"),
 					TenantID:   roachpb.MustMakeTenantID(20),

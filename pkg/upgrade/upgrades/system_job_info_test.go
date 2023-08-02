@@ -60,7 +60,7 @@ func TestSystemJobInfoMigration(t *testing.T) {
 	// We verify that the jobs table gets its version upgraded through
 	// the upgrade, to ensure the creation of job_info synchronizes with
 	// concurrent accesses to the jobs table.
-	kvDB := tc.Server(0).(*server.TestServer).DB()
+	kvDB := tc.Server(0).DB()
 	tblBefore := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "system", "public", "jobs")
 
 	upgrades.Upgrade(

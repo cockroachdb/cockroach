@@ -290,14 +290,17 @@ func TestCorruptedClusterID(t *testing.T) {
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
 func compareNodeStatus(
-	t *testing.T, ts *TestServer, expectedNodeStatus *statuspb.NodeStatus, testNumber int,
+	t *testing.T,
+	ts serverutils.TestServerInterface,
+	expectedNodeStatus *statuspb.NodeStatus,
+	testNumber int,
 ) *statuspb.NodeStatus {
 	// ========================================
 	// Read NodeStatus from server and validate top-level fields.
 	// ========================================
-	nodeStatusKey := keys.NodeStatusKey(ts.node.Descriptor.NodeID)
+	nodeStatusKey := keys.NodeStatusKey(ts.NodeID())
 	nodeStatus := &statuspb.NodeStatus{}
-	if err := ts.db.GetProto(context.Background(), nodeStatusKey, nodeStatus); err != nil {
+	if err := ts.DB().GetProto(context.Background(), nodeStatusKey, nodeStatus); err != nil {
 		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
 
@@ -409,15 +412,15 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 	// Start test server and wait for full initialization.
 	// ========================================
-	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DisableEventLog: true,
+	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		DisableEventLog:   true,
 	})
-	defer srv.Stopper().Stop(context.Background())
-	ts := srv.(*TestServer)
+	defer ts.Stopper().Stop(context.Background())
 	ctx := context.Background()
 
 	// Retrieve the first store from the Node.
-	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
+	s, err := ts.GetStores().(*kvserver.Stores).GetStore(roachpb.StoreID(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +436,9 @@ func TestNodeStatusWritten(t *testing.T) {
 	}
 
 	// Wait for full replication of initial ranges.
-	initialRanges, err := ExpectedInitialRangeCount(keys.SystemSQLCodec, &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
+	zcfg := ts.DefaultZoneConfig()
+	szcfg := ts.DefaultSystemZoneConfig()
+	initialRanges, err := ExpectedInitialRangeCount(keys.SystemSQLCodec, &zcfg, &szcfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +456,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// status produced by the server.
 	// ========================================
 	expectedNodeStatus := &statuspb.NodeStatus{
-		Desc:      ts.node.Descriptor,
+		Desc:      ts.Node().(*Node).Descriptor,
 		StartedAt: 0,
 		UpdatedAt: 0,
 		Metrics: map[string]float64{
@@ -461,7 +466,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	}
 
 	expectedStoreStatuses := make(map[roachpb.StoreID]statuspb.StoreStatus)
-	if err := ts.node.stores.VisitStores(func(s *kvserver.Store) error {
+	if err := ts.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		desc, err := s.Descriptor(ctx, false /* useCached */)
 		if err != nil {
 			t.Fatal(err)
@@ -496,7 +501,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// were multiple replicas, more care would need to be taken in the initial
 	// syncFeed().
 	forceWriteStatus := func() {
-		if err := ts.node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
+		if err := ts.Node().(*Node).computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
 			t.Fatalf("error publishing store statuses: %s", err)
 		}
 
@@ -520,10 +525,10 @@ func TestNodeStatusWritten(t *testing.T) {
 	rightKey := "c"
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.db.Put(ctx, leftKey, content); err != nil {
+	if err := kvDB.Put(ctx, leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put(ctx, rightKey, content); err != nil {
+	if err := kvDB.Put(ctx, rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -550,7 +555,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(
+	if err := kvDB.AdminSplit(
 		context.Background(),
 		splitKey,
 		hlc.MaxTimestamp, /* expirationTime */
@@ -560,10 +565,10 @@ func TestNodeStatusWritten(t *testing.T) {
 
 	// Write on both sides of the split to ensure that the raft machinery
 	// is running.
-	if err := ts.db.Put(ctx, leftKey, content); err != nil {
+	if err := kvDB.Put(ctx, leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put(ctx, rightKey, content); err != nil {
+	if err := kvDB.Put(ctx, rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -669,7 +674,7 @@ func TestNodeBatchRequestPProfLabels(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	observedProfileLabels := make(map[string]string)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
@@ -693,9 +698,8 @@ func TestNodeBatchRequestPProfLabels(t *testing.T) {
 			},
 		},
 	})
-	defer srv.Stopper().Stop(context.Background())
-	ts := srv.(*TestServer)
-	n := ts.GetNode()
+	defer ts.Stopper().Stop(context.Background())
+	n := ts.Node().(*Node)
 
 	var ba kvpb.BatchRequest
 	ba.RangeID = 1
@@ -732,11 +736,10 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-	ts := srv.(*TestServer)
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(context.Background())
 
-	n := ts.GetNode()
+	n := ts.Node().(*Node)
 	bCurr := n.metrics.BatchCount.Count()
 	getCurr := n.metrics.MethodCounts[kvpb.Get].Count()
 	putCurr := n.metrics.MethodCounts[kvpb.Put].Count()

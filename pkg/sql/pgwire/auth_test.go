@@ -30,7 +30,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -228,11 +227,11 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
-		testServer := s.(*server.TestServer)
-		pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
+		testServer := s.ApplicationLayer()
+		pgServer := testServer.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
-		s.ApplicationLayer().PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+		testServer.PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -271,7 +270,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					}
 
 				case "accept_sql_without_tls":
-					testServer.Cfg.AcceptSQLWithoutTLS = true
+					testServer.SetAcceptSQLWithoutTLS(true)
 
 				case "set_hba":
 					_, err := conn.ExecContext(context.Background(),
@@ -634,9 +633,11 @@ func TestClientAddrOverride(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
@@ -651,9 +652,9 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	pgServer := s.ApplicationLayer().PGServer().(*pgwire.Server)
+	pgServer := s.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
-	pgPreServer := s.ApplicationLayer().PGPreServer().(*pgwire.PreServeConnHandler)
+	pgPreServer := s.PGPreServer().(*pgwire.PreServeConnHandler)
 
 	testCases := []struct {
 		specialAddr string
@@ -792,18 +793,19 @@ func TestSSLSessionVar(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107310),
-	})
-	s.(*server.TestServer).Cfg.AcceptSQLWithoutTLS = true
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	// Start a server.
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	// Ensure the test user exists.
 	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'abc'`, username.TestUser)); err != nil {
 		t.Fatal(err)
 	}
+
+	s.SetAcceptSQLWithoutTLS(true)
 
 	pgURLWithCerts, cleanupFuncCerts := sqlutils.PGUrlWithOptionalClientCerts(
 		t, s.AdvSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,

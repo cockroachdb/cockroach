@@ -100,7 +100,7 @@ func TestFlowControlBasic(t *testing.T) {
 		for i := 0; i < numNodes; i++ {
 			si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
 			require.NoError(t, err)
-			tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(si.StoreID(),
+			tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
 				&unreliableRaftHandler{
 					rangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: si,
@@ -1907,7 +1907,7 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
 		require.NoError(t, err)
-		tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(si.StoreID(),
+		tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
 			&unreliableRaftHandler{
 				rangeID:                    desc.RangeID,
 				IncomingRaftMessageHandler: si,

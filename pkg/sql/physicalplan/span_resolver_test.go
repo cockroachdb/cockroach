@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -87,11 +86,11 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	s3 := tc.Servers[3]
 
 	lr := physicalplan.NewSpanResolver(
-		s3.Cfg.Settings,
+		s3.ClusterSettings(),
 		s3.DistSenderI().(*kvcoord.DistSender),
-		s3.Gossip(),
-		s3.GetNode().Descriptor.NodeID,
-		s3.GetNode().Descriptor.Locality,
+		s3.GossipI().(*gossip.Gossip),
+		s3.NodeID(),
+		*s3.Locality(),
 		s3.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -170,7 +169,7 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
 func splitRangeAtVal(
-	ts *server.TestServer, tableDesc catalog.TableDescriptor, pk int,
+	ts serverutils.TestServerInterface, tableDesc catalog.TableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.PublicNonPrimaryIndexes()) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
@@ -197,13 +196,13 @@ func TestSpanResolver(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
+	rowRanges, tableDesc := setupRanges(db, s, cdb, t)
 	lr := physicalplan.NewSpanResolver(
-		s.(*server.TestServer).Cfg.Settings,
+		s.ClusterSettings(),
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor.NodeID,
-		s.(*server.TestServer).GetNode().Descriptor.Locality,
+		s.NodeID(),
+		*s.Locality(),
 		s.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -296,13 +295,13 @@ func TestMixedDirections(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
+	rowRanges, tableDesc := setupRanges(db, s, cdb, t)
 	lr := physicalplan.NewSpanResolver(
-		s.(*server.TestServer).Cfg.Settings,
+		s.ClusterSettings(),
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor.NodeID,
-		s.(*server.TestServer).GetNode().Descriptor.Locality,
+		s.NodeID(),
+		*s.Locality(),
 		s.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -328,7 +327,7 @@ func TestMixedDirections(t *testing.T) {
 }
 
 func setupRanges(
-	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
+	db *gosql.DB, s serverutils.TestServerInterface, cdb *kv.DB, t *testing.T,
 ) ([]roachpb.RangeDescriptor, catalog.TableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)

@@ -1744,7 +1744,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer stopServer()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	knobs := s.(*server.TestServer).Cfg.TestingKnobs.
+	knobs := s.TestingKnobs().
 		DistSQL.(*execinfra.TestingKnobs).
 		Changefeed.(*TestingKnobs)
 
@@ -2695,7 +2695,8 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -2711,8 +2712,6 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			},
 		},
 	})
-	ctx := context.Background()
-	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 
 	rootDB := sqlutils.MakeSQLRunner(db)
