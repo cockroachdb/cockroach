@@ -41,6 +41,7 @@ var authenticate = func(
 	// The auth step should require only a few back and forths so 20 iterations
 	// should be enough.
 	var i int
+	var authenticationOK bool
 	for ; i < 20; i++ {
 		// Read the server response and forward it to the client.
 		// TODO(spaskob): in verbose mode, log these messages.
@@ -97,6 +98,7 @@ var authenticate = func(
 		// `pgproto3.ReadyForQuery` is encountered which signifies that server
 		// is ready to serve queries.
 		case *pgproto3.AuthenticationOk:
+			authenticationOK = true
 			throttleError := throttleHook(throttler.AttemptOK)
 			if throttleError != nil {
 				if err = feSend(toPgError(throttleError)); err != nil {
@@ -111,12 +113,16 @@ var authenticate = func(
 		// Server has rejected the authentication response from the client and
 		// has closed the connection.
 		case *pgproto3.ErrorResponse:
-			throttleError := throttleHook(throttler.AttemptInvalidCredentials)
-			if throttleError != nil {
-				if err = feSend(toPgError(throttleError)); err != nil {
-					return nil, err
+			// If the connection was authenticated already, the error is not auth
+			// related so no need to throttle.
+			if !authenticationOK {
+				throttleError := throttleHook(throttler.AttemptInvalidCredentials)
+				if throttleError != nil {
+					if err = feSend(toPgError(throttleError)); err != nil {
+						return nil, err
+					}
+					return nil, throttleError
 				}
-				return nil, throttleError
 			}
 			if err = feSend(backendMsg); err != nil {
 				return nil, err
