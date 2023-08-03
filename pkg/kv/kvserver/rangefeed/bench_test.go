@@ -83,8 +83,6 @@ func BenchmarkRangefeedBudget(b *testing.B) {
 // runBenchmarkRangefeed runs a rangefeed benchmark, emitting b.N events across
 // a rangefeed.
 func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
-	defer log.Scope(b).Close(b)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	stopper := stop.NewStopper()
