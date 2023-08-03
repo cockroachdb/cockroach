@@ -230,9 +230,11 @@ func (p *peer) breakerDisabled() bool {
 func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	// Acquire mu just to show that we can, as the caller is supposed
 	// to not hold the lock.
-	p.mu.Lock()
-	_ = 0 // bypass empty crit section lint
-	p.mu.Unlock()
+	func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		_ = 0 // bypass empty crit section lint
+	}()
 
 	taskName := fmt.Sprintf("conn to n%d@%s/%s", p.k.NodeID, p.k.TargetAddr, p.k.Class)
 
@@ -300,9 +302,11 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			return
 		}
 
-		p.mu.Lock()
-		p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
-		p.mu.Unlock()
+		func() {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+		}()
 
 		if p.snap().deleteAfter != 0 {
 			// Peer is in inactive mode, and we just finished up a probe, so
@@ -806,13 +810,15 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 
 func touchOldPeers(peers *peerMap, now time.Time) {
 	var sigs []circuit.Signal
-	peers.mu.RLock()
-	for _, p := range peers.mu.m {
-		if p.snap().deletable(now) {
-			sigs = append(sigs, p.b.Signal())
+	func() {
+		peers.mu.RLock()
+		defer peers.mu.RUnlock()
+		for _, p := range peers.mu.m {
+			if p.snap().deletable(now) {
+				sigs = append(sigs, p.b.Signal())
+			}
 		}
-	}
-	peers.mu.RUnlock()
+	}()
 
 	// Now, outside of the lock, query all of the collected Signals which will tip
 	// off the respective probes, which will perform self-removal from the map. To

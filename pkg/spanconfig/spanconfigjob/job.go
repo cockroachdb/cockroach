@@ -170,9 +170,12 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				return nil
 			}
 
-			persistCheckpointsMu.Lock()
-			shouldPersistCheckpoint := persistCheckpointsMu.ShouldProcess(timeutil.Now())
-			persistCheckpointsMu.Unlock()
+			shouldPersistCheckpoint := func() bool {
+				persistCheckpointsMu.Lock()
+				defer persistCheckpointsMu.Unlock()
+				return persistCheckpointsMu.ShouldProcess(timeutil.Now())
+			}()
+
 			if !shouldPersistCheckpoint {
 				return nil
 			}
