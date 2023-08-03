@@ -586,6 +586,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
+			storeFailures:      store.metrics.StoreFailures,
 			pending:            store.metrics.ReplicateQueuePending,
 			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
 			purgatory:          store.metrics.ReplicateQueuePurgatory,

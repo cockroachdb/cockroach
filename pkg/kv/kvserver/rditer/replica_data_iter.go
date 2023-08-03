@@ -14,8 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -80,6 +82,22 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 		ReplicatedBySpan:    d.RSpan(),
 		ReplicatedByRangeID: true,
 	})
+}
+
+// MakeReplicatedKeySpanSet is similar to MakeReplicatedKeySpans, except it
+// creates a SpanSet instead of a slice of spans.
+func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
+	spans := MakeReplicatedKeySpans(d)
+	ss := spanset.New()
+	ss.AddNonMVCC(spanset.SpanReadWrite, spans[0])
+	ss.AddNonMVCC(spanset.SpanReadWrite, spans[1])
+	ss.AddNonMVCC(spanset.SpanReadWrite, spans[2])
+	ss.AddMVCC(spanset.SpanReadWrite, spans[3], hlc.MaxTimestamp)
+	ss.SortAndDedup()
+	if err := ss.Validate(); err != nil {
+		panic(err)
+	}
+	return ss
 }
 
 // makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
