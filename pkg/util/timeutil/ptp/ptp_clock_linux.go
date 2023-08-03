@@ -79,5 +79,9 @@ func (p Clock) Now() time.Time {
 		panic(err)
 	}
 
-	return timeutil.Unix(int64(ts.tv_sec)*1e9, int64(ts.tv_nsec))
+	return timeutil.Unix(int64(ts.tv_sec), int64(ts.tv_nsec))
+}
+
+func realtime() Clock {
+	return Clock{clockDeviceID: uintptr(C.CLOCK_REALTIME)}
 }
