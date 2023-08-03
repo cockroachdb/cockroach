@@ -53,7 +53,7 @@ func printLTKey(k LockTableKey) string {
 		hiStr = fmt.Sprintf("%d,", idInt.Hi)
 	}
 	return fmt.Sprintf("LT{k: %s, strength: %s, uuid:%s%d}",
-		string(k.Key), k.Strength, hiStr, idInt.Lo)
+		string(k.Key), byteToReplicatedLockStrengthMap[k.StrengthByte], hiStr, idInt.Lo)
 }
 
 func printEngContents(b *strings.Builder, eng Engine) {

@@ -173,9 +173,10 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 	key := LockTableKey{Key: lockedKey}
 	switch len(k.Version) {
 	case engineKeyVersionLockTableLen:
-		key.Strength = lock.Strength(k.Version[0])
-		if key.Strength < lock.None || key.Strength > lock.Exclusive {
-			return LockTableKey{}, errors.Errorf("unknown strength %d", key.Strength)
+		key.StrengthByte = k.Version[0]
+		if byteToReplicatedLockStrengthMap[key.StrengthByte] < lock.None ||
+			byteToReplicatedLockStrengthMap[key.StrengthByte] > lock.Intent {
+			return LockTableKey{}, errors.Errorf("unknown strength %d", byteToReplicatedLockStrengthMap[key.StrengthByte])
 		}
 		key.TxnUUID = k.Version[1:]
 	default:
@@ -250,11 +251,39 @@ func (m EngineKeyFormatter) Format(f fmt.State, c rune) {
 
 // LockTableKey is a key representing a lock in the lock table.
 type LockTableKey struct {
-	Key      roachpb.Key
-	Strength lock.Strength
+	Key          roachpb.Key
+	StrengthByte byte
 	// Slice is of length uuid.Size. We use a slice instead of a byte array, to
 	// avoid copying a slice when decoding.
 	TxnUUID []byte
+}
+
+// byteToReplicatedLockStrengthMap is a mapping between
+// (StrengthByte, lock.Strength), which may be used to translate StrengthBytes
+// stored in LockTableKeys to lock.Strengths.
+var byteToReplicatedLockStrengthMap = func() [lock.NumLockStrength]lock.Strength {
+	var m [lock.NumLockStrength]lock.Strength
+	m[3] = lock.Intent
+	return m
+}()
+
+// replicatedLockStrengthToByteMap is a mapping between
+// (lock.Strength, StrengthByte), where the StrengthByte corresponds to the byte
+// persisted in LockTableKeys.
+var replicatedLockStrengthToByteMap = func() [lock.NumLockStrength]byte {
+	var m [lock.NumLockStrength]byte
+	m[lock.Intent] = 3
+	return m
+}()
+
+// TestingReplicatedLockStrengthToByteMap exports replicatedLockStrengthToByte
+// map for testing purposes.
+func TestingReplicatedLockStrengthToByteMap() [lock.NumLockStrength]byte {
+	return replicatedLockStrengthToByteMap
+}
+
+func (lk LockTableKey) String() string {
+	return fmt.Sprintf("%s/%s/%x", lk.Key, byteToReplicatedLockStrengthMap[lk.StrengthByte], lk.TxnUUID)
 }
 
 // ToEngineKey converts a lock table key to an EngineKey. buf is used as
@@ -264,7 +293,7 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 	if len(lk.TxnUUID) != uuid.Size {
 		panic("invalid TxnUUID")
 	}
-	if lk.Strength != lock.Exclusive {
+	if byteToReplicatedLockStrengthMap[lk.StrengthByte] != lock.Intent {
 		panic("unsupported lock strength")
 	}
 	// The first term in estimatedLen is for LockTableSingleKey.
@@ -282,7 +311,7 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 		// estimatedLen was an underestimate.
 		k.Version = make([]byte, engineKeyVersionLockTableLen)
 	}
-	k.Version[0] = byte(lk.Strength)
+	k.Version[0] = lk.StrengthByte
 	copy(k.Version[1:], lk.TxnUUID)
 	return k, buf
 }

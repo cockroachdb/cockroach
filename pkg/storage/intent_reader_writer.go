@@ -41,9 +41,9 @@ func (idw intentDemuxWriter) ClearIntent(
 ) (_ []byte, _ error) {
 	var engineKey EngineKey
 	engineKey, buf = LockTableKey{
-		Key:      key,
-		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID[:],
+		Key:          key,
+		StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+		TxnUUID:      txnUUID[:],
 	}.ToEngineKey(buf)
 	if txnDidNotUpdateMeta {
 		return buf, idw.w.SingleClearEngineKey(engineKey)
@@ -59,9 +59,9 @@ func (idw intentDemuxWriter) PutIntent(
 ) (_ []byte, _ error) {
 	var engineKey EngineKey
 	engineKey, buf = LockTableKey{
-		Key:      key,
-		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID[:],
+		Key:          key,
+		StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+		TxnUUID:      txnUUID[:],
 	}.ToEngineKey(buf)
 	return buf, idw.w.PutEngineKey(engineKey, value)
 }

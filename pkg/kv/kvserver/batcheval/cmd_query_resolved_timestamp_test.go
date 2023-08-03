@@ -227,9 +227,9 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 	txnUUID := uuid.FromUint128(uint128.FromInts(0, 12345))
 
 	lockTableKey := storage.LockTableKey{
-		Key:      roachpb.Key("a"),
-		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID.GetBytes(),
+		Key:          roachpb.Key("a"),
+		StrengthByte: storage.replicatedLockStrengthToByteMap[lock.Intent],
+		TxnUUID:      txnUUID.GetBytes(),
 	}
 	engineKey, buf := lockTableKey.ToEngineKey(nil)
 

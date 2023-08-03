@@ -36,13 +36,27 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 	testCases := []struct {
 		key LockTableKey
 	}{
-		{key: LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Exclusive, TxnUUID: uuid1[:]}},
-		{key: LockTableKey{Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: uuid2[:]}},
+		{
+			key: LockTableKey{
+				Key:          roachpb.Key("foo"),
+				StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+				TxnUUID:      uuid1[:],
+			},
+		},
+		{
+			key: LockTableKey{
+				Key:          roachpb.Key("a"),
+				StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+				TxnUUID:      uuid2[:]},
+		},
 		// Causes a doubly-local range local key.
-		{key: LockTableKey{
-			Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")),
-			Strength: lock.Exclusive,
-			TxnUUID:  uuid1[:]}},
+		{
+			key: LockTableKey{
+				Key:          keys.RangeDescriptorKey(roachpb.RKey("baz")),
+				StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+				TxnUUID:      uuid1[:],
+			},
+		},
 	}
 	buf := make([]byte, 100)
 	for i, test := range testCases {
@@ -81,6 +95,47 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 			require.Equal(t, test.key, keyDecoded)
 		})
 	}
+}
+
+// TestLockTableKeyMixedVersionV23_123_2 ensures a lock table key written by a
+// <= v23.1 node can be decoded by a 23.2 node and a lock table key written by
+// a 23.2 node cna be decoded by a 23.1 node.
+func TestLockTableKeyMixedVersionV23_1V23_2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	uuid1 := uuid.MakeV4()
+	t.Run("decode_v23_2", func(t *testing.T) {
+		key := LockTableKey{
+			Key:          roachpb.Key("foo"),
+			StrengthByte: 3, // lock.Exclusive in 23.1
+			TxnUUID:      uuid1[:],
+		}
+
+		eKey, _ := key.ToEngineKey(nil)
+		require.True(t, eKey.IsLockTableKey())
+		eKeyDecoded, ok := DecodeEngineKey(eKey.Encode())
+		require.True(t, ok)
+		require.True(t, eKeyDecoded.IsLockTableKey())
+		keyDecoded, err := eKeyDecoded.ToLockTableKey()
+		require.NoError(t, err)
+		require.Equal(t, lock.Intent, byteToReplicatedLockStrengthMap[keyDecoded.StrengthByte])
+	})
+
+	t.Run("encode_v23_2", func(t *testing.T) {
+		key := LockTableKey{
+			Key:          roachpb.Key("foo"),
+			StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+			TxnUUID:      uuid1[:],
+		}
+		eKey, _ := key.ToEngineKey(nil)
+		require.True(t, eKey.IsLockTableKey())
+		eKeyDecoded, ok := DecodeEngineKey(eKey.Encode())
+		require.True(t, ok)
+		require.True(t, eKeyDecoded.IsLockTableKey())
+		keyDecoded, err := eKeyDecoded.ToLockTableKey()
+		require.NoError(t, err)
+		require.Equal(t, byte(3), keyDecoded.StrengthByte)
+	})
 }
 
 func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
@@ -175,16 +230,16 @@ func TestEngineKeyValidate(t *testing.T) {
 		// Valid LockTableKeys.
 		{
 			key: LockTableKey{
-				Key:      roachpb.Key("foo"),
-				Strength: lock.Exclusive,
-				TxnUUID:  uuid1[:],
+				Key:          roachpb.Key("foo"),
+				StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+				TxnUUID:      uuid1[:],
 			},
 		},
 		{
 			key: LockTableKey{
-				Key:      keys.RangeDescriptorKey(roachpb.RKey("bar")),
-				Strength: lock.Exclusive,
-				TxnUUID:  uuid1[:],
+				Key:          keys.RangeDescriptorKey(roachpb.RKey("bar")),
+				StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+				TxnUUID:      uuid1[:],
 			},
 		},
 
@@ -267,8 +322,8 @@ func randomMVCCKey(r *rand.Rand) MVCCKey {
 
 func randomLockTableKey(r *rand.Rand) LockTableKey {
 	k := LockTableKey{
-		Key:      randutil.RandBytes(r, randutil.RandIntInRange(r, 1, 12)),
-		Strength: lock.Exclusive,
+		Key:          randutil.RandBytes(r, randutil.RandIntInRange(r, 1, 12)),
+		StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
 	}
 	var txnID uuid.UUID
 	txnID.DeterministicV4(r.Uint64(), math.MaxUint64)

@@ -586,7 +586,11 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	// Nothing added.
 	finishAndCheck(0, 0)
 	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-	ek, _ := LockTableKey{aKey, lock.Exclusive, uuid[:]}.ToEngineKey(nil)
+	ek, _ := LockTableKey{
+		Key:          aKey,
+		StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+		TxnUUID:      uuid[:],
+	}.ToEngineKey(nil)
 	require.NoError(t, collector.Add(pebble.InternalKey{UserKey: ek.Encode()}, []byte("foo")))
 	// The added key was not an MVCCKey.
 	finishAndCheck(0, 0)
@@ -1204,7 +1208,10 @@ func TestShortAttributeExtractor(t *testing.T) {
 
 	var txnUUID [uuid.Size]byte
 	lockKey, _ := LockTableKey{
-		Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(nil)
+		Key:          roachpb.Key("a"),
+		StrengthByte: replicatedLockStrengthToByteMap[lock.Intent],
+		TxnUUID:      txnUUID[:],
+	}.ToEngineKey(nil)
 	v := MVCCValue{}
 	tombstoneVal, err := EncodeMVCCValue(v)
 	require.NoError(t, err)
