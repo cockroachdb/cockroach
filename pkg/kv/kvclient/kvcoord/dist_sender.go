@@ -368,6 +368,9 @@ func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 	}
 }
 
+// MetricStruct implements metrics.Struct interface.
+func (DistSenderRangeFeedMetrics) MetricStruct() {}
+
 // updateCrossLocalityMetricsOnReplicaAddressedBatchRequest updates
 // DistSenderMetrics for batch requests that have been divided and are currently
 // forwarding to a specific replica for the corresponding range. The metrics
