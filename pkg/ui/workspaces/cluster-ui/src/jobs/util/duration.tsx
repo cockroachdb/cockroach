@@ -17,7 +17,7 @@ import { JOB_STATUS_SUCCEEDED, isRunning } from "./jobOptions";
 type Job = cockroach.server.serverpb.IJobResponse;
 
 export const formatDuration = (d: moment.Duration): string =>
-  [Math.floor(d.asHours()).toFixed(0), d.minutes(), d.seconds()]
+  [Number(Math.floor(d.asHours()).toFixed(0)), d.minutes(), d.seconds()]
     .map(c => (c < 10 ? ("0" + c).slice(-2) : c))
     .join(":");
 
