@@ -229,21 +229,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
-	maxOffset := time.Duration(cfg.MaxOffset)
-	toleratedOffset := cfg.ToleratedOffset()
-	var clock *hlc.Clock
-	if cfg.ClockDevicePath != "" {
-		ptpClock, err := ptp.MakeClock(ctx, cfg.ClockDevicePath)
-		if err != nil {
-			return nil, errors.Wrap(err, "instantiating clock source")
-		}
-		clock = hlc.NewClock(ptpClock, maxOffset, toleratedOffset)
-	} else if cfg.TestingKnobs.Server != nil &&
-		cfg.TestingKnobs.Server.(*TestingKnobs).WallClock != nil {
-		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
-			maxOffset, toleratedOffset)
-	} else {
-		clock = hlc.NewClockWithSystemTimeSource(maxOffset, toleratedOffset)
+	clock, err := newClockFromConfig(ctx, cfg.BaseConfig)
+	if err != nil {
+		return nil, err
 	}
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
@@ -1211,6 +1199,27 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	return lateBoundServer, err
+}
+
+// newClockFromConfig creates a HLC clock from the server configuration.
+func newClockFromConfig(ctx context.Context, cfg BaseConfig) (*hlc.Clock, error) {
+	maxOffset := time.Duration(cfg.MaxOffset)
+	toleratedOffset := cfg.ToleratedOffset()
+	var clock *hlc.Clock
+	if cfg.ClockDevicePath != "" {
+		ptpClock, err := ptp.MakeClock(ctx, cfg.ClockDevicePath)
+		if err != nil {
+			return nil, errors.Wrap(err, "instantiating clock source")
+		}
+		clock = hlc.NewClock(ptpClock, maxOffset, toleratedOffset)
+	} else if cfg.TestingKnobs.Server != nil &&
+		cfg.TestingKnobs.Server.(*TestingKnobs).WallClock != nil {
+		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
+			maxOffset, toleratedOffset)
+	} else {
+		clock = hlc.NewClockWithSystemTimeSource(maxOffset, toleratedOffset)
+	}
+	return clock, nil
 }
 
 // ClusterSettings returns the cluster settings.
