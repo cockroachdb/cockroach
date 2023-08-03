@@ -741,7 +741,7 @@ func MachineTypeToCPUs(s string) int {
 		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "t2a-standard-%d", &v); err == nil {
 			return v
 		}
 		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
