@@ -450,6 +450,8 @@ SELECT IF(x::INT::FLOAT = x,
              'NOOPE', 'insert saw its own writes: ' || x::STRING || ' (it is halloween today)')::FLOAT)
        + 0.1
   FROM t.test
+  -- the function used here is implemented by using the internal executor.
+  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL
 `); err != nil {
 		t.Fatal(err)
 	}
