@@ -247,27 +247,9 @@ var CanSendToFollower = func(
 const (
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 1024
-	// RangeLookupPrefetchCount is the maximum number of range descriptors to prefetch
-	// during range lookups.
-	RangeLookupPrefetchCount = 8
 	// The maximum number of times a replica is retried when it repeatedly returns
 	// stale lease info.
 	sameReplicaRetryLimit = 10
-)
-
-var rangeDescriptorCacheSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"kv.range_descriptor_cache.size",
-	"maximum number of entries in the range descriptor cache",
-	1e6,
-	func(v int64) error {
-		// Set a minimum value to avoid a cache that is too small to be useful.
-		const minVal = 64
-		if v < minVal {
-			return errors.Errorf("cannot be set to a value less than %d", minVal)
-		}
-		return nil
-	},
 )
 
 // senderConcurrencyLimit controls the maximum number of asynchronous send
@@ -406,19 +388,6 @@ func (dm *DistSenderMetrics) updateCrossLocalityMetricsOnReplicaAddressedBatchRe
 	}
 }
 
-// FirstRangeProvider is capable of providing DistSender with the descriptor of
-// the first range in the cluster and notifying the DistSender when the first
-// range in the cluster has changed.
-type FirstRangeProvider interface {
-	// GetFirstRangeDescriptor returns the RangeDescriptor for the first range
-	// in the cluster.
-	GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error)
-
-	// OnFirstRangeChanged calls the provided callback when the RangeDescriptor
-	// for the first range has changed.
-	OnFirstRangeChanged(func(*roachpb.RangeDescriptor))
-}
-
 // A DistSender provides methods to access Cockroach's monolithic,
 // distributed key value store. Each method invocation triggers a
 // lookup or lookups to find replica metadata for implicated key
@@ -443,11 +412,9 @@ type DistSender struct {
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache *rangecache.RangeCache
-	// firstRangeProvider provides the range descriptor for range one.
-	// This is not required if a RangeDescriptorDB is supplied.
-	firstRangeProvider FirstRangeProvider
-	transportFactory   TransportFactory
-	rpcContext         *rpc.Context
+
+	transportFactory TransportFactory
+	rpcContext       *rpc.Context
 	// nodeDialer allows RPC calls from the SQL layer to the KV layer.
 	nodeDialer      *nodedialer.Dialer
 	rpcRetryOptions retry.Options
@@ -461,11 +428,6 @@ type DistSender struct {
 	// BatchRequests and BatchResponses are passed through this interceptor, which
 	// can potentially throttle requests.
 	kvInterceptor multitenant.TenantSideKVInterceptor
-
-	// disableFirstRangeUpdates disables updates of the first range via
-	// gossip. Used by tests which want finer control of the contents of the
-	// range cache.
-	disableFirstRangeUpdates int32
 
 	// disableParallelBatches instructs DistSender to never parallelize
 	// the transmission of partial batch requests across ranges.
@@ -528,8 +490,8 @@ type DistSenderConfig struct {
 	// If both are provided (not required, but allowed for tests) range lookups
 	// will be delegated to the RangeDescriptorDB but FirstRangeProvider will
 	// still be used to listen for updates to the first range's descriptor.
-	FirstRangeProvider FirstRangeProvider
-	RangeDescriptorDB  rangecache.RangeDescriptorDB
+	FirstRangeProvider rangecache.FirstRangeProvider
+	RangeDescriptorDB  rangecache.RangeLookup
 
 	// Locality is the description of the topography of the server on which the
 	// DistSender is running.
@@ -568,26 +530,14 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	if cfg.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
 	}
-	var rdb rangecache.RangeDescriptorDB
-	if cfg.FirstRangeProvider != nil {
-		ds.firstRangeProvider = cfg.FirstRangeProvider
-		rdb = ds
-	}
-	if cfg.RangeDescriptorDB != nil {
-		rdb = cfg.RangeDescriptorDB
-	}
-	if rdb == nil {
-		panic("DistSenderConfig must contain either FirstRangeProvider or RangeDescriptorDB")
-	}
-	getRangeDescCacheSize := func() int64 {
-		return rangeDescriptorCacheSize.Get(&ds.st.SV)
-	}
-	ds.rangeCache = rangecache.NewRangeCache(ds.st, rdb, getRangeDescCacheSize, cfg.RPCContext.Stopper)
+
+	ds.rangeCache = rangecache.NewRangeCache(ds.st, cfg.FirstRangeProvider, ds, ds.metrics.RangeLookups, cfg.RPCContext.Stopper)
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {
 		ds.transportFactory = GRPCTransportFactory
 	}
+
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
@@ -612,17 +562,6 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
 
-	if ds.firstRangeProvider != nil {
-		ctx := ds.AnnotateCtx(context.Background())
-		ds.firstRangeProvider.OnFirstRangeChanged(func(desc *roachpb.RangeDescriptor) {
-			if atomic.LoadInt32(&ds.disableFirstRangeUpdates) == 1 {
-				return
-			}
-			log.VEventf(ctx, 1, "gossiped first range descriptor: %+v", desc.Replicas())
-			ds.rangeCache.EvictByKey(ctx, roachpb.RKeyMin)
-		})
-	}
-
 	if cfg.TestingKnobs.LatencyFunc != nil {
 		ds.latencyFunc = cfg.TestingKnobs.LatencyFunc
 	} else {
@@ -641,13 +580,6 @@ func (ds *DistSender) LatencyFunc() LatencyFunc {
 	return ds.latencyFunc
 }
 
-// DisableFirstRangeUpdates disables updates of the first range via
-// gossip. Used by tests which want finer control of the contents of the range
-// cache.
-func (ds *DistSender) DisableFirstRangeUpdates() {
-	atomic.StoreInt32(&ds.disableFirstRangeUpdates, 1)
-}
-
 // DisableParallelBatches instructs DistSender to never parallelize the
 // transmission of partial batch requests across ranges.
 func (ds *DistSender) DisableParallelBatches() {
@@ -663,56 +595,6 @@ func (ds *DistSender) Metrics() DistSenderMetrics {
 // RangeDescriptorCache gives access to the DistSender's range cache.
 func (ds *DistSender) RangeDescriptorCache() *rangecache.RangeCache {
 	return ds.rangeCache
-}
-
-// RangeLookup implements the RangeDescriptorDB interface.
-//
-// It uses LookupRange to perform a lookup scan for the provided key, using
-// DistSender itself as the client.Sender. This means that the scan will recurse
-// into DistSender, which will in turn use the RangeDescriptorCache again to
-// lookup the RangeDescriptor necessary to perform the scan.
-//
-// The client has some control over the consistency of the lookup. The
-// acceptable values for the consistency argument are INCONSISTENT
-// or READ_UNCOMMITTED. We use INCONSISTENT for an optimistic lookup
-// pass. If we don't find a new enough descriptor, we do a leaseholder
-// read at READ_UNCOMMITTED in order to read intents as well as committed
-// values. The reason for this is that it's not clear whether the intent
-// or the previous value points to the correct location of the Range. It gets
-// even more complicated when there are split-related intents or a txn record
-// co-located with a replica involved in the split. Since we cannot know the
-// correct answer, we look up both the pre- and post- transaction values.
-//
-// Note that consistency levels CONSISTENT or INCONSISTENT will result in an
-// assertion failed error. See the commentary on kv.RangeLookup for more
-// details.
-func (ds *DistSender) RangeLookup(
-	ctx context.Context, key roachpb.RKey, rc rangecache.RangeLookupConsistency, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-	ds.metrics.RangeLookups.Inc(1)
-	switch rc {
-	case kvpb.INCONSISTENT, kvpb.READ_UNCOMMITTED:
-	default:
-		return nil, nil, errors.AssertionFailedf("invalid consistency level %v", rc)
-	}
-
-	// By using DistSender as the sender, we guarantee that even if the desired
-	// RangeDescriptor is not on the first range we send the lookup too, we'll
-	// still find it when we scan to the next range. This addresses the issue
-	// described in #18032 and #16266, allowing us to support meta2 splits.
-	return kv.RangeLookup(ctx, ds, key.AsRawKey(), rc, RangeLookupPrefetchCount, useReverseScan)
-}
-
-// FirstRange implements the RangeDescriptorDB interface.
-//
-// It returns the RangeDescriptor for the first range in the cluster using the
-// FirstRangeProvider, which is typically implemented using the gossip protocol
-// instead of the datastore.
-func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
-	if ds.firstRangeProvider == nil {
-		panic("with `nil` firstRangeProvider, DistSender must not use itself as RangeDescriptorDB")
-	}
-	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
 // getNodeID attempts to return the local node ID. It returns 0 if the DistSender

@@ -5,7 +5,7 @@ gomock(
     name = "mock_rangecache",
     out = "mocks_generated.go",
     interfaces = [
-        "RangeDescriptorDB",
+        "RangeLookup",
     ],
     library = "//pkg/kv/kvclient/rangecache",
     package = "rangecachemock",

@@ -93,7 +93,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 
 					ctrl := gomock.NewController(t)
 					transport := NewMockTransport(ctrl)
-					rangeDB := rangecachemock.NewMockRangeDescriptorDB(ctrl)
+					rangeDB := rangecachemock.NewMockRangeLookup(ctrl)
 
 					// We start off with a cached lease on r1.
 					cachedLease := roachpb.Lease{
@@ -114,7 +114,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 
 					// Once all replicas have failed, it should try to refresh the lease using
 					// the range cache. We let this succeed once.
-					rangeDB.EXPECT().FirstRange().Return(&desc, nil)
+					rangeDB.EXPECT().RangeLookup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&desc, nil, nil)
 
 					// It then tries the replicas again. This time we just report the
 					// transport as exhausted immediately.
@@ -122,13 +122,13 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					transport.EXPECT().Release()
 
 					// This invalidates the cache yet again. This time we error.
-					rangeDB.EXPECT().FirstRange().Return(nil, grpcstatus.Error(spec.errorCode, ""))
+					rangeDB.EXPECT().RangeLookup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil, grpcstatus.Error(spec.errorCode, ""))
 
 					// If we expect a range lookup retry, allow the retry to succeed by
 					// returning a range descriptor and a client that immediately
 					// cancels the context and closes the range feed stream.
 					if spec.expectRetry {
-						rangeDB.EXPECT().FirstRange().MinTimes(1).Return(&desc, nil)
+						rangeDB.EXPECT().RangeLookup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MinTimes(1).Return(&desc, nil, nil)
 						client := kvpbmock.NewMockInternalClient(ctrl)
 
 						if useMuxRangeFeed {
