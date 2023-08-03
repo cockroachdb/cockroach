@@ -1731,6 +1731,10 @@ func SendEmptySnapshot(
 
 	// The snapshot must use a Pebble snapshot, since it requires consistent
 	// iterators.
+	//
+	// NB: Using a regular snapshot as opposed to an EventuallyFileOnlySnapshot
+	// is alright here as there should be no keys in this span to begin with,
+	// and this snapshot should be very short-lived.
 	engSnapshot := eng.NewSnapshot()
 
 	// Create an OutgoingSnapshot to send.

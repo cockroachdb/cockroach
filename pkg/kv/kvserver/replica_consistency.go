@@ -485,6 +485,22 @@ func CalcReplicaDigest(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
+	if efos, ok := snap.(storage.EventuallyFileOnlyReader); ok {
+		// We start off by waiting for this snapshot to become a file-only snapshot.
+		// This is preferable as it reduces the amount of in-memory tables
+		// (memtables) pinned for the iterations below, and reduces errors later on
+		// in checksum computation. A wait here is safe as we're running
+		// asynchronously and not blocking other computation requests. Other checksum
+		// computation requests can run concurrently and start computation while
+		// we're waiting for this EFOS to transition to a file-only snapshot, however
+		// both requests are likely sharing the same `limiter` so if too many
+		// requests run concurrently, some of them could time out due to a
+		// combination of this wait and the limiter-induced wait.
+		if err := efos.WaitForFileOnly(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	// Request quota from the limiter in chunks of at least targetBatchSize, to
 	// amortize the overhead of the limiter when reading many small KVs.
 	var batchSize int64
@@ -635,7 +651,13 @@ func (r *Replica) computeChecksumPostApply(
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
-	snap := r.store.TODOEngine().NewSnapshot()
+	spans := rditer.MakeReplicatedKeySpans(&desc)
+	var snap storage.Reader
+	if r.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&r.ClusterSettings().SV) {
+		snap = r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
+	} else {
+		snap = r.store.TODOEngine().NewSnapshot()
+	}
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
