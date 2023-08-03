@@ -244,42 +244,45 @@ func (w *Watcher) updateAccessController(
 	checkListeners(ctx, copy, controllers)
 }
 
-// ListenForDenied Adds a listener to the watcher for the given connection. If the
-// connection is already blocked a nil remove function is returned and an error
-// is returned immediately.
+// ListenForDenied Adds a listener to the watcher for the given connection. If
+// the connection is already blocked a nil remove function is returned and an
+// error is returned immediately.
 //
 // Example Usage:
 //
-//	remove, err := w.ListenForDenied(ctx, connection, func(err error) {
+//	removeFn, err := w.ListenForDenied(ctx, connection, func(err error) {
 //	  /* connection was blocked by change */
 //	})
 //
-// if err != nil { /*connection already blocked*/ }
-// defer remove()
+//	if err != nil { /*connection already blocked*/ }
+//	defer removeFn()
 //
-// Warning:
-// Do not call remove() within the error callback. It would deadlock.
+// WARNING: Do not call removeFn() within the error callback. It would deadlock.
 func (w *Watcher) ListenForDenied(
 	ctx context.Context, connection ConnectionTags, callback func(error),
 ) (func(), error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	lst, controllers := func() (*listener, []AccessController) {
+		w.mu.Lock()
+		defer w.mu.Unlock()
 
-	if err := checkConnection(ctx, connection, w.controllers); err != nil {
+		id := w.nextID
+		w.nextID++
+
+		l := &listener{
+			id:         id,
+			connection: connection,
+		}
+		l.mu.denied = callback
+
+		w.listeners.ReplaceOrInsert(l)
+
+		return l, w.controllers
+	}()
+	if err := checkConnection(ctx, connection, controllers); err != nil {
+		w.removeListener(lst)
 		return nil, err
 	}
-
-	id := w.nextID
-	w.nextID++
-
-	l := &listener{
-		id:         id,
-		connection: connection,
-	}
-	l.mu.denied = callback
-
-	w.listeners.ReplaceOrInsert(l)
-	return func() { w.removeListener(l) }, nil
+	return func() { w.removeListener(lst) }, nil
 }
 
 func (w *Watcher) removeListener(l *listener) {
@@ -315,6 +318,8 @@ func checkListeners(ctx context.Context, listeners *btree.BTree, controllers []A
 	})
 }
 
+// NOTE: checkConnection may grab a lock, and could be blocked waiting for it,
+// so callers should not hold a global lock while calling this.
 func checkConnection(
 	ctx context.Context, connection ConnectionTags, controllers []AccessController,
 ) error {
