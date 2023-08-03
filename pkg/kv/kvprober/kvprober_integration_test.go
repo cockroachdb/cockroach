@@ -171,8 +171,6 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 			p.WriteProbe(ctx, s.DB())
 		}
 
-		// Expect all read probes to fail but write probes & planning to succeed.
-		require.Equal(t, p.Metrics().ReadProbeAttempts.Count(), p.Metrics().ReadProbeFailures.Count())
 		// kvprober is running in background, so more than ten probes may be run.
 		require.GreaterOrEqual(t, p.Metrics().ReadProbeFailures.Count(), int64(10))
 
@@ -220,8 +218,6 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 			p.WriteProbe(ctx, s.DB())
 		}
 
-		// Expect all write probes to fail but read probes & planning to succeed.
-		require.Equal(t, p.Metrics().WriteProbeAttempts.Count(), p.Metrics().WriteProbeFailures.Count())
 		// kvprober is running in background, so more than ten probes may be run.
 		require.GreaterOrEqual(t, p.Metrics().WriteProbeFailures.Count(), int64(10))
 

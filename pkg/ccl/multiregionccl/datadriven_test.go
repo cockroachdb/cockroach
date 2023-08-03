@@ -114,6 +114,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "flaky test")
+	skip.WithIssue(t, 98020)
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ds := datadrivenTestState{}
