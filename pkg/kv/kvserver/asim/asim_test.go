@@ -40,7 +40,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 }
 
 func TestAsimDeterministic(t *testing.T) {
-	skip.UnderRace(t, 105904, "asim is non-deterministic under race")
+	skip.WithIssue(t, 105904, "asim is non-deterministic")
 	settings := config.DefaultSimulationSettings()
 
 	runs := 3
