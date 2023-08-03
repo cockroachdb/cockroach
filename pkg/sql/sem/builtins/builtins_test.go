@@ -80,20 +80,54 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 	}
 }
 
-// TestMapToUniqueUnorderedID verifies that the mapping preserves the ones count.
-func TestMapToUniqueUnorderedID(t *testing.T) {
+func TestMapToUnorderedUniqueInt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for i := 0; i < 30; i++ {
-		// RandInput is [0][63 random bits].
-		randInput := uint64(rand.Int63())
-		output := mapToUnorderedUniqueInt(randInput)
+	defer log.Scope(t).Close(t)
 
-		inputOnesCount := bits.OnesCount64(randInput)
-		outputOnesCount := bits.OnesCount64(output)
-		require.Equalf(t, inputOnesCount, outputOnesCount, "input: %b, output: "+
-			"%b\nExpected: %d, got: %d", randInput, output, inputOnesCount,
-			outputOnesCount)
-	}
+	t.Run("preserves number of one bits", func(t *testing.T) {
+		for i := 0; i < 30; i++ {
+			// RandInput is [0][63 random bits].
+			randInput := uint64(rand.Int63())
+			output := mapToUnorderedUniqueInt(randInput)
+
+			inputOnesCount := bits.OnesCount64(randInput)
+			outputOnesCount := bits.OnesCount64(output)
+			require.Equalf(t, inputOnesCount, outputOnesCount, "input: %b, output: "+
+				"%b\nExpected: %d, got: %d", randInput, output, inputOnesCount,
+				outputOnesCount)
+		}
+	})
+
+	t.Run("correctly reverses timestamp", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			input    uint64
+			expected uint64
+		}{
+			"asymmetrical timestamp": {
+				input:    0b0101100000000000000000000000000000000000000000000000000000000001,
+				expected: 0b0000000000000000000000000000000000000000000001101000000000000001,
+			},
+			"symmetrical timestamp": {
+				input:    0b0100000000000000000000000000000000000000000000001000000000000101,
+				expected: 0b0100000000000000000000000000000000000000000000001000000000000101,
+			},
+			"max timestamp": {
+				input:    0b0111111111111111111111111111111111111111111111111000000000000001,
+				expected: 0b0111111111111111111111111111111111111111111111111000000000000001,
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				actual := mapToUnorderedUniqueInt(tc.input)
+				require.Equalf(t,
+					tc.expected, actual,
+					"actual unordered unique int does not match expected:\n"+
+						"%064b (expected)\n"+
+						"%064b (actual)",
+					tc.expected, actual,
+				)
+			})
+		}
+	})
 }
 
 // TestSerialNormalizationWithUniqueUnorderedID makes sure that serial
