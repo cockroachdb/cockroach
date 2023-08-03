@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
+	"golang.org/x/exp/slices"
 	"golang.org/x/oauth2"
 )
 
@@ -387,7 +388,9 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 				p.l.Printf("could not create GitHub project card: %v", err)
 			}
 		}
-	} else {
+	} else if !slices.Contains(req.ExtraLabels, "skipped-test") {
+		// For failures, but not for skipped tests, add a comment to an existing
+		// issue.
 		comment := github.IssueComment{Body: github.String(body)}
 		if _, _, err := p.createComment(
 			ctx, p.Org, p.Repo, *foundIssue, &comment); err != nil {

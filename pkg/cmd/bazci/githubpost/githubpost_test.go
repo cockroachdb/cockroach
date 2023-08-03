@@ -334,7 +334,7 @@ TestXXA - 1.00s
 			defer file.Close()
 			curIssue := 0
 
-			f := func(ctx context.Context, f failure) error {
+			f := func(ctx context.Context, f failureOrSkip) error {
 				if t.Failed() {
 					return nil
 				}
@@ -421,7 +421,7 @@ func TestListFailuresFromTestXML(t *testing.T) {
 			defer file.Close()
 			curIssue := 0
 
-			f := func(ctx context.Context, f failure) error {
+			f := func(ctx context.Context, f failureOrSkip) error {
 				if t.Failed() {
 					return nil
 				}
@@ -481,7 +481,7 @@ func TestPostGeneralFailure(t *testing.T) {
 				issue.message = string(b)
 			}
 
-			f := func(ctx context.Context, f failure) error {
+			f := func(ctx context.Context, f failureOrSkip) error {
 				if t.Failed() {
 					return nil
 				}

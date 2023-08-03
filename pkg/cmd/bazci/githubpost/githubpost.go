@@ -58,9 +58,11 @@ type fileAndLine struct {
 // mock out the results of the getFileLine function.
 var fileLineForTesting map[packageAndTest]fileAndLine
 
-type formatter func(context.Context, failure) (issues.IssueFormatter, issues.PostRequest)
+type formatter func(context.Context, failureOrSkip) (issues.IssueFormatter, issues.PostRequest)
 
-func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
+func defaultFormatter(
+	ctx context.Context, f failureOrSkip,
+) (issues.IssueFormatter, issues.PostRequest) {
 	teams := getOwner(ctx, f.packageName, f.testName)
 	repro := fmt.Sprintf("./dev test ./pkg/%s --race --stress -f %s",
 		trimPkg(f.packageName), f.testName)
@@ -77,19 +79,26 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 			}
 		}
 	}
+
+	if f.isSkip {
+		extraLabels = append(extraLabels, "skipped-test", "release-blocker")
+	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:        f.testName,
-		PackageName:     f.packageName,
-		Message:         f.testMessage,
-		Artifacts:       "/", // best we can do for unit tests
-		HelpCommand:     issues.UnitTestHelpCommand(repro),
-		MentionOnCreate: mentions,
-		ProjectColumnID: projColID,
-		ExtraLabels:     extraLabels,
+		TestName:             f.testName,
+		PackageName:          f.packageName,
+		Message:              f.testMessage,
+		Artifacts:            "/", // best we can do for unit tests
+		HelpCommand:          issues.UnitTestHelpCommand(repro),
+		MentionOnCreate:      mentions,
+		ProjectColumnID:      projColID,
+		ExtraLabels:          extraLabels,
+		SkipLabelTestFailure: f.isSkip,
 	}
 }
 
-func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f failure) error {
+func getIssueFilerForFormatter(
+	formatterName string,
+) func(ctx context.Context, f failureOrSkip) error {
 	var reqFromFailure formatter
 	switch formatterName {
 	case "pebble-metamorphic":
@@ -98,7 +107,7 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 		reqFromFailure = defaultFormatter
 	}
 
-	return func(ctx context.Context, f failure) error {
+	return func(ctx context.Context, f failureOrSkip) error {
 		fmter, req := reqFromFailure(ctx, f)
 		if stress := os.Getenv("COCKROACH_NIGHTLY_STRESS"); stress != "" {
 			if req.ExtraParams == nil {
@@ -132,11 +141,12 @@ func PostFromTestXML(formatterName string, in io.Reader) error {
 	return listFailuresFromTestXML(ctx, in, fileIssue)
 }
 
-type failure struct {
+type failureOrSkip struct {
 	title       string
 	packageName string
 	testName    string
 	testMessage string
+	isSkip      bool
 }
 
 // This struct is described in the test2json documentation.
@@ -188,7 +198,7 @@ func trimPkg(pkg string) string {
 }
 
 func listFailuresFromJSON(
-	ctx context.Context, input io.Reader, fileIssue func(context.Context, failure) error,
+	ctx context.Context, input io.Reader, fileIssue func(context.Context, failureOrSkip) error,
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
@@ -207,6 +217,7 @@ func listFailuresFromJSON(
 	// purpose of issue reporting.
 	outstandingOutput := make(map[scopedTest][]testEvent)
 	failures := make(map[scopedTest][]testEvent)
+	skips := make(map[scopedTest][]testEvent)
 	var slowPassEvents []testEvent
 	var slowFailEvents []testEvent
 
@@ -317,7 +328,15 @@ func listFailuresFromJSON(
 					}
 					timedOutEvent = te
 				}
-			case "pass", "skip":
+			case "skip":
+				key := scoped(te)
+				// Move the test to the skip collection unless the test timed out.
+				// We have special reporting for timeouts below.
+				if timedOutCulprit != key {
+					failures[key] = outstandingOutput[key]
+				}
+				fallthrough
+			case "pass":
 				if timedOutCulprit.name != "" {
 					// NB: we used to do this:
 					//   panic(fmt.Sprintf("detected test timeout but test seems to have passed (%+v)", te))
@@ -386,7 +405,7 @@ func listFailuresFromJSON(
 	if lastEvent.Action == "fail" && len(failures) == 0 && timedOutCulprit.name == "" {
 		// If we couldn't find a failing Go test, assume that a failure occurred
 		// before running Go and post an issue about that.
-		err := fileIssue(ctx, failure{
+		err := fileIssue(ctx, failureOrSkip{
 			title:       fmt.Sprintf("%s: package failed", shortPkg()),
 			packageName: maybeEnv(pkgEnv, "unknown"),
 			testName:    unknown,
@@ -398,6 +417,9 @@ func listFailuresFromJSON(
 	}
 
 	if err := processFailures(ctx, fileIssue, failures); err != nil {
+		return err
+	}
+	if err := processSkips(ctx, fileIssue, skips); err != nil {
 		return err
 	}
 
@@ -447,7 +469,7 @@ func listFailuresFromJSON(
 			// The test that was running when the timeout hit is the one that ran for
 			// the longest time.
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
-			err := fileIssue(ctx, failure{
+			err := fileIssue(ctx, failureOrSkip{
 				title:       fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name),
 				packageName: timedOutCulprit.pkg,
 				testName:    timedOutCulprit.name,
@@ -461,7 +483,7 @@ func listFailuresFromJSON(
 			// TODO(irfansharif): These are assigned to nobody given our lack of
 			// a story around #51653. It'd be nice to be able to go from pkg
 			// name to team-name, and be able to assign to a specific team.
-			err := fileIssue(ctx, failure{
+			err := fileIssue(ctx, failureOrSkip{
 				title:       fmt.Sprintf("%s: package timed out", shortPkg()),
 				packageName: maybeEnv(pkgEnv, "unknown"),
 				testName:    unknown,
@@ -477,7 +499,7 @@ func listFailuresFromJSON(
 }
 
 func listFailuresFromTestXML(
-	ctx context.Context, input io.Reader, fileIssue func(context.Context, failure) error,
+	ctx context.Context, input io.Reader, fileIssue func(context.Context, failureOrSkip) error,
 ) error {
 	var buf bytes.Buffer
 	_, err := buf.ReadFrom(input)
@@ -489,16 +511,19 @@ func listFailuresFromTestXML(
 		return err
 	}
 	failures := make(map[scopedTest][]testEvent)
+	skips := make(map[scopedTest][]testEvent)
 	for _, suite := range suites.Suites {
 		pkg := suite.Name
 		for _, testCase := range suite.TestCases {
-			var result *buildutil.XMLMessage
+			var failureResult, skipResult *buildutil.XMLMessage
 			if testCase.Failure != nil {
-				result = testCase.Failure
+				failureResult = testCase.Failure
 			} else if testCase.Error != nil {
-				result = testCase.Error
+				failureResult = testCase.Error
+			} else if testCase.Skipped != nil {
+				skipResult = testCase.Skipped
 			}
-			if result != nil {
+			if failureResult != nil {
 				key := scopedTest{
 					pkg:  pkg,
 					name: testCase.Name,
@@ -512,10 +537,29 @@ func listFailuresFromTestXML(
 					Action:  "fail",
 					Package: pkg,
 					Test:    testCase.Name,
-					Output:  result.Contents,
+					Output:  failureResult.Contents,
 					Elapsed: elapsed,
 				}
 				failures[key] = append(failures[key], event)
+			}
+			if skipResult != nil {
+				key := scopedTest{
+					pkg:  pkg,
+					name: testCase.Name,
+				}
+				elapsed, err := strconv.ParseFloat(testCase.Time, 64)
+				if err != nil {
+					fmt.Printf("couldn't parse time %s as float64: %+v\n", testCase.Time, err)
+					elapsed = 0.0
+				}
+				event := testEvent{
+					Action:  "skip",
+					Package: pkg,
+					Test:    testCase.Name,
+					Output:  skipResult.Contents,
+					Elapsed: elapsed,
+				}
+				skips[key] = append(skips[key], event)
 			}
 		}
 	}
@@ -523,12 +567,15 @@ func listFailuresFromTestXML(
 	if len(failures) > 0 {
 		return processFailures(ctx, fileIssue, failures)
 	}
+	if len(skips) > 0 {
+		return processSkips(ctx, fileIssue, skips)
+	}
 	return nil
 }
 
 func processFailures(
 	ctx context.Context,
-	fileIssue func(context.Context, failure) error,
+	fileIssue func(context.Context, failureOrSkip) error,
 	failures map[scopedTest][]testEvent,
 ) error {
 	for test, testEvents := range failures {
@@ -558,11 +605,58 @@ func processFailures(
 		for _, testEvent := range testEvents {
 			outputs = append(outputs, testEvent.Output)
 		}
-		err := fileIssue(ctx, failure{
+		err := fileIssue(ctx, failureOrSkip{
 			title:       fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name),
 			packageName: test.pkg,
 			testName:    test.name,
 			testMessage: strings.Join(outputs, ""),
+		})
+		if err != nil {
+			return errors.Wrap(err, "failed to post issue")
+		}
+	}
+
+	return nil
+}
+
+func processSkips(
+	ctx context.Context,
+	fileIssue func(context.Context, failureOrSkip) error,
+	skips map[scopedTest][]testEvent,
+) error {
+	for test, testEvents := range skips {
+		if split := strings.SplitN(test.name, "/", 2); len(split) == 2 {
+			parentTest, subTest := scopedTest{pkg: test.pkg, name: split[0]}, scopedTest{pkg: test.pkg, name: split[1]}
+			log.Printf("consolidating skipped subtest %q into parent test %q", subTest.name, parentTest.name)
+			skips[parentTest] = append(skips[parentTest], testEvents...)
+			delete(skips, test)
+		} else {
+			log.Printf("skipped parent test %q (no subtests)", test.name)
+			if _, ok := skips[test]; !ok {
+				return errors.AssertionFailedf("expected %q in 'skips'", test.name)
+			}
+		}
+	}
+	// Sort the skipped tests to make the unit tests for this script deterministic.
+	var skippedTestNames []scopedTest
+	for name := range skips {
+		skippedTestNames = append(skippedTestNames, name)
+	}
+	sort.Slice(skippedTestNames, func(i, j int) bool {
+		return fmt.Sprint(skippedTestNames[i]) < fmt.Sprint(skippedTestNames[j])
+	})
+	for _, test := range skippedTestNames {
+		testEvents := skips[test]
+		var outputs []string
+		for _, testEvent := range testEvents {
+			outputs = append(outputs, testEvent.Output)
+		}
+		err := fileIssue(ctx, failureOrSkip{
+			title:       fmt.Sprintf("%s: %s skipped", trimPkg(test.pkg), test.name),
+			packageName: test.pkg,
+			testName:    test.name,
+			testMessage: strings.Join(outputs, ""),
+			isSkip:      true,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to post issue")
@@ -680,7 +774,7 @@ func getOwner(ctx context.Context, packageName, testName string) (_teams []team.
 }
 
 func formatPebbleMetamorphicIssue(
-	ctx context.Context, f failure,
+	ctx context.Context, f failureOrSkip,
 ) (issues.IssueFormatter, issues.PostRequest) {
 	var repro string
 	{
@@ -714,9 +808,9 @@ func PostGeneralFailure(formatterName, logs string) {
 	postGeneralFailureImpl(logs, fileIssue)
 }
 
-func postGeneralFailureImpl(logs string, fileIssue func(context.Context, failure) error) {
+func postGeneralFailureImpl(logs string, fileIssue func(context.Context, failureOrSkip) error) {
 	ctx := context.Background()
-	err := fileIssue(ctx, failure{
+	err := fileIssue(ctx, failureOrSkip{
 		title:       "unexpected build failure",
 		testMessage: logs,
 	})
