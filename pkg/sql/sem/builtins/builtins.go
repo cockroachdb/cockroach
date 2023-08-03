@@ -9796,11 +9796,13 @@ func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
 // serial unique uint64 to an unordered unique int64. It accomplishes this by
 // reversing the timestamp portion of the unique ID. This bit manipulation
 // should preserve the number of 1-bits.
-func mapToUnorderedUniqueInt(val uint64) uint64 {
+func mapToUnorderedUniqueInt(uniqueInt uint64) uint64 {
 	// val is [0][48 bits of ts][15 bits of node id]
-	ts := (val & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
-	v := (bits.Reverse64(ts) >> 1) | (val & (1<<15 - 1))
-	return v
+	ts := uniqueInt & builtinconstants.UniqueIntTimestampMask
+	nodeID := uniqueInt & builtinconstants.UniqueIntNodeIDMask
+	reversedTS := bits.Reverse64(ts<<builtinconstants.UniqueIntLeadingZeroBits) << builtinconstants.UniqueIntNodeIDBits
+	unorderedUniqueInt := reversedTS | nodeID
+	return unorderedUniqueInt
 }
 
 // ProcessUniqueID is an ID which is unique to this process in the cluster.
