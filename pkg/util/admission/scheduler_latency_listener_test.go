@@ -117,7 +117,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 					d.ScanArgs(t, "target-p99", &targetP99Str)
 					targetP99, err := time.ParseDuration(targetP99Str)
 					require.NoError(t, err)
-					params.targetP99 = targetP99
+					params.target = targetP99
 				}
 
 				for _, floatArgKey := range []string{
@@ -232,7 +232,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 						utilLimitPercents = append(utilLimitPercents, 100*limiter.getUtilizationLimit())
 						utilPercents = append(utilPercents, 100*limiter.getUtilization())
 						p99Latencies = append(p99Latencies, float64(p99.Microseconds()))
-						p99LatencyTargets = append(p99LatencyTargets, float64(params.targetP99.Microseconds()))
+						p99LatencyTargets = append(p99LatencyTargets, float64(params.target.Microseconds()))
 					}
 				}
 				return ""
@@ -255,7 +255,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 					d.ScanArgs(t, "c", &c)
 				}
 
-				p99 := params.targetP99
+				p99 := params.target
 				// We're simulating the specified number of ticks. We "remember"
 				// the utilDelta, utilFrac, utilLag values from earlier, and
 				// they're maintained per-iteration below. This allows the auto
@@ -283,14 +283,14 @@ func TestSchedulerLatencyListener(t *testing.T) {
 					utilLimitPercents = append(utilLimitPercents, 100*limiter.getUtilizationLimit())
 					utilPercents = append(utilPercents, 100*limiter.getUtilization())
 					p99Latencies = append(p99Latencies, float64(p99.Microseconds()))
-					p99LatencyTargets = append(p99LatencyTargets, float64(params.targetP99.Microseconds()))
+					p99LatencyTargets = append(p99LatencyTargets, float64(params.target.Microseconds()))
 
 					diff := 100*limiter.getUtilization() - steadyStateUtilPercent
 					y := math.RoundToEven(float64(m)*math.Abs(diff) + float64(rnd.Intn(2*c)-c))
 					if diff >= 0.1 {
-						p99 = params.targetP99 + time.Duration(y)*time.Microsecond
+						p99 = params.target + time.Duration(y)*time.Microsecond
 					} else {
-						p99 = params.targetP99 - time.Duration(y)*time.Microsecond
+						p99 = params.target - time.Duration(y)*time.Microsecond
 					}
 					if p99.Microseconds() < 50 {
 						p99 = 50 * time.Microsecond // floor
@@ -377,7 +377,7 @@ func (p schedulerLatencyListenerParams) String() string {
 			"adjustment-delta = %0.2f%%\n"+
 			"factor           = %0.2f\n"+
 			"inactive-factor  = %0.2f",
-		p.targetP99, p.minUtilization*100, p.maxUtilization*100, inactiveUtilizationLimit*100,
+		p.target, p.minUtilization*100, p.maxUtilization*100, inactiveUtilizationLimit*100,
 		p.adjustmentDelta*100,
 		p.multiplicativeFactorOnDecrease,
 		p.multiplicativeFactorOnInactiveDecrease,

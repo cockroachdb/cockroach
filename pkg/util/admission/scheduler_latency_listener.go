@@ -56,10 +56,10 @@ func (e *schedulerLatencyListener) setCoord(coord *ElasticCPUGrantCoordinator) {
 
 // SchedulerLatency is part of the SchedulerLatencyListener interface. It
 // controls the elastic CPU % limit based on scheduling latency and elastic CPU
-// utilization data. Every tick we measure scheduling_p99 and execute the
+// utilization data. Every tick we measure scheduling_latency and execute the
 // following:
 //
-//		IF scheduling_p99 > target_p99:
+//		IF scheduling_latency > target:
 //			utilization_limit = max(utilization_limit – delta * factor, min_utilization)
 //		ELSE:
 //			IF requests_waiting:
@@ -69,47 +69,49 @@ func (e *schedulerLatencyListener) setCoord(coord *ElasticCPUGrantCoordinator) {
 //
 // Definitions:
 //
-//	 scheduling_p99        Observed p99 scheduling latency a recent time window.
-//	 target_p99            Target p99 scheduling latency.
-//	 min_utilization       Floor on per-node elastic work CPU % utilization.
-//	 max_utilization       Ceiling on per-node elastic work CPU % utilization.
-//	 inactive_utilization  The CPU % utilization we decrease to when there's no utilization.
-//	 delta                 Per-tick adjustment of CPU %.
-//	 factor                Multiplicative factor for delta, used when decreasing utilization.
-//	 inactive_factor       Multiplicative factor for delta, used when decreasing utilization when inactive.
-//	 requests_waiting      Whether there are requests waiting due to insufficient utilization limit.
-//	 utilization_limit     CPU % utilization limit for elastic work.
+//	scheduling_latency    Observed scheduling latency a recent time window.
+//	target                Target scheduling latency.
+//	min_utilization       Floor on per-node elastic work CPU % utilization.
+//	max_utilization       Ceiling on per-node elastic work CPU % utilization.
+//	inactive_utilization  The CPU % utilization we decrease to when there's no utilization.
+//	delta                 Per-tick adjustment of CPU %.
+//	factor                Multiplicative factor for delta, used when decreasing utilization.
+//	inactive_factor       Multiplicative factor for delta, used when decreasing utilization when inactive.
+//	requests_waiting      Whether there are requests waiting due to insufficient utilization limit.
+//	utilization_limit     CPU % utilization limit for elastic work.
 //
-//	The controller uses fixed deltas for adjustments, adjusting down a bit more
-//	aggressively than adjusting up. This is due to the nature of the work being
-//	paced — we care more about quickly introducing a ceiling rather than
-//	staying near it (though experimentally we’re able to stay near it just
-//	fine). It adjusts upwards only when seeing waiting requests that could use
-//	more quota (assuming it’s under the p99 target). The adjustments are small
-//	to reduce {over,under}shoot and controller instability at the cost of being
-//	somewhat dampened. We use a relatively long duration for measuring scheduler
-//	latency data; since the p99 is computed off of histogram data, we saw a lot
-//	more jaggedness when taking p99s off of a smaller set of scheduler events
-//	(last 50ms for ex.) compared to computing p99s over a larger set of
-//	scheduler events (last 2500ms). This, with the small deltas used for
-//	adjustments, can make for a dampened response, but assuming a stable-ish
-//	foreground CPU load against a node, it works fine. The controller output is
-//	limited to a well-defined range that can be tuned through cluster settings.
-//	This controller can be made more involved if we find good reasons for
-//	it; this is just the first version that worked well-enough.
-func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
+// The controller uses fixed deltas for adjustments, adjusting down a bit more
+// aggressively than adjusting up. This is due to the nature of the work being
+// paced — we care more about quickly introducing a ceiling rather than
+// staying near it (though experimentally we’re able to stay near it just
+// fine). It adjusts upwards only when seeing waiting requests that could use
+// more quota (assuming it’s under the target). The adjustments are small
+// to reduce {over,under}shoot and controller instability at the cost of being
+// somewhat dampened. We use a relatively long duration for measuring scheduler
+// latency data; since the p99 (or whatever
+// scheduler_latency.sample_percentile is) is computed off of histogram data,
+// we saw a lot more jaggedness when taking p99s off of a smaller set of
+// scheduler events (last 50ms for ex.) compared to computing p99s over a
+// larger set of scheduler events (last 2500ms). This, with the small deltas
+// used for adjustments, can make for a dampened response, but
+// assuming a stable-ish foreground CPU load against a node, it works fine. The
+// controller output is limited to a well-defined range that can be tuned
+// through cluster settings. This controller can be made more involved if we
+// find good reasons for it; this is just the first version that worked
+// well-enough.
+func (e *schedulerLatencyListener) SchedulerLatency(schedulingLatency, period time.Duration) {
 	params := e.getParams(period)
 	if !params.enabled {
 		return // nothing to do
 	}
 
-	e.metrics.P99SchedulerLatency.Update(p99.Nanoseconds())
+	e.metrics.SchedulerLatency.Update(schedulingLatency.Nanoseconds())
 
 	hasWaitingRequests := e.elasticCPULimiter.hasWaitingRequests()
 	oldUtilizationLimit := e.elasticCPULimiter.getUtilizationLimit()
 	newUtilizationLimit := oldUtilizationLimit
 
-	if p99 > params.targetP99 { // over latency target; decrease limit
+	if schedulingLatency > params.target { // over latency target; decrease limit
 		newUtilizationLimit = oldUtilizationLimit -
 			(params.adjustmentDelta * params.multiplicativeFactorOnDecrease)
 		newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
@@ -167,7 +169,7 @@ func (e *schedulerLatencyListener) getParams(period time.Duration) schedulerLate
 	}
 
 	enabled := elasticCPUControlEnabled.Get(&e.settings.SV)
-	targetP99 := elasticCPUSchedulerLatencyTarget.Get(&e.settings.SV)
+	target := elasticCPUSchedulerLatencyTarget.Get(&e.settings.SV)
 	minUtilization := elasticCPUMinUtilization.Get(&e.settings.SV)
 	maxUtilization := elasticCPUMaxUtilization.Get(&e.settings.SV)
 	if minUtilization > maxUtilization { // user error
@@ -186,7 +188,7 @@ func (e *schedulerLatencyListener) getParams(period time.Duration) schedulerLate
 
 	return schedulerLatencyListenerParams{
 		enabled:                                enabled,
-		targetP99:                              targetP99,
+		target:                                 target,
 		minUtilization:                         minUtilization,
 		maxUtilization:                         maxUtilization,
 		inactivePoint:                          inactivePoint,
@@ -198,7 +200,7 @@ func (e *schedulerLatencyListener) getParams(period time.Duration) schedulerLate
 
 type schedulerLatencyListenerParams struct {
 	enabled                                bool
-	targetP99                              time.Duration // target p99 scheduling latency
+	target                                 time.Duration // target scheduling latency
 	minUtilization, maxUtilization         float64       // {floor,ceiling} on per-node CPU % utilization for elastic work
 	inactivePoint                          float64       // point between {min,max} utilization we'll decrease to when inactive
 	adjustmentDelta                        float64       // adjustment delta for CPU % limit applied elastic work
@@ -256,16 +258,16 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 	elasticCPUSchedulerLatencyTarget = settings.RegisterDurationSetting(
 		settings.SystemOnly,
 		"admission.elastic_cpu.scheduler_latency_target",
-		"sets the p99 scheduling latency the elastic CPU controller aims for",
+		"sets the scheduling latency the elastic CPU controller aims for",
 		time.Millisecond,
 		settings.DurationInRange(50*time.Microsecond, time.Second),
 	)
 )
 
 var (
-	p99SchedulerLatency = metric.Metadata{
-		Name:        "admission.scheduler_latency_listener.p99_nanos",
-		Help:        "The scheduling latency at p99 as observed by the scheduler latency listener",
+	schedulerLatency = metric.Metadata{
+		Name:        "admission.scheduler_latency_listener.nanos",
+		Help:        "The scheduling latency at scheduler_latency.sample_percentile",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -274,12 +276,12 @@ var (
 // schedulerLatencyListenerMetrics are the metrics associated with an instance
 // of the schedulerLatencyListener.
 type schedulerLatencyListenerMetrics struct {
-	P99SchedulerLatency *metric.Gauge
+	SchedulerLatency *metric.Gauge
 }
 
 func makeSchedulerLatencyListenerMetrics() *schedulerLatencyListenerMetrics {
 	return &schedulerLatencyListenerMetrics{
-		P99SchedulerLatency: metric.NewGauge(p99SchedulerLatency),
+		SchedulerLatency: metric.NewGauge(schedulerLatency),
 	}
 }
 

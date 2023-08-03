@@ -59,6 +59,19 @@ var sampleDuration = settings.RegisterDurationSetting(
 	}),
 )
 
+var samplePercentile = settings.RegisterFloatSetting(
+	settings.ApplicationLevel, // used in virtual clusters
+	"scheduler_latency.sample_percentile",
+	"controls the scheduling latency percentile computed",
+	0.99, // p99
+	settings.WithValidateFloat(func(p float64) error {
+		if p < 0 || p > 1 {
+			return fmt.Errorf("p expected to be in range [0,1], got %f", p)
+		}
+		return nil
+	}),
+)
+
 var schedulerLatency = metric.Metadata{
 	Name:        "go.scheduler_latency",
 	Help:        "Go scheduling latency",
@@ -80,12 +93,14 @@ func StartSampler(
 		settingsValuesMu := struct {
 			syncutil.Mutex
 			period, duration time.Duration
+			percentile       float64
 		}{}
 
 		settingsValuesMu.period = samplePeriod.Get(&st.SV)
 		settingsValuesMu.duration = sampleDuration.Get(&st.SV)
+		settingsValuesMu.percentile = samplePercentile.Get(&st.SV)
 
-		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration, listener)
+		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration, listener, settingsValuesMu.percentile)
 		_ = stopper.RunAsyncTask(ctx, "export-scheduler-stats", func(ctx context.Context) {
 			// cpuSchedulerLatencyBuckets are prometheus histogram buckets
 			// suitable for a histogram that records a (second-denominated)
@@ -139,6 +154,13 @@ func StartSampler(
 			settingsValuesMu.duration = duration
 			s.setPeriodAndDuration(settingsValuesMu.period, settingsValuesMu.duration)
 		})
+		samplePercentile.SetOnChange(&st.SV, func(ctx context.Context) {
+			p := samplePercentile.Get(&st.SV)
+			settingsValuesMu.Lock()
+			defer settingsValuesMu.Unlock()
+			settingsValuesMu.percentile = p
+			s.setPercentile(p)
+		})
 
 		for {
 			select {
@@ -164,14 +186,16 @@ type sampler struct {
 	mu       struct {
 		syncutil.Mutex
 		ringBuffer            ring.Buffer[*metrics.Float64Histogram]
+		percentile            float64
 		lastIntervalHistogram *metrics.Float64Histogram
 	}
 }
 
-func newSampler(period, duration time.Duration, listener LatencyObserver) *sampler {
+func newSampler(period, duration time.Duration, listener LatencyObserver, p float64) *sampler {
 	s := &sampler{listener: listener}
 	s.mu.ringBuffer = ring.MakeBuffer(([]*metrics.Float64Histogram)(nil))
 	s.setPeriodAndDuration(period, duration)
+	s.setPercentile(p)
 	return s
 }
 
@@ -187,6 +211,12 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	s.mu.lastIntervalHistogram = nil
 }
 
+func (s *sampler) setPercentile(p float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.percentile = p
+}
+
 // sampleOnTickAndInvokeCallbacks samples scheduler latency stats as the ticker
 // has ticked. It invokes all callbacks registered with this package.
 func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
@@ -199,11 +229,12 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 		return
 	}
 	s.mu.lastIntervalHistogram = sub(latestCumulative, oldestCumulative)
-	p99 := time.Duration(int64(percentile(s.mu.lastIntervalHistogram, 0.99) * float64(time.Second.Nanoseconds())))
+	schedulingLatency := time.Duration(int64(percentile(s.mu.lastIntervalHistogram, s.mu.percentile) *
+		float64(time.Second.Nanoseconds())))
 
 	// Perform the callback if there's a listener.
 	if s.listener != nil {
-		s.listener.SchedulerLatency(p99, period)
+		s.listener.SchedulerLatency(schedulingLatency, period)
 	}
 }
 
