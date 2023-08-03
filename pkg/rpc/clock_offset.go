@@ -322,22 +322,26 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	now := r.clock.Now()
 	healthyOffsetCount := 0
 
-	r.mu.Lock()
-	// Each measurement is recorded as its minimum and maximum value.
-	offsets := make(stats.Float64Data, 0, 2*len(r.mu.offsets))
-	for id, offset := range r.mu.offsets {
-		if offset.isStale(r.offsetTTL, now) {
-			delete(r.mu.offsets, id)
-			continue
+	var offsets stats.Float64Data
+	var numClocks int
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		// Each measurement is recorded as its minimum and maximum value.
+		offsets = make(stats.Float64Data, 0, 2*len(r.mu.offsets))
+		for id, offset := range r.mu.offsets {
+			if offset.isStale(r.offsetTTL, now) {
+				delete(r.mu.offsets, id)
+				continue
+			}
+			offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))
+			offsets = append(offsets, float64(offset.Offset-offset.Uncertainty))
+			if offset.isHealthy(ctx, r.toleratedOffset) {
+				healthyOffsetCount++
+			}
 		}
-		offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))
-		offsets = append(offsets, float64(offset.Offset-offset.Uncertainty))
-		if offset.isHealthy(ctx, r.toleratedOffset) {
-			healthyOffsetCount++
-		}
-	}
-	numClocks := len(r.mu.offsets)
-	r.mu.Unlock()
+		numClocks = len(r.mu.offsets)
+	}()
 
 	mean, err := offsets.Mean()
 	if err != nil && !errors.Is(err, stats.EmptyInput) {
