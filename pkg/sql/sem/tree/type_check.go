@@ -606,7 +606,7 @@ func (expr *CastExpr) TypeCheck(
 	castFrom := typedSubExpr.ResolvedType()
 	allowStable := true
 	context := ""
-	if semaCtx != nil && semaCtx.Properties.required.rejectFlags&RejectStableOperators != 0 {
+	if semaCtx != nil && semaCtx.Properties.IsSet(RejectStableOperators) {
 		allowStable = false
 		context = semaCtx.Properties.required.context
 	}
@@ -962,12 +962,12 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 		return err
 	}
 	if expr.IsWindowFunctionApplication() {
-		if sc.Properties.required.rejectFlags&RejectWindowApplications != 0 {
+		if sc.Properties.IsSet(RejectWindowApplications) {
 			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
 		}
 
 		if sc.Properties.Derived.InWindowFunc &&
-			sc.Properties.required.rejectFlags&RejectNestedWindowFunctions != 0 {
+			sc.Properties.IsSet(RejectNestedWindowFunctions) {
 			return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 		}
 		sc.Properties.Derived.SeenWindowApplication = true
@@ -976,10 +976,10 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 		// we have an aggregation.
 		if fnCls == AggregateClass {
 			if sc.Properties.Derived.inFuncExpr &&
-				sc.Properties.required.rejectFlags&RejectNestedAggregates != 0 {
+				sc.Properties.IsSet(RejectNestedAggregates) {
 				return NewAggInAggError()
 			}
-			if sc.Properties.required.rejectFlags&RejectAggregates != 0 {
+			if sc.Properties.IsSet(RejectAggregates) {
 				return NewInvalidFunctionUsageError(AggregateClass, sc.Properties.required.context)
 			}
 			sc.Properties.Derived.SeenAggregate = true
@@ -987,10 +987,10 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 	}
 	if fnCls == GeneratorClass {
 		if sc.Properties.Derived.inFuncExpr &&
-			sc.Properties.required.rejectFlags&RejectNestedGenerators != 0 {
+			sc.Properties.IsSet(RejectNestedGenerators) {
 			return NewInvalidNestedSRFError(sc.Properties.required.context)
 		}
-		if sc.Properties.required.rejectFlags&RejectGenerators != 0 {
+		if sc.Properties.IsSet(RejectGenerators) {
 			return NewInvalidFunctionUsageError(GeneratorClass, sc.Properties.required.context)
 		}
 		sc.Properties.Derived.SeenGenerator = true
@@ -1023,7 +1023,7 @@ func (sc *SemaContext) checkVolatility(v volatility.V) error {
 	}
 	switch v {
 	case volatility.Volatile:
-		if sc.Properties.required.rejectFlags&RejectVolatileFunctions != 0 {
+		if sc.Properties.IsSet(RejectVolatileFunctions) {
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
 			// this error code matches PostgreSQL's in the same conditions.
@@ -1031,7 +1031,7 @@ func (sc *SemaContext) checkVolatility(v volatility.V) error {
 				"volatile functions are not allowed in %s", sc.Properties.required.context)
 		}
 	case volatility.Stable:
-		if sc.Properties.required.rejectFlags&RejectStableOperators != 0 {
+		if sc.Properties.IsSet(RejectStableOperators) {
 			return NewContextDependentOpsNotAllowedError(sc.Properties.required.context)
 		}
 	}
@@ -1529,7 +1529,7 @@ func (expr *RangeCond) TypeCheck(
 
 // TypeCheck implements the Expr interface.
 func (expr *Subquery) TypeCheck(_ context.Context, sc *SemaContext, _ *types.T) (TypedExpr, error) {
-	if sc != nil && sc.Properties.required.rejectFlags&RejectSubqueries != 0 {
+	if sc != nil && sc.Properties.IsSet(RejectSubqueries) {
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 			"subqueries are not allowed in %s", sc.Properties.required.context)
 	}
