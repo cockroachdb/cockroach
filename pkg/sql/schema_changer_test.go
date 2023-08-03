@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -1569,124 +1570,108 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 51796)
-	// TODO (lucy): This test needs more complicated schema changer knobs than
-	// currently implemented. Previously this test disabled the async schema
-	// changer so that we don't retry the cleanup of the failed schema change
-	// until a certain point in the test.
-	params, _ := tests.CreateTestServerParams()
-	const chunkSize = 200
-	var enableAsyncSchemaChanges uint32
-	var attempts int32
-	// attempt 1: write the first chunk of the index.
-	// attempt 2: write the second chunk and hit a unique constraint
-	// violation; purge the schema change.
-	// attempt 3: return an error while purging the schema change.
-	var expectedAttempts int32 = 3
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			BackfillChunkSize: chunkSize,
-		},
-		DistSQL: &execinfra.TestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				// Return a deadline exceeded error during the third attempt
-				// which attempts to clean up the schema change.
-				if atomic.AddInt32(&attempts, 1) == expectedAttempts {
-					// Disable the async schema changer for assertions.
-					atomic.StoreUint32(&enableAsyncSchemaChanges, 0)
-					return context.DeadlineExceeded
-				}
-				return nil
+
+	for _, schemaChangerSetup := range []string{
+		"SET use_declarative_schema_changer='off'",
+		"SET use_declarative_schema_changer='on'",
+	} {
+		params, _ := tests.CreateTestServerParams()
+		const chunkSize = 200
+
+		var getKeyCount func() (int, error)
+		countBeforeRollback := 0
+		params.Knobs = base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeOnFailOrCancel: func(jobID jobspb.JobID) error {
+					cnt, err := getKeyCount()
+					if err != nil {
+						return err
+					}
+					countBeforeRollback = cnt
+					return nil
+				},
 			},
-			BulkAdderFlushesEveryBatch: true,
-		},
-	}
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				RunBeforeMakingPostCommitPlan: func(inRollback bool) error {
+					if inRollback {
+						cnt, err := getKeyCount()
+						if err != nil {
+							return err
+						}
+						countBeforeRollback = cnt
+					}
+					return nil
+				},
+			},
+		}
+		server, sqlDB, kvDB := serverutils.StartServer(t, params)
+		defer server.Stopper().Stop(context.Background())
 
-	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with AddImmediateGCZoneConfig.
-	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+		_, err := sqlDB.Exec(fmt.Sprintf("SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d", chunkSize))
+		require.NoError(t, err)
 
-	if _, err := sqlDB.Exec(`
+		getKeyCount = func() (int, error) {
+			return sqltestutils.GetTableKeyCount(ctx, kvDB)
+		}
+		// Disable strict GC TTL enforcement because we're going to shove a zero-value
+		// TTL into the system with AddImmediateGCZoneConfig.
+		defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+		_, err = sqlDB.Exec(schemaChangerSetup)
+		require.NoError(t, err)
+
+		if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
-		t.Fatal(err)
-	}
-
-	// Bulk insert.
-	const maxValue = chunkSize + 1
-	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
-		t.Fatal(err)
-	}
-
-	// Add a row with a duplicate value=0 which is the same
-	// value as for the key maxValue.
-	if _, err := sqlDB.Exec(
-		`INSERT INTO t.test VALUES ($1, $2)`, maxValue+1, 0,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// A schema change that violates integrity constraints.
-	if _, err := sqlDB.Exec(
-		"CREATE UNIQUE INDEX foo ON t.test (v)",
-	); !testutils.IsError(err, `violates unique constraint "foo"`) {
-		t.Fatal(err)
-	}
-
-	// The index doesn't exist
-	if _, err := sqlDB.Query(
-		`SELECT v from t.test@foo`,
-	); !testutils.IsError(err, "index .* not found") {
-		t.Fatal(err)
-	}
-
-	// Allow async schema change purge to attempt backfill and error.
-	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	// deal with schema change knob
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
-	// The deadline exceeded error in the schema change purge results in no
-	// retry attempts of the purge.
-	testutils.SucceedsSoon(t, func() error {
-		if read := atomic.LoadInt32(&attempts); read != expectedAttempts {
-			return errors.Errorf("%d retries, despite allowing only (schema change + reverse) = %d", read, expectedAttempts)
+			t.Fatal(err)
 		}
-		return nil
-	})
 
-	// There is still some garbage index data that needs to be purged. All the
-	// rows from k = 0 to k = chunkSize - 1 have index values.
-	numGarbageValues := chunkSize
+		// Bulk insert.
+		const maxValue = chunkSize + 1
+		if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
+			t.Fatal(err)
+		}
 
-	ctx := context.Background()
+		// Add a row with a duplicate value=0 which is the same
+		// value as for the key maxValue.
+		if _, err := sqlDB.Exec(
+			`INSERT INTO t.test VALUES ($1, $2)`, maxValue+1, 0,
+		); err != nil {
+			t.Fatal(err)
+		}
 
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues); err != nil {
-		t.Fatal(err)
-	}
+		// A schema change that violates integrity constraints.
+		if _, err := sqlDB.Exec(
+			"CREATE UNIQUE INDEX foo ON t.test (v)",
+		); !testutils.IsError(err, `violates unique constraint "foo"`) {
+			t.Fatal(err)
+		}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		t.Fatal(err)
-	}
+		// The index doesn't exist
+		if _, err := sqlDB.Query(
+			`SELECT v from t.test@foo`,
+		); !testutils.IsError(err, "index .* not found") {
+			t.Fatal(err)
+		}
 
-	// Enable async schema change processing to ensure that it cleans up the
-	// above garbage left behind.
-	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
+		// countBeforeRollback is assigned in the rollback testing knob which is
+		// called before rollback starts so that the first chunk (200 keys) written
+		// is still visible. The first chunk is visible because there is no
+		// duplicate keys within it. The duplicate keys only exist in the second
+		// chunk. Also note that we wrote maxValue+1 rows, and there is 1 extra key
+		// from kv.
+		require.Equal(t, countBeforeRollback, maxValue+2+chunkSize)
 
-	// No garbage left behind.
-	testutils.SucceedsSoon(t, func() error {
-		numGarbageValues = 0
-		return sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues)
-	})
-
-	// A new attempt cleans up a chunk of data.
-	if attempts != expectedAttempts+1 {
-		t.Fatalf("%d chunk ops, despite allowing only (schema change + reverse) = %d", attempts, expectedAttempts)
+		// No garbage left behind after rollback. This check should succeed pretty
+		// fast since we use `DelRange` in GC and `CheckTableKeyCount` cannot see
+		// tombstones.
+		testutils.SucceedsSoon(t, func() error {
+			return sqltestutils.CheckTableKeyCount(ctx, kvDB, 1 /* multiple */, maxValue+1)
+		})
 	}
 }
 
