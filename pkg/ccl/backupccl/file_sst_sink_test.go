@@ -927,7 +927,7 @@ func fileSSTSinkTestSetUp(
 		settings: &settings.SV,
 	}
 
-	sink := makeFileSSTSink(sinkConf, store)
+	sink := makeFileSSTSink(sinkConf, store, nil /* pacer */)
 	return sink, store
 }
 

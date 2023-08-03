@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -110,6 +111,13 @@ var (
 	)
 
 	testingDiscardBackupData = envutil.EnvOrDefaultBool("COCKROACH_BACKUP_TESTING_DISCARD_DATA", false)
+
+	fileSSTSinkElasticCPUControlEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		"determines whether the file sst sink integrates with elastic CPU control",
+		true,
+	)
 )
 
 const (
@@ -455,9 +463,28 @@ func runBackupProcessor(
 		todo <- chunk
 	}
 
+	// Passing a nil pacer is effectively a noop if CPU control is disabled.
+	var pacer *admission.Pacer = nil
+	if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
+		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+		pacer = flowCtx.Cfg.AdmissionPacerFactory.NewPacer(
+			100*time.Millisecond,
+			admission.WorkInfo{
+				TenantID:        tenantID,
+				Priority:        admissionpb.BulkNormalPri,
+				CreateTime:      timeutil.Now().UnixNano(),
+				BypassAdmission: false,
+			},
+		)
+	}
+	defer pacer.Close()
+
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
-		sink := makeFileSSTSink(sinkConf, storage)
+		sink := makeFileSSTSink(sinkConf, storage, pacer)
 		defer func() {
 			if err := sink.flush(ctx); err != nil {
 				log.Warningf(ctx, "failed to flush SST sink: %s", err)
