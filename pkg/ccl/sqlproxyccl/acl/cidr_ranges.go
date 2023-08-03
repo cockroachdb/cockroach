@@ -28,14 +28,14 @@ var _ AccessController = &CIDRRanges{}
 
 // CheckConnection implements the AccessController interface.
 func (p *CIDRRanges) CheckConnection(ctx context.Context, conn ConnectionTags) error {
-	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
-	if err != nil {
-		return err
-	}
-
 	// Private connections. This ACL is only responsible for public CIDR ranges.
 	if conn.EndpointID != "" {
 		return nil
+	}
+
+	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
+	if err != nil {
+		return err
 	}
 
 	// Cluster allows public connections, so we'll check allowed CIDR ranges.
