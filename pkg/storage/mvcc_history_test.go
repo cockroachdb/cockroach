@@ -57,7 +57,7 @@ var (
 	cmdDeleteRangeTombstoneKnownStats = util.ConstantWithMetamorphicTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
 	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
-		"engine", "readonly", "batch", "snapshot").(string)
+		"engine", "readonly", "batch", "snapshot", "efos").(string)
 	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
 	mvccHistoriesPeekBounds = util.ConstantWithMetamorphicTestChoice("mvcc-histories-peek-bounds",
 		"none", "left", "right", "both").(string)
@@ -2319,6 +2319,8 @@ func (e *evalCtx) newReader() storage.Reader {
 		return e.engine.NewBatch()
 	case "snapshot":
 		return e.engine.NewSnapshot()
+	case "efos":
+		return e.engine.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}})
 	default:
 		e.t.Fatalf("unknown reader type %q", mvccHistoriesReader)
 		return nil
