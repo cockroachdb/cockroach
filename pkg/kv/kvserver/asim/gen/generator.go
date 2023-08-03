@@ -190,7 +190,7 @@ func (lr LoadedRanges) Generate(
 type PlacementType int
 
 const (
-	Uniform PlacementType = iota
+	Even PlacementType = iota
 	Skewed
 )
 
@@ -209,7 +209,7 @@ type BaseRanges struct {
 // PlacementType while using other BaseRanges fields for range configuration.
 func (b BaseRanges) getRangesInfo(pType PlacementType, numOfStores int) state.RangesInfo {
 	switch pType {
-	case Uniform:
+	case Even:
 		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	case Skewed:
 		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
@@ -227,7 +227,7 @@ func (b BaseRanges) loadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 }
 
 // BasicRanges implements the RangeGen interface, supporting basic range info
-// distribution, including uniform and skewed distributions.
+// distribution, including even and skewed distributions.
 type BasicRanges struct {
 	BaseRanges
 	PlacementType PlacementType
