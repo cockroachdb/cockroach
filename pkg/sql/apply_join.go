@@ -347,6 +347,9 @@ func runPlanInsidePlan(
 	if recv.commErr != nil {
 		return recv.commErr
 	}
+	if resultWriter.Err() != nil {
+		return resultWriter.Err()
+	}
 
 	evalCtxFactory2 := func(usedConcurrently bool) *extendedEvalContext {
 		return evalCtxFactory()
