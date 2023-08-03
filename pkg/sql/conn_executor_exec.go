@@ -879,7 +879,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	defer func() { _ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode) }()
+	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
+	defer func() {
+		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+
+		// If this is an internal executor, then we need to step back
+		// the txn so that the outer executor uses the proper sequence
+		// number.
+		if ex.executorType == executorTypeInternal {
+			err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum)
+			retEv, retPayload, retErr = makeErrEvent(err)
+		}
+	}()
 
 	// Then we create a sequencing point.
 	//
