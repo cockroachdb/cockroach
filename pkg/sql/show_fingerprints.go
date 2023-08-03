@@ -66,7 +66,7 @@ func (p *planner) ShowFingerprints(
 
 	return &showFingerprintsNode{
 		tableDesc: tableDesc,
-		indexes:   tableDesc.NonDropIndexes(),
+		indexes:   tableDesc.ActiveIndexes(),
 	}, nil
 }
 

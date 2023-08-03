@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ptp",
@@ -55,6 +55,22 @@ go_library(
         ],
         "@io_bazel_rules_go//go/platform:windows": [
             "@com_github_cockroachdb_errors//:errors",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "ptp_test",
+    srcs = ["ptp_clock_linux_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":ptp"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/timeutil",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/timeutil",
         ],
         "//conditions:default": [],
     }),

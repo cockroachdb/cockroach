@@ -876,9 +876,6 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientClock := &AdvancingClock{time: timeutil.Unix(0, 10)}
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
-	// Make the interval shorter to speed up the test.
-	clientCtx.RPCHeartbeatInterval = 1 * time.Millisecond
-	clientCtx.RPCHeartbeatTimeout = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientClock.getAdvancementInterval()
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
@@ -952,7 +949,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	// Remove the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
-	clientCtx.heartbeatTimeout = 0
+	clientCtx.RPCHeartbeatTimeout = 0
 	// Allow two heartbeat for initialization. The first ping doesn't report an offset,
 	// the second one thus doesn't have an offset to work with, so it's only on the
 	// third one that's fully configured.
@@ -1022,9 +1019,6 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	clientClock := &AdvancingClock{time: timeutil.Unix(0, 10)}
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
-	// Make the interval shorter to speed up the test.
-	clientCtx.RPCHeartbeatInterval = 1 * time.Millisecond
-	clientCtx.RPCHeartbeatTimeout = 1 * time.Millisecond
 
 	var hbDecommission atomic.Value
 	hbDecommission.Store(false)
