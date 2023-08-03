@@ -111,13 +111,6 @@ const (
 	// cluster that can use the test fixtures in
 	// `pkg/cmd/roachtest/fixtures`.
 	numNodesInFixtures = 4
-
-	// CurrentCockroachPath is the path to the binary where the current
-	// version of cockroach being tested is located. This file is
-	// uploaded before any user functions are run. The primary use case
-	// are tests that need long runnig background functions on startup
-	// (such as running a workload).
-	CurrentCockroachPath = "./cockroach-current"
 )
 
 var (
@@ -579,35 +572,6 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster,
 		install.BinaryOption(binaryPath),
 	)
 	return clusterupgrade.StartWithSettings(ctx, l, c, s.crdbNodes, startOpts, clusterSettings...)
-}
-
-// uploadCurrentVersionStep uploads the current cockroach binary to
-// all DB nodes in the test. This is so that startup steps can use
-// them (if, for instance, they need to run a workload). The binary
-// will be located in `dest`.
-type uploadCurrentVersionStep struct {
-	id        int
-	rt        test.Test
-	crdbNodes option.NodeListOption
-	dest      string
-}
-
-func (s uploadCurrentVersionStep) ID() int                { return s.id }
-func (s uploadCurrentVersionStep) Background() shouldStop { return nil }
-
-func (s uploadCurrentVersionStep) Description() string {
-	return fmt.Sprintf("upload current binary to all cockroach nodes (%v)", s.crdbNodes)
-}
-
-func (s uploadCurrentVersionStep) Run(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
-) error {
-	_, err := clusterupgrade.UploadVersion(ctx, s.rt, l, c, s.crdbNodes, clusterupgrade.MainVersion)
-	if err != nil {
-		return err
-	}
-
-	return c.RunE(ctx, s.crdbNodes, fmt.Sprintf("mv ./cockroach %s", s.dest))
 }
 
 // waitForStableClusterVersionStep implements the process of waiting
