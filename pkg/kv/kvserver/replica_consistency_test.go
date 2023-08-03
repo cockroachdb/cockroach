@@ -59,7 +59,8 @@ func TestReplicaChecksumVersion(t *testing.T) {
 
 		var g errgroup.Group
 		g.Go(func() error { return tc.repl.computeChecksumPostApply(ctx, cc) })
-		shortCtx, cancel := context.WithTimeout(ctx, time.Second)
+		// NB: This timeout should be longer than storage.maxEfosWait.
+		shortCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		rc, err := tc.repl.getChecksum(shortCtx, cc.ChecksumID)
 		taskErr := g.Wait()

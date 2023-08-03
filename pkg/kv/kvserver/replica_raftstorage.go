@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -235,8 +237,28 @@ func (r *Replica) GetSnapshot(
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
+	var snap storage.Reader
+	var startKey roachpb.RKey
 	r.raftMu.Lock()
-	snap := r.store.TODOEngine().NewSnapshot()
+	if r.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&r.ClusterSettings().SV) {
+		var ss *spanset.SpanSet
+		r.mu.RLock()
+		spans := rditer.MakeReplicatedKeySpans(r.mu.state.Desc)
+		startKey = r.mu.state.Desc.StartKey
+		if util.RaceEnabled {
+			ss = rditer.MakeReplicatedKeySpanSet(r.mu.state.Desc)
+			defer ss.Release()
+		}
+		r.mu.RUnlock()
+		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
+		if util.RaceEnabled {
+			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
+		} else {
+			snap = efos
+		}
+	} else {
+		snap = r.store.TODOEngine().NewSnapshot()
+	}
 	r.raftMu.Unlock()
 
 	defer func() {
@@ -248,8 +270,10 @@ func (r *Replica) GetSnapshot(
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	rangeID := r.RangeID
+	if startKey == nil {
+		startKey = r.mu.state.Desc.StartKey
+	}
 
-	startKey := r.mu.state.Desc.StartKey
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
 

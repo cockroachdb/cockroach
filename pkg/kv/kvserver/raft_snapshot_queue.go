@@ -56,6 +56,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,
 			processingNanos:      store.metrics.RaftSnapshotQueueProcessingNanos,
 			disabledConfig:       kvserverbase.RaftSnapshotQueueEnabled,

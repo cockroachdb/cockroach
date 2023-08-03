@@ -14,8 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -73,13 +75,34 @@ func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 //
 // 1. Replicated range-id local key span.
 // 2. "Local" key span (range descriptor, etc)
-// 3. Lock-table key spans.
-// 4. User key span.
+// 3 and 4. Lock-table key spans.
+// 5. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		ReplicatedBySpan:    d.RSpan(),
 		ReplicatedByRangeID: true,
 	})
+}
+
+// MakeReplicatedKeySpanSet is similar to MakeReplicatedKeySpans, except it
+// creates a SpanSet instead of a slice of spans. Note that lock table spans
+// are skipped.
+func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
+	spans := MakeReplicatedKeySpans(d)
+	if len(spans) != 5 {
+		panic("unexpected output from MakeReplicatedKeySpans")
+	}
+	ss := spanset.New()
+	ss.AddNonMVCC(spanset.SpanReadWrite, spans[0])
+	ss.AddNonMVCC(spanset.SpanReadWrite, spans[1])
+	// NB: We don't need to add lock table spans. The caller is expected to add
+	// these.
+	ss.AddMVCC(spanset.SpanReadWrite, spans[4], hlc.MaxTimestamp)
+	ss.SortAndDedup()
+	if err := ss.Validate(); err != nil {
+		panic(err)
+	}
+	return ss
 }
 
 // makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
