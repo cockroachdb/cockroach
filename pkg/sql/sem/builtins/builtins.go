@@ -2105,9 +2105,9 @@ var regularBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(v), nil
 			},
 			Info: "Returns a unique ID. The value is a combination of the " +
-				"insert timestamp and the ID of the node executing the statement, which " +
-				"guarantees this combination is globally unique. The way it is generated " +
-				"there is no ordering",
+				"insert timestamp (bit-reversed) and the ID of the node executing the statement, which " +
+				"guarantees this combination is globally unique. The way it is generated is statistically " +
+				"likely to not have any ordering relative to previously generated values.",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -9793,13 +9793,16 @@ func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
 }
 
 // mapToUnorderedUniqueInt is used by GenerateUniqueUnorderedID to convert a
-// serial unique uint64 to an unordered unique int64. The bit manipulation
+// serial unique uint64 to an unordered unique int64. It accomplishes this by
+// reversing the timestamp portion of the unique ID. This bit manipulation
 // should preserve the number of 1-bits.
-func mapToUnorderedUniqueInt(val uint64) uint64 {
+func mapToUnorderedUniqueInt(uniqueInt uint64) uint64 {
 	// val is [0][48 bits of ts][15 bits of node id]
-	ts := (val & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
-	v := (bits.Reverse64(ts) >> 1) | (val & (1<<15 - 1))
-	return v
+	ts := uniqueInt & builtinconstants.UniqueIntTimestampMask
+	nodeID := uniqueInt & builtinconstants.UniqueIntNodeIDMask
+	reversedTS := bits.Reverse64(ts<<builtinconstants.UniqueIntLeadingZeroBits) << builtinconstants.UniqueIntNodeIDBits
+	unorderedUniqueInt := reversedTS | nodeID
+	return unorderedUniqueInt
 }
 
 // ProcessUniqueID is an ID which is unique to this process in the cluster.
@@ -9858,7 +9861,7 @@ func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
 func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
 	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
 	// in the timestamp portion of the final value instead of always setting them.
-	id := (timestamp << builtinconstants.NodeIDBits) ^ uint64(instanceID)
+	id := (timestamp << builtinconstants.UniqueIntNodeIDBits) ^ uint64(instanceID)
 	return tree.DInt(id)
 }
 

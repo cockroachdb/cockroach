@@ -177,7 +177,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 		// NB: funcs can appear more than once i.e. upper/lowercase variants for
 		// faster lookups, so normalize to lowercase and de-dupe using a set.
 		name = strings.ToLower(name)
-		if _, ok := seen[name]; ok {
+		if _, ok := seen[name]; ok || strings.HasPrefix(name, "crdb_internal.") {
 			continue
 		}
 		seen[name] = struct{}{}

@@ -1298,7 +1298,11 @@ func canPushWithPriority(req Request, s waitingState) bool {
 	}
 	pusheeIso = s.txn.IsoLevel
 	pusheePri = s.txn.Priority
-	return txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri)
+	// We assume that the pushee is in the PENDING state when deciding whether
+	// to push. A push may determine that the pushee is STAGING or has already
+	// been finalized.
+	pusheeStatus := roachpb.PENDING
+	return txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri, pusheeStatus)
 }
 
 func logResolveIntent(ctx context.Context, intent roachpb.LockUpdate) {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -286,6 +288,127 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 			})
 		})
 	})
+}
+
+// TestTxnRecoveryFromStagingWithoutHighPriority tests that the transaction
+// recovery process is NOT initiated by a normal-priority operation which
+// encounters a staging transaction. Instead, the normal-priority operation
+// waits for the committing transaction to complete. The test contains a subtest
+// for each of the combinations of the following options:
+//
+//   - pusheeIsoLevel: configures the isolation level of the pushee (committing)
+//     transaction. Isolation levels affect the behavior of pushes of pending
+//     transactions, but not of staging transactions.
+//
+//   - pusheeCommits: configures whether or not the staging transaction is
+//     implicitly and, eventually, explicitly committed or not.
+//
+//   - pusherWriting: configures whether or not the conflicting operation is a
+//     read (false) or a write (true), which dictates the kind of push operation
+//     dispatched against the staging transaction.
+func TestTxnRecoveryFromStagingWithoutHighPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	run := func(t *testing.T, pusheeIsoLevel isolation.Level, pusheeCommits, pusherWriting bool) {
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+		cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+		// Create a transaction that will get stuck performing a parallel
+		// commit.
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+		txn := newTransaction("txn", keyA, 1, store.Clock())
+		txn.IsoLevel = pusheeIsoLevel
+
+		// Issue two writes, which will be considered in-flight at the time of
+		// the transaction's EndTxn request.
+		keyAVal := []byte("value")
+		pArgs := putArgs(keyA, keyAVal)
+		pArgs.Sequence = 1
+		h := kvpb.Header{Txn: txn}
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &pArgs)
+		require.Nil(t, pErr, "error: %s", pErr)
+
+		pArgs = putArgs(keyB, []byte("value2"))
+		pArgs.Sequence = 2
+		h2 := kvpb.Header{Txn: txn.Clone()}
+		if !pusheeCommits {
+			// If we're not going to have the pushee commit, make sure it never enters
+			// the implicit commit state by bumping the timestamp of one of its writes.
+			manual.Advance(100)
+			h2.Txn.WriteTimestamp = store.Clock().Now()
+		}
+		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), h2, &pArgs)
+		require.Nil(t, pErr, "error: %s", pErr)
+
+		// Issue a parallel commit, which will put the transaction into a
+		// STAGING state. Include both writes as the EndTxn's in-flight writes.
+		et, etH := endTxnArgs(txn, true)
+		et.InFlightWrites = []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 1},
+			{Key: keyB, Sequence: 2},
+		}
+		etReply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), etH, &et)
+		require.Nil(t, pErr, "error: %s", pErr)
+		require.Equal(t, roachpb.STAGING, etReply.Header().Txn.Status)
+
+		// Issue a conflicting, normal-priority operation.
+		var conflictArgs kvpb.Request
+		if pusherWriting {
+			pArgs = putArgs(keyB, []byte("value3"))
+			conflictArgs = &pArgs
+		} else {
+			gArgs := getArgs(keyB)
+			conflictArgs = &gArgs
+		}
+		manual.Advance(100)
+		pErrC := make(chan *kvpb.Error, 1)
+		require.NoError(t, stopper.RunAsyncTask(ctx, "conflict", func(ctx context.Context) {
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), conflictArgs)
+			pErrC <- pErr
+		}))
+
+		// Wait for the conflict to push and be queued in the txn wait queue.
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case pErr := <-pErrC:
+				t.Fatalf("conflicting operation unexpectedly completed: pErr=%s", pErr)
+			default:
+			}
+			if v := store.txnWaitMetrics.PusherWaiting.Value(); v != 1 {
+				return errors.Errorf("expected 1 pusher waiting, found %d", v)
+			}
+			return nil
+		})
+
+		// Finalize the STAGING txn, either by committing it or by aborting it.
+		et2, et2H := endTxnArgs(txn, pusheeCommits)
+		etReply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), et2H, &et2)
+		require.Nil(t, pErr, "error: %s", pErr)
+		expStatus := roachpb.COMMITTED
+		if !pusheeCommits {
+			expStatus = roachpb.ABORTED
+		}
+		require.Equal(t, expStatus, etReply.Header().Txn.Status)
+
+		// This will unblock the conflicting operation, which should succeed.
+		pErr = <-pErrC
+		require.Nil(t, pErr, "error: %s", pErr)
+	}
+
+	for _, pusheeIsoLevel := range isolation.Levels() {
+		t.Run("pushee_iso_level="+pusheeIsoLevel.String(), func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "pushee_commits", func(t *testing.T, pusheeCommits bool) {
+				testutils.RunTrueAndFalse(t, "pusher_writing", func(t *testing.T, pusherWriting bool) {
+					run(t, pusheeIsoLevel, pusheeCommits, pusherWriting)
+				})
+			})
+		})
+	}
 }
 
 // TestTxnClearRangeIntents tests whether a ClearRange call blindly removes
