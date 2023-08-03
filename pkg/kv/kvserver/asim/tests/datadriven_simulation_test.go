@@ -209,7 +209,7 @@ func TestDataDriven(t *testing.T) {
 				if placementSkew {
 					placementType = gen.Skewed
 				} else {
-					placementType = gen.Uniform
+					placementType = gen.Even
 				}
 				rangeGen = gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
