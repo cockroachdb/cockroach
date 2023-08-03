@@ -16,6 +16,7 @@ import (
 	"io"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -256,6 +257,39 @@ func Test_startClusterID(t *testing.T) {
 	require.True(t, isStartStep)
 	require.Equal(t, 2, step.ID())
 	require.Equal(t, 2, plan.startClusterID)
+}
+
+// Test_upgradeTimeout tests the behaviour of upgrade timeouts in
+// mixedversion tests. If no custom value is passed, the default
+// timeout in the clusterupgrade package is used; otherwise, the
+// custom value is enforced.
+func Test_upgradeTimeout(t *testing.T) {
+	findUpgradeWaitSteps := func(plan *TestPlan) []waitForStableClusterVersionStep {
+		var steps []waitForStableClusterVersionStep
+		for _, s := range plan.steps {
+			if step, isUpgrade := s.(waitForStableClusterVersionStep); isUpgrade {
+				steps = append(steps, step)
+			}
+		}
+		if len(steps) == 0 {
+			require.Fail(t, "could not find any waitForStableClusterVersionStep in the plan")
+		}
+		return steps
+	}
+
+	assertTimeout := func(expectedTimeout time.Duration, opts ...customOption) {
+		mvt := newTest(opts...)
+		plan, err := mvt.plan()
+		require.NoError(t, err)
+		waitUpgrades := findUpgradeWaitSteps(plan)
+
+		for _, s := range waitUpgrades {
+			require.Equal(t, expectedTimeout, s.timeout)
+		}
+	}
+
+	assertTimeout(10 * time.Minute)                               // using default settings, the default timeout applies
+	assertTimeout(30*time.Minute, UpgradeTimeout(30*time.Minute)) // custom timeout applies.
 }
 
 func newTest(options ...customOption) *Test {
