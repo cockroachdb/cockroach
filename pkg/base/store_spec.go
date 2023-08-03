@@ -249,12 +249,11 @@ type StoreSpec struct {
 	BallastSize *SizeSpec
 	InMemory    bool
 	Attributes  roachpb.Attributes
-	// StickyInMemoryEngineID is a unique identifier associated with a given
-	// store which will remain in memory even after the default Engine close
-	// until it has been explicitly cleaned up by CleanupStickyInMemEngine[s]
-	// or the process has been terminated.
-	// This only applies to in-memory storage engine.
-	StickyInMemoryEngineID string
+	// StickyVFSID is a unique identifier associated with a given store which
+	// will preserve the in-memory virtual file system (VFS) even after the
+	// storage engine has been closed. This only applies to in-memory storage
+	// engine.
+	StickyVFSID string
 	// UseFileRegistry is true if the "file registry" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
 	UseFileRegistry bool

@@ -300,10 +300,10 @@ func NewTestCluster(
 		if len(serverArgs.StoreSpecs) == 0 {
 			serverArgs.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
 		}
-		if knobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs); ok && knobs.StickyEngineRegistry != nil {
+		if knobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs); ok && knobs.StickyVFSRegistry != nil {
 			for j := range serverArgs.StoreSpecs {
-				if serverArgs.StoreSpecs[j].StickyInMemoryEngineID == "" {
-					serverArgs.StoreSpecs[j].StickyInMemoryEngineID = fmt.Sprintf("auto-node%d-store%d", i+1, j+1)
+				if serverArgs.StoreSpecs[j].StickyVFSID == "" {
+					serverArgs.StoreSpecs[j].StickyVFSID = fmt.Sprintf("auto-node%d-store%d", i+1, j+1)
 				}
 			}
 		}
@@ -1724,7 +1724,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
-		if specs.InMemory && specs.StickyInMemoryEngineID == "" {
+		if specs.InMemory && specs.StickyVFSID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky engine", i)
 		}
 	}
