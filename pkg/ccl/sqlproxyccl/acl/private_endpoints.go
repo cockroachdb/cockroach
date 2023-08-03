@@ -37,14 +37,14 @@ var _ AccessController = &PrivateEndpoints{}
 
 // CheckConnection implements the AccessController interface.
 func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionTags) error {
-	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
-	if err != nil {
-		return err
-	}
-
 	// Public connections. This ACL is only responsible for private endpoints.
 	if conn.EndpointID == "" {
 		return nil
+	}
+
+	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
+	if err != nil {
+		return err
 	}
 
 	// Cluster allows private connections, so we'll check allowed endpoints.
