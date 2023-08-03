@@ -337,6 +337,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		}
 	}
 	numClocks := len(r.mu.offsets)
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	mean, err := offsets.Mean()

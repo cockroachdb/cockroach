@@ -406,11 +406,15 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	for _, ev := range events {
 		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}
-	s.mu.Lock()
-	s.mu.internal = freshStore
-	s.setLastUpdatedLocked(ts)
-	handlers := s.mu.handlers
-	s.mu.Unlock()
+	var handlers []handler
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.internal = freshStore
+		s.setLastUpdatedLocked(ts)
+		handlers = s.mu.handlers
+	}()
+
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		handler.invoke(ctx, keys.EverythingSpan)
@@ -426,16 +430,19 @@ func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
 func (s *KVSubscriber) handlePartialUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
-	s.mu.Lock()
-	for _, ev := range events {
-		// TODO(irfansharif): We can apply a batch of updates atomically
-		// now that the StoreWriter interface supports it; it'll let us
-		// avoid this mutex.
-		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
-	}
-	s.setLastUpdatedLocked(ts)
-	handlers := s.mu.handlers
-	s.mu.Unlock()
+	var handlers []handler
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, ev := range events {
+			// TODO(irfansharif): We can apply a batch of updates atomically
+			// now that the StoreWriter interface supports it; it'll let us
+			// avoid this mutex.
+			s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
+		}
+		s.setLastUpdatedLocked(ts)
+		handlers = s.mu.handlers
+	}()
 
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
