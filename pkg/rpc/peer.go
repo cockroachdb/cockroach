@@ -300,9 +300,11 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			return
 		}
 
-		p.mu.Lock()
-		p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
-		p.mu.Unlock()
+		func() {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+		}()
 
 		if p.snap().deleteAfter != 0 {
 			// Peer is in inactive mode, and we just finished up a probe, so
@@ -805,14 +807,17 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 }
 
 func touchOldPeers(peers *peerMap, now time.Time) {
-	var sigs []circuit.Signal
-	peers.mu.RLock()
-	for _, p := range peers.mu.m {
-		if p.snap().deletable(now) {
-			sigs = append(sigs, p.b.Signal())
+	sigs := func() []circuit.Signal {
+		var signals []circuit.Signal
+		peers.mu.RLock()
+		defer peers.mu.RUnlock()
+		for _, p := range peers.mu.m {
+			if p.snap().deletable(now) {
+				signals = append(signals, p.b.Signal())
+			}
 		}
-	}
-	peers.mu.RUnlock()
+		return signals
+	}()
 
 	// Now, outside of the lock, query all of the collected Signals which will tip
 	// off the respective probes, which will perform self-removal from the map. To
