@@ -16,9 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// Callback is provided the current value of the scheduler's p99 latency and the
+// Callback is provided the current value of the scheduling latency at some
+// percentile (typically p99, see scheduler_latency.sample_percentile) and the
 // period over which the measurement applies.
-type Callback func(p99 time.Duration, period time.Duration)
+type Callback func(schedulingLatency time.Duration, period time.Duration)
 
 // RegisterCallback registers a callback to be run with observed scheduling
 // latencies every scheduler_latency.sample_period.
