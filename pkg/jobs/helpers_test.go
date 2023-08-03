@@ -124,7 +124,6 @@ func (j *Job) TestingCurrentStatus(ctx context.Context) (Status, error) {
 const (
 	AdoptQuery                     = claimQuery
 	CancelQuery                    = pauseAndCancelUpdate
-	GcQuery                        = expiredJobsQuery
 	RemoveClaimsQuery              = removeClaimsForDeadSessionsQuery
 	ProcessJobsQuery               = processQueryWithBackoff
 	IntervalBaseSettingKey         = intervalBaseSettingKey
