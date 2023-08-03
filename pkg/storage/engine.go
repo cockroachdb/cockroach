@@ -641,6 +641,17 @@ type Reader interface {
 	PinEngineStateForIterators() error
 }
 
+// EventuallyFileOnlyReader is a specialized Reader that supports a method to
+// wait on a transition to being a file-only reader that does not pin any
+// keys in-memory.
+type EventuallyFileOnlyReader interface {
+	Reader
+	// WaitForFileOnly blocks the calling goroutine until this reader has
+	// transitioned to a file-only reader that does not pin any in-memory state.
+	// If an error is returned, this transition did not succeed.
+	WaitForFileOnly(context.Context) error
+}
+
 // Writer is the write interface to an engine's data.
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
@@ -1000,6 +1011,19 @@ type Engine interface {
 	// Note that snapshots must not be used after the original engine has been
 	// stopped.
 	NewSnapshot() Reader
+	// NewEventuallyFileOnlySnapshot returns a new instance of a read-only
+	// eventually file-only snapshot. This type of snapshot incurs lower write-amp
+	// than a regular Snapshot opened with NewSnapshot, however it incurs a greater
+	// space-amp on disk for the duration of this snapshot's lifetime. There's
+	// also a chance that its conversion to a file-only snapshot could get
+	// errored out if an excise operation were to conflict with one of the passed
+	// in KeyRanges. Note that if no keyRanges are passed in, a file-only snapshot
+	// is created from the start; this is usually not desirable as it makes no
+	// deterministic guarantees about what will be readable (anything in memtables
+	// will not be visible). Snapshot guarantees are only provided for keys
+	// in the passed-in keyRanges; reads are not guaranteed to be consistent
+	// outside of these bounds.
+	NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) EventuallyFileOnlyReader
 	// Type returns engine type.
 	Type() enginepb.EngineType
 	// IngestLocalFiles atomically links a slice of files into the RocksDB

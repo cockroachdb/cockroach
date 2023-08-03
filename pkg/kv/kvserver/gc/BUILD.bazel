@@ -13,6 +13,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/abortspan",
+        "//pkg/kv/kvserver/benignerror",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
         "//pkg/settings",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
     ],
 )
 

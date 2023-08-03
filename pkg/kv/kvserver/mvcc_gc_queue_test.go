@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -660,10 +661,7 @@ func TestGCScoreWithHint(t *testing.T) {
 	}
 }
 
-// TestMVCCGCQueueProcess creates test data in the range over various time
-// scales and verifies that scan queue process properly GCs test data.
-func TestMVCCGCQueueProcess(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 	defer log.Scope(t).Close(t)
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
@@ -863,8 +861,13 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 
 	// Call Run with dummy functions to get current Info.
 	gcInfo, err := func() (gc.Info, error) {
-		snap := tc.repl.store.TODOEngine().NewSnapshot()
+		var snap storage.Reader
 		desc := tc.repl.Desc()
+		if useEfos {
+			snap = tc.repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
+		} else {
+			snap = tc.repl.store.TODOEngine().NewSnapshot()
+		}
 		defer snap.Close()
 
 		conf, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
@@ -905,6 +908,9 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		t.Errorf("expected total range value size: %d bytes; got %d bytes", expectedVersionsRangeValBytes,
 			gcInfo.AffectedVersionsRangeValBytes)
 	}
+
+	settings := tc.repl.ClusterSettings()
+	storage.UseEFOS.Override(ctx, &settings.SV, useEfos)
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
@@ -968,6 +974,17 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		t.Log("success")
 		return nil
 	})
+}
+
+// TestMVCCGCQueueProcess creates test data in the range over various time
+// scales and verifies that scan queue process properly GCs test data.
+func TestMVCCGCQueueProcess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, useEfos := range []bool{false, true} {
+		t.Run(fmt.Sprintf("use_efos=%v", useEfos), func(t *testing.T) {
+			testMVCCGCQueueProcessImpl(t, useEfos)
+		})
+	}
 }
 
 func TestMVCCGCQueueTransactionTable(t *testing.T) {

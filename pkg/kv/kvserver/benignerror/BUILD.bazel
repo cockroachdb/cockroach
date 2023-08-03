@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "benignerror",
-    srcs = ["benign_error.go"],
+    srcs = [
+        "benign_error.go",
+        "store_benign_error.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror",
     visibility = ["//visibility:public"],
     deps = ["@com_github_cockroachdb_errors//:errors"],
