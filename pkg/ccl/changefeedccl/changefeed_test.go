@@ -2092,9 +2092,15 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		// Pause job to avoid race on the resolved array
 		require.NoError(t, jobFeed.Pause())
 
+		// NB: With the declarative schema changer, there is a primary index swap,
+		// so the primary index span will change.
+		freshFooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			s.SystemServer.DB(), s.Codec, "d", "foo")
+		tableSpanAfter := freshFooDesc.PrimaryIndexSpan(s.Codec)
+
 		// Verify that none of the resolved spans after resume were checkpointed.
 		for _, sp := range resolved {
-			require.Falsef(t, !sp.Equal(tableSpan) && secondCheckpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
+			require.Falsef(t, !sp.Equal(tableSpanAfter) && secondCheckpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
 		}
 	}
 
