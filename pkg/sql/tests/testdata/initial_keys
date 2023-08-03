@@ -1,3 +1,5 @@
+# Modification outside of a go package.
+
 initial-keys tenant=system
 ----
 120 keys:

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// File modification in package with no tests.
+
 // EventPayload is implemented by CommonEventDetails.
 type EventPayload interface {
 	// CommonDetails gives access to the common payload.
