@@ -139,8 +139,7 @@ func runCircuitBreakerTestForKey(
 
 	lReg := listenerutil.NewListenerRegistry()
 	defer lReg.Close()
-	reg := server.NewStickyInMemEnginesRegistry()
-	defer reg.CloseAllStickyInMemEngines()
+	reg := server.NewStickyVFSRegistry()
 
 	// TODO: Disable expiration based leases metamorphism since it currently
 	// breaks closed timestamps and prevent rangefeeds from advancing checkpoint
@@ -158,7 +157,7 @@ func runCircuitBreakerTestForKey(
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: reg,
+					StickyVFSRegistry: reg,
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,
@@ -166,8 +165,8 @@ func runCircuitBreakerTestForKey(
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Listener: lReg.MustGetOrCreate(t, i),

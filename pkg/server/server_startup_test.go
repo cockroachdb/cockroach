@@ -40,8 +40,7 @@ func TestStartupInjectedFailureSingleNode(t *testing.T) {
 
 	rng, seed := randutil.NewLockedTestRand()
 	t.Log("TestStartupInjectedFailure random seed", seed)
-	reg := server.NewStickyInMemEnginesRegistry()
-	defer reg.CloseAllStickyInMemEngines()
+	reg := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -51,13 +50,13 @@ func TestStartupInjectedFailureSingleNode(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: "1",
+					InMemory:    true,
+					StickyVFSID: "1",
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: reg,
+					StickyVFSRegistry: reg,
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
 					// Ensure that scratch range has proper zone config, otherwise it is

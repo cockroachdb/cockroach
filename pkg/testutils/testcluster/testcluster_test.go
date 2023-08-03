@@ -263,8 +263,7 @@ func TestRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -274,13 +273,13 @@ func TestRestart(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: "TestRestart" + strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: "TestRestart" + strconv.FormatInt(int64(i), 10),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
+					StickyVFSRegistry: stickyVFSRegistry,
 				},
 			},
 		}
