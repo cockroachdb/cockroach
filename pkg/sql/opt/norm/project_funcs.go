@@ -859,14 +859,10 @@ func (c *CustomFuncs) ProjectRemappedCols(
 ) (projections memo.ProjectionsExpr) {
 	for col, ok := from.Next(0); ok; col, ok = from.Next(col + 1) {
 		if !to.Contains(col) {
-			// TODO(mgartner): We don't need to compute the entire equivalence group,
-			// we only need to find the first equivalent column that's in the to set.
-			candidates := fds.ComputeEquivGroup(col)
-			candidates.IntersectionWith(to)
-			if candidates.Empty() {
+			toCol, ok := c.remapColWithIdenticalType(col, to, fds)
+			if !ok {
 				panic(errors.AssertionFailedf("cannot remap column %v", col))
 			}
-			toCol, _ := candidates.Next(0)
 			projections = append(
 				projections,
 				c.f.ConstructProjectionsItem(c.f.ConstructVariable(toCol), col),
@@ -881,18 +877,6 @@ func (c *CustomFuncs) ProjectRemappedCols(
 func (c *CustomFuncs) RemapProjectionCols(
 	projections memo.ProjectionsExpr, to opt.ColSet, fds *props.FuncDepSet,
 ) memo.ProjectionsExpr {
-	getReplacement := func(col opt.ColumnID) opt.ColumnID {
-		// TODO(mgartner): We don't need to compute the entire equivalence group, we
-		// only need to find the first equivalent column that's in the to set.
-		candidates := fds.ComputeEquivGroup(col)
-		candidates.IntersectionWith(to)
-		if candidates.Empty() {
-			panic(errors.AssertionFailedf("cannot remap column"))
-		}
-		replacement, _ := candidates.Next(0)
-		return replacement
-	}
-
 	// Use the projection outer columns to filter out columns that are synthesized
 	// within the projections themselves (e.g. in a subquery).
 	outerCols := c.ProjectionOuterCols(projections)
@@ -902,7 +886,11 @@ func (c *CustomFuncs) RemapProjectionCols(
 	replace = func(e opt.Expr) opt.Expr {
 		if v, ok := e.(*memo.VariableExpr); ok && !to.Contains(v.Col) && outerCols.Contains(v.Col) {
 			// This variable needs to be remapped.
-			return c.f.ConstructVariable(getReplacement(v.Col))
+			toCol, ok := c.remapColWithIdenticalType(v.Col, to, fds)
+			if !ok {
+				panic(errors.AssertionFailedf("cannot remap column %v", v.Col))
+			}
+			return c.f.ConstructVariable(toCol)
 		}
 		return c.f.Replace(e, replace)
 	}

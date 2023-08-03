@@ -308,13 +308,32 @@ func (c *CustomFuncs) MakeBoolCol() opt.ColumnID {
 // CanRemapCols returns true if it's possible to remap every column in the
 // "from" set to a column in the "to" set using the given FDs.
 func (c *CustomFuncs) CanRemapCols(from, to opt.ColSet, fds *props.FuncDepSet) bool {
-	for col, ok := from.Next(0); ok; col, ok = from.Next(col + 1) {
-		if !fds.ComputeEquivGroup(col).Intersects(to) {
+	for fromCol, ok := from.Next(0); ok; fromCol, ok = from.Next(fromCol + 1) {
+		if _, ok := c.remapColWithIdenticalType(fromCol, to, fds); !ok {
 			// It is not possible to remap this column to one from the "to" set.
 			return false
 		}
 	}
 	return true
+}
+
+// remapColWithIdenticalType returns a column in the "to" set that is equivalent
+// to "fromCol" and has the identical type. It returns ok=false if no such
+// column exists.
+func (c *CustomFuncs) remapColWithIdenticalType(
+	fromCol opt.ColumnID, to opt.ColSet, fds *props.FuncDepSet,
+) (_ opt.ColumnID, ok bool) {
+	md := c.mem.Metadata()
+	fromColType := md.ColumnMeta(fromCol).Type
+	equivCols := fds.ComputeEquivGroup(fromCol)
+	equivCols.IntersectionWith(to)
+	for equivCol, ok := equivCols.Next(0); ok; equivCol, ok = equivCols.Next(equivCol + 1) {
+		equivColType := md.ColumnMeta(equivCol).Type
+		if fromColType.Identical(equivColType) {
+			return equivCol, true
+		}
+	}
+	return 0, false
 }
 
 // ----------------------------------------------------------------------
