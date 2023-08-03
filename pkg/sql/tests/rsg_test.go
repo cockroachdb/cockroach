@@ -200,6 +200,16 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 					return &nonCrasher{sql: sql, err: err}
 				}
 				return nil
+			case <-ctx.Done():
+				// Sanity: The context is cancelled when the test is about to
+				// timeout. We will log whatever statement we're waiting on for
+				// debugging purposes. Sometimes queries won't respect
+				// cancellation due to lib/pq limitations.
+				t.Logf("Context cancelled while executing: %q", sql)
+				// We will intentionally retry, which will us to wait for the
+				// go routine to complete above to avoid leaking it.
+				retry = true
+				return nil
 			case <-time.After(targetDuration):
 				db.mu.Lock()
 				defer db.mu.Unlock()
@@ -357,7 +367,9 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				case "crdb_internal.reset_sql_stats",
 					"crdb_internal.check_consistency",
 					"crdb_internal.request_statement_bundle",
-					"crdb_internal.reset_activity_tables":
+					"crdb_internal.reset_activity_tables",
+					"crdb_internal.revalidate_unique_constraints_in_all_tables",
+					"crdb_internal.validate_ttl_scheduled_jobs":
 					// Skipped due to long execution time.
 					continue
 				}
