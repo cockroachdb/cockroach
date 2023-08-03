@@ -292,7 +292,4 @@ define UniqueChecksItemPrivate {
     # KeyCols are the columns in the Check query that form the value tuple shown
     # in the error message.
     KeyCols ColList
-
-    # OpName is the name that should be used for this check in error messages.
-    OpName string
 }
