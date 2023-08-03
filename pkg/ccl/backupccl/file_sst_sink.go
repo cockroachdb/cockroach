@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	io "io"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -38,8 +40,9 @@ type sstSinkConf struct {
 }
 
 type fileSSTSink struct {
-	dest cloud.ExternalStorage
-	conf sstSinkConf
+	dest  cloud.ExternalStorage
+	conf  sstSinkConf
+	pacer *admission.Pacer
 
 	sst     storage.SSTWriter
 	ctx     context.Context
@@ -69,8 +72,10 @@ type fileSSTSink struct {
 	}
 }
 
-func makeFileSSTSink(conf sstSinkConf, dest cloud.ExternalStorage) *fileSSTSink {
-	return &fileSSTSink{conf: conf, dest: dest}
+func makeFileSSTSink(
+	conf sstSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
+) *fileSSTSink {
+	return &fileSSTSink{conf: conf, dest: dest, pacer: pacer}
 }
 
 func (s *fileSSTSink) Close() error {
@@ -218,7 +223,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	//
 	// TODO(msbutler): investigate using single a single iterator that surfaces
 	// all point keys first and then all range keys
-	if err := s.copyPointKeys(resp.dataSST); err != nil {
+	if err := s.copyPointKeys(ctx, resp.dataSST); err != nil {
 		return err
 	}
 	if err := s.copyRangeKeys(resp.dataSST); err != nil {
@@ -257,7 +262,11 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	return nil
 }
 
-func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
+// pacerLogEvery is used for logging errors instead of returning terminal
+// errors when pacer.Pace returns an error.
+var pacerLogEvery = log.Every(100 * time.Millisecond)
+
+func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) error {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
@@ -270,6 +279,11 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 	defer iter.Close()
 
 	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if err := s.pacer.Pace(ctx); err != nil {
+			if pacerLogEvery.ShouldLog() {
+				log.Errorf(ctx, "file sst sink pacing: %v", err)
+			}
+		}
 		if valid, err := iter.Valid(); !valid || err != nil {
 			if err != nil {
 				return err

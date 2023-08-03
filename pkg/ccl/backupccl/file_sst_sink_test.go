@@ -879,7 +879,7 @@ func fileSSTSinkTestSetUp(
 		settings: &tc.Servers[0].ClusterSettings().SV,
 	}
 
-	sink := makeFileSSTSink(sinkConf, store)
+	sink := makeFileSSTSink(sinkConf, store, nil /* pacer */)
 	return sink, store
 }
 
