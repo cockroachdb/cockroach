@@ -443,7 +443,7 @@ func setFuncOptions(
 			return err
 		}
 		typeReplacedFuncBody, err := serializeUserDefinedTypes(
-			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true, /* multiStmt */
+			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs",
 		)
 		if err != nil {
 			return err

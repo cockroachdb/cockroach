@@ -411,7 +411,8 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery,
+		false /* multiStmt */, "view queries")
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
@@ -490,7 +491,7 @@ func replaceSeqNamesWithIDs(
 // and serialize any user defined types, so that renaming the type
 // does not corrupt the view.
 func serializeUserDefinedTypes(
-	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool, parentType string,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		var innerExpr tree.Expr
@@ -503,20 +504,6 @@ func serializeUserDefinedTypes(
 			innerExpr = n.Expr
 			typRef = n.Type
 		default:
-			return true, expr, nil
-		}
-		// We cannot type-check subqueries without using optbuilder, and there
-		// is no need to because we only need to rewrite string values that are
-		// directly cast to enums. For example, we must rewrite the 'foo' in:
-		//
-		//   SELECT 'foo'::myenum
-		//
-		// We don't need to rewrite the 'foo' in the query below, which can be
-		// corrupted by renaming the 'foo' value in the myenum type.
-		//
-		//   SELECT (SELECT 'foo')::myenum
-		//
-		if _, ok := innerExpr.(*tree.Subquery); ok {
 			return true, expr, nil
 		}
 		// semaCtx may be nil if this is a virtual view being created at
@@ -532,6 +519,14 @@ func serializeUserDefinedTypes(
 		}
 		if !typ.UserDefined() {
 			return true, expr, nil
+		}
+		{
+			// We cannot type-check subqueries without using optbuilder, so we
+			// currently do not support casting expressions with subqueries to
+			// UDTs.
+			context := "casts to enums within " + parentType
+			defer semaCtx.Properties.Restore(semaCtx.Properties)
+			semaCtx.Properties.Require(context, tree.RejectSubqueries)
 		}
 		texpr, err := innerExpr.TypeCheck(ctx, semaCtx, typ)
 		if err != nil {
@@ -603,7 +598,8 @@ func (p *planner) replaceViewDesc(
 		toReplace.ViewQuery = updatedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery, false /* multiStmt */)
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery,
+		false /* multiStmt */, "view queries")
 	if err != nil {
 		return nil, err
 	}
