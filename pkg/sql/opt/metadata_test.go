@@ -546,3 +546,8 @@ func (ep *fakeGetMultiregionConfigPlanner) GetRangeDescByID(
 func (ep *fakeGetMultiregionConfigPlanner) Optimizer() interface{} {
 	return nil
 }
+
+// AutoCommit is part of the eval.Planner interface.
+func (ep *fakeGetMultiregionConfigPlanner) AutoCommit() bool {
+	return false
+}

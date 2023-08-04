@@ -981,3 +981,8 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 func (p *planner) Optimizer() interface{} {
 	return p.optPlanningCtx.Optimizer()
 }
+
+// AutoCommit is part of the eval.Planner interface.
+func (p *planner) AutoCommit() bool {
+	return p.autoCommit
+}
