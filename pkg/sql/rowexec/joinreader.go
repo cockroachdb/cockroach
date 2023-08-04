@@ -800,6 +800,24 @@ func sortSpans(spans roachpb.Spans, spanIDs []int) {
 	}
 }
 
+func (jr *joinReader) getBatchBytesLimit() rowinfra.BytesLimit {
+	if jr.usesStreamer {
+		// The streamer itself sets the correct TargetBytes parameter on the
+		// BatchRequests.
+		return rowinfra.NoBytesLimit
+	}
+	if !jr.shouldLimitBatches {
+		// We deem it safe to not limit the batches in order to get the
+		// DistSender-level parallelism.
+		return rowinfra.NoBytesLimit
+	}
+	bytesLimit := jr.lookupBatchBytesLimit
+	if bytesLimit == 0 {
+		bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
+	}
+	return bytesLimit
+}
+
 // readInput reads the next batch of input rows and starts an index scan.
 // It can sometimes emit a single row on behalf of the previous batch.
 func (jr *joinReader) readInput() (
@@ -985,19 +1003,8 @@ func (jr *joinReader) readInput() (
 	// modification here, but we want to be conscious about the memory
 	// accounting - we don't double count for any memory of spans because the
 	// joinReaderStrategy doesn't account for any memory used by the spans.
-	var bytesLimit rowinfra.BytesLimit
-	if !jr.usesStreamer {
-		if !jr.shouldLimitBatches {
-			bytesLimit = rowinfra.NoBytesLimit
-		} else {
-			bytesLimit = jr.lookupBatchBytesLimit
-			if jr.lookupBatchBytesLimit == 0 {
-				bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
-			}
-		}
-	}
 	if err = jr.fetcher.StartScan(
-		jr.Ctx(), spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+		jr.Ctx(), spans, spanIDs, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
 	); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -1056,12 +1063,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			}
 
 			log.VEventf(jr.Ctx(), 1, "scanning %d remote spans", len(spans))
-			bytesLimit := rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
-			if !jr.shouldLimitBatches {
-				bytesLimit = rowinfra.NoBytesLimit
-			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx(), spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx(), spans, spanIDs, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
