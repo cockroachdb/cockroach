@@ -276,7 +276,9 @@ func (w *Watcher) ListenForDenied(
 
 		w.listeners.ReplaceOrInsert(l)
 
-		return l, w.controllers
+		// We need a new copy of w.controllers so that it doesn't race with the
+		// add and update operations.
+		return l, append([]AccessController(nil), w.controllers...)
 	}()
 	if err := checkConnection(ctx, connection, controllers); err != nil {
 		w.removeListener(lst)
