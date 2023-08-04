@@ -91,10 +91,10 @@ type TestingKnobs struct {
 	// targets produced by the Allocator to include replicas that may be waiting
 	// for snapshots.
 	AllowLeaseTransfersToReplicasNeedingSnapshots bool
-	RaftStatusFn                                  func(r interface {
-		Desc() *roachpb.RangeDescriptor
-		StoreID() roachpb.StoreID
-	}) *raft.Status
+	RaftStatusFn                                  func(
+		desc *roachpb.RangeDescriptor,
+		storeID roachpb.StoreID,
+	) *raft.Status
 	// BlockTransferTarget can be used to block returning any transfer targets
 	// from TransferLeaseTarget.
 	BlockTransferTarget func() bool
