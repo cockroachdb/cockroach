@@ -706,9 +706,7 @@ func prepInMemPlanStores(
 	pss := make(map[int]loqrecovery.PlanStore)
 	for id, args := range serverArgs {
 		reg := args.Knobs.Server.(*server.TestingKnobs).StickyVFSRegistry
-		store, err := reg.Get(args.StoreSpecs[0])
-		require.NoError(t, err, "can't create loq recovery plan store")
-		pss[id] = loqrecovery.NewPlanStore(".", store)
+		pss[id] = loqrecovery.NewPlanStore(".", reg.Get(args.StoreSpecs[0].StickyVFSID))
 	}
 	return pss
 }

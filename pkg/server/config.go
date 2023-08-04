@@ -746,28 +746,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
-		if spec.InMemory && spec.StickyVFSID != "" {
-			if cfg.TestingKnobs.Server == nil {
-				return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
-					"engine no server knobs available to get a registry. " +
-					"Please use Knobs.Server.StickyVFSRegistry to provide one.")
-			}
-			knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-			if knobs.StickyVFSRegistry == nil {
-				return Engines{}, errors.Errorf("Could not create a sticky " +
-					"engine no registry available. Please use " +
-					"Knobs.Server.StickyVFSRegistry to provide one.")
-			}
-			eng, err := knobs.StickyVFSRegistry.Open(ctx, cfg, spec)
-			if err != nil {
-				return Engines{}, err
-			}
-			detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
-			engines = append(engines, eng)
-			continue
-		}
-
-		var location storage.Location
 		storageConfigOpts := []storage.ConfigOption{
 			storage.Attributes(spec.Attributes),
 			storage.EncryptionAtRest(spec.EncryptionOptions),
@@ -780,8 +758,25 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
 
+		var location storage.Location
 		if spec.InMemory {
-			location = storage.InMemory()
+			if spec.StickyVFSID == "" {
+				location = storage.InMemory()
+			} else {
+				if cfg.TestingKnobs.Server == nil {
+					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
+						"engine no server knobs available to get a registry. " +
+						"Please use Knobs.Server.StickyVFSRegistry to provide one.")
+				}
+				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+				if knobs.StickyVFSRegistry == nil {
+					return Engines{}, errors.Errorf("Could not create a sticky " +
+						"engine no registry available. Please use " +
+						"Knobs.Server.StickyVFSRegistry to provide one.")
+				}
+				location = storage.MakeLocation("", knobs.StickyVFSRegistry.Get(spec.StickyVFSID))
+			}
+
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)

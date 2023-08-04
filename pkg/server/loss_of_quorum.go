@@ -51,11 +51,7 @@ func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
 					"engine no registry available. Please use " +
 					"Knobs.Server.StickyVFSRegistry to provide one.")
 			}
-			var err error
-			fs, err = knobs.StickyVFSRegistry.Get(spec)
-			if err != nil {
-				return loqrecovery.PlanStore{}, err
-			}
+			fs = knobs.StickyVFSRegistry.Get(spec.StickyVFSID)
 		} else {
 			fs = vfs.NewMem()
 		}
