@@ -161,8 +161,8 @@ func randExpr(
 			}
 		}
 		if len(cols) > 1 {
-			// If any of the columns are nullable, set the computed column to be
-			// nullable.
+			// If any of the columns are nullable, the resulting expression
+			// could be null.
 			for _, x := range cols {
 				if x.Nullable.Nullability != tree.NotNull {
 					nullability = x.Nullable.Nullability
