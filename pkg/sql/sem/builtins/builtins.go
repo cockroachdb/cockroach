@@ -8117,6 +8117,11 @@ expires until the statement bundle is collected`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				argStrings := make([]string, len(args))
 				for i := range args {
+					if args[i] == tree.DNull {
+						return nil, pgerror.New(
+							pgcode.NullValueNotAllowed, "RAISE statement option cannot be null",
+						)
+					}
 					s, ok := tree.AsDString(args[i])
 					if !ok {
 						return nil, errors.Newf("expected string value, got %T", args[i])
@@ -8168,8 +8173,9 @@ expires until the statement bundle is collected`,
 				}
 				return tree.DNull, nil
 			},
-			Info:       "This function is used internally to implement the PLpgSQL RAISE statement.",
-			Volatility: volatility.Volatile,
+			Info:              "This function is used internally to implement the PLpgSQL RAISE statement.",
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
 		},
 	),
 }
