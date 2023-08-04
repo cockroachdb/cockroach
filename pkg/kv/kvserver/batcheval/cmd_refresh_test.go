@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -89,16 +90,17 @@ func TestRefreshError(t *testing.T) {
 					},
 					ReadTimestamp: ts3,
 				},
-				Timestamp: ts3,
+				Timestamp:  ts3,
+				WaitPolicy: lock.WaitPolicy_Error,
 			},
 		}, &resp)
-		require.IsType(t, &kvpb.RefreshFailedError{}, err)
 		if resolveIntent {
+			require.IsType(t, &kvpb.RefreshFailedError{}, err)
 			require.Equal(t, "encountered recently written committed value \"resolved_key\" @0.000000002,0",
 				err.Error())
 		} else {
-			require.Equal(t, "encountered recently written intent \"unresolved_key\" @0.000000002,0",
-				err.Error())
+			require.IsType(t, &kvpb.WriteIntentError{}, err)
+			require.Equal(t, "conflicting intents on \"unresolved_key\"", err.Error())
 		}
 	})
 }

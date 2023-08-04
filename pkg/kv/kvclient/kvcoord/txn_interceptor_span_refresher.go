@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -528,8 +529,10 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
 	if refreshErr != nil {
-		if refreshErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
-			msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
+		if err, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
+			msg.Printf(" due to a conflict: %s on key %s", err.FailureReason(), err.Key)
+		} else if wiErr, ok := refreshErr.GetDetail().(*kvpb.WriteIntentError); ok {
+			msg.Printf(" due to a conflict: intent on key %s", wiErr.Intents)
 		} else {
 			msg.Printf(" - unknown error: %s", refreshErr)
 		}
@@ -573,6 +576,8 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// TODO(nvanbenschoten): actually merge spans.
 	refreshSpanBa := &kvpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshToTxn
+	// Ensure that refresh requests do not block on conflicts in the lock table.
+	refreshSpanBa.WaitPolicy = lock.WaitPolicy_Error
 	addRefreshes := func(refreshes *condensableSpanSet) {
 		// We're going to check writes between the previous refreshed timestamp, if
 		// any, and the timestamp we want to bump the transaction to. Note that if

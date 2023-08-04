@@ -193,7 +193,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				// Each kvpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs, waitPolicy)
 
 				c.requestsByName[reqName] = concurrency.Request{
 					Txn:                    txn,
@@ -359,7 +359,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				reqs, _ := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, reqs, g.Req.WaitPolicy)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
@@ -1028,10 +1028,10 @@ func (c *cluster) resetNamespace() {
 // collectSpans collects the declared spans for a set of requests.
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
-	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []kvpb.Request,
+	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []kvpb.Request, wp lock.WaitPolicy,
 ) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet) {
 	latchSpans, lockSpans = &spanset.SpanSet{}, &lockspanset.LockSpanSet{}
-	h := kvpb.Header{Txn: txn, Timestamp: ts}
+	h := kvpb.Header{Txn: txn, Timestamp: ts, WaitPolicy: wp}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
 			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)

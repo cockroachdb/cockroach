@@ -212,6 +212,12 @@ func scanSingleRequest(
 		}
 		return &r
 
+	case "refresh":
+		var r kvpb.RefreshRequest
+		r.Sequence = maybeGetSeq()
+		r.Key = roachpb.Key(mustGetField("key"))
+		return &r
+
 	default:
 		d.Fatalf(t, "unknown request type: %s", cmd)
 		return nil

@@ -91,6 +91,27 @@ func DefaultDeclareIsolatedKeys(
 	lockSpans.Add(str, req.Header().Span())
 }
 
+// DeclareKeysForRefresh determines whether a Refresh request should declare
+// locks and go through the lock table or not. The former is done in versions >=
+// V23_2_RemoveLockTableWaiterTouchPush where Refresh requests use a
+// WaitPolicy_Error, so they do not block on conflict. To ensure correct
+// behavior during migrations, check for WaitPolicy_Error before declaring locks.
+// TODO(mira): Remove after V23_2_RemoveLockTableWaiterTouchPush is deleted.
+func DeclareKeysForRefresh(
+	irs ImmutableRangeState,
+	header *kvpb.Header,
+	req kvpb.Request,
+	latchSpans *spanset.SpanSet,
+	lss *lockspanset.LockSpanSet,
+	dur time.Duration,
+) {
+	if header.WaitPolicy == lock.WaitPolicy_Error {
+		DefaultDeclareIsolatedKeys(irs, header, req, latchSpans, lss, dur)
+	} else {
+		DefaultDeclareKeys(irs, header, req, latchSpans, lss, dur)
+	}
+}
+
 // DeclareKeysForBatch adds all keys that the batch with the provided header
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.

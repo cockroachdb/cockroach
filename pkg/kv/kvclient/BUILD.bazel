@@ -23,6 +23,7 @@ go_test(
     name = "kvclient_test",
     srcs = [
         "main_test.go",
+        "priority_refresh_test.go",
         "revision_reader_test.go",
     ],
     args = ["-test.timeout=295s"],
