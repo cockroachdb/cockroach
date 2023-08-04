@@ -718,6 +718,17 @@ func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
 	}
 }
 
+func (h *hasher) HashFastPathUniqueChecksExpr(val FastPathUniqueChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+		h.HashInsertFastPathFKUniqCheck(val[i].FastPathCheck)
+	}
+}
+
+func (h *hasher) HashInsertFastPathFKUniqCheck(val *opt.InsertFastPathFKUniqCheck) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
 	for i := range val {
 		h.HashString(val[i].Key)
@@ -1169,6 +1180,21 @@ func (h *hasher) IsUniqueChecksExprEqual(l, r UniqueChecksExpr) bool {
 	}
 	for i := range l {
 		if l[i].Check != r[i].Check {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsFastPathUniqueChecksExprEqual(l, r FastPathUniqueChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Check != r[i].Check {
+			return false
+		}
+		if l[i].FastPathCheck != r[i].FastPathCheck {
 			return false
 		}
 	}

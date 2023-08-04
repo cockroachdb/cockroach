@@ -21,6 +21,7 @@
 define Insert {
     Input RelExpr
     UniqueChecks UniqueChecksExpr
+    FastPathUniqueChecks FastPathUniqueChecksExpr
     FKChecks FKChecksExpr
     _ MutationPrivate
 }
@@ -266,6 +267,29 @@ define FKChecksItemPrivate {
 
     # OpName is the name that should be used for this check in error messages.
     OpName string
+}
+
+# FastPathUniqueChecks is a list of uniqueness check Selects which could be
+# converted into constrained Scans from which KV requests can be generated
+# to be used in place of regular UniqueChecks.
+[Scalar, List]
+define FastPathUniqueChecks {
+}
+
+# FastPathUniqueChecksItem is a unique check query, to be run as a KV request
+# before the main query.
+# An execution error will be generated if the KV request returns any results.
+[Scalar, ListItem]
+define FastPathUniqueChecksItem {
+    Check RelExpr
+    _ FastPathUniqueChecksItemPrivate
+}
+
+[Private]
+define FastPathUniqueChecksItemPrivate {
+    # FastPathCheck holds information which is used to construct an
+    # insert fast path operation in the execbuilder.
+    FastPathCheck InsertFastPathFKUniqCheck
 }
 
 # UniqueChecks is a list of uniqueness check queries, to be run after the main
