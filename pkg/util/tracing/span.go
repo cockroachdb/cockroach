@@ -703,23 +703,27 @@ func (sp *Span) reset(
 		// Nobody is supposed to have a reference to the span at this point, but let's
 		// take the lock anyway to protect against buggy clients accessing the span
 		// after Finish().
-		c.mu.Lock()
-		if len(c.mu.openChildren) != 0 {
-			panic(errors.AssertionFailedf("unexpected children in span being reset: %v", c.mu.openChildren))
-		}
-		if len(c.mu.tags) != 0 {
-			panic(errors.AssertionFailedf("unexpected tags in span being reset: %v", c.mu.tags))
-		}
-		if !c.mu.recording.finishedChildren.Empty() {
-			panic(errors.AssertionFailedf("unexpected finished children in span being reset: %v", c.mu.recording.finishedChildren))
-		}
-		if c.mu.recording.structured.Len() != 0 {
-			panic(errors.AssertionFailedf("unexpected structured recording in span being reset"))
-		}
-		if c.mu.recording.logs.Len() != 0 {
-			panic(errors.AssertionFailedf("unexpected logs in span being reset"))
-		}
+		func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if len(c.mu.openChildren) != 0 {
+				panic(errors.AssertionFailedf("unexpected children in span being reset: %v", c.mu.openChildren))
+			}
+			if len(c.mu.tags) != 0 {
+				panic(errors.AssertionFailedf("unexpected tags in span being reset: %v", c.mu.tags))
+			}
+			if !c.mu.recording.finishedChildren.Empty() {
+				panic(errors.AssertionFailedf("unexpected finished children in span being reset: %v", c.mu.recording.finishedChildren))
+			}
+			if c.mu.recording.structured.Len() != 0 {
+				panic(errors.AssertionFailedf("unexpected structured recording in span being reset"))
+			}
+			if c.mu.recording.logs.Len() != 0 {
+				panic(errors.AssertionFailedf("unexpected logs in span being reset"))
+			}
+		}()
 
+		c.mu.Lock()
 		h := sp.helper
 		c.mu.crdbSpanMu = crdbSpanMu{
 			duration:     -1, // unfinished
