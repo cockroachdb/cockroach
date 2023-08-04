@@ -243,7 +243,6 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.StorageEngine = kvServerCfg.BaseConfig.StorageEngine
 	baseCfg.TestingInsecureWebAccess = kvServerCfg.BaseConfig.TestingInsecureWebAccess
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
-	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 
 	// TODO(knz): use a single network interface for all tenant servers.

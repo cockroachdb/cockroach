@@ -6385,7 +6385,6 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 	params.ServerArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{SkipZoneConfigBootstrap: true}
-	params.ServerArgs.DisableSpanConfigs = true
 	tc := testcluster.StartTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)

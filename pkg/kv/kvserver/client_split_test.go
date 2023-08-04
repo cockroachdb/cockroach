@@ -3627,7 +3627,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableSpanConfigs: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,
@@ -3870,7 +3869,6 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			}
 
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DisableSpanConfigs: true,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						LoadBasedSplittingOverrideKey: overrideLBSplitFn,

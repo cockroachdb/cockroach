@@ -45,7 +45,6 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 	clusterArgs := base.TestClusterArgs{
 		// Disable all automatic jobs creation and adoption.
 		ServerArgs: base.TestServerArgs{
-			DisableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
