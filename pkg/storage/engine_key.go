@@ -205,7 +205,7 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	versionLen := int(b[len(b)-1])
 	// keyPartEnd points to the sentinel byte.
 	keyPartEnd := len(b) - 1 - versionLen
-	if keyPartEnd < 0 {
+	if keyPartEnd < 0 || b[keyPartEnd] != 0x00 {
 		return EngineKey{}, false
 	}
 	// Key excludes the sentinel byte.
@@ -229,7 +229,7 @@ func GetKeyPartFromEngineKey(engineKey []byte) (key []byte, ok bool) {
 	versionLen := int(engineKey[len(engineKey)-1])
 	// keyPartEnd points to the sentinel byte.
 	keyPartEnd := len(engineKey) - 1 - versionLen
-	if keyPartEnd < 0 {
+	if keyPartEnd < 0 || engineKey[keyPartEnd] != 0x00 {
 		return nil, false
 	}
 	// Key excludes the sentinel byte.
