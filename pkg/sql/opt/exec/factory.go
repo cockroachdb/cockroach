@@ -249,22 +249,32 @@ type Cascade struct {
 	) (Plan, error)
 }
 
-// InsertFastPathFKCheck contains information about a foreign key check to be
-// performed by the insert fast-path (see ConstructInsertFastPath). It
-// identifies the index into which we can perform the lookup.
-type InsertFastPathFKCheck struct {
+// InsertFastPathCheck contains information about a foreign key or
+// uniqueness check to be performed by the insert fast-path (see
+// ConstructInsertFastPath). It identifies the index into which we can perform
+// the lookup.
+type InsertFastPathCheck struct {
 	ReferencedTable cat.Table
 	ReferencedIndex cat.Index
 
-	// InsertCols contains the FK columns from the origin table, in the order of
-	// the ReferencedIndex columns. For each, the value in the array indicates the
-	// index of the column in the input table.
+	// InsertCols contains the table column ordinals of the referenced index key
+	// columns. The position in this slice corresponds with the ordinal of the
+	// referenced index column (its position in the index key).
 	InsertCols []TableColumnOrdinal
 
 	MatchMethod tree.CompositeKeyMatchMethod
 
 	// Row-level locking properties of the check.
 	Locking opt.Locking
+
+	// DatumsFromConstraint contains constant values from the insert row for the
+	// columns in the unique constraint. Columns not available directly from the
+	// insert row or computed from insert row values (computed column) may be
+	// filled in from a CHECK constraint on the column. The number of entries
+	// corresponds with the number of KV lookups. For example, when built from
+	// analyzing a locality-optimized operation accessing 1 local region and 2
+	// remote regions, the resulting DatumsFromConstraint would have 3 entries.
+	DatumsFromConstraint []tree.Datums
 
 	// MkErr is called when a violation is detected (i.e. the index has no entries
 	// for a given inserted row). The values passed correspond to InsertCols

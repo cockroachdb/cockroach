@@ -1412,7 +1412,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
-	fkChecks []exec.InsertFastPathFKCheck,
+	fkChecks []exec.InsertFastPathCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1453,9 +1453,9 @@ func (ef *execFactory) ConstructInsertFastPath(
 	ins.run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, cols, ins.run.ti.ri.InsertColIDtoRowIndex)
 
 	if len(fkChecks) > 0 {
-		ins.run.fkChecks = make([]insertFastPathFKCheck, len(fkChecks))
+		ins.run.fkChecks = make([]insertFastPathCheck, len(fkChecks))
 		for i := range fkChecks {
-			ins.run.fkChecks[i].InsertFastPathFKCheck = fkChecks[i]
+			ins.run.fkChecks[i].InsertFastPathCheck = fkChecks[i]
 		}
 	}
 

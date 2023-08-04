@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 )
 
-// FKCheckSpan returns a span that can be scanned to ascertain existence of a
-// specific row in a given index.
-func FKCheckSpan(
+// FKUniqCheckSpan returns a span that can be scanned to ascertain existence of
+// a specific row in a given index.
+func FKUniqCheckSpan(
 	builder *span.Builder,
 	splitter span.Splitter,
 	values []tree.Datum,
@@ -30,5 +30,9 @@ func FKCheckSpan(
 	if err != nil {
 		return roachpb.Span{}, err
 	}
+	// TODO(msirek): This function will always create a span with both Key and
+	// EndKey set, and later we'll always use a ScanRequest. Investigate whether
+	// we could use a Get request in some cases (when CanSplitSpanIntoFamilySpans
+	// returns true).
 	return splitter.ExistenceCheckSpan(span, numCols, containsNull), nil
 }
