@@ -1215,10 +1215,13 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 
 	type fakeSession = sqllivenesstestutils.FakeSession
 	t.Run("session_expiry_overrides_lease_deadline", func(t *testing.T) {
-		// Deliberately set the sessionDuration to be less than the lease duration
-		// to confirm that the sessionDuration overrides the lease duration while
-		// setting the transaction deadline.
-		sessionDuration := base.DefaultDescriptorLeaseDuration - time.Minute
+		// Intentionally, lease the descriptor earlier, since our injection
+		// of a session below will interfere with session based leasing.
+		_, err := sqlConn.ExecContext(ctx, "INSERT INTO t1.test(k, v) VALUES (2, 'cbc')")
+		require.NoError(t, err)
+		// Deliberately set the sessionDuration to be less than the
+		// server.sqlliveness.ttl, which will be used as the lease duration.
+		sessionDuration := time.Second * 10
 		fs := fakeSession{
 			ExpTS: s.Clock().Now().Add(sessionDuration.Nanoseconds(), 0),
 		}
@@ -1282,6 +1285,10 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 	`); err != nil {
 			t.Fatal(err)
 		}
+		// Intentionally, lease the descriptor earlier, since our injection
+		// of a session below will interfere with session based leasing.
+		_, err := dbConn.ExecContext(ctx, "INSERT INTO t1.test(k, v) VALUES (2, 'cbc')")
+		require.NoError(t, err)
 
 		// Inject an already expired session to observe that it has no effect.
 		fs := &fakeSession{

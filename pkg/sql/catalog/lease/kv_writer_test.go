@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -160,7 +161,11 @@ func getRawHistoryKVs(
 					return nil
 				}
 				k := it.UnsafeKey().Clone()
-				suffix, _, err := codec.DecodeTablePrefix(k.Key)
+				// Strip both the index ID and table ID, since
+				// the KV writer and actual table intentionally,
+				// have a higher primary index ID for compatibility
+				// reasons.
+				suffix, _, _, err := codec.DecodeIndexPrefix(k.Key)
 				require.NoError(t, err)
 				v, err := it.Value()
 				require.NoError(t, err)
@@ -206,11 +211,14 @@ func generateWriteOps(n, numGroups int) func() (_ []writeOp, wantMore bool) {
 		if err != nil {
 			panic(err)
 		}
+		// We will intentionally use a large number of versions to
+		// distinguish things and keep them unique.
 		lf := leaseFields{
 			descID:       descpb.ID(rand.Intn(vals)),
-			version:      descpb.DescriptorVersion(rand.Intn(vals)),
+			version:      descpb.DescriptorVersion(rand.Int63()),
 			instanceID:   base.SQLInstanceID(rand.Intn(vals)),
 			expiration:   *ts,
+			sessionID:    sqlliveness.SessionID(ts.String()),
 			regionPrefix: enum.One,
 		}
 		return lf

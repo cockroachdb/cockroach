@@ -253,6 +253,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.Clock,
 			cfgCpy.Settings,
 			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+			cfgCpy.SQLLiveness,
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.AppStopper(),
@@ -405,26 +406,20 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t.expectLeases(descID, "/1/1")
 	e1 := l1.Expiration()
 
-	// Another lease acquisition from the same node will result in a new lease.
-	rt := removalTracker.TrackRemoval(l1.Underlying())
+	// Another lease acquisition from the same node will result in getting the
+	// same lease again, since it's tied to the session ID
 	l3 := t.mustAcquire(1, descID)
 	e3 := l3.Expiration()
-	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime == e1.WallTime {
-		t.Fatalf("expected different leases, but found %v", l1)
-	}
-	if e3.WallTime < e1.WallTime {
-		t.Fatalf("expected new lease expiration (%s) to be after old lease expiration (%s)",
-			e3, e1)
-	}
-	// In acquiring the new lease the older lease is released.
-	if err := rt.WaitForRemoval(); err != nil {
-		t.Fatal(err)
+	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime != e1.WallTime {
+		t.Fatalf("expected same leases because the session time will be the same, but found %v", l1)
 	}
 	// Only one actual lease.
 	t.expectLeases(descID, "/1/1")
 
 	t.mustRelease(1, l1, nil)
 	t.mustRelease(1, l3, nil)
+	// Lease will still stick around since the descriptor is not dropped, and
+	// the session is alive.
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
@@ -925,6 +920,10 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
+	// Disable stats collection, which may acquire this descriptor.
+	if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.foo (v INT);
@@ -1029,7 +1028,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		requireRestartTransactionErrWithMsg(t, err, "WriteTooOldError")
 	}
 
-	// requireSessionExpiredErr ensures `err` is a liveness session expired error.
+	// requireSessionExpiredErr ensures `err` is a sessionID session expired error.
 	requireSessionExpiredErr := func(t *testing.T, err error) {
 		requireRestartTransactionErrWithMsg(t, err, "liveness session expired")
 	}
@@ -1084,7 +1083,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// leased descriptor such an "old" transaction is using is the very original
 	// version (v1) of `t.kv` that expires at the modification time of v2 of
 	// `t.kv`. But the bumped commit timestamp is larger than the leased
-	// descriptor's expiration time, leading to a "liveness session expired"
+	// descriptor's expiration time, leading to a "sessionID session expired"
 	// error.
 	_, err = txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`)
 	require.NoError(t, err)
@@ -1937,15 +1936,8 @@ CREATE TABLE t.test2 ();
 
 	// Check that lease acquisition happens independent of lease being requested.
 	testutils.SucceedsSoon(t, func() error {
-		if count := atomic.LoadInt32(&testAcquiredCount); count < 4 {
-			// Wait for the background renew goroutine to renew t1 and t2 at least
-			// once, making AcquireCount at least 4: initial acquire on t1, initial
-			// acquire on t2, renew on t1, renew on t2.
-			return errors.Errorf("expected at least 4 leases to be acquired, but acquired %d times", count)
-		}
-		released := releasedLeases()
-		if notYetReleased := expected.Difference(released); notYetReleased.Len() != 0 {
-			return errors.Errorf("expected %v to be released, released %v", expected.Ordered(), released.Ordered())
+		if count := atomic.LoadInt32(&testAcquiredCount); count <= 2 {
+			return errors.Errorf("expected more than 2 leases to be acquired, but acquired %d times", count)
 		}
 		return nil
 	})
@@ -2940,192 +2932,6 @@ CREATE TABLE d1.t2 (name int);
 	close(errorChan)
 }
 
-// Validates that the transaction deadline can be extended
-// past the original lease duration. Previously, we had a
-// a limitation if the transaction took longer then the
-// the lease, the transaction would fail because of the
-// deadline.
-func TestLeaseTxnDeadlineExtension(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	filterMu := syncutil.Mutex{}
-	blockTxn := make(chan struct{})
-	blockedOnce := false
-	var txnID string
-
-	var params base.TestServerArgs
-	params.Settings = cluster.MakeTestingClusterSettings()
-	// Set the lease duration such that the next lease acquisition will
-	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.SV, 0)
-	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
-			filterMu.Lock()
-			// Wait for a commit with the txnID, and only allows
-			// it to resume when the channel gets unblocked.
-			if req.Txn != nil && req.Txn.ID.String() == txnID {
-				filterMu.Unlock()
-				// There will only be a single EndTxn request in
-				// flight due to the transaction ID filter and
-				// blocked once flag, so no mutex is needed here.
-				if req.IsSingleEndTxnRequest() && !blockedOnce {
-					<-blockTxn
-					blockedOnce = true
-				}
-			} else {
-				filterMu.Unlock()
-			}
-			return nil
-		},
-	}
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
-	// Setup tables for the test.
-	_, err := conn.Exec(`
-CREATE TABLE t1(val int);
-	`)
-	require.NoError(t, err)
-	// Validates that transaction deadlines can move forward into
-	// the future after lease expiry.
-	t.Run("validate-lease-txn-deadline-ext", func(t *testing.T) {
-		conn, err := tc.ServerConn(0).Conn(ctx)
-		require.NoError(t, err)
-		descModConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-		waitChan := make(chan error)
-		resumeChan := make(chan struct{})
-		go func() {
-			ctx = context.Background()
-			// Start a transaction that will lease out a table,
-			// and let the lease duration expire.
-			_, err := conn.ExecContext(ctx, `
-BEGIN;
-SELECT * FROM t1;
-	`)
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Fetch the transaction ID, so that we can delay the commit
-			txnIDResult := conn.QueryRowContext(ctx, `SELECT id FROM crdb_internal.node_transactions WHERE session_id IN (SELECT * FROM [SHOW session_id]);`)
-			if txnIDResult.Err() != nil {
-				waitChan <- txnIDResult.Err()
-				return
-			}
-			filterMu.Lock()
-			err = txnIDResult.Scan(&txnID)
-			blockedOnce = false
-			filterMu.Unlock()
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Inform the main routine that it can cause an operation
-			// to block us.
-			waitChan <- nil
-			<-resumeChan
-			// Execute an insert once the other transaction
-			// gets a lease. The lease renewal should adjust
-			// our deadline.
-			_, err = conn.ExecContext(ctx, `
-INSERT INTO t1 VALUES (1);
-COMMIT;`,
-			)
-			waitChan <- err
-		}()
-
-		// Wait for the TXN ID and hook to be setup.
-		err = <-waitChan
-		require.NoError(t, err)
-		// Issue a select from a different connection that will
-		// need a lease.
-		descModConn.Exec(t, `
-SELECT * FROM T1;`)
-		resumeChan <- struct{}{}
-		blockTxn <- struct{}{}
-		err = <-waitChan
-		require.NoError(t, err)
-	})
-
-	// Validates that the transaction deadline extension can be blocked,
-	// if the lease can't be renewed, for example if the descriptor gets
-	// modified.
-	t.Run("validate-lease-txn-deadline-ext-blocked", func(t *testing.T) {
-		conn, err := tc.ServerConn(0).Conn(ctx)
-		require.NoError(t, err)
-		descModConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-		waitChan := make(chan error)
-		resumeChan := make(chan struct{})
-		go func() {
-			ctx = context.Background()
-			// Start a transaction that will lease out a table,
-			// and let the lease duration expire.
-			_, err := conn.ExecContext(ctx, `
-BEGIN;
-SELECT * FROM t1;
-	`)
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Fetch the transaction ID, so that we can delay the commit
-			txnIDResult := conn.QueryRowContext(ctx, `SELECT id FROM crdb_internal.node_transactions WHERE session_id IN (SELECT * FROM [SHOW session_id]);`)
-			if txnIDResult.Err() != nil {
-				waitChan <- txnIDResult.Err()
-				return
-			}
-			filterMu.Lock()
-			err = txnIDResult.Scan(&txnID)
-			blockedOnce = false
-			filterMu.Unlock()
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			// Inform the main routine that it can cause an operation
-			// to block us.
-			waitChan <- nil
-			<-resumeChan
-			// Execute an insert on the same connection and attempt
-			// to commit, this operation will fail.
-			_, err = conn.ExecContext(ctx, `
-INSERT INTO t1 VALUES (1);`,
-			)
-			if err != nil {
-				waitChan <- err
-				return
-			}
-			_, err = conn.ExecContext(ctx, `
-COMMIT;`,
-			)
-			if err == nil {
-				err = errors.New("Failing did not get expected error")
-			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*") {
-				err = errors.Wrap(err, "Failed unexpected error")
-			} else {
-				err = nil
-			}
-			waitChan <- err
-		}()
-
-		// Wait for the TXN ID and hook to be setup.
-		err = <-waitChan
-		require.NoError(t, err)
-		// Issue an alter column on a different connection, which
-		// will require a lease.
-		descModConn.Exec(t, `
-ALTER TABLE T1 ALTER COLUMN VAL SET DEFAULT 5;
-SELECT * FROM T1`)
-		resumeChan <- struct{}{}
-		blockTxn <- struct{}{}
-		err = <-waitChan
-		require.NoError(t, err)
-	})
-}
-
 // Validates that the transaction deadline will be
 // updated for implicit transactions before the autocommit,
 // if the deadline is found to be expired.
@@ -3359,95 +3165,19 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	}()
 	unblock := <-errorsAfterEndTxn
 	unblock <- kvpb.NewError(kvpb.NewAmbiguousResultError(errors.New("boom")))
-	// Make sure we see a retry, then let it succeed.
-	close(<-errorsAfterEndTxn)
 	// Allow anything further to proceed.
 	cancel()
 	// Ensure that the query completed successfully.
 	require.NoError(t, <-selectErr)
-}
 
-// TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
-// periodical refresh, if the descriptor, whose lease we intend to refresh, does not exist anymore, we delete
-// this descriptor from "cache" (i.e. manager.mu.descriptor).
-func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	// typeDescID will be set to id of the created type `typ` later.
-	mu := syncutil.Mutex{}
-	typeDescID := descpb.InvalidID
-	typeDescName := ""
-	var tdb *sqlutils.SQLRunner
-	dropCompleted := make(chan bool)
-
-	// The overall testing strategy is
-	// 1. Add a testing knob immediately before the acquire a node lease inside refreshSomeLeases;
-	// 2. Create a new type `typ` and acquire a lease of it;
-	// 3. When the lease manager attempts to refresh the lease on `typ`, the testing knob is trigger which removes
-	//    `typ` from storage;
-	// 4. This allows refreshSomeLeases fail with a DescriptorNotFound error and trigger the logic that removes this
-	//    descriptor entry from the lease manager's cache (namely, manager.mu.descriptor).
-	// 5. Finally, we assert that the entry for `typ` is no longer in the cache.
-	var params base.TestServerArgs
-	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			TestingBeforeAcquireLeaseDuringRefresh: func(id descpb.ID) error {
-				mu.Lock()
-				defer mu.Unlock()
-				if typeDescID != descpb.InvalidID && id == typeDescID {
-					// Drop this type to trigger the logic that remove unfound descriptor from lease manager cache.
-					tdb.Exec(t, fmt.Sprintf("DROP TYPE %v", typeDescName))
-					dropCompleted <- true
-				}
-				return nil
-			},
-		},
-	}
-	params.Settings = cluster.MakeTestingClusterSettings()
-
-	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
-	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
-	lease.LeaseDuration.Override(ctx, &params.SV, time.Second)
-
-	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
-	tdb = sqlutils.MakeSQLRunner(sqlDB)
-
-	sql := `
-					CREATE DATABASE test;
-					USE test;
-					CREATE TYPE typ as enum ('a', 'b');
-					`
-	tdb.Exec(t, sql)
-
-	// Ensure `typ` is present in the lease manger by acquiring a lease on it.
-	typeDesc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, s.Codec(), "test", "typ")
-	lm := s.LeaseManager().(*lease.Manager)
-	_, err := lm.Acquire(ctx, s.Clock().Now(), typeDesc.GetID())
-	require.NoError(t, err)
-
-	// Set typeDescID such that the next periodical lease refresh will trigger the testing knob that drops `typ`.
-	mu.Lock()
-	typeDescID = typeDesc.GetID()
-	typeDescName = typeDesc.GetName()
-	mu.Unlock()
-
-	// Wait until the testing knob drops `typ`
-	<-dropCompleted
-
-	// Assert that soon (when the next periodical lease refresh happens) the testing knob will drop `typ`,
-	// and consequently trigger the logic to remove the descriptor from lease manager due to a failure
-	// to acquire a lease on this descriptor.
-	testutils.SucceedsSoon(t, func() error {
-		if lm.TestingDescriptorStateIsNil(typeDesc.GetID()) {
-			return nil
-		}
-
-		return errors.Errorf("descriptor %v(#%v) is still there. Expected: descriptor removed from cache.",
-			typeDesc.GetName(), typeDesc.GetID())
-	})
+	const sql = `
+  SELECT count(*)
+    FROM system.lease
+   WHERE "descID" = $1;
+	`
+	r := sqlDB.QueryRow(sql, tableID)
+	require.NotNil(t, r, "expected a single row")
+	var count int
+	require.NoError(t, r.Scan(&count))
+	require.Equal(t, 1, count, "expected only a single lease since it should have been re-acquired")
 }

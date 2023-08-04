@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-comments               "comm😷eNt"          text
-comments               object_id           bigint
-comments               rowid               bigint
-comments               sub_id              bigint
-comments               "type%q"            bigint
-"join_tok\\x86ens"     " expiration"       timestamp with time zone
-"join_tok\\x86ens"     rowid               bigint
-"join_tok\\x86ens"     "secre%pt%q"        bytea
-"join_tok\\x86ens"     "😺id                "                            uuid
-lease                  "crd%qb_region"     bytea
-lease                  "des\fcID"          bigint
-lease                  "expir(at\\xb6ion"  timestamp without time zone
-lease                  "nodeID̸"           bigint
-lease                  rowid               bigint
-lease                  version             bigint
-protecte😠d_ts_records  _ts                 numeric
-protecte😠d_ts_records  "i'd"               uuid
-protecte😠d_ts_records  "meta_type"        text
-protecte😠d_ts_records  met😹a               bytea
-protecte😠d_ts_records  num_spans           bigint
+comments               "comm😷eNt"         text
+comments               object_id          bigint
+comments               rowid              bigint
+comments               sub_id             bigint
+comments               "type%q"           bigint
+"join_tok\\x86ens"     " expiration"      timestamp with time zone
+"join_tok\\x86ens"     rowid              bigint
+"join_tok\\x86ens"     "secre%pt%q"       bytea
+"join_tok\\x86ens"     "😺id               "                         uuid
+lease                  "crdb%q_region"    bytea
+lease                  "des\fcID"         bigint
+lease                  "nodeID̸"          bigint
+lease                  rowid              bigint
+lease                  "sessi(on\\xb6ID"  bytea
+lease                  version            bigint
+protecte😠d_ts_records  "id'"              uuid
+protecte😠d_ts_records  "meta_type"       text
+protecte😠d_ts_records  meta😹              bytea
+protecte😠d_ts_records  num_spans          bigint
+protecte😠d_ts_records  rowid              bigint
 
 subtest templates/different_templates_in_each_db
 

@@ -95,6 +95,7 @@ func TestTableSet(t *testing.T) {
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
 			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
+			s.mu.session = staticSession{hlc.Timestamp{WallTime: op.expiration}}
 			set.insert(s)
 
 		case remove:
@@ -102,6 +103,7 @@ func TestTableSet(t *testing.T) {
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
 			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
+			s.mu.session = staticSession{hlc.Timestamp{WallTime: op.expiration}}
 			set.remove(s)
 
 		case newest:
@@ -567,7 +569,6 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
 	expiration := lease.Expiration()
-	tracker := removalTracker.TrackRemoval(lease.Descriptor)
 
 	// Acquire another lease.
 	if _, err := acquireNodeLease(
@@ -581,18 +582,11 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-	if newLease.Expiration() == expiration {
-		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration().GoTime())
+	if newLease.Expiration() != expiration {
+		t.Fatalf("same lease expected %s %s", expiration.GoTime(), newLease.Expiration().GoTime())
 	}
 
-	// TODO(ajwerner): does this matter?
 	lease.Release(context.Background())
-
-	// The first lease acquisition was released.
-	if err := tracker.WaitForRemoval(); err != nil {
-		t.Fatal(err)
-	}
-
 	newLease.Release(context.Background())
 }
 
@@ -1153,8 +1147,10 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			addedDescVState.mu.Lock()
 			if v < maxVersion {
 				addedDescVState.mu.expiration = versionTS(v + 1)
+				addedDescVState.mu.session = staticSession{addedDescVState.mu.expiration}
 			} else {
 				addedDescVState.mu.expiration = hlc.MaxTimestamp
+				addedDescVState.mu.session = staticSession{hlc.MaxTimestamp}
 			}
 			addedDescVState.mu.Unlock()
 			descStates[tableID].mu.active.insert(addedDescVState)
