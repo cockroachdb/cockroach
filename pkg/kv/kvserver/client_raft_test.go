@@ -95,7 +95,6 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -113,7 +112,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: stickyVFSRegistry,
+						StickyVFSRegistry: server.NewStickyVFSRegistry(),
 					},
 				},
 			},
@@ -670,10 +669,6 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			name = "differentTerm"
 		}
 		t.Run(name, func(t *testing.T) {
-			// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-			// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-			stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-			defer stickyVFSRegistry.CloseAllEngines()
 			lisReg := listenerutil.NewListenerRegistry()
 			defer lisReg.Close()
 
@@ -689,7 +684,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							StickyVFSRegistry: stickyVFSRegistry,
+							StickyVFSRegistry: server.NewStickyVFSRegistry(),
 						},
 					},
 				}
@@ -737,7 +732,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			tc.WaitForValues(t, key, []int64{incAB, incA, incAB})
+			tc.WaitForValues(t, key, []int64{incAB, 0 /* stopped server */, incAB})
 
 			repl0 := store.LookupReplica(key)
 			index := repl0.GetLastIndex()
@@ -1721,11 +1716,6 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -1738,7 +1728,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 			},
 		}
@@ -1785,7 +1775,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc.WaitForValues(t, key, []int64{incAB, incA, incA, incAB, incAB})
+	tc.WaitForValues(t, key, []int64{incAB, 0 /* stopped */, 0 /* stopped */, incAB, incAB})
 
 	index := repl.GetLastIndex()
 
@@ -1809,8 +1799,6 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
-
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -1823,7 +1811,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable the replica GC queue so that it doesn't accidentally pick up the
@@ -1890,8 +1878,6 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
-
 	raftConfig := base.RaftConfig{
 		// Drop the raft tick interval so the Raft group is ticked more.
 		RaftTickInterval: 10 * time.Millisecond,
@@ -1919,7 +1905,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			RaftConfig: raftConfig,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable leader transfers during leaseholder changes so that we
@@ -2212,11 +2198,6 @@ func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -2229,7 +2210,7 @@ func TestProgressWithDownNode(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 			},
 		}
@@ -2263,7 +2244,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	}
 
 	// The new increment can be seen on both live replicas.
-	tc.WaitForValues(t, key, []int64{16, 5, 16})
+	tc.WaitForValues(t, key, []int64{16, 0 /* stopped */, 16})
 
 	// Once the downed node is restarted, it will catch up.
 	require.NoError(t, tc.RestartServer(1))
@@ -2299,8 +2280,6 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -2313,7 +2292,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 					WallClock:         manualClock,
 				},
 			},
@@ -2371,7 +2350,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 		t.Fatal(err)
 	}
 
-	tc.WaitForValues(t, key, []int64{5, 2, 5})
+	tc.WaitForValues(t, key, []int64{5, 0 /* stopped */, 5})
 
 	// Re-add the store and restart it.
 	// TODO(dt): ben originally suggested we also attempt this in the other order.
@@ -2404,11 +2383,6 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 4
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -2421,7 +2395,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
@@ -2467,7 +2441,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 	}
 	// The first increment is visible on the new replica.
-	tc.WaitForValues(t, key, []int64{inc1, inc1, inc1, inc1})
+	tc.WaitForValues(t, key, []int64{inc1, 0 /* stopped */, inc1, inc1})
 
 	// Ensure that the rest of the group can make progress.
 	inc2 := int64(11)
@@ -2477,7 +2451,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 			t.Fatal(err)
 		}
 	}
-	tc.WaitForValues(t, key, []int64{inc1 + inc2, inc1, inc1 + inc2, inc1 + inc2})
+	tc.WaitForValues(t, key, []int64{inc1 + inc2, 0 /* stopped */, inc1 + inc2, inc1 + inc2})
 
 	// Bring the downed store back up (required for a clean shutdown).
 	require.NoError(t, tc.RestartServer(1))
@@ -3508,11 +3482,6 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -3525,7 +3494,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
@@ -3585,7 +3554,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 
 		actual := tc.ReadIntFromStores(key)
-		expected := []int64{16, 0, 5}
+		expected := []int64{16, 0, 0 /* stopped */}
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
@@ -3857,11 +3826,6 @@ func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 4
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -3874,7 +3838,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableScanner: true,
@@ -3920,7 +3884,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 	if _, err := kv.SendWrapped(ctx, store.TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
-	tc.WaitForValues(t, key, []int64{16, 16, 16, 5})
+	tc.WaitForValues(t, key, []int64{16, 16, 16, 0 /* stopped */})
 
 	// Wait for a bunch of raft ticks in order to flush any heartbeats through
 	// the system. In particular, a coalesced heartbeat containing a quiesce
@@ -3959,11 +3923,6 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
@@ -3976,7 +3935,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 			},
 		}
@@ -4017,7 +3976,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	if _, err := kv.SendWrapped(ctx, store.TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
-	tc.WaitForValues(t, key, []int64{16, 16, 5})
+	tc.WaitForValues(t, key, []int64{16, 16, 0 /* stopped */})
 
 	// Bring it back up and re-add the range. There is a race when the
 	// store applies its removal and re-addition back to back: the
@@ -5238,9 +5197,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		keyA, keyB roachpb.Key,
 		lhsID roachpb.RangeID,
 		lhsPartition *testClusterPartitionedRange,
-		stickyVFSRegistry server.StickyVFSRegistry,
 	) {
-		stickyVFSRegistry = server.NewStickyVFSRegistry()
 		lisReg := listenerutil.NewListenerRegistry()
 		const numServers int = 3
 		stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -5254,7 +5211,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: stickyVFSRegistry,
+						StickyVFSRegistry: server.NewStickyVFSRegistry(),
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						// Newly-started stores (including the "rogue" one) should not GC
@@ -5308,7 +5265,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		increment(t, db, keyA, 1)
 		tc.WaitForValues(t, keyA, []int64{6, 7, 7})
-		return tc, db, keyA, keyB, lhsID, lhsPartition, stickyVFSRegistry
+		return tc, db, keyA, keyB, lhsID, lhsPartition
 	}
 
 	// In this case we only have the LHS partitioned. The RHS will learn about its
@@ -5317,8 +5274,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// partition the RHS and ensure that the split does not clobber the RHS's hard
 	// state.
 	t.Run("(1) no RHS partition", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
-		defer stickyVFSRegistry.CloseAllEngines()
+		tc, db, keyA, keyB, _, lhsPartition := setup(t)
 
 		defer tc.Stopper().Stop(ctx)
 		tc.SplitRangeOrFatal(t, keyB)
@@ -5370,8 +5326,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// This case is like the previous case except the store crashes after
 	// laying down a tombstone.
 	t.Run("(2) no RHS partition, with restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
-		defer stickyVFSRegistry.CloseAllEngines()
+		tc, db, keyA, keyB, _, lhsPartition := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		tc.SplitRangeOrFatal(t, keyB)
@@ -5443,8 +5398,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// the split is processed. We partition the RHS's new replica ID before
 	// processing the split to ensure that the RHS doesn't get initialized.
 	t.Run("(3) initial replica RHS partition, no restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
-		defer stickyVFSRegistry.CloseAllEngines()
+		tc, db, keyA, keyB, _, lhsPartition := setup(t)
 		defer tc.Stopper().Stop(ctx)
 		var rhsPartition *testClusterPartitionedRange
 		partitionReplicaOnSplit(t, tc, keyB, lhsPartition, &rhsPartition)
@@ -5505,8 +5459,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	// its higher replica ID the store crashes and forgets. The RHS replica gets
 	// initialized by the split.
 	t.Run("(4) initial replica RHS partition, with restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition, stickyVFSRegistry := setup(t)
-		defer stickyVFSRegistry.CloseAllEngines()
+		tc, db, keyA, keyB, _, lhsPartition := setup(t)
 		defer tc.Stopper().Stop(ctx)
 		var rhsPartition *testClusterPartitionedRange
 

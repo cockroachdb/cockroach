@@ -1605,11 +1605,15 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 }
 
 // ReadIntFromStores reads the current integer value at the given key
-// from all configured engines, filling in zeros when the value is not
-// found.
+// from all configured engines on un-stopped servers, filling in zeros
+// when the value is not found.
 func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	results := make([]int64, len(tc.Servers))
 	for i, server := range tc.Servers {
+		// Skip stopped servers, leaving their value as zero.
+		if tc.ServerStopped(i) {
+			continue
+		}
 		err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			valRes, err := storage.MVCCGet(context.Background(), s.TODOEngine(), key,
 				server.Clock().Now(), storage.MVCCGetOptions{})
@@ -1725,7 +1729,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 
 	for i, specs := range serverArgs.StoreSpecs {
 		if specs.InMemory && specs.StickyVFSID == "" {
-			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky engine", i)
+			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky VFS", i)
 		}
 	}
 	s, err := serverutils.NewServer(serverArgs)

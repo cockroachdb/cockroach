@@ -81,14 +81,14 @@ func (s *Store) AddReplica(repl *Replica) error {
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
 // store).
-func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
+func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, error) {
 	var totalStats enginepb.MVCCStats
 	var err error
 
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.TODOEngine(), now)
+		stats, err = rditer.ComputeStatsForRange(r.Desc(), reader, now)
 		if err != nil {
 			return false
 		}

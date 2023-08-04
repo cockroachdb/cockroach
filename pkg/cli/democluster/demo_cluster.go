@@ -307,16 +307,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			}
 			rpcAddrReadyChs[i] = rpcAddrReady
 		}
-
-		// Ensure we close all sticky stores we've created when the stopper
-		// instructs the entire cluster to stop. We do this only here
-		// because we want this closer to be registered after all the
-		// individual servers' Stop() methods have been registered
-		// via createAndAddNode() above.
-		c.stopper.AddCloser(stop.CloserFn(func() {
-			c.stickyVFSRegistry.CloseAllEngines()
-		}))
-
 		// Start the remaining nodes asynchronously.
 		for i := 1; i < c.demoCtx.NumNodes; i++ {
 			if err := c.startNodeAsync(ctx, i, errCh, timeoutCh); err != nil {
