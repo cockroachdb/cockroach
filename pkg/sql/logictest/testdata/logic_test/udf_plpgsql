@@ -367,6 +367,21 @@ $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 2F005 control reached end of function without RETURN
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF a < b THEN
+      RETURN -1;
+    ELSIF a = b THEN
+      i := 0;
+    ELSE
+      RETURN 1;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 2F005 control reached end of function without RETURN
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
       EXIT;
@@ -709,6 +724,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# Testing CONSTANT variable declarations.
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
@@ -808,3 +824,93 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN i;
   END
 $$ LANGUAGE PLpgSQL;
+
+# Testing IF statements with ELSIF branches.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := -1;
+  BEGIN
+    IF n = 0 THEN
+      RETURN 0;
+    ELSIF n = 1 THEN
+      i := 100;
+    ELSIF n = 2 THEN
+      i := 200;
+      RETURN i;
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(100);
+----
+0  100  200  -1
+
+statement ok
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    foo INT := 0;
+  BEGIN
+    LOOP IF i >= a THEN EXIT; END IF;
+      IF b = 0 THEN
+        RETURN NULL;
+      ELSIF b = 1 THEN
+        foo := foo + 1;
+      ELSIF b = 2 THEN
+        RETURN 100;
+      ELSE
+        foo := foo + b;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN foo;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIII
+SELECT f(0, 0), f(1, 0), f(1, 1), f(1, 2), f(1, 3);
+----
+0  NULL  1  100  3
+
+query IIII
+SELECT f(5, 0), f(5, 1), f(5, 2), f(5, 3);
+----
+NULL  5  100  15
+
+# Branches should only be executed if the previous ones fail.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n <= 0 THEN
+      RAISE NOTICE 'foo';
+    ELSIF n <= 1 THEN
+      RAISE NOTICE 'bar';
+    ELSIF n <= 2 THEN
+      RAISE NOTICE 'baz';
+    END IF;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(0);
+----
+NOTICE: foo
+
+query T noticetrace
+SELECT f(1);
+----
+NOTICE: bar
+
+query T noticetrace
+SELECT f(2);
+----
+NOTICE: baz
+
+query I
+SELECT f(100);
+----
+0
