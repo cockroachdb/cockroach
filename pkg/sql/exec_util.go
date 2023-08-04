@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -1318,6 +1319,10 @@ type ExecutorConfig struct {
 	// SessionInitCache cache; contains information used during authentication
 	// and per-role default settings.
 	SessionInitCache *sessioninit.Cache
+
+	// AuditConfig is the cluster's audit configuration. See the
+	// 'sql.log.user_audit' cluster setting to see how this is configured.
+	AuditConfig *auditlogging.AuditConfigLock
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
