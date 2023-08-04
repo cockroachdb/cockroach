@@ -3620,11 +3620,17 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		}
 		return nil
 	}
+	// Set global reads.
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.GlobalReads = proto.Bool(true)
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableSpanConfigs: true,
 		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zoneConfig,
+			},
+
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,
 				TestingResponseFilter: respFilter,
@@ -3650,11 +3656,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	splitArgs := adminSplitArgs(descKey)
 	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
-
-	// Set global reads.
-	zoneConfig := zonepb.DefaultZoneConfig()
-	zoneConfig.GlobalReads = proto.Bool(true)
-	config.TestingSetZoneConfig(config.ObjectID(descID), zoneConfig)
 
 	// Perform a write to the system config span being watched by
 	// the SystemConfigProvider.
@@ -3867,7 +3868,6 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			}
 
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DisableSpanConfigs: true,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						LoadBasedSplittingOverrideKey: overrideLBSplitFn,

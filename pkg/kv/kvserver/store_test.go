@@ -220,7 +220,9 @@ func createTestStoreWithoutStart(
 	// dependency reasons. Tests using this harness can probably be refactored
 	// to do the same (with some effort). That's unlikely to happen soon, so
 	// let's continue to use the system config span.
-	cfg.SpanConfigsDisabled = true
+	cfg.SystemConfigProvider = config.NewConstantSystemConfigProvider(
+		config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
+	)
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	require.Nil(t, cfg.Transport)

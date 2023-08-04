@@ -1944,17 +1944,6 @@ type clusterOpt interface {
 	apply(args *base.TestServerArgs)
 }
 
-// clusterOptDisableSpanConfigs corresponds to the disable-span-configs
-// directive.
-type clusterOptDisableSpanConfigs struct{}
-
-var _ clusterOpt = clusterOptDisableSpanConfigs{}
-
-// apply implements the clusterOpt interface.
-func (c clusterOptDisableSpanConfigs) apply(args *base.TestServerArgs) {
-	args.DisableSpanConfigs = true
-}
-
 // clusterOptTracingOff corresponds to the tracing-off directive.
 type clusterOptTracingOff struct{}
 
@@ -2141,8 +2130,6 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 	var res []clusterOpt
 	parseDirectiveOptions(t, path, clusterDirective, func(opt string) {
 		switch opt {
-		case "disable-span-configs":
-			res = append(res, clusterOptDisableSpanConfigs{})
 		case "tracing-off":
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
