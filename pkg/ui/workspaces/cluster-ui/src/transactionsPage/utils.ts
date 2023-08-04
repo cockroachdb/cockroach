@@ -199,8 +199,8 @@ export const filterTransactions = (
     })
     .filter(
       (t: Transaction) =>
-        t.stats_data.stats.service_lat.mean >= timeValue ||
-        timeValue === "empty",
+        timeValue === "empty" ||
+        t.stats_data.stats.service_lat.mean >= Number(timeValue),
     )
     .filter((t: Transaction) => {
       // The transaction must contain at least one value of the regions list
