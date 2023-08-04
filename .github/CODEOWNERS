@@ -219,7 +219,7 @@
 /pkg/server/status*go                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/status*go                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/status/                      @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/sticky_engine*               @cockroachdb/storage
+/pkg/server/sticky_vfs*                  @cockroachdb/storage
 /pkg/server/structlogging/               @cockroachdb/cluster-observability @cockroachdb/obs-inf-prs
 /pkg/server/systemconfigwatcher/         @cockroachdb/kv-prs      @cockroachdb/multi-tenant
 /pkg/server/telemetry/                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs

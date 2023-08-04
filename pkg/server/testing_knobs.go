@@ -105,7 +105,7 @@ type TestingKnobs struct {
 	// StickyVFSRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyVFSID.
 	//
-	// When supplied to a TestCluster, StickyEngineIDs will be associated auto-
+	// When supplied to a TestCluster, StickyVFSIDs will be associated auto-
 	// matically to the StoreSpecs used.
 	StickyVFSRegistry StickyVFSRegistry
 	// WallClock is used to inject a custom clock for testing the server. It is

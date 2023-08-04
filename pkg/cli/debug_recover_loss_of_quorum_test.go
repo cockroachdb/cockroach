@@ -377,9 +377,7 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	require.NoError(t, err, "force local must fix incorrect version")
 	// Check that stored plan has version matching cluster version.
-	fs, err := storeReg.Get(base.StoreSpec{InMemory: true, StickyVFSID: "1"})
-	require.NoError(t, err, "failed to get shared store fs")
-	ps := loqrecovery.NewPlanStore("", fs)
+	ps := loqrecovery.NewPlanStore("", storeReg.Get("1"))
 	p, ok, err := ps.LoadPlan()
 	require.NoError(t, err, "failed to read node 0 plan")
 	require.True(t, ok, "plan was not staged")

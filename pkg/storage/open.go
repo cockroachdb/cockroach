@@ -81,16 +81,6 @@ var ForTesting ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
-// ForStickyEngineTesting is similar to ForTesting but leaves separated
-// intents as enabled since we cannot ensure consistency in the test setup
-// between what the KV layer thinks and what the engine does in terms of
-// writing separated intents. Since our optimizations are for the case where
-// we know there are only separated intents, this sidesteps any test issues
-// due to inconsistencies.
-var ForStickyEngineTesting ConfigOption = func(cfg *engineConfig) error {
-	return nil
-}
-
 // Attributes configures the engine's attributes.
 func Attributes(attrs roachpb.Attributes) ConfigOption {
 	return func(cfg *engineConfig) error {
