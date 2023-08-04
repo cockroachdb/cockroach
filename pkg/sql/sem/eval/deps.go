@@ -425,6 +425,10 @@ type Planner interface {
 	// name, if any. It returns nil if no such row exists. Used to implement the
 	// PLpgSQL FETCH statement.
 	PLpgSQLFetchCursor(ctx context.Context, cursor *tree.CursorStmt) (res tree.Datums, err error)
+
+	// AutoCommit indicates whether the Planner has flagged the current statement
+	// as eligible for transaction auto-commit.
+	AutoCommit() bool
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
