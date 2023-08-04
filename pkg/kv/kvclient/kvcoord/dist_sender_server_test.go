@@ -2012,6 +2012,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			return nil
 		}
 
+	// Disable load-based splitting to avoid unexpected range splits. The test
+	// operates between keys "a" and "z" and expects a single split point at "b".
+	// See the call to setupMultipleRanges below.
+	storeKnobs.DisableLoadBasedSplitting = true
+
 	var refreshSpansCondenseFilter atomic.Value
 	s := serverutils.StartServerOnly(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{
@@ -3181,10 +3186,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// This test is like the previous one in that the commit batch succeeds at
 			// an updated timestamp, but this time the EndTxn puts the
 			// transaction in the STAGING state instead of COMMITTED because there had
-			// been previous write in a different batch. Like above, the commit is
+			// been a previous write in a different batch. Like above, the commit is
 			// successful since there are no refresh spans (the request will succeed
 			// after a server-side refresh).
-			name: "write too old in staging commit",
+			name: "write too old with put in staging commit",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "orig")
 			},

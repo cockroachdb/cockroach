@@ -43,13 +43,11 @@ func TestCIDRRanges(t *testing.T) {
 		require.EqualError(t, err, "foo")
 	})
 
-	// Private connection should allow, despite not having any CIDR ranges.
+	// Private connection should be allowed, despite not having any CIDR ranges.
 	t.Run("private connection", func(t *testing.T) {
 		p := &acl.CIDRRanges{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
-				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PUBLIC_ONLY,
-				}, nil
+				return &tenant.Tenant{}, nil
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("foo"))
@@ -61,7 +59,6 @@ func TestCIDRRanges(t *testing.T) {
 		p := &acl.CIDRRanges{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType:  tenant.ALLOW_ALL,
 					AllowedCIDRRanges: []string{"127.0.0.0/32", "10.0.0.8/16"},
 				}, nil
 			},
@@ -74,7 +71,6 @@ func TestCIDRRanges(t *testing.T) {
 		p := &acl.CIDRRanges{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType:  tenant.ALLOW_ALL,
 					AllowedCIDRRanges: []string{},
 				}, nil
 			},
@@ -87,7 +83,6 @@ func TestCIDRRanges(t *testing.T) {
 		p := &acl.CIDRRanges{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType:  tenant.ALLOW_ALL,
 					AllowedCIDRRanges: []string{"0.0.0.0/0"},
 				}, nil
 			},
@@ -96,24 +91,10 @@ func TestCIDRRanges(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("disallow public connections", func(t *testing.T) {
-		p := &acl.CIDRRanges{
-			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
-				return &tenant.Tenant{
-					ConnectivityType:  tenant.ALLOW_PRIVATE_ONLY,
-					AllowedCIDRRanges: []string{"127.0.0.1/32"},
-				}, nil
-			},
-		}
-		err := p.CheckConnection(ctx, makeConn(""))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow public connections from IP 127.0.0.1")
-	})
-
 	t.Run("could not parse connection IP", func(t *testing.T) {
 		p := &acl.CIDRRanges{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType:  tenant.ALLOW_ALL,
 					AllowedCIDRRanges: []string{"127.0.0.1/32"},
 				}, nil
 			},
@@ -129,7 +110,6 @@ func TestCIDRRanges(t *testing.T) {
 		p := &acl.CIDRRanges{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType:  tenant.ALLOW_ALL,
 					AllowedCIDRRanges: []string{"127.0.0.1"},
 				}, nil
 			},

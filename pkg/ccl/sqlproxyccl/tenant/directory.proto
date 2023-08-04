@@ -94,29 +94,6 @@ message EnsurePodRequest {
 message EnsurePodResponse {
 }
 
-// ConnectivityType indicates the extent to which the tenant can be accessed
-// (e.g. private only, public only, or both).
-enum ConnectivityType {
-  option (gogoproto.goproto_enum_prefix) = false;
-
-  // ALLOW_ALL indicates that the cluster allows both public and private
-  // connections. In this case, both IP allowlist and private endpoint rules
-  // will apply.
-  //
-  // The proxy will block incoming connections if:
-  //   1. the connection is public, and there are no IP allowlist entries, or
-  //   2. the connection is private, and there are no private endpoint entries.
-  ALLOW_ALL = 0;
-  // ALLOW_PUBLIC_ONLY indicates that the cluster is exposed to the public
-  // internet, and IP allowlist rules will apply. By default, if there are no
-  // rules, the proxy will block all public connections.
-  ALLOW_PUBLIC_ONLY = 1;
-  // ALLOW_PRIVATE_ONLY indicates that the cluster allows private endpoints, and
-  // private endpoint rules will apply. By default, if there are no rules, the
-  // proxy will block all private connections.
-  ALLOW_PRIVATE_ONLY = 2;
-}
-
 // Tenant contains information about a tenant, such as its name and ID.
 // Fields are optional except TenantID and Version.
 message Tenant {
@@ -127,15 +104,14 @@ message Tenant {
   string version = 2;
   // ClusterName is the name of the tenant's cluster.
   string cluster_name = 3;
-  // ConnectivityType indicates the extent to which the tenant can be accessed.
-  ConnectivityType connectivity_type = 4;
+  reserved 4;
   // AllowedCIDRRanges corresponds to the list of source CIDR ranges that are
-  // allowed to access the tenant. This will only apply if the tenant allows
-  // public connections.
+  // allowed to access the tenant. By default, if there are no rules, the proxy
+  // will block all public connections.
   repeated string allowed_cidr_ranges = 5 [(gogoproto.customname) = "AllowedCIDRRanges"];
   // AllowedPrivateEndpoints corresponds to the list of endpoint identifiers
-  // that are allowed to access the tenant. This will only apply if the tenant
-  // allows private connections.
+  // that are allowed to access the tenant. By default, if there are no rules,
+  // the proxy will block all private connections.
   repeated string allowed_private_endpoints = 6;
 }
 
