@@ -406,8 +406,7 @@ CREATE FUNCTION sc1.f_test_drop(IN INT8)
   SELECT 1;
 $$
 
-# TODO(107369): Postgres errors with code 42725 here.
-statement error pgcode XXUUU pq: function name \"f_test_drop\" is not unique
+statement error pgcode 42725 pq: function name \"f_test_drop\" is not unique
 DROP FUNCTION f_test_drop;
 
 statement ok
