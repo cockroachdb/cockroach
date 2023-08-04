@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -131,7 +132,11 @@ func (t *descriptorState) findForTimestamp(
 // it and returns it. The regionEnumPrefix is used if the cluster is configured
 // for multi-region system tables.
 func (t *descriptorState) upsertLeaseLocked(
-	ctx context.Context, desc catalog.Descriptor, expiration hlc.Timestamp, regionEnumPrefix []byte,
+	ctx context.Context,
+	desc catalog.Descriptor,
+	session sqlliveness.Session,
+	expiration hlc.Timestamp,
+	regionEnumPrefix []byte,
 ) (createdDescriptorVersionState *descriptorVersionState, toRelease *storedLease, _ error) {
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
@@ -141,7 +146,7 @@ func (t *descriptorState) upsertLeaseLocked(
 		if t.mu.active.findNewest() != nil {
 			log.Infof(ctx, "new lease: %s", desc)
 		}
-		descState := newDescriptorVersionState(t, desc, expiration, regionEnumPrefix, true /* isLease */)
+		descState := newDescriptorVersionState(t, desc, session, expiration, regionEnumPrefix, true /* isLease */)
 		t.mu.active.insert(descState)
 		return descState, nil, nil
 	}
@@ -149,7 +154,8 @@ func (t *descriptorState) upsertLeaseLocked(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// The desc is replacing an existing one at the same version.
-	if !s.mu.expiration.Less(expiration) {
+	// FIXME: handle mixed version
+	if session == nil && !s.mu.expiration.Less(expiration) {
 		// This is a violation of an invariant and can actually not
 		// happen. We return an error here to aid in further investigations.
 		return nil, nil, errors.AssertionFailedf("lease expiration monotonicity violation, (%s) vs (%s)", s, desc)
@@ -162,15 +168,24 @@ func (t *descriptorState) upsertLeaseLocked(
 	// released! This is because the new lease is valid at the same desc
 	// version at a greater expiration.
 	s.mu.expiration = expiration
+	s.mu.session = session
 	toRelease = s.mu.lease
 	s.mu.lease = &storedLease{
 		prefix:     regionEnumPrefix,
 		id:         desc.GetID(),
 		version:    int(desc.GetVersion()),
 		expiration: storedLeaseExpiration(expiration),
+		sessionID:  []byte(session.ID()),
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "replaced lease: %s with %s", toRelease, s.mu.lease)
+	}
+	// If the version never changed there is nothing to
+	// delete. For expiration we should flag this as
+	// requiring some sort of clean up.
+	// FIXME: For expiration we should still clean up.
+	if toRelease.version == s.mu.lease.version {
+		toRelease = nil
 	}
 	return nil, toRelease, nil
 }
@@ -180,6 +195,7 @@ var _ redact.SafeFormatter = (*descriptorVersionState)(nil)
 func newDescriptorVersionState(
 	t *descriptorState,
 	desc catalog.Descriptor,
+	session sqlliveness.Session,
 	expiration hlc.Timestamp,
 	prefix []byte,
 	isLease bool,
@@ -189,12 +205,14 @@ func newDescriptorVersionState(
 		Descriptor: desc,
 	}
 	descState.mu.expiration = expiration
+	descState.mu.session = session
 	if isLease {
 		descState.mu.lease = &storedLease{
 			id:         desc.GetID(),
 			prefix:     prefix,
 			version:    int(desc.GetVersion()),
 			expiration: storedLeaseExpiration(expiration),
+			sessionID:  []byte(session.ID()),
 		}
 	}
 	return descState
@@ -225,7 +243,6 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 // release returns a descriptorVersionState that needs to be released from
 // the store.
 func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState) {
-
 	// Decrements the refcount and returns true if the lease has to be removed
 	// from the store.
 	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)

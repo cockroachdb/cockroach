@@ -251,6 +251,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.Clock,
 			cfgCpy.Settings,
 			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+			cfgCpy.SQLLiveness,
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
@@ -402,26 +403,20 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t.expectLeases(descID, "/1/1")
 	e1 := l1.Expiration()
 
-	// Another lease acquisition from the same node will result in a new lease.
-	rt := removalTracker.TrackRemoval(l1.Underlying())
+	// Another lease acquisition from the same node will result in getting the
+	// same lease again, since it's tied to the session ID
 	l3 := t.mustAcquire(1, descID)
 	e3 := l3.Expiration()
-	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime == e1.WallTime {
-		t.Fatalf("expected different leases, but found %v", l1)
-	}
-	if e3.WallTime < e1.WallTime {
-		t.Fatalf("expected new lease expiration (%s) to be after old lease expiration (%s)",
-			e3, e1)
-	}
-	// In acquiring the new lease the older lease is released.
-	if err := rt.WaitForRemoval(); err != nil {
-		t.Fatal(err)
+	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime != e1.WallTime {
+		t.Fatalf("expected same leases because the session time will be the same, but found %v", l1)
 	}
 	// Only one actual lease.
 	t.expectLeases(descID, "/1/1")
 
 	t.mustRelease(1, l1, nil)
 	t.mustRelease(1, l3, nil)
+	// Lease will still stick around since the descriptor is not dropped, and
+	// the session is alive.
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
@@ -1020,7 +1015,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		requireRestartTransactionErrWithMsg(t, err, "WriteTooOldError")
 	}
 
-	// requireSessionExpiredErr ensures `err` is a liveness session expired error.
+	// requireSessionExpiredErr ensures `err` is a sessionID session expired error.
 	requireSessionExpiredErr := func(t *testing.T, err error) {
 		requireRestartTransactionErrWithMsg(t, err, "liveness session expired")
 	}
@@ -1075,7 +1070,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// leased descriptor such an "old" transaction is using is the very original
 	// version (v1) of `t.kv` that expires at the modification time of v2 of
 	// `t.kv`. But the bumped commit timestamp is larger than the leased
-	// descriptor's expiration time, leading to a "liveness session expired"
+	// descriptor's expiration time, leading to a "sessionID session expired"
 	// error.
 	_, err = txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`)
 	require.NoError(t, err)
@@ -1362,8 +1357,8 @@ CREATE TABLE t.test2 ();
 		if en2.WallTime <= eo2.WallTime {
 			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
 				en2, eo2)
-		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 3 {
-			return errors.Errorf("expected at least 3 leases to be acquired, but acquired %d times",
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
+			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
 				count)
 		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
 			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
@@ -1916,12 +1911,8 @@ CREATE TABLE t.test2 ();
 
 	// Check that lease acquisition happens independent of lease being requested.
 	testutils.SucceedsSoon(t, func() error {
-		if count := atomic.LoadInt32(&testAcquiredCount); count <= 4 {
-			return errors.Errorf("expected more than 4 leases to be acquired, but acquired %d times", count)
-		}
-		released := releasedLeases()
-		if notYetReleased := expected.Difference(released); notYetReleased.Len() != 0 {
-			return errors.Errorf("expected %v to be released, released %v", expected.Ordered(), released.Ordered())
+		if count := atomic.LoadInt32(&testAcquiredCount); count <= 2 {
+			return errors.Errorf("expected more than 2 leases to be acquired, but acquired %d times", count)
 		}
 		return nil
 	})
@@ -2905,6 +2896,7 @@ CREATE TABLE d1.t2 (name int);
 // the lease, the transaction would fail because of the
 // deadline.
 func TestLeaseTxnDeadlineExtension(t *testing.T) {
+	t.Skip("unsupported test, sessions based leases never expire")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3315,18 +3307,28 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	}()
 	unblock := <-errorsAfterEndTxn
 	unblock <- kvpb.NewError(kvpb.NewAmbiguousResultError(errors.New("boom")))
-	// Make sure we see a retry, then let it succeed.
-	close(<-errorsAfterEndTxn)
 	// Allow anything further to proceed.
 	cancel()
 	// Ensure that the query completed successfully.
 	require.NoError(t, <-selectErr)
+
+	const sql = `
+  SELECT count(*)
+    FROM system.lease
+   WHERE "descID" = $1;
+	`
+	r := sqlDB.QueryRow(sql, tableID)
+	require.NotNil(t, r, "expected a single row")
+	var count int
+	require.NoError(t, r.Scan(&count))
+	require.Equal(t, 1, count, "expected only a single lease since it should have been re-acquired")
 }
 
 // TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails makes sure that, during a lease
 // periodical refresh, if the descriptor, whose lease we intend to refresh, does not exist anymore, we delete
 // this descriptor from "cache" (i.e. manager.mu.descriptor).
 func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *testing.T) {
+	t.Skip("unsupported, lease renewals do not exist anymore.")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

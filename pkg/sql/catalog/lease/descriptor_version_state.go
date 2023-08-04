@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -29,6 +30,7 @@ type storedLease struct {
 	id         descpb.ID
 	prefix     []byte
 	version    int
+	sessionID  []byte
 	expiration tree.DTimestamp
 }
 
@@ -64,6 +66,7 @@ type descriptorVersionState struct {
 		// is associated with the version, or the ModificationTime of the next version
 		// when the version isn't associated with a lease.
 		expiration hlc.Timestamp
+		session    sqlliveness.Session
 
 		refcount int
 		// Set if the node has a lease on this descriptor version.
@@ -115,6 +118,10 @@ func (s *descriptorVersionState) hasExpired(timestamp hlc.Timestamp) bool {
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
 func (s *descriptorVersionState) hasExpiredLocked(timestamp hlc.Timestamp) bool {
+	// FIXME: Support both.
+	if s.mu.session != nil {
+		return s.mu.session.Expiration().LessEq(timestamp)
+	}
 	return s.mu.expiration.LessEq(timestamp)
 }
 
@@ -131,9 +138,24 @@ func (s *descriptorVersionState) incRefCountLocked(ctx context.Context, expensiv
 	}
 }
 
+func (s *descriptorVersionState) getExpirationAndHasSession() (hlc.Timestamp, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// FIXME: Support both.
+	if s.mu.session != nil {
+		return s.mu.session.Expiration(), true
+	}
+	return s.mu.expiration, false
+}
+
 func (s *descriptorVersionState) getExpiration() hlc.Timestamp {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// FIXME: Support both.
+	if s.mu.session != nil {
+		return s.mu.session.Expiration()
+	}
+	// Lease has a fixed expiration, so return that now
 	return s.mu.expiration
 }
 

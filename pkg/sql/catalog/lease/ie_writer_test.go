@@ -29,11 +29,11 @@ func newInternalExecutorWriter(ie isql.Executor, tableName string) *ieWriter {
 	const (
 		deleteLease = `
 DELETE FROM %s
-      WHERE (crdb_region, "descID", version, "nodeID", expiration)
+      WHERE (crdb_region, "descID", version, "nodeID", sessionID)
             = ($1, $2, $3, $4, $5);`
 		insertLease = `
 INSERT
-  INTO %s (crdb_region, "descID", version, "nodeID", expiration)
+  INTO %s (crdb_region, "descID", version, "nodeID", sessionID)
 VALUES ($1, $2, $3, $4, $5)`
 	)
 	return &ieWriter{
@@ -49,14 +49,14 @@ func (w *ieWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 		"lease-release",
 		nil, /* txn */
 		w.deleteQuery,
-		l.regionPrefix, l.descID, l.version, l.instanceID, &l.expiration,
+		l.regionPrefix, l.descID, l.version, l.instanceID, l.sessionID.UnsafeBytes(),
 	)
 	return err
 }
 
 func (w *ieWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	count, err := w.ie.Exec(ctx, "lease-insert", txn, w.insertQuery,
-		l.regionPrefix, l.descID, l.version, l.instanceID, &l.expiration,
+		l.regionPrefix, l.descID, l.version, l.instanceID, l.sessionID.UnsafeBytes(),
 	)
 	if err != nil {
 		return err

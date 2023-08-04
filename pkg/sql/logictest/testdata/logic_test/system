@@ -285,11 +285,11 @@ skipif config local-mixed-22.2-23.1
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.lease
 ----
-descID       INT8       false  NULL  ·  {primary}  false
-version      INT8       false  NULL  ·  {primary}  false
-nodeID       INT8       false  NULL  ·  {primary}  false
-expiration   TIMESTAMP  false  NULL  ·  {primary}  false
-crdb_region  BYTES      false  NULL  ·  {primary}  false
+descID       INT8   false  NULL  ·  {primary}  false
+version      INT8   false  NULL  ·  {primary}  false
+nodeID       INT8   false  NULL  ·  {primary}  false
+sessionID    BYTES  false  NULL  ·  {primary}  false
+crdb_region  BYTES  false  NULL  ·  {primary}  false
 
 onlyif config local-mixed-22.2-23.1
 query TTBTTTB rowsort

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,13 +49,14 @@ import (
 // the manager. Some of these fields belong on the manager, in any case, since
 // they're only used by the manager and not by the store itself.
 type storage struct {
-	nodeIDContainer *base.SQLIDContainer
-	db              isql.DB
-	clock           *hlc.Clock
-	settings        *cluster.Settings
-	codec           keys.SQLCodec
-	regionPrefix    *atomic.Value
-	sysDBCache      *catkv.SystemDatabaseCache
+	nodeIDContainer  *base.SQLIDContainer
+	db               isql.DB
+	clock            *hlc.Clock
+	settings         *cluster.Settings
+	codec            keys.SQLCodec
+	regionPrefix     *atomic.Value
+	sysDBCache       *catkv.SystemDatabaseCache
+	livenessProvider sqlliveness.Provider
 
 	// group is used for all calls made to acquireNodeLease to prevent
 	// concurrent lease acquisitions from the store.
@@ -70,6 +72,7 @@ type leaseFields struct {
 	descID       descpb.ID
 	version      descpb.DescriptorVersion
 	instanceID   base.SQLInstanceID
+	sessionID    sqlliveness.SessionID
 	expiration   tree.DTimestamp
 }
 
@@ -116,8 +119,17 @@ func (s storage) crossValidateDuringRenewal() bool {
 // or offline (currently only applicable to tables), the error will be of type
 // inactiveTableError. The expiration time set for the lease > minExpiration.
 func (s storage) acquire(
-	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
-) (desc catalog.Descriptor, expiration hlc.Timestamp, prefix []byte, _ error) {
+	ctx context.Context,
+	minExpiration hlc.Timestamp,
+	previousVersion descpb.DescriptorVersion,
+	id descpb.ID,
+) (
+	desc catalog.Descriptor,
+	session sqlliveness.Session,
+	expiration hlc.Timestamp,
+	prefix []byte,
+	_ error,
+) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	prefix = s.getRegionPrefix()
 	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -148,6 +160,7 @@ func (s storage) acquire(
 				version:      desc.GetVersion(),
 				instanceID:   instanceID,
 				expiration:   prevExpirationTS,
+				sessionID:    session.ID(),
 			}); err != nil {
 				return errors.Wrap(err, "deleting ambiguously created lease")
 			}
@@ -173,14 +186,26 @@ func (s storage) acquire(
 		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
 
 		ts := storedLeaseExpiration(expiration)
+		session, err = s.livenessProvider.Session(ctx)
+		if err != nil {
+			return err
+		}
 		lf := leaseFields{
 			regionPrefix: prefix,
 			descID:       desc.GetID(),
 			version:      desc.GetVersion(),
 			instanceID:   s.nodeIDContainer.SQLInstanceID(),
+			sessionID:    session.ID(),
 			expiration:   ts,
 		}
-		return s.writer.insertLease(ctx, txn, lf)
+		// FIXME: Check if we are still using expiry...
+		// If the version is the same as the previous version, then a valid
+		// row exists within the leases table. We only need to upsert if
+		// expiry is active. FIXME: Feed in...
+		if desc.GetVersion() != previousVersion {
+			return s.writer.insertLease(ctx, txn, lf)
+		}
+		return nil
 	}
 
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
@@ -197,16 +222,16 @@ func (s storage) acquire(
 				" removal for %v, retrying: %v", id, err)
 			continue
 		case err != nil:
-			return nil, hlc.Timestamp{}, nil, err
+			return nil, nil, hlc.Timestamp{}, nil, err
 		}
 		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
 		if s.testingKnobs.LeaseAcquiredEvent != nil {
 			s.testingKnobs.LeaseAcquiredEvent(desc, err)
 		}
 		s.outstandingLeases.Inc(1)
-		return desc, expiration, prefix, nil
+		return desc, session, expiration, prefix, nil
 	}
-	return nil, hlc.Timestamp{}, nil, ctx.Err()
+	return nil, nil, hlc.Timestamp{}, nil, ctx.Err()
 }
 
 // Release a previously acquired descriptor. Never let this method
@@ -232,6 +257,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			version:      descpb.DescriptorVersion(lease.version),
 			instanceID:   instanceID,
 			expiration:   lease.expiration,
+			sessionID:    sqlliveness.SessionID(lease.sessionID),
 		}
 		err := s.writer.deleteLease(ctx, nil /* txn */, lf)
 		if err != nil {

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,7 +83,7 @@ func (m *Manager) WaitForNoVersion(
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := m.storage.clock.Now()
-		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
+		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
 			now.AsOfSystemTime(),
 			id)
 		values, err := m.storage.db.Executor().QueryRowEx(
@@ -446,6 +447,22 @@ func (m *Manager) readOlderVersionForTimestamp(
 	return descs, nil
 }
 
+type staticSession struct {
+	exp hlc.Timestamp
+}
+
+// ID implements the sqlliveness.Session interface.
+func (f staticSession) ID() sqlliveness.SessionID { return sqlliveness.SessionID(f.exp.String()) }
+
+// Expiration implements the sqlliveness.Session interface.
+func (f staticSession) Expiration() hlc.Timestamp { return f.exp }
+
+// Start implements the sqlliveness.Session interface.
+func (f staticSession) Start() hlc.Timestamp { return hlc.MinTimestamp }
+
+// RegisterCallbackForSessionExpiry implements the sqlliveness.Session interface.
+func (f staticSession) RegisterCallbackForSessionExpiry(func(context.Context)) {}
+
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
 func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDescriptor) {
@@ -457,9 +474,10 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		// the store we have to ensure that no one else inserted the
 		// same version.
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
+		session := staticSession{versions[i].expiration}
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, false))
+				newDescriptorVersionState(t, versions[i].desc, session, versions[i].expiration, nil, false))
 		}
 	}
 }
@@ -528,10 +546,12 @@ func acquireNodeLease(
 			}
 			newest := m.findNewest(id)
 			var minExpiration hlc.Timestamp
+			var newestVersion descpb.DescriptorVersion
 			if newest != nil {
 				minExpiration = newest.getExpiration()
+				newestVersion = newest.GetVersion()
 			}
-			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, id)
+			desc, session, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, newestVersion, id)
 			if err != nil {
 				return nil, err
 			}
@@ -540,7 +560,7 @@ func acquireNodeLease(
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
 			var newDescVersionState *descriptorVersionState
-			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, regionPrefix)
+			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, session, expiration, regionPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -723,6 +743,7 @@ func NewLeaseManager(
 	clock *hlc.Clock,
 	settings *cluster.Settings,
 	settingsWatcher *settingswatcher.SettingsWatcher,
+	provider sqlliveness.Provider,
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
@@ -730,15 +751,16 @@ func NewLeaseManager(
 ) *Manager {
 	lm := &Manager{
 		storage: storage{
-			nodeIDContainer: nodeIDContainer,
-			writer:          newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher),
-			db:              db,
-			clock:           clock,
-			settings:        settings,
-			codec:           codec,
-			sysDBCache:      catkv.NewSystemDatabaseCache(codec, settings),
-			group:           singleflight.NewGroup("acquire-lease", "descriptor ID"),
-			testingKnobs:    testingKnobs.LeaseStoreTestingKnobs,
+			nodeIDContainer:  nodeIDContainer,
+			writer:           newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher),
+			livenessProvider: provider,
+			db:               db,
+			clock:            clock,
+			settings:         settings,
+			codec:            codec,
+			sysDBCache:       catkv.NewSystemDatabaseCache(codec, settings),
+			group:            singleflight.NewGroup("acquire-lease", "descriptor ID"),
+			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
 			outstandingLeases: metric.NewGauge(metric.Metadata{
 				Name:        "sql.leases.active",
 				Help:        "The number of outstanding SQL schema leases.",
@@ -843,10 +865,10 @@ func (m *Manager) AcquireByName(
 	descVersion := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
 		if descVersion.GetModificationTime().LessEq(timestamp) {
-			expiration := descVersion.getExpiration()
+			expiration, session := descVersion.getExpirationAndHasSession()
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
-			if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
+			if !session && durationUntilExpiry < m.storage.leaseRenewalTimeout() {
 				if t := m.findDescriptorState(descVersion.GetID(), false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(
 						ctx, m, descVersion.GetID(), name); err != nil {
@@ -1014,8 +1036,9 @@ func (m *Manager) Acquire(
 		if err == nil {
 			// If the latest lease is nearly expired, ensure a renewal is queued.
 			if latest {
-				durationUntilExpiry := time.Duration(desc.getExpiration().WallTime - timestamp.WallTime)
-				if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
+				expiration, session := desc.getExpirationAndHasSession()
+				durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
+				if !session && durationUntilExpiry < m.storage.leaseRenewalTimeout() {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, id, desc.GetName()); err != nil {
 						return nil, err
 					}
@@ -1251,7 +1274,8 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
-				m.refreshSomeLeases(ctx)
+				// FIXME: Disabled
+				// m.refreshSomeLeases(ctx)
 			}
 		}
 	})
@@ -1356,9 +1380,10 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// doesn't implement AS OF SYSTEM TIME.
 
 		// Read orphaned leases.
+		// FIXME: HERE
 		const (
 			queryWithRegion = `
-SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+SELECT "descID", version, "sessionID", crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `
 			queryWithoutRegion = `
 SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
@@ -1391,9 +1416,10 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			row := rows[i]
 			wg.Add(1)
 			lease := storedLease{
-				id:         descpb.ID(tree.MustBeDInt(row[0])),
-				version:    int(tree.MustBeDInt(row[1])),
-				expiration: tree.MustBeDTimestamp(row[2]),
+				id:        descpb.ID(tree.MustBeDInt(row[0])),
+				version:   int(tree.MustBeDInt(row[1])),
+				sessionID: []byte(tree.MustBeDBytes(row[2])),
+				// FIXME: SessionID
 			}
 			if len(row) == 4 {
 				if ed, ok := row[3].(*tree.DEnum); ok {
