@@ -473,6 +473,33 @@ func TestTypeCheckCollatedString(t *testing.T) {
 	require.Equal(t, rightTyp.Locale(), "en-US-u-ks-level2")
 }
 
+func TestTypeCheckCollatedStringNestedCaseComparison(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+
+	// The collated string constant must be on the LHS for this test, so that
+	// the type-checker chooses the collated string overload first.
+	for _, exprStr := range []string{
+		`CASE WHEN false THEN CASE WHEN (NOT (false)) THEN NULL END ELSE ('' COLLATE "es_ES") END >= ('' COLLATE "es_ES")`,
+		`CASE WHEN false THEN NULL ELSE ('' COLLATE "es_ES") END >= ('' COLLATE "es_ES")`,
+		`CASE WHEN false THEN ('' COLLATE "es_ES") ELSE NULL END >= ('' COLLATE "es_ES")`,
+		`('' COLLATE "es_ES") >= CASE WHEN false THEN CASE WHEN (NOT (false)) THEN NULL END ELSE ('' COLLATE "es_ES") END`} {
+		expr, err := parser.ParseExpr(exprStr)
+		require.NoError(t, err)
+		typed, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+		require.NoError(t, err)
+
+		for _, ex := range []tree.Expr{typed.(*tree.ComparisonExpr).Left, typed.(*tree.ComparisonExpr).Right} {
+			typ := ex.(tree.TypedExpr).ResolvedType()
+			require.Equal(t, types.CollatedStringFamily, typ.Family())
+			require.Equal(t, "es_ES", typ.Locale())
+		}
+	}
+}
+
 func TestTypeCheckCaseExprWithPlaceholders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
