@@ -951,9 +951,10 @@ func makeTenantSQLServerArgs(
 	// the instance ID (once known) as a tag.
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
-	maxOffset := time.Duration(baseCfg.MaxOffset)
-	toleratedOffset := baseCfg.ToleratedOffset()
-	clock := hlc.NewClockWithSystemTimeSource(maxOffset, toleratedOffset)
+	clock, err := newClockFromConfig(startupCtx, baseCfg)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
 
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
