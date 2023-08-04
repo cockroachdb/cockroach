@@ -718,6 +718,19 @@ func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
 	}
 }
 
+func (h *hasher) HashFastPathUniqueChecksExpr(val FastPathUniqueChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+		h.HashTableID(val[i].ReferencedTableID)
+		h.HashIndexOrdinal(val[i].ReferencedIndexOrdinal)
+		h.HashColList(val[i].InsertCols)
+		for _, scalarListExpr := range val[i].DatumsFromConstraint {
+			tuple := *(scalarListExpr.(*TupleExpr))
+			h.HashScalarListExpr(tuple.Elems)
+		}
+	}
+}
+
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
 	for i := range val {
 		h.HashString(val[i].Key)
@@ -1170,6 +1183,32 @@ func (h *hasher) IsUniqueChecksExprEqual(l, r UniqueChecksExpr) bool {
 	for i := range l {
 		if l[i].Check != r[i].Check {
 			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsFastPathUniqueChecksExprEqual(l, r FastPathUniqueChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].ReferencedTableID != r[i].ReferencedTableID {
+			return false
+		}
+		if l[i].ReferencedIndexOrdinal != r[i].ReferencedIndexOrdinal {
+			return false
+		}
+		if !h.IsColListEqual(l[i].InsertCols, r[i].InsertCols) {
+			return false
+		}
+		if len(l[i].DatumsFromConstraint) != len(r[i].DatumsFromConstraint) {
+			return false
+		}
+		for j := range l[i].DatumsFromConstraint {
+			if l[i].DatumsFromConstraint[j] != r[i].DatumsFromConstraint[j] {
+				return false
+			}
 		}
 	}
 	return true

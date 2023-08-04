@@ -21,6 +21,7 @@
 define Insert {
     Input RelExpr
     UniqueChecks UniqueChecksExpr
+    FastPathUniqueChecks FastPathUniqueChecksExpr
     FKChecks FKChecksExpr
     _ MutationPrivate
 }
@@ -266,6 +267,47 @@ define FKChecksItemPrivate {
 
     # OpName is the name that should be used for this check in error messages.
     OpName string
+}
+
+# FastPathUniqueChecks is a list of uniqueness check Selects which could be
+# converted into constrained Scans from which KV requests can be generated
+# to be used in place of regular UniqueChecks.
+[Scalar, List]
+define FastPathUniqueChecks {
+}
+
+# FastPathUniqueChecksItem is a unique check query, to be run as a KV request
+# before the main query.
+# An execution error will be generated if the KV request returns any results.
+[Scalar, ListItem]
+define FastPathUniqueChecksItem {
+    Check RelExpr
+    _ FastPathUniqueChecksItemPrivate
+}
+
+# FastPathUniqueChecksItemPrivate contains information about a foreign key or
+# uniqueness check to be performed by the insert fast-path (see
+# ConstructInsertFastPath). It identifies the index into which we can perform
+# the lookup. This is a structure built during exploration to contain
+# information we can use to build the InsertFastPathFKUniqCheck structure in the
+# execbuilder phase.
+[Private]
+define FastPathUniqueChecksItemPrivate {
+    ReferencedTableID TableID
+    ReferencedIndexOrdinal IndexOrdinal
+
+    # InsertCols contains the FK columns from the origin table or the index key
+    # columns for a uniqueness check, in the order of the ReferencedIndexOrdinal
+    # columns. For each, the value in the array indicates the index of the
+    # column in the input table.
+    InsertCols ColList
+
+    # DatumsFromConstraint contains constant values from the WHERE clause
+    # constraint which are part of the index key to look up. The number of
+    # entries corresponds with the number of KV lookups. For example, when built
+    # from analyzing a locality-optimized operation accessing 1 local region and
+    # 2 remote regions, the resulting DatumsFromConstraint would have 3 entries.
+    DatumsFromConstraint ScalarListExpr
 }
 
 # UniqueChecks is a list of uniqueness check queries, to be run after the main

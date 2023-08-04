@@ -172,6 +172,10 @@ type mutationBuilder struct {
 	// uniqueChecks contains unique check queries; see buildUnique* methods.
 	uniqueChecks memo.UniqueChecksExpr
 
+	// fastPathUniqueChecks contains fast path unique check queries which are used for
+	// insert fast path; see buildInsertionCheck.
+	fastPathUniqueChecks memo.FastPathUniqueChecksExpr
+
 	// fkChecks contains foreign key check queries; see buildFK* methods.
 	fkChecks memo.FKChecksExpr
 

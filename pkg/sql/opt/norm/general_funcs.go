@@ -281,6 +281,36 @@ func (c *CustomFuncs) RedundantCols(input memo.RelExpr, cols opt.ColSet) opt.Col
 	return cols.Difference(reducedCols)
 }
 
+func (c *CustomFuncs) RemapScanColsInScalarExpr(
+	scalar opt.ScalarExpr, src, dst *memo.ScanPrivate,
+) opt.ScalarExpr {
+	md := c.mem.Metadata()
+	if md.Table(src.Table).ID() != md.Table(dst.Table).ID() {
+		panic(errors.AssertionFailedf("scans must have the same base table"))
+	}
+	if src.Cols.Len() != dst.Cols.Len() {
+		panic(errors.AssertionFailedf("scans must have the same number of columns"))
+	}
+	// Remap each column in src to a column in dst.
+	var colMap opt.ColMap
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		ord := src.Table.ColumnOrdinal(srcCol)
+		dstCol := dst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	return c.f.RemapCols(scalar, colMap)
+}
+
+// RemapScanColsInFilter returns a new FiltersExpr where columns in src's table
+// are replaced with columns of the same ordinal in dst's table. src and dst
+// must scan the same base table.
+func (c *CustomFuncs) RemapScanColsInFilter(
+	filters memo.FiltersExpr, src, dst *memo.ScanPrivate,
+) memo.FiltersExpr {
+	newFilters := c.RemapScanColsInScalarExpr(&filters, src, dst).(*memo.FiltersExpr)
+	return *newFilters
+}
+
 // DuplicateColumnIDs duplicates a table and set of columns IDs in the metadata.
 // It returns the new table's ID and the new set of columns IDs.
 func (c *CustomFuncs) DuplicateColumnIDs(
