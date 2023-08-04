@@ -209,6 +209,11 @@ const (
 	// parameters of a window function in order to reject nested window
 	// functions.
 	WindowFuncScene
+
+	// ConditionalScene is temporarily entered while type checking condition
+	// expressions CASE, COALESCE, and IF. Used to reject set-returning
+	// functions within conditional expressions.
+	ConditionalScene
 )
 
 // Enter enters the given scene adds the given scene to s.
@@ -424,11 +429,8 @@ func (expr *CaseExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
 	if semaCtx != nil {
-		// We need to save and restore the previous value of the field in
-		// semaCtx in case we are recursively called within a subquery
-		// context.
-		defer semaCtx.Properties.Restore(semaCtx.Properties)
-		semaCtx.Properties.Require("CASE", RejectGenerators)
+		defer semaCtx.Properties.Scene.ReturnTo(semaCtx.Properties.Scene)
+		semaCtx.Properties.Scene.Enter(ConditionalScene)
 	}
 	var err error
 	tmpExprs := make([]Expr, 0, len(expr.Whens)+1)
@@ -877,11 +879,8 @@ func (expr *CoalesceExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
 	if semaCtx != nil {
-		// We need to save and restore the previous value of the field in
-		// semaCtx in case we are recursively called within a subquery
-		// context.
-		defer semaCtx.Properties.Restore(semaCtx.Properties)
-		semaCtx.Properties.Require("COALESCE", RejectGenerators)
+		defer semaCtx.Properties.Scene.ReturnTo(semaCtx.Properties.Scene)
+		semaCtx.Properties.Scene.Enter(ConditionalScene)
 	}
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, expr.Exprs...)
 	if err != nil {
@@ -1028,6 +1027,9 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 		}
 		if sc.Properties.IsSet(RejectGenerators) {
 			return NewInvalidFunctionUsageError(GeneratorClass, sc.Properties.required.context)
+		}
+		if sc.Properties.Scene.In(ConditionalScene) {
+			return NewInvalidFunctionUsageError(GeneratorClass, "conditional expressions")
 		}
 		sc.Properties.Derived.SeenGenerator = true
 	}
@@ -1355,11 +1357,8 @@ func (expr *IfExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
 	if semaCtx != nil {
-		// We need to save and restore the previous value of the field in
-		// semaCtx in case we are recursively called within a subquery
-		// context.
-		defer semaCtx.Properties.Restore(semaCtx.Properties)
-		semaCtx.Properties.Require("IF", RejectGenerators)
+		defer semaCtx.Properties.Scene.ReturnTo(semaCtx.Properties.Scene)
+		semaCtx.Properties.Scene.Enter(ConditionalScene)
 	}
 	typedCond, err := typeCheckAndRequireBoolean(ctx, semaCtx, expr.Cond, "IF condition")
 	if err != nil {
