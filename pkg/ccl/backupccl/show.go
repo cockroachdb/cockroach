@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -830,10 +831,14 @@ func backupShowerDefault(
 					fileSizes = info.fileSizes[layer]
 				}
 
-				tableSizes, err := getTableSizes(ctx, info.layerToIterFactory[layer], fileSizes)
-				if err != nil {
-					return nil, err
+				var tableSizes map[catid.DescID]descriptorSize
+				if !opts.SkipSize {
+					tableSizes, err = getTableSizes(ctx, info.layerToIterFactory[layer], fileSizes)
+					if err != nil {
+						return nil, err
+					}
 				}
+
 				backupType := tree.NewDString("full")
 				if manifest.IsIncremental() {
 					backupType = tree.NewDString("incremental")
