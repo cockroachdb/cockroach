@@ -570,6 +570,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 			Cols: opt.ColList{},
 			ID:   mb.md.NextUniqueID(),
 		})
+		mb.inputForInsertExpr = mb.outScope.expr
 		return
 	}
 
@@ -644,6 +645,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 
 	// Add assignment casts for insert columns.
 	mb.addAssignmentCasts(mb.insertColIDs)
+	mb.inputForInsertExpr = mb.outScope.expr
 }
 
 // addSynthesizedColsForInsert wraps an Insert input expression with a Project
@@ -690,7 +692,7 @@ func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(
-		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+		mb.outScope.expr, mb.uniqueChecks, mb.fastPathUniqueChecks, mb.fkChecks, private,
 	)
 
 	mb.buildReturning(returning)
