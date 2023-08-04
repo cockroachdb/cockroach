@@ -84,13 +84,14 @@ func (sr *SimulatorReplica) LeaseStatusAt(
 // violates the lease preferences defined in the span config. If there is an
 // error or no preferences defined then it will return false and consider that
 // to be in-conformance.
-func (sr *SimulatorReplica) LeaseViolatesPreferences(context.Context) bool {
+func (sr *SimulatorReplica) LeaseViolatesPreferences(
+	_ context.Context, conf roachpb.SpanConfig,
+) bool {
 	descs := sr.state.StoreDescriptors(true /* useCached */, sr.repl.StoreID())
 	if len(descs) != 1 {
 		panic(fmt.Sprintf("programming error: cannot get  store descriptor for store %d", sr.repl.StoreID()))
 	}
 	storeDesc := descs[0]
-	_, conf := sr.DescAndSpanConfig()
 
 	if len(conf.LeasePreferences) == 0 {
 		return false
@@ -146,10 +147,8 @@ func (sr *SimulatorReplica) GetFirstIndex() kvpb.RaftIndex {
 	return 2
 }
 
-// DescAndSpanConfig returns the authoritative range descriptor as well
-// as the span config for the replica.
-func (sr *SimulatorReplica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
-	return sr.rng.Descriptor(), sr.rng.SpanConfig()
+func (sr *SimulatorReplica) SpanConfig() (roachpb.SpanConfig, error) {
+	return sr.rng.SpanConfig(), nil
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in

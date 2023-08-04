@@ -610,7 +610,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	// order to pass replicaIsBehind checks, fake out the function for getting
 	// raft status with one that always returns all replicas as up to date.
 	sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-		return TestingRaftStatusFn(r)
+		return TestingRaftStatusFn(r.Desc(), r.StoreID())
 	}
 
 	testCases := []struct {
@@ -907,7 +907,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-				return TestingRaftStatusFn(r)
+				return TestingRaftStatusFn(r.Desc(), r.StoreID())
 			}
 			sp.OverrideIsStoreReadyForRoutineReplicaTransferFn = func(_ context.Context, this roachpb.StoreID) bool {
 				for _, deadStore := range deadStores {
@@ -1261,7 +1261,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-				return TestingRaftStatusFn(r)
+				return TestingRaftStatusFn(r.Desc(), r.StoreID())
 			}
 			s.cfg.DefaultSpanConfig.NumVoters = int32(len(tc.voters))
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters) + len(tc.nonVoters))
@@ -1526,7 +1526,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-				return TestingRaftStatusFn(r)
+				return TestingRaftStatusFn(r.Desc(), r.StoreID())
 			}
 
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
@@ -1563,21 +1563,19 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// Set up a fake RaftStatus that indicates s5 is behind (but all other stores
 	// are caught up). We thus shouldn't transfer a lease to s5.
 	behindTestingRaftStatusFn := func(
-		r interface {
-			Desc() *roachpb.RangeDescriptor
-			StoreID() roachpb.StoreID
-		},
+		desc *roachpb.RangeDescriptor,
+		storeID roachpb.StoreID,
 	) *raft.Status {
 		status := &raft.Status{
 			Progress: make(map[uint64]tracker.Progress),
 		}
-		replDesc, ok := r.Desc().GetReplicaDescriptor(r.StoreID())
-		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", r.StoreID())
+		replDesc, ok := desc.GetReplicaDescriptor(storeID)
+		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", storeID)
 
 		status.Lead = uint64(replDesc.ReplicaID)
 		status.RaftState = raft.StateLeader
 		status.Commit = 2
-		for _, replica := range r.Desc().InternalReplicas {
+		for _, replica := range desc.InternalReplicas {
 			match := uint64(2)
 			if replica.StoreID == roachpb.StoreID(5) {
 				match = 0
@@ -1618,7 +1616,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 
 		sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
 		sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
-			return behindTestingRaftStatusFn(r)
+			return behindTestingRaftStatusFn(r.Desc(), r.StoreID())
 		}
 		lbRebalanceDimension := sr.RebalanceObjective().ToDimension()
 
@@ -1821,16 +1819,11 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 // TestingRaftStatusFn returns a raft status where all replicas are up to date and
 // the replica on the store with ID StoreID is the leader. It may be used for
 // testing.
-func TestingRaftStatusFn(
-	r interface {
-		Desc() *roachpb.RangeDescriptor
-		StoreID() roachpb.StoreID
-	},
-) *raft.Status {
+func TestingRaftStatusFn(desc *roachpb.RangeDescriptor, storeID roachpb.StoreID) *raft.Status {
 	status := &raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
-	replDesc, ok := r.Desc().GetReplicaDescriptor(r.StoreID())
+	replDesc, ok := desc.GetReplicaDescriptor(storeID)
 	if !ok {
 		return status
 	}
@@ -1838,7 +1831,7 @@ func TestingRaftStatusFn(
 	status.Lead = uint64(replDesc.ReplicaID)
 	status.RaftState = raft.StateLeader
 	status.Commit = 2
-	for _, replica := range r.Desc().InternalReplicas {
+	for _, replica := range desc.InternalReplicas {
 		status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
 			Match: 2,
 			State: tracker.StateReplicate,

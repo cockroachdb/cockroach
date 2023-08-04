@@ -1967,6 +1967,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				emptySpanConfig(),
 				c.existing,
 				&mockRepl{
@@ -2096,6 +2097,7 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				emptySpanConfig(),
 				existing,
 				&mockRepl{
@@ -2211,6 +2213,7 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				emptySpanConfig(),
 				c.existing,
 				repl,
@@ -2303,6 +2306,7 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				sp,
+				&roachpb.RangeDescriptor{},
 				c.conf,
 				c.existing,
 				&mockRepl{
@@ -2415,6 +2419,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				storePool,
+				&roachpb.RangeDescriptor{},
 				c.conf,
 				c.existing,
 				&mockRepl{
@@ -2699,6 +2704,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 			result := a.ShouldTransferLease(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				emptySpanConfig(),
 				c.existing,
 				&mockRepl{
@@ -2767,6 +2773,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 			result := a.ShouldTransferLease(
 				ctx,
 				storePool,
+				&roachpb.RangeDescriptor{},
 				emptySpanConfig(),
 				c.existing,
 				&mockRepl{
@@ -2814,6 +2821,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		result := a.ShouldTransferLease(
 			ctx,
 			storePool,
+			&roachpb.RangeDescriptor{},
 			emptySpanConfig(),
 			replicas(1, 2, 3),
 			&mockRepl{storeID: 2, replicationFactor: 3},
@@ -2955,6 +2963,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 			result := a.ShouldTransferLease(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				conf,
 				c.existing,
 				&mockRepl{
@@ -2970,6 +2979,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				conf,
 				c.existing,
 				&mockRepl{
@@ -2989,6 +2999,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 			target = a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				conf,
 				c.existing,
 				&mockRepl{
@@ -3082,6 +3093,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				conf,
 				c.existing,
 				&mockRepl{
@@ -3102,6 +3114,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 			target = a.TransferLeaseTarget(
 				ctx,
 				sp,
+				&roachpb.RangeDescriptor{},
 				conf,
 				c.existing,
 				&mockRepl{
@@ -5732,6 +5745,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				ctx,
 				storePool,
+				&roachpb.RangeDescriptor{},
 				emptySpanConfig(),
 				existing,
 				&mockRepl{
