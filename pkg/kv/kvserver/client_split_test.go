@@ -1509,8 +1509,9 @@ func runSetupSplitSnapshotRace(
 		t.Fatal(pErr)
 	}
 
-	// Store 3 still has the old value, but 4 and 5 are up to date.
-	tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 2, 5, 5})
+	// Store 3 still has the old value (but it's offline), and 4 and 5
+	// are up to date.
+	tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 0 /* stopped */, 5, 5})
 
 	// Scan the meta ranges to resolve all intents
 	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender),
@@ -1541,12 +1542,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): Currently this test uses ReuseEnginesDeprecated because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
-	runSetupSplitSnapshotRace(t, stickyVFSRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
+	runSetupSplitSnapshotRace(t, server.NewStickyVFSRegistry(), func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the left range up first so that the split happens before it sees a snapshot.
 		for i := 1; i <= 3; i++ {
 			require.NoError(t, tc.RestartServer(i))
@@ -1580,12 +1576,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): Currently this test uses ReuseEngines because
-	// `tc.WaitForValues` will try to read from a closed Engine otherwise; fix.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
-	runSetupSplitSnapshotRace(t, stickyVFSRegistry, func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
+	runSetupSplitSnapshotRace(t, server.NewStickyVFSRegistry(), func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
 			require.NoError(t, tc.RestartServer(i))
