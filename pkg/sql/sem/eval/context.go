@@ -445,6 +445,11 @@ func (p *fakePlannerWithMonitor) Optimizer() interface{} {
 	return nil
 }
 
+// AutoCommit is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) AutoCommit() bool {
+	return false
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }
