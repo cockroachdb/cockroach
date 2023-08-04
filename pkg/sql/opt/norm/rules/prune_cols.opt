@@ -453,7 +453,7 @@
 # PruneMutationInputCols discards input columns that are never used by the
 # mutation operator.
 [PruneMutationInputCols, Normalize]
-(Insert | Update | Upsert | Delete
+(Update | Upsert | Delete
     $input:*
     $uniqueChecks:*
     $fkChecks:*
@@ -475,6 +475,33 @@
     $mutationPrivate
 )
 
+# PruneInsertInputCols discards input columns that are never used by the
+# mutation operator.
+[PruneInsertInputCols, Normalize]
+(Insert
+    $input:*
+    $uniqueChecks:*
+    $fastPathUniqueChecks:*
+    $fkChecks:*
+    $mutationPrivate:* &
+        (CanPruneCols
+            $input
+            $needed:(NeededMutationCols
+                $mutationPrivate
+                $uniqueChecks
+                $fkChecks
+            )
+        )
+)
+=>
+((OpName)
+    (PruneCols $input $needed)
+    $uniqueChecks
+    $fastPathUniqueChecks
+    $fkChecks
+    $mutationPrivate
+)
+
 # PruneReturningCols removes columns from the mutation operator's ReturnCols
 # set if they are not used in the RETURNING clause of the mutation.
 # Removing ReturnCols will then allow the PruneMutationFetchCols to be more
@@ -483,7 +510,7 @@
 # columns. Make appropriate changes to SQL execution to accommodate this.
 [PruneMutationReturnCols, Normalize]
 (Project
-    $input:(Insert | Update | Upsert | Delete
+    $input:(Update | Upsert | Delete
         $innerInput:*
         $uniqueChecks:*
         $fkChecks:*
@@ -505,6 +532,45 @@
     ((OpName $input)
         $innerInput
         $uniqueChecks
+        $fkChecks
+        (PruneMutationReturnCols $mutationPrivate $needed)
+    )
+    $projections
+    $passthrough
+)
+
+# PruneReturningCols removes columns from the Insert operator's ReturnCols
+# set if they are not used in the RETURNING clause of the mutation.
+# Removing ReturnCols will then allow the PruneMutationFetchCols to be more
+# conservative with the fetch columns.
+# TODO(ridwanmsharif): Mutations shouldn't need to return the primary key
+# columns. Make appropriate changes to SQL execution to accommodate this.
+[PruneInsertReturnCols, Normalize]
+(Project
+    $input:(Insert
+        $innerInput:*
+        $uniqueChecks:*
+        $fastPathUniqueChecks:*
+        $fkChecks:*
+        $mutationPrivate:*
+    )
+    $projections:*
+    $passthrough:* &
+        (CanPruneMutationReturnCols
+            $mutationPrivate
+            $needed:(UnionCols3
+                (PrimaryKeyCols (MutationTable $mutationPrivate))
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
+)
+=>
+(Project
+    ((OpName $input)
+        $innerInput
+        $uniqueChecks
+        $fastPathUniqueChecks
         $fkChecks
         (PruneMutationReturnCols $mutationPrivate $needed)
     )

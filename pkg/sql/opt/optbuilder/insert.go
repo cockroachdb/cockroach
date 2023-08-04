@@ -690,7 +690,7 @@ func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 
 	private := mb.makeMutationPrivate(returning != nil)
 	mb.outScope.expr = mb.b.factory.ConstructInsert(
-		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
+		mb.outScope.expr, mb.uniqueChecks, mb.fastPathUniqueChecks, mb.fkChecks, private,
 	)
 
 	mb.buildReturning(returning)
