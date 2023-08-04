@@ -1214,14 +1214,8 @@ type StoreConfig struct {
 	KVMemoryMonitor        *mon.BytesMonitor
 	RangefeedBudgetFactory *rangefeed.BudgetFactory
 
-	// SpanConfigsDisabled determines whether we're able to use the span configs
-	// infrastructure or not.
-	//
-	// TODO(irfansharif): We can remove this.
-	SpanConfigsDisabled bool
 	// Used to subscribe to span configuration changes, keeping up-to-date a
-	// data structure useful for retrieving span configs. Only available if
-	// SpanConfigsDisabled is unset.
+	// data structure useful for retrieving span configs.
 	SpanConfigSubscriber spanconfig.KVSubscriber
 	// SharedStorageEnabled stores whether this store is configured with a
 	// shared.Storage instance and can accept shared snapshots.
@@ -2220,23 +2214,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	if !s.cfg.SpanConfigsDisabled {
+	// Some tests don't set the SpanConfigSubscriber.
+	// TODO(baptist): Fix all the tests that set a null SpanConfigSubscriber.
+	if s.cfg.SpanConfigSubscriber != nil {
 		s.cfg.SpanConfigSubscriber.Subscribe(func(ctx context.Context, update roachpb.Span) {
 			s.onSpanConfigUpdate(ctx, update)
-		})
-
-		// When toggling between the system config span and the span
-		// configs infrastructure, we want to re-apply configs on all
-		// replicas from whatever the new source is.
-		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
-			if enabled {
-				s.applyAllFromSpanConfigStore(ctx)
-			} else if scp := s.cfg.SystemConfigProvider; scp != nil {
-				if sc := scp.GetSystemConfig(); sc != nil {
-					s.systemGossipUpdate(sc)
-				}
-			}
 		})
 
 		// We also want to do it when the fallback config setting is changed.
@@ -2284,10 +2266,8 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
 	}
 
-	if s.cfg.SpanConfigsDisabled ||
-		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
+	if s.cfg.SpanConfigSubscriber == nil ||
 		s.TestingKnobs().UseSystemConfigSpanForQueues {
-
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
 			return nil, errSpanConfigsUnavailable
@@ -2487,10 +2467,6 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
-	if !spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return
-	}
-
 	sp, err := keys.SpanAddr(updated)
 	if err != nil {
 		log.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
@@ -3749,10 +3725,9 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 // WaitForSpanConfigSubscription waits until the store is wholly subscribed to
 // the global span configurations state.
 func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
-	if s.cfg.SpanConfigsDisabled {
-		return nil // nothing to do here
+	if s.cfg.SpanConfigSubscriber == nil {
+		return nil
 	}
-
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		if !s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
 			return nil

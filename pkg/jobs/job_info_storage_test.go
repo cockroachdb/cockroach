@@ -239,7 +239,6 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 				SkipJobBootstrap: true,
 			},
 		},
-		DisableSpanConfigs: true,
 	}
 
 	ctx := context.Background()
