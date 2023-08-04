@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/text/language"
 )
 
@@ -328,6 +329,10 @@ func (n *EnumValue) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
+	} else if f.HasFlags(FmtMarkRedactionNode) {
+		ctx.WriteString(string(redact.StartMarker()))
+		lexbase.EncodeSQLString(&ctx.Buffer, string(*n))
+		ctx.WriteString(string(redact.EndMarker()))
 	} else {
 		lexbase.EncodeSQLString(&ctx.Buffer, string(*n))
 	}

@@ -284,6 +284,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 
 	t.Run("redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE plesiosaur AS ENUM ('pterodactyl', '5555555555554444');")
 		r.Exec(t, "CREATE TABLE pterosaur (cardholder STRING PRIMARY KEY, cardno INT, INDEX (cardno));")
 		r.Exec(t, "INSERT INTO pterosaur VALUES ('pterodactyl', 5555555555554444);")
 		r.Exec(t, "CREATE STATISTICS jurassic FROM pterosaur;")
@@ -303,6 +304,20 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false, /* expectErrors */
 			plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("types", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE test_type1 AS ENUM ('hello','world');")
+		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type1", nil /* contentCheck */, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type2", nil /* contentCheck */, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
 	})
 
