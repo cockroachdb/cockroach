@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 )
 
-// FKCheckSpan returns a span that can be scanned to ascertain existence of a
-// specific row in a given index.
-func FKCheckSpan(
+// FKUniqCheckSpan returns a span that can be scanned to ascertain existence of
+// a specific row in a given index.
+func FKUniqCheckSpan(
 	builder *span.Builder,
 	splitter span.Splitter,
 	values []tree.Datum,

@@ -289,7 +289,7 @@ define FastPathUniqueChecksItem {
 # uniqueness check to be performed by the insert fast-path (see
 # ConstructInsertFastPath). It identifies the index into which we can perform
 # the lookup. This is a structure built during exploration to contain
-# information we can use to build the InsertFastPathFKUniqCheck structure in the
+# information we can use to build the InsertFastPathCheck structure in the
 # execbuilder phase.
 [Private]
 define FastPathUniqueChecksItemPrivate {
