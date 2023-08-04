@@ -48,3 +48,14 @@ func CombineUnique[T constraints.Ordered](a, b []T) []T {
 	}
 	return a
 }
+
+// Map iterates over all elements in slice, applies transformation
+// function for every result and returns new slice with transformed
+// values
+func Map[T, U any](values []T, fn func(T) U) []U {
+	res := make([]U, len(values))
+	for i := range values {
+		res[i] = fn(values[i])
+	}
+	return res
+}
