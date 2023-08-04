@@ -25,20 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EnabledSetting is a hidden cluster setting to enable the use of the span
-// configs infrastructure in KV. It switches each store in the cluster from
-// using the gossip backed system config span to instead using the span configs
-// infrastructure. It has no effect if COCKROACH_DISABLE_SPAN_CONFIGS
-// is set.
-//
-// TODO(irfansharif): We should remove this.
-var EnabledSetting = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"spanconfig.store.enabled",
-	`use the span config infrastructure in KV instead of the system config span`,
-	true,
-)
-
 // FallbackConfigOverride is a hidden cluster setting to override the fallback
 // config used for ranges with no explicit span configs set.
 var FallbackConfigOverride = settings.RegisterProtobufSetting(
