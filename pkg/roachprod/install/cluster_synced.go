@@ -134,7 +134,7 @@ var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDe
 var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
 var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
 	func(res *RunResultDetails) bool {
-		out := strings.ToLower(res.Output())
+		out := strings.ToLower(res.Output(false))
 		for _, s := range noScpRetrySubstrings {
 			if strings.Contains(out, s) {
 				return false
@@ -775,28 +775,44 @@ func newRunResultDetails(node Node, err error) *RunResultDetails {
 }
 
 // Output prints either the combined, or separated stdout and stderr command output
-func (r *RunResultDetails) Output() string {
+func (r *RunResultDetails) Output(decorate bool) string {
 	var builder strings.Builder
-
-	if s := strings.TrimSpace(r.Stdout); s != "" {
-		builder.WriteString("stdout:\n```\n")
-		builder.WriteString(s)
-		builder.WriteString("\n```")
-	}
-	if s := strings.TrimSpace(r.Stderr); s != "" {
+	outputExists := false
+	writeVal := func(label string, value string) {
+		s := strings.TrimSpace(value)
 		if builder.Len() > 0 {
 			builder.WriteByte('\n')
 		}
-		builder.WriteString("stderr:\n```\n")
+
+		if s == "" {
+			if decorate {
+				builder.WriteString(label)
+				builder.WriteString(": <empty>")
+			}
+			return
+		}
+
+		if label != "" && decorate {
+			builder.WriteString(label)
+			builder.WriteString(":")
+		}
 		builder.WriteString(s)
-		builder.WriteString("\n```")
-	}
-	if s := strings.TrimSpace(r.CombinedOut); s != "" {
-		builder.WriteString("combined out:\n```\n")
-		builder.WriteString(s)
-		builder.WriteString("\n```")
+		builder.WriteString("\n")
+		outputExists = true
 	}
 
+	writeVal("stdout", r.Stdout)
+	writeVal("stderr", r.Stderr)
+
+	// Only if stderr and stdout are empty do we check the combined output.
+	if !outputExists {
+		builder.Reset()
+		writeVal("", r.CombinedOut)
+	}
+
+	if !outputExists {
+		return ""
+	}
 	return builder.String()
 }
 
@@ -888,12 +904,16 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	}
 
 	if res.Err != nil {
-		output := res.Output()
+		output := res.Output(true)
 		// Somewhat arbitrary limit to give us a chance to see some of the output
 		// in the failure_*.log, since the full output is in the run_*.log.
 		oLen := len(output)
-		if oLen > 2048 {
-			output = "<truncated> ... " + output[oLen-2048:oLen-1]
+		if oLen > 1024 {
+			output = "<truncated> ... " + output[oLen-1024:oLen-1]
+		}
+
+		if output == "" {
+			output = "<no output>"
 		}
 		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n%s", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
@@ -924,7 +944,7 @@ func (c *SyncedCluster) Run(
 	stream := len(nodes) == 1
 	var display string
 	if !stream {
-		display = fmt.Sprintf("%s: %s", c.Name, title)
+		display = fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
 	}
 
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -951,15 +971,15 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 	// Easier to read output when we indent each line of the output. If an error is
 	// present, we also include the error message at the top.
 	format := func(s string, e error) string {
-		s = strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n\t")
+		s = strings.ReplaceAll(s, "\n", "\n\t")
 		if e != nil {
 			return fmt.Sprintf("<err> %v\n\t%s", e, s)
 		}
 
 		if s == "" {
-			s = "<ok>"
+			return "\t<ok>"
 		}
-		return s
+		return fmt.Sprintf("\t<ok>\n\t%s", s)
 	}
 
 	var resultWithError *RunResultDetails
@@ -973,7 +993,7 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 		// Emit the cached output of each result. When stream == true, the output is emitted
 		// as it is generated in `runCmdOnSingleNode`.
 		if !stream {
-			fmt.Fprintf(stdout, "  %2d: %s\n", i+1, format(r.CombinedOut, r.Err))
+			fmt.Fprintf(stdout, "  %2d: %s\n", i+1, format(r.Output(true), r.Err))
 		}
 
 		if r.Err != nil {
@@ -999,7 +1019,7 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 func (c *SyncedCluster) RunWithDetails(
 	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string,
 ) ([]RunResultDetails, error) {
-	display := fmt.Sprintf("%s: %s", c.Name, title)
+	display := fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
 
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -2205,7 +2225,6 @@ func (c *SyncedCluster) Get(
 	}
 
 	if config.Quiet && l.File != nil {
-		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
 			l.Printf("  %2d: %s", nodes[i], lines[i])

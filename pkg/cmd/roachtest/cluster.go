@@ -2141,17 +2141,20 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	}
 	defer l.Close()
 
-	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
+	cmd := strings.Join(args, " ")
+	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
+	fmt.Fprintf(l.Stdout, "> %s\n", cmd)
 	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
 			return err
 		}
 
+		l.Printf("> result: %s", err)
 		createFailedFile(l.File.Name())
 		return errors.Wrapf(err, "full command output in %s.log", logFile)
 	}
-
+	fmt.Fprintf(l.Stdout, "> result: <ok>\n")
 	return nil
 }
 
@@ -2185,25 +2188,24 @@ func (c *clusterImpl) RunWithDetails(
 	}
 	defer l.Close()
 
-	// This logs to the test logger to easily identify the command that is being run and
-	// where to find the output.
-	joined := strings.Join(args, " ")
+	cmd := strings.Join(args, " ")
 
 	// This could probably be removed in favour of c.t.L() but it's used extensively in roachtests.
 	if testLogger != nil {
-		testLogger.Printf("running command `%s`; output in %s.log", joined, logFile)
+		testLogger.Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	}
-	l.Printf("running %s on nodes: %v", joined, nodes)
+	fmt.Fprintf(l.Stdout, "> %s\n", cmd)
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 
-	if err := ctx.Err(); err != nil {
-		l.Printf("(note: incoming context was canceled: %s)", err)
-		return nil, err
-	}
-
 	logFileFull := l.File.Name()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			l.Printf("(note: incoming context was canceled: %s)", err)
+			return nil, ctxErr
+		}
+
+		l.Printf("> result: %s", err)
 		createFailedFile(logFileFull)
 		return nil, err
 	}
