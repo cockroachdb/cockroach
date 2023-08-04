@@ -183,4 +183,3 @@ statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary
 CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
 
 subtest end
-
