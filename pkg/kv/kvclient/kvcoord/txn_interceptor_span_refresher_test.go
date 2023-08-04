@@ -638,7 +638,7 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	require.NotNil(t, pErr)
 	require.Regexp(t,
 		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
-			"due to a conflict: committed value on key \"a\"\\)", pErr)
+			"due to encountered recently written committed value \"a\" @0.000000001,0\\)", pErr)
 	require.Equal(t, int64(2), tsr.metrics.ClientRefreshSuccess.Count())
 	require.Equal(t, int64(1), tsr.metrics.ClientRefreshFail.Count())
 	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
