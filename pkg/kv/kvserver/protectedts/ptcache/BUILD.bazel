@@ -44,6 +44,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/isql",
