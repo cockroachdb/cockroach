@@ -1900,28 +1900,22 @@ SELECT * FROM v104927
 
 subtest end
 
-# Regression test for #105259. Do not type-check subqueries in views outside
-# optbuilder. Doing so can cause internal errors.
-subtest regression_105259
+# Regression tests for #105259 and #107654. Do not type-check subqueries in
+# views outside optbuilder. Doing so can cause internal errors.
+subtest regression_105259_107654
 
 statement ok
 CREATE TYPE e105259 AS ENUM ('foo');
 
-statement ok
-CREATE VIEW v105259 AS
+statement error pgcode 0A000 subqueries are not allowed in casts to enums within view queries
+CREATE VIEW v AS
 SELECT (SELECT 'foo')::e105259
 
-query T
-SELECT * FROM v105259
-----
-foo
-
-statement ok
-ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
-
-# Renaming the enum value corrupts the view. This is expected behavior.
-statement error pgcode 22P02 invalid input value for enum e105259: "foo"
-SELECT * FROM v105259
+statement error pgcode 0A000 subqueries are not allowed in casts to enums within view queries
+CREATE VIEW v AS
+SELECT (
+  CASE WHEN true THEN (SELECT 'foo') ELSE NULL END
+)::e105259
 
 subtest end
 
