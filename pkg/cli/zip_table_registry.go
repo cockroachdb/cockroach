@@ -1236,6 +1236,78 @@ var zipSystemTables = DebugZipTableRegistry{
 			"anti_plan_gist",
 		},
 	},
+	// statement_statistics can have over 100k rows in just the last hour.
+	// Only select the top 100 by cpu usage, and the transaction fingerprints
+	// from the transaction_contention_events table to keep the number of rows
+	// limited.
+	"system.statement_statistics_limit_5000": {
+		customQueryRedacted: `SELECT max(ss.aggregated_ts),
+       ss.fingerprint_id,
+       ss.transaction_fingerprint_id,
+       ss.plan_hash,
+       ss.app_name,
+       ss.agg_interval,
+       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       ss.plan,
+       ss.index_recommendations
+     FROM system.public.statement_statistics ss
+     WHERE aggregated_ts > (now() - INTERVAL '1 hour') AND
+ ( transaction_fingerprint_id in (SELECT DISTINCT(blocking_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      union
+                                      SELECT DISTINCT(waiting_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      )
+    OR transaction_fingerprint_id in (SELECT ss_cpu.transaction_fingerprint_id
+                                      FROM system.public.statement_statistics ss_cpu
+                                      group by ss_cpu.transaction_fingerprint_id, ss_cpu.cpu_sql_nanos
+                                      ORDER BY ss_cpu.cpu_sql_nanos desc limit 100))
+GROUP BY ss.aggregated_ts,
+         ss.app_name,
+         ss.fingerprint_id,
+         ss.transaction_fingerprint_id,
+         ss.plan_hash,
+         ss.agg_interval,
+         ss.plan,
+         ss.index_recommendations
+limit 5000;`,
+		customQueryUnredacted: `SELECT max(ss.aggregated_ts),
+       ss.fingerprint_id,
+       ss.transaction_fingerprint_id,
+       ss.plan_hash,
+       ss.app_name,
+       ss.agg_interval,
+       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       ss.plan,
+       ss.index_recommendations
+     FROM system.public.statement_statistics ss
+     WHERE aggregated_ts > (now() - INTERVAL '1 hour') AND
+ ( transaction_fingerprint_id in (SELECT DISTINCT(blocking_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      union
+                                      SELECT DISTINCT(waiting_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      )
+    OR transaction_fingerprint_id in (SELECT ss_cpu.transaction_fingerprint_id
+                                      FROM system.public.statement_statistics ss_cpu
+                                      group by ss_cpu.transaction_fingerprint_id, ss_cpu.cpu_sql_nanos
+                                      ORDER BY ss_cpu.cpu_sql_nanos desc limit 100))
+GROUP BY ss.aggregated_ts,
+         ss.app_name,
+         ss.fingerprint_id,
+         ss.transaction_fingerprint_id,
+         ss.plan_hash,
+         ss.agg_interval,
+         ss.plan,
+         ss.index_recommendations
+limit 5000;`,
+	},
 	"system.table_statistics": {
 		// `histogram` may contain sensitive information, such as keys and non-key column data.
 		nonSensitiveCols: NonSensitiveColumns{
