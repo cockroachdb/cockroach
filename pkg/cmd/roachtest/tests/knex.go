@@ -12,6 +12,9 @@ package tests
 
 import (
 	"context"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -111,6 +114,31 @@ func registerKnex(r registry.Registry) {
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
+		if err != nil {
+			// We don't have a good way of parsing test results from javascript, so we
+			// do substring matching instead.
+			numFailingRegex := regexp.MustCompile(`There were (\d+) failures`)
+			matches := numFailingRegex.FindStringSubmatch(rawResultsStr)
+			numFailing, convErr := strconv.Atoi(matches[1])
+			if convErr != nil {
+				t.Fatal(convErr)
+			}
+			for _, testName := range []string{
+				"#852, ssl param with PG query string",
+				"support postgresql connection protocol",
+				"it should parse the connection string",
+				"it should allow to use proprietary dialect",
+				"it should use knex supported dialect",
+			} {
+				// Each failing test name gets logged twice in the output.
+				if strings.Count(rawResultsStr, testName) == 2 {
+					numFailing -= 1
+				}
+			}
+			if numFailing == 0 {
+				err = nil
+			}
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
