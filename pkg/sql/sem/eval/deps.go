@@ -420,6 +420,10 @@ type Planner interface {
 	// error if the cursor doesn't exist. It is used to implement the PLpgSQL
 	// CLOSE statement.
 	PLpgSQLCloseCursor(cursorName tree.Name) error
+
+	// AutoCommit indicates whether the Planner has flagged the current statement
+	// as eligible for transaction auto-commit.
+	AutoCommit() bool
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
