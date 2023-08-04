@@ -254,9 +254,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
 	}
-	if params.DisableSpanConfigs {
-		cfg.SpanConfigsDisabled = true
-	}
 	if params.SnapshotApplyLimit != 0 {
 		cfg.SnapshotApplyLimit = params.SnapshotApplyLimit
 	}

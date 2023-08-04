@@ -453,7 +453,6 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/storage",
         "//pkg/storage/enginepb",
