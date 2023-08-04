@@ -28,6 +28,7 @@ func RegisterTests(r registry.Registry) {
 	registerBackupNodeShutdown(r)
 	registerBackupFixtures(r)
 	registerCDC(r)
+	registerCDCBench(r)
 	registerCDCMixedVersions(r)
 	registerExportParquet(r)
 	registerCancel(r)

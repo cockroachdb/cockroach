@@ -31,6 +31,7 @@ go_library(
         "canary.go",
         "cancel.go",
         "cdc.go",
+        "cdc_bench.go",
         "cdc_stats.go",
         "chaos.go",
         "clearrange.go",
