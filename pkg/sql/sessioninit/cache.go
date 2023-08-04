@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -58,10 +57,6 @@ type Cache struct {
 	settingsCache map[SettingsCacheKey][]string
 	// populateCacheGroup is used to ensure that there is at most one in-flight
 	// request for populating each cache entry.
-
-	// AuditConfig is the cluster's audit configuration. See the 'sql.log.user_audit'
-	// cluster setting to see how this is configured.
-	AuditConfig *auditlogging.AuditConfigLock
 
 	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
@@ -102,9 +97,6 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 		boundAccount:       account,
 		populateCacheGroup: singleflight.NewGroup("load-value", "key"),
 		stopper:            stopper,
-		AuditConfig: &auditlogging.AuditConfigLock{
-			Config: auditlogging.EmptyAuditConfig(),
-		},
 	}
 }
 
