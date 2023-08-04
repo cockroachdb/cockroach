@@ -983,9 +983,9 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteString(": ")
 	}
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp:
-		// Omit empty lists (except filters).
-		if scalar.ChildCount() == 0 {
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp, opt.FastPathUniqueChecksOp:
+		// Omit empty lists (except filters) and special-purpose fast path check expressions.
+		if scalar.ChildCount() == 0 || scalar.Op() == opt.FastPathUniqueChecksOp {
 			return
 		}
 
@@ -1131,7 +1131,7 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 	typ := scalar.DataType()
 	if typ == nil {
 		if scalar.Op() == opt.UniqueChecksItemOp || scalar.Op() == opt.FKChecksItemOp ||
-			scalar.Op() == opt.KVOptionsItemOp {
+			scalar.Op() == opt.KVOptionsItemOp || scalar.Op() == opt.FastPathUniqueChecksItemOp {
 			// These are not true scalars and have no properties.
 			return nil
 		}
@@ -1231,6 +1231,19 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	case *UniqueChecksItem:
 		tab := f.Memo.metadata.TableMeta(t.Table)
+		constraint := tab.Table.Unique(t.CheckOrdinal)
+		fmt.Fprintf(f.Buffer, ": %s(", tab.Alias.ObjectName)
+		for i := 0; i < constraint.ColumnCount(); i++ {
+			if i > 0 {
+				f.Buffer.WriteByte(',')
+			}
+			col := tab.Table.Column(constraint.ColumnOrdinal(tab.Table, i))
+			f.Buffer.WriteString(string(col.ColName()))
+		}
+		f.Buffer.WriteByte(')')
+
+	case *FastPathUniqueChecksItem:
+		tab := f.Memo.metadata.TableMeta(t.ReferencedTableID)
 		constraint := tab.Table.Unique(t.CheckOrdinal)
 		fmt.Fprintf(f.Buffer, ": %s(", tab.Alias.ObjectName)
 		for i := 0; i < constraint.ColumnCount(); i++ {
