@@ -1358,15 +1358,10 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 	// We will be performing type checking on expressions from PARTITION BY and
 	// ORDER BY clauses below, and we need the semantic context to know that we
 	// are in a window function. InWindowFunc is updated when type checking
-	// FuncExpr above, but it is reset upon returning from that, so we need to do
-	// this update manually.
-	defer func(ctx *tree.SemaContext, prevWindow bool) {
-		ctx.Properties.Derived.InWindowFunc = prevWindow
-	}(
-		s.builder.semaCtx,
-		s.builder.semaCtx.Properties.Derived.InWindowFunc,
-	)
-	s.builder.semaCtx.Properties.Derived.InWindowFunc = true
+	// FuncExpr above, but it is reset upon returning from that, so we need to
+	// do this update manually.
+	defer s.builder.semaCtx.Properties.Ancestors.PopTo(s.builder.semaCtx.Properties.Ancestors)
+	s.builder.semaCtx.Properties.Ancestors.Push(tree.WindowFuncAncestor)
 
 	oldPartitions := f.WindowDef.Partitions
 	f.WindowDef.Partitions = make(tree.Exprs, len(oldPartitions))
