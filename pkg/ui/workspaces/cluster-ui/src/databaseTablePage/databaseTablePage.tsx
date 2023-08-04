@@ -246,6 +246,9 @@ export class DatabaseTablePage extends React.Component<
 
   componentDidMount(): void {
     this.refresh();
+    if (this.props.refreshSettings != null) {
+      this.props.refreshSettings();
+    }
   }
 
   componentDidUpdate(prevProp: Readonly<DatabaseTablePageProps>): void {
@@ -283,10 +286,6 @@ export class DatabaseTablePage extends React.Component<
         this.props.databaseName,
         this.props.name,
       );
-    }
-
-    if (this.props.refreshSettings != null) {
-      this.props.refreshSettings();
     }
   }
 
