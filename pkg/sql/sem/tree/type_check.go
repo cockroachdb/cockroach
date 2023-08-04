@@ -82,17 +82,21 @@ type SemaContext struct {
 // Restore() method, see below.
 type SemaProperties struct {
 	// required constraints type checking to only accept certain kinds
-	// of expressions. See SetConstraint
+	// of expressions. See Require.
 	required semaRequirements
 
 	// Derived is populated during semantic analysis with properties
 	// from the expression being analyzed.  The caller is responsible
 	// for re-initializing this when needed.
 	Derived ScalarProperties
+
+	// Ancestors is mutated during semantic analysis to provide contextual
+	// information for each descendent during traversal of sub-expressions.
+	Ancestors ScalarAncestors
 }
 
 type semaRequirements struct {
-	// context is the name of the semantic anlysis context, for use in
+	// context is the name of the semantic analysis context, for use in
 	// error messages.
 	context string
 
@@ -102,11 +106,14 @@ type semaRequirements struct {
 	rejectFlags SemaRejectFlags
 }
 
-// Require resets the derived properties and sets required constraints.
+// Require resets the derived properties and the scalar ancestors, and sets
+// required constraints. It must only be called before starting semantic
+// analysis and during traversal by semantic analysis itself.
 func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
 	s.required.context = context
 	s.required.rejectFlags = rejectFlags
 	s.Derived.Clear()
+	s.Ancestors.clear()
 }
 
 // IsSet checks if the given rejectFlag is set as a required property.
@@ -180,21 +187,50 @@ type ScalarProperties struct {
 	// SeenGenerator is set to true if the expression originally
 	// contained a SRF.
 	SeenGenerator bool
-
-	// inFuncExpr is temporarily set to true while type checking the
-	// parameters of a function. Used to process RejectNestedGenerators
-	// properly.
-	inFuncExpr bool
-
-	// InWindowFunc is temporarily set to true while type checking the
-	// parameters of a window function in order to reject nested window
-	// functions.
-	InWindowFunc bool
 }
 
 // Clear resets the scalar properties to defaults.
 func (sp *ScalarProperties) Clear() {
 	*sp = ScalarProperties{}
+}
+
+// ScalarAncestors provides context for the current scalar expression during
+// semantic analysis. Ancestors are temporarily modified by expressions so that
+// their descendent expressions can be analyzed with respect to their ancestors.
+type ScalarAncestors byte
+
+const (
+	// FuncExprAncestor is temporarily added to ScalarAncestors while type
+	// checking the parameters of a function. Used to process
+	// RejectNestedGenerators properly.
+	FuncExprAncestor ScalarAncestors = 1 << iota
+
+	// WindowFuncAncestor is temporarily added to ScalarAncestors while type
+	// checking the parameters of a window function in order to reject nested
+	// window functions.
+	WindowFuncAncestor
+)
+
+// Push adds the given ancestor to s.
+func (s *ScalarAncestors) Push(other ScalarAncestors) {
+	*s = *s | other
+}
+
+// Has returns true if s has the given ancestor.
+func (s ScalarAncestors) Has(other ScalarAncestors) bool {
+	return s&other != 0
+}
+
+// PopTo returns s to the given set of ancestors. Use with:
+//
+//	defer semaCtx.Properties.Ancestors.PopTo(semaCtx.Properties.Ancestors)
+func (s *ScalarAncestors) PopTo(orig ScalarAncestors) {
+	*s = orig
+}
+
+// clear resets s to the default set of ancestors.
+func (s *ScalarAncestors) clear() {
+	*s = 0
 }
 
 // MakeSemaContext initializes a simple SemaContext suitable
@@ -966,7 +1002,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
 		}
 
-		if sc.Properties.Derived.InWindowFunc &&
+		if sc.Properties.Ancestors.Has(WindowFuncAncestor) &&
 			sc.Properties.IsSet(RejectNestedWindowFunctions) {
 			return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 		}
@@ -975,7 +1011,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 		// If it is an aggregate function *not used OVER a window*, then
 		// we have an aggregation.
 		if fnCls == AggregateClass {
-			if sc.Properties.Derived.inFuncExpr &&
+			if sc.Properties.Ancestors.Has(FuncExprAncestor) &&
 				sc.Properties.IsSet(RejectNestedAggregates) {
 				return NewAggInAggError()
 			}
@@ -986,7 +1022,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 		}
 	}
 	if fnCls == GeneratorClass {
-		if sc.Properties.Derived.inFuncExpr &&
+		if sc.Properties.Ancestors.Has(FuncExprAncestor) &&
 			sc.Properties.IsSet(RejectNestedGenerators) {
 			return NewInvalidNestedSRFError(sc.Properties.required.context)
 		}
@@ -1080,23 +1116,15 @@ func (expr *FuncExpr) TypeCheck(
 	}
 
 	if semaCtx != nil {
-		// We'll need to remember we are in a function application to
-		// generate suitable errors in checkFunctionUsage().  We cannot
-		// set ctx.inFuncExpr earlier (in particular not before the call
-		// to checkFunctionUsage() above) because the top-level FuncExpr
-		// must be acceptable even if it is a SRF and
-		// RejectNestedGenerators is set.
-		defer func(semaCtx *SemaContext, prevFunc bool, prevWindow bool) {
-			semaCtx.Properties.Derived.inFuncExpr = prevFunc
-			semaCtx.Properties.Derived.InWindowFunc = prevWindow
-		}(
-			semaCtx,
-			semaCtx.Properties.Derived.inFuncExpr,
-			semaCtx.Properties.Derived.InWindowFunc,
-		)
-		semaCtx.Properties.Derived.inFuncExpr = true
+		// We'll need to remember we are in a function application to generate
+		// suitable errors in checkFunctionUsage(). We cannot enter
+		// FuncExprAncestor earlier (in particular not before the call to
+		// checkFunctionUsage() above) because the top-level FuncExpr must be
+		// acceptable even if it is a SRF and RejectNestedGenerators is set.
+		defer semaCtx.Properties.Ancestors.PopTo(semaCtx.Properties.Ancestors)
+		semaCtx.Properties.Ancestors.Push(FuncExprAncestor)
 		if expr.WindowDef != nil {
-			semaCtx.Properties.Derived.InWindowFunc = true
+			semaCtx.Properties.Ancestors.Push(WindowFuncAncestor)
 		}
 	}
 
