@@ -1884,7 +1884,7 @@ constraint_catalog  constraint_schema  constraint_name                          
 system              public             29_11_1_not_null                                                                                                descID IS NOT NULL
 system              public             29_11_2_not_null                                                                                                version IS NOT NULL
 system              public             29_11_3_not_null                                                                                                nodeID IS NOT NULL
-system              public             29_11_4_not_null                                                                                                expiration IS NOT NULL
+system              public             29_11_4_not_null                                                                                                sessionID IS NOT NULL
 system              public             29_11_5_not_null                                                                                                crdb_region IS NOT NULL
 system              public             29_12_1_not_null                                                                                                timestamp IS NOT NULL
 system              public             29_12_2_not_null                                                                                                eventType IS NOT NULL
@@ -2144,8 +2144,8 @@ system         public        jobs                             id                
 system         public        join_tokens                      id                                                                                                        system              public             primary
 system         public        lease                            crdb_region                                                                                               system              public             primary
 system         public        lease                            descID                                                                                                    system              public             primary
-system         public        lease                            expiration                                                                                                system              public             primary
 system         public        lease                            nodeID                                                                                                    system              public             primary
+system         public        lease                            sessionID                                                                                                 system              public             primary
 system         public        lease                            version                                                                                                   system              public             primary
 system         public        locations                        localityKey                                                                                               system              public             primary
 system         public        locations                        localityValue                                                                                             system              public             primary
@@ -2400,8 +2400,8 @@ system         public        join_tokens                      id                
 system         public        join_tokens                      secret                                                                                                    2
 system         public        lease                            crdb_region                                                                                               5
 system         public        lease                            descID                                                                                                    1
-system         public        lease                            expiration                                                                                                4
 system         public        lease                            nodeID                                                                                                    3
+system         public        lease                            sessionID                                                                                                 4
 system         public        lease                            version                                                                                                   2
 system         public        locations                        latitude                                                                                                  3
 system         public        locations                        localityKey                                                                                               1

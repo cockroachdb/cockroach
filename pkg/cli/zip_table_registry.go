@@ -1065,7 +1065,7 @@ var zipSystemTables = DebugZipTableRegistry{
 			`"descID"`,
 			"version",
 			`"nodeID"`,
-			"expiration",
+			`"sessionID"`,
 		},
 	},
 	"system.locations": {

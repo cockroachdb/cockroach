@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -106,6 +107,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.Clock,
 		execCfg.Settings,
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+		s.SQLLivenessProvider().(sqlliveness.Provider),
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},
 		stopper,

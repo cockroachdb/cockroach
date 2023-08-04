@@ -30,8 +30,9 @@ import (
 type kvWriter struct {
 	db *kv.DB
 
-	oldWriter bootstrap.KVWriter
-	newWriter bootstrap.KVWriter
+	preMRWriter   bootstrap.KVWriter
+	mrWriter      bootstrap.KVWriter
+	currentWriter bootstrap.KVWriter
 
 	settingsWatcher *settingswatcher.SettingsWatcher
 }
@@ -41,8 +42,9 @@ func newKVWriter(
 ) *kvWriter {
 	return &kvWriter{
 		db:              db,
-		newWriter:       bootstrap.MakeKVWriter(codec, leaseTableWithID(id)),
-		oldWriter:       bootstrap.MakeKVWriter(codec, systemschema.V22_2_LeaseTable()),
+		mrWriter:        bootstrap.MakeKVWriter(codec, systemschema.V23_1_LeaseTable()),
+		preMRWriter:     bootstrap.MakeKVWriter(codec, systemschema.V22_2_LeaseTable()),
+		currentWriter:   bootstrap.MakeKVWriter(codec, leaseTableWithID(id)),
 		settingsWatcher: settingsWatcher,
 	}
 }
@@ -61,19 +63,25 @@ func leaseTableWithID(id descpb.ID) catalog.TableDescriptor {
 func (w *kvWriter) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return w.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.V23_1_SystemRbrCleanup)
+	return w.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.V23_2)
 }
 
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
-		if guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
-			err := w.newWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
+		if guard.IsActive(clusterversion.V23_2) {
+			err := w.currentWriter.Insert(ctx, b, false /*kvTrace */, leaseAsCurrentDatum(l)...)
+			if err != nil {
+				return err
+			}
+		}
+		if !guard.IsActive(clusterversion.V23_2) && guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
+			err := w.mrWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
 			}
 		}
 		if !guard.IsActive(clusterversion.V23_1_SystemRbrSingleWrite) {
-			err := w.oldWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbtDatum(l)...)
+			err := w.preMRWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbtDatum(l)...)
 			if err != nil {
 				return err
 			}
@@ -84,14 +92,20 @@ func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
-		if guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
-			err := w.newWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
+		if guard.IsActive(clusterversion.V23_2) {
+			err := w.currentWriter.Delete(ctx, b, false /*kvTrace */, leaseAsCurrentDatum(l)...)
+			if err != nil {
+				return err
+			}
+		}
+		if !guard.IsActive(clusterversion.V23_2) && guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
+			err := w.mrWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
 			}
 		}
 		if !guard.IsActive(clusterversion.V23_1_SystemRbrSingleWrite) {
-			err := w.oldWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbtDatum(l)...)
+			err := w.preMRWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbtDatum(l)...)
 			if err != nil {
 				return err
 			}
@@ -124,6 +138,17 @@ func (w *kvWriter) do(
 	}
 	run = (*kv.Txn).CommitInBatch
 	return w.db.Txn(ctx, do)
+}
+
+func leaseAsCurrentDatum(l leaseFields) []tree.Datum {
+	return []tree.Datum{
+		tree.NewDInt(tree.DInt(l.descID)),
+		tree.NewDInt(tree.DInt(l.version)),
+		tree.NewDInt(tree.DInt(l.instanceID)),
+		tree.NewDBytes(tree.DBytes(l.sessionID)),
+		tree.NewDBytes(tree.DBytes(l.regionPrefix)),
+	}
+
 }
 
 func leaseAsRbrDatum(l leaseFields) []tree.Datum {

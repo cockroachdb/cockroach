@@ -672,6 +672,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.clock,
 		cfg.Settings,
 		settingsWatcher,
+		cfg.sqlLivenessProvider,
 		codec,
 		lmKnobs,
 		cfg.stopper,
