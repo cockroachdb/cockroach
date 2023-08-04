@@ -23,6 +23,9 @@ type BaseMemoryMetrics struct {
 	CurBytesCount *metric.Gauge
 }
 
+// MetricStruct implements the metrics.Struct interface.
+func (BaseMemoryMetrics) MetricStruct() {}
+
 // MemoryMetrics contains pointers to the metrics object
 // for one of the SQL endpoints:
 // - "client" for connections received via pgwire.

@@ -105,7 +105,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB, nil)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
-					metrics.numErrors.Inc(1)
+					metrics.NumErrors.Inc(1)
 				}
 			}
 		case <-ctx.Done():
@@ -119,14 +119,14 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 // ActivityUpdaterMetrics must be public for metrics to get
 // registered
 type ActivityUpdaterMetrics struct {
-	numErrors *metric.Counter
+	NumErrors *metric.Counter
 }
 
 func (m ActivityUpdaterMetrics) MetricStruct() {}
 
 func newActivityUpdaterMetrics() metric.Struct {
 	return ActivityUpdaterMetrics{
-		numErrors: metric.NewCounter(metric.Metadata{
+		NumErrors: metric.NewCounter(metric.Metadata{
 			Name:        "jobs.metrics.task_failed",
 			Help:        "Number of metrics sql activity updater tasks that failed",
 			Measurement: "errors",
