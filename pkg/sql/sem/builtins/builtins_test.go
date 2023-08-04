@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/bits"
 	"math/rand"
+	"sort"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/constraints"
 )
 
 func TestCategory(t *testing.T) {
@@ -76,6 +78,96 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 		if tc <= prev {
 			t.Fatalf("%d > %d", tc, prev)
 		}
+	}
+}
+
+// sorterWithSwapCount implements sort.Interface and wraps a slice of data
+// with a counter that tracks the number of swaps performed during sorting.
+type sorterWithSwapCount[T constraints.Ordered] struct {
+	data      []T
+	swapCount int
+}
+
+func (s *sorterWithSwapCount[_]) Len() int {
+	return len(s.data)
+}
+
+func (s *sorterWithSwapCount[_]) Less(i, j int) bool {
+	return s.data[i] < s.data[j]
+}
+
+func (s *sorterWithSwapCount[_]) Swap(i, j int) {
+	s.data[i], s.data[j] = s.data[j], s.data[i]
+	s.swapCount += 1
+}
+
+var _ sort.Interface = &sorterWithSwapCount[tree.DInt]{}
+
+// TestGenerateUniqueUnorderedIDOrder verifies the expected lack of ordering
+// for IDs produced by GenerateUniqueUnorderedID.
+func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Our null hypothesis is that the mean number of swaps required to sort a
+	// slice of generated IDs is the same as the mean number of swaps required to
+	// sort a slice (of the same length) of random numbers.
+	//
+	// We determined experimentally (by using the same test as below but with
+	// rand.Int63() instead of GenerateUniqueUnorderedID and numTrials = 100000)
+	// that the number of swaps required to sort a slice of 101 (numGensPerTrial)
+	// random numbers fits a normal distribution with the following mean and
+	// standard deviation:
+	const (
+		distMean   = 271
+		distStdDev = 21
+	)
+
+	// We test our null hypothesis by running 100 trials and then performing
+	// a z-test (https://en.wikipedia.org/wiki/Z-test) for the observed mean
+	// number of swaps. We then compare it against the critical value of +-1.96,
+	// which corresponds to a confidence level of 95%.
+	const (
+		numTrials       = 100
+		numGensPerTrial = 101
+	)
+
+	// Run trials.
+	swapCounts := make([]int, numTrials)
+	{
+		for i := 0; i < numTrials; i++ {
+			gens := make([]tree.DInt, numGensPerTrial)
+			for i := range gens {
+				gens[i] = GenerateUniqueUnorderedID(1 /* instanceID */)
+			}
+			s := &sorterWithSwapCount[tree.DInt]{
+				data: gens,
+			}
+			sort.Sort(s)
+			swapCounts[i] = s.swapCount
+		}
+
+		t.Logf("swap counts: %#v", swapCounts)
+	}
+
+	// Compute z-score.
+	var zScore float64
+	{
+		swapCountsSum := 0
+		for _, c := range swapCounts {
+			swapCountsSum += c
+		}
+		swapCountsMean := float64(swapCountsSum) / float64(numTrials)
+
+		stdErr := float64(distStdDev) / math.Sqrt(numTrials)
+		zScore = (swapCountsMean - float64(distMean)) / stdErr
+
+		t.Logf("z-score: %f", zScore)
+	}
+
+	// Compare z-score to critical value.
+	if zScore < -1.96 || zScore > 1.96 {
+		t.Fatalf("there is evidence that the generated IDs are not unordered (p < 0.05)")
 	}
 }
 
