@@ -167,7 +167,6 @@ CREATE TABLE generated_as_id_t (
 statement ok
 INSERT INTO generated_as_id_t (a) VALUES (7), (8), (9);
 
-# TODO(107369): This error code does not have a name associated with it.
 statement error pgcode 428C9 column "b" can only be updated to DEFAULT
 CREATE FUNCTION f_err(i INT, j INT) RETURNS RECORD AS
 $$

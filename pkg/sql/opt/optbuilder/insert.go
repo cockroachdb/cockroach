@@ -454,7 +454,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		panic(pgerror.Newf(pgcode.InvalidForeignKey,
+		panic(pgerror.Newf(pgcode.NotNullViolation,
 			"missing %q primary key column", col.ColName()))
 	}
 }
