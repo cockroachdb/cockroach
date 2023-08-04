@@ -132,3 +132,125 @@ num=2
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+
+# ------------------------------------------------------------------------------
+# Test that optimistic evaluation succeeds if the lock is held by our own
+# transaction, regardless of lock strengths.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req5 txn=txn1 ts=10,1 spans=shared@a
+----
+
+scan r=req5
+----
+start-waiting: false
+
+should-wait r=req5
+----
+false
+
+acquire r=req5 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+
+# Ensure a optimistic evaluation attempt from the same transaction that covers
+# key "a" succeeds -- both with lower and higher lock strengths than the
+# strength of the lock already held (shared).
+
+new-request r=req6 txn=txn1 ts=10,1 spans=exclusive@a,c
+----
+
+scan-opt r=req6
+----
+start-waiting: false
+
+should-wait r=req6
+----
+false
+
+check-opt-no-conflicts r=req6 spans=exclusive@a,c
+----
+no-conflicts: true
+
+dequeue r=req6
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req7 txn=txn1 ts=10,1 spans=none@a,c
+----
+
+scan-opt r=req7
+----
+start-waiting: false
+
+should-wait r=req7
+----
+false
+
+check-opt-no-conflicts r=req7 spans=none@a,c
+----
+no-conflicts: true
+
+dequeue r=req7
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+
+# ------------------------------------------------------------------------------
+# Test that optimistic evaluation works with SHARED locking strength -- if a
+# shared lock is held, another transaction should be able to perform optimistic
+# evaluation with shared locking strength and not conflict; optimistic evaluation
+# should conflict if run with exclusive lock strength.
+# ------------------------------------------------------------------------------
+
+new-request r=req8 txn=txn2 ts=10,1 spans=none@a,c
+----
+
+scan-opt r=req8
+----
+start-waiting: false
+
+should-wait r=req8
+----
+false
+
+check-opt-no-conflicts r=req8 spans=shared@a,c
+----
+no-conflicts: true
+
+dequeue r=req8
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req9 txn=txn2 ts=10,1 spans=exclusive@a,c
+----
+
+scan-opt r=req9
+----
+start-waiting: false
+
+should-wait r=req9
+----
+false
+
+check-opt-no-conflicts r=req9 spans=exclusive@a,c
+----
+no-conflicts: false
+
+dequeue r=req9
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]

@@ -667,7 +667,7 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 		ltRange := &lockState{key: startKey, endKey: span.EndKey}
 		for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
 			l := iter.Cur()
-			if !l.isNonConflictingLock(g, g.curStrength()) {
+			if !l.isNonConflictingLock(g) {
 				return false
 			}
 		}
@@ -2359,7 +2359,7 @@ func (l *lockState) claimBeforeProceeding(g *lockTableGuardImpl) {
 	panic("lock table bug: did not find enqueued request")
 }
 
-func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strength) bool {
+func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -2368,13 +2368,12 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strengt
 		return true
 	}
 	// Lock is not empty.
-	lockHolderTxn, lockHolderTS := l.getLockHolder()
-	if lockHolderTxn == nil {
-		// Transactions that have claimed the lock, but have not acquired it yet,
-		// are considered non-conflicting.
-		//
-		// Optimistic evaluation may call into this function with or without holding
-		// latches. It's worth considering both these cases separately:
+	if !l.isHeld() {
+		// If the lock is neither empty nor held it must be the case that another
+		// transaction has claimed the lock. Locks that have been claimed, but have
+		// not been acquired yet, are considered non-conflicting. Optimistic
+		// evaluation may call into this function with or without holding latches.
+		// It's worth considering both these cases separately:
 		//
 		// 1. If Optimistic evaluation is holding latches, then there cannot be a
 		// conflicting request that has claimed (but not acquired) the lock that is
@@ -2397,19 +2396,29 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strengt
 		// claimed the lock will know what happened and what to do about it.
 		return true
 	}
+	lockHolderTxn, _ := l.getLockHolder()
 	if g.isSameTxn(lockHolderTxn) {
-		// Already locked by this txn.
+		// NB: Unlike the pessimistic (normal) evaluation code path, we do not need
+		// to check the lock's strength if it is already held by this transaction --
+		// it's non-conflicting. There's two cases to consider:
+		//
+		// 1. If the lock is held with the same/higher lock strength on this key
+		// then this optimistic evaluation attempt already has all the protection it
+		// needs.
+		//
+		// 2. If the lock is held with a weaker lock strength other transactions may
+		// be able to acquire a lock on this key that conflicts with this optimistic
+		// evaluation attempt. This is okay, as we'll detect such cases -- however,
+		// the weaker lock in itself is not conflicting with the optimistic
+		// evaluation attempt.
 		return true
 	}
+
 	// NB: We do not look at the txnStatusCache in this optimistic evaluation
 	// path. A conflict with a finalized txn will be noticed when retrying
 	// pessimistically.
 
-	if str == lock.None && g.ts.Less(lockHolderTS) {
-		return true
-	}
-	// Conflicts.
-	return false
+	return !lock.Conflicts(l.getLockMode(), g.curLockMode(), &g.lt.settings.SV) // non-conflicting
 }
 
 // Acquires this lock. Any requests that are waiting in the lock's wait queues
