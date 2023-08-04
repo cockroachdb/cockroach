@@ -594,7 +594,6 @@ func (s *crdbSpan) finish() bool {
 			return false
 		}
 		s.mu.finished = true
-
 		if s.recordingType() != tracingpb.RecordingOff {
 			duration := timeutil.Since(s.startTime)
 			if duration == 0 {
@@ -1096,9 +1095,11 @@ func (s *crdbSpan) appendStructuredEventsRecursivelyLocked(
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
 			sp := c.span()
-			sp.mu.Lock()
-			buffer = sp.appendStructuredEventsRecursivelyLocked(buffer, includeDetachedChildren)
-			sp.mu.Unlock()
+			buffer = func() []tracingpb.StructuredRecord {
+				sp.mu.Lock()
+				defer sp.mu.Unlock()
+				return sp.appendStructuredEventsRecursivelyLocked(buffer, includeDetachedChildren)
+			}()
 		}
 	}
 	return s.mu.recording.finishedChildren.appendStructuredEventsRecursively(buffer)
@@ -1134,10 +1135,12 @@ func (s *crdbSpan) getChildrenMetadataRecursivelyLocked(
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
 			sp := c.span()
-			sp.mu.Lock()
-			sp.getChildrenMetadataRecursivelyLocked(childrenMetadata,
-				true /*includeRootMetadata */, includeDetachedChildren)
-			sp.mu.Unlock()
+			func() {
+				sp.mu.Lock()
+				defer sp.mu.Unlock()
+				sp.getChildrenMetadataRecursivelyLocked(childrenMetadata,
+					true /*includeRootMetadata */, includeDetachedChildren)
+			}()
 		}
 	}
 }

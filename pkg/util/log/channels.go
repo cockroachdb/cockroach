@@ -59,12 +59,15 @@ func logfDepthInternal(
 	if sev == severity.FATAL {
 		// Timeout logic should stay at the top of this call to capture all
 		// writes that happen afterwards.
-		logging.mu.Lock()
-		exitFunc := func(x exit.Code, _ error) { exit.WithCode(x) }
-		if logging.mu.exitOverride.f != nil {
-			exitFunc = logging.mu.exitOverride.f
-		}
-		logging.mu.Unlock()
+		exitFunc := func() (exitFunc func(exit.Code, error)) {
+			exitFunc = func(x exit.Code, _ error) { exit.WithCode(x) }
+			logging.mu.Lock()
+			defer logging.mu.Unlock()
+			if logging.mu.exitOverride.f != nil {
+				exitFunc = logging.mu.exitOverride.f
+			}
+			return exitFunc
+		}()
 
 		// Fatal error handling later already tries to exit even if I/O should
 		// block, but crash reporting might also be in the way.

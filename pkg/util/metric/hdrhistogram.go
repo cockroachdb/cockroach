@@ -117,10 +117,14 @@ func (h *HdrHistogram) Min() int64 {
 
 // Inspect calls the closure with the empty string and the receiver.
 func (h *HdrHistogram) Inspect(f func(interface{})) {
-	h.mu.Lock()
-	maybeTick(h.mu.tickHelper)
-	h.mu.Unlock()
+	h.maybeTick()
 	f(h)
+}
+
+func (h *HdrHistogram) maybeTick() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	maybeTick(h.mu.tickHelper)
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -132,9 +136,12 @@ func (h *HdrHistogram) GetType() *prometheusgo.MetricType {
 func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	hist := &prometheusgo.Histogram{}
 
-	h.mu.Lock()
-	maybeTick(h.mu.tickHelper)
-	bars := h.mu.cumulative.Distribution()
+	bars := func() []hdrhistogram.Bar {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		maybeTick(h.mu.tickHelper)
+		return h.mu.cumulative.Distribution()
+	}()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
 
 	var cumCount uint64
@@ -157,7 +164,6 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 	hist.SampleCount = &cumCount
 	hist.SampleSum = &sum // can do better here; we approximate in the loop
-	h.mu.Unlock()
 
 	return &prometheusgo.Metric{
 		Histogram: hist,
