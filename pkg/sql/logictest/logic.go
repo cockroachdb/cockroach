@@ -1286,6 +1286,12 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
+
+	// These tests involve stopping and starting nodes, so to reduce flakiness,
+	// we increase the lease Transfer timeout.
+	if _, err := t.db.Exec("SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '40s'"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
