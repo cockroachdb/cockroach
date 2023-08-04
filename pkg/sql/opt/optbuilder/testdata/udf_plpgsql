@@ -3079,3 +3079,173 @@ project
                      │                        └── projections
                      │                             └── const: 0 [as=stmt_return_3:2]
                      └── const: 1
+
+# Testing IF statements with ELSIF branches.
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN 0;
+    ELSIF n = 1 THEN
+      RETURN 100;
+    ELSIF n = 2 THEN
+      RETURN 200;
+    END IF;
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:9
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:9]
+           ├── args
+           │    └── const: 0
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: stmt_if_6:8
+                     ├── project
+                     │    ├── columns: stmt_if_6:8
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── case [as=stmt_if_6:8]
+                     │              ├── true
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 0
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_3:4!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 0 [as=stmt_return_3:4]
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 1
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_4:5!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 100 [as=stmt_return_4:5]
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 2
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_5:6!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 200 [as=stmt_return_5:6]
+                     │              └── subquery
+                     │                   └── project
+                     │                        ├── columns: stmt_if_1:7
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: stmt_if_1 [as=stmt_if_1:7]
+                     │                                  ├── args
+                     │                                  │    └── variable: n:1
+                     │                                  ├── params: n:2
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: stmt_return_2:3!null
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── const: -1 [as=stmt_return_2:3]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN 0;
+    ELSIF n = 1 THEN
+      RETURN 100;
+    ELSIF n = 2 THEN
+      RETURN 200;
+    ELSE
+      RETURN -1;
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:8]
+           ├── args
+           │    └── const: 0
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: stmt_if_6:7
+                     ├── project
+                     │    ├── columns: stmt_if_6:7
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── case [as=stmt_if_6:7]
+                     │              ├── true
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 0
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_2:3!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 0 [as=stmt_return_2:3]
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 1
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_3:4!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 100 [as=stmt_return_3:4]
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 2
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_4:5!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 200 [as=stmt_return_4:5]
+                     │              └── subquery
+                     │                   └── project
+                     │                        ├── columns: stmt_return_5:6!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: -1 [as=stmt_return_5:6]
+                     └── const: 1

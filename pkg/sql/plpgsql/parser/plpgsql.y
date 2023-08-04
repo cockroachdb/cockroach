@@ -114,8 +114,8 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
     return u.val.(plpgsqltree.PLpgSQLStmtGetDiagItemList)
 }
 
-func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStmtIfElseIfArm {
-    return u.val.([]*plpgsqltree.PLpgSQLStmtIfElseIfArm)
+func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []plpgsqltree.PLpgSQLStmtIfElseIfArm {
+    return u.val.([]plpgsqltree.PLpgSQLStmtIfElseIfArm)
 }
 
 func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
@@ -315,7 +315,7 @@ func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOpt
 %type <str> opt_error_level option_type
 
 %type <[]plpgsqltree.PLpgSQLStatement> proc_sect
-%type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
+%type <[]plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
 %type <[]plpgsqltree.PLpgSQLStatement> stmt_else loop_body // TODO is this a list of statement?
 %type <plpgsqltree.PLpgSQLStatement>  pl_block
 %type <plpgsqltree.PLpgSQLStatement>	proc_stmt
@@ -822,7 +822,7 @@ stmt_if: IF expr_until_then THEN proc_sect stmt_elsifs stmt_else END_IF IF ';'
 
 stmt_elsifs:
   {
-    $$.val = []*plpgsqltree.PLpgSQLStmtIfElseIfArm{};
+    $$.val = []plpgsqltree.PLpgSQLStmtIfElseIfArm{};
   }
 | stmt_elsifs ELSIF expr_until_then THEN proc_sect
   {
@@ -830,7 +830,7 @@ stmt_elsifs:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    newStmt := &plpgsqltree.PLpgSQLStmtIfElseIfArm{
+    newStmt := plpgsqltree.PLpgSQLStmtIfElseIfArm{
       Condition: cond,
       Stmts: $5.plpgsqlStatements(),
     }

@@ -709,6 +709,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# Testing CONSTANT variable declarations.
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
@@ -808,3 +809,58 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN i;
   END
 $$ LANGUAGE PLpgSQL;
+
+# Testing IF statements with ELSIF branches.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RETURN 0;
+    ELSIF n = 1 THEN
+      RETURN 100;
+    ELSIF n = 2 THEN
+      RETURN 200;
+    END IF;
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(100);
+----
+0  100  200  -1
+
+# Branches should only be executed if the previous ones fail.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n <= 0 THEN
+      RAISE NOTICE 'foo';
+    ELSIF n <= 1 THEN
+      RAISE NOTICE 'bar';
+    ELSIF n <= 2 THEN
+      RAISE NOTICE 'baz';
+    END IF;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(0);
+----
+NOTICE: foo
+
+query T noticetrace
+SELECT f(1);
+----
+NOTICE: bar
+
+query T noticetrace
+SELECT f(2);
+----
+NOTICE: baz
+
+query I
+SELECT f(100);
+----
+0
