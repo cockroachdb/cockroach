@@ -72,10 +72,9 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		// The test needs to be refactored to work with the secondary tenants.
 		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107289),
 		// We want fast scan.
-		ScanInterval:       time.Millisecond,
-		ScanMinIdleTime:    time.Millisecond,
-		ScanMaxIdleTime:    time.Millisecond,
-		DisableSpanConfigs: true,
+		ScanInterval:    time.Millisecond,
+		ScanMinIdleTime: time.Millisecond,
+		ScanMaxIdleTime: time.Millisecond,
 	})
 	defer s.Stopper().Stop(context.Background())
 
