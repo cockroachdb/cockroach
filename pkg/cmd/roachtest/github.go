@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -44,6 +45,29 @@ func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) 
 
 func roachtestPrefix(p string) string {
 	return "ROACHTEST_" + p
+}
+
+// generateHelpCommand creates a HelpCommand for createPostRequest
+func generateHelpCommand(
+	clusterName string, start time.Time, end time.Time,
+) func(renderer *issues.Renderer) {
+	return func(renderer *issues.Renderer) {
+		issues.HelpCommandAsLink(
+			"roachtest README",
+			"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
+		)(renderer)
+		issues.HelpCommandAsLink(
+			"How To Investigate (internal)",
+			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
+		)(renderer)
+		// An empty clusterName corresponds to a cluster creation failure
+		if clusterName != "" {
+			issues.HelpCommandAsLink(
+				"Grafana",
+				fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
+			)(renderer)
+		}
+	}
 }
 
 // postIssueCondition encapsulates a condition that causes issue
@@ -98,13 +122,19 @@ func (g *githubIssues) shouldPost(t test.Test) (bool, string) {
 }
 
 func (g *githubIssues) createPostRequest(
-	t test.Test, firstFailure failure, message string,
-) issues.PostRequest {
+	testName string,
+	start time.Time,
+	end time.Time,
+	spec *registry.TestSpec,
+	firstFailure failure,
+	message string,
+) (issues.PostRequest, error) {
 	var mention []string
 	var projColID int
 
-	issueOwner := t.Spec().(*registry.TestSpec).Owner
-	issueName := t.Name()
+	issueOwner := spec.Owner
+	issueName := testName
+	issueClusterName := ""
 
 	messagePrefix := ""
 	// Overrides to shield eng teams from potential flakes
@@ -112,18 +142,17 @@ func (g *githubIssues) createPostRequest(
 	case failureContainsError(firstFailure, errClusterProvisioningFailed):
 		issueOwner = registry.OwnerDevInf
 		issueName = "cluster_creation"
-		messagePrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
+		messagePrefix = fmt.Sprintf("test %s was skipped due to ", testName)
 	case failureContainsError(firstFailure, rperrors.ErrSSH255):
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", t.Name())
+		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
 	case failureContainsError(firstFailure, errDuringPostAssertions):
-		messagePrefix = fmt.Sprintf("test %s failed during post test assertions (see test-post-assertions.log) due to ", t.Name())
+		messagePrefix = fmt.Sprintf("test %s failed during post test assertions (see test-post-assertions.log) due to ", testName)
 	}
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
 	// (this label may be removed by a human upon closer investigation).
-	spec := t.Spec().(*registry.TestSpec)
 	labels := []string{"O-roachtest"}
 	if !spec.NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
@@ -131,7 +160,7 @@ func (g *githubIssues) createPostRequest(
 
 	teams, err := g.teamLoader()
 	if err != nil {
-		t.Fatalf("could not load teams: %v", err)
+		return issues.PostRequest{}, err
 	}
 
 	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(issueOwner), team.PurposeRoachtest); ok {
@@ -149,7 +178,7 @@ func (g *githubIssues) createPostRequest(
 		branch = "<unknown branch>"
 	}
 
-	artifacts := fmt.Sprintf("/%s", t.Name())
+	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
 		roachtestPrefix("cloud"): spec.Cluster.Cloud,
@@ -173,6 +202,7 @@ func (g *githubIssues) createPostRequest(
 			// N.B. when Arch is specified, it cannot differ from cluster's arch.
 			// Hence, we only emit when arch was unspecified.
 			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
+			issueClusterName = g.cluster.name
 		}
 	}
 
@@ -185,17 +215,8 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
-		HelpCommand: func(renderer *issues.Renderer) {
-			issues.HelpCommandAsLink(
-				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
-			)(renderer)
-			issues.HelpCommandAsLink(
-				"How To Investigate (internal)",
-				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
-			)(renderer)
-		},
-	}
+		HelpCommand:     generateHelpCommand(issueClusterName, start, end),
+	}, nil
 }
 
 func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) error {
@@ -205,10 +226,15 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 		return nil
 	}
 
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message)
+	if err != nil {
+		return err
+	}
+
 	return g.issuePoster(
 		context.Background(),
 		l,
 		issues.UnitTestFormatter,
-		g.createPostRequest(t, t.firstFailure(), message),
+		postRequest,
 	)
 }
