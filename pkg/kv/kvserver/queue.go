@@ -658,11 +658,22 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 
 	bq.mu.Lock()
-	stopped := bq.mu.stopped || bq.mu.disabled
+	stopped := bq.mu.stopped
+	disabled := bq.mu.disabled
 	bq.mu.Unlock()
 
 	if stopped {
 		return
+	}
+
+	if disabled {
+		// The disabed queue bypass is used when in tests which enable manual
+		// replication, however still need to assert on specific range(s)
+		// processing through the replicate queue.
+		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
+		if bypassDisabled == nil || !bypassDisabled(repl.GetRangeID()) {
+			return
+		}
 	}
 
 	if !repl.IsInitialized() {
@@ -732,10 +743,16 @@ func (bq *baseQueue) addInternal(
 	}
 
 	if bq.mu.disabled {
-		if log.V(3) {
-			log.Infof(ctx, "queue disabled")
+		// The disabed queue bypass is used when in tests which enable manual
+		// replication, however still need to assert on specific range(s)
+		// processing through the replicate queue.
+		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
+		if bypassDisabled == nil || !bypassDisabled(desc.RangeID) {
+			if log.V(3) {
+				log.Infof(ctx, "queue disabled")
+			}
+			return false, errQueueDisabled
 		}
-		return false, errQueueDisabled
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.

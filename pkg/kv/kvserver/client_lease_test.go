@@ -16,7 +16,6 @@ import (
 	"math"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -909,13 +909,16 @@ func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
 }
 
 // This test replicates the behavior observed in
-// https://github.com/cockroachdb/cockroach/issues/62485. We verify that
-// when a dc with the leaseholder is lost, a node in a dc that does not have the
-// lease preference can steal the lease, upreplicate the range and then give up the
-// lease in a single cycle of the replicate_queue.
+// https://github.com/cockroachdb/cockroach/issues/62485. We verify that when a
+// dc with the leaseholder is lost, a node in a dc that does not have the lease
+// preference, can steal the lease, upreplicate the range and then give up the
+// lease in a short period of time. Previously, the replicate queue would
+// reprocess, instead of requeue replicas. This behavior changed in #85219, to
+// prevent queue priority inversion. Subsequently, this test only asserts that
+// the lease preferences are satisfied quickly, rather than in a single
+// replicate queue process() call.
 func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 88769, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	stickyRegistry := server.NewStickyVFSRegistry()
@@ -947,6 +950,14 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		locality("us", "mi"),
 		locality("us", "mi"),
 	}
+
+	// This test disables the replicate queue. We wish to enable the replicate
+	// queue only for range we are testing, after marking some servers as dead.
+	var testRangeID int64
+	atomic.StoreInt64(&testRangeID, -1)
+	disabledQueueBypassFn := func(rangeID roachpb.RangeID) bool {
+		return rangeID == roachpb.RangeID(atomic.LoadInt64(&testRangeID))
+	}
 	// Disable expiration based lease transfers. It is possible that a (pseudo)
 	// dead node acquires the lease and we are forced to wait out the expiration
 	// timer, if this were not set.
@@ -954,8 +965,18 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	sv := &settings.SV
 	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, sv, false)
 	kvserver.ExpirationLeasesOnly.Override(ctx, sv, false)
+	// Stores can become throttled when a snapshot reservation fails, which slows
+	// down, or even fails this test. Remove the failed reservation timeout to
+	// stop this occurring. Likewise, the remaining live stores (n1,n4,n5) may
+	// become suspect due to manual clock jumps. Disable the suspect timer to
+	// prevent them becoming suspect when we bump the clocks.
+	storepool.FailedReservationsTimeout.Override(ctx, sv, 0)
+	liveness.TimeAfterNodeSuspect.Override(ctx, sv, 0)
+	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(sv)
+
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
+			Settings: settings,
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -967,6 +988,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 					// The Raft leadership may not end up on the eu node, but it needs to
 					// be able to acquire the lease anyway.
 					AllowLeaseRequestProposalsWhenNotLeader: true,
+					BaseQueueDisabledBypassFilter:           disabledQueueBypassFn,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{
@@ -992,6 +1014,12 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 3)...))
 	tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
 
+	// Enable queue processing of the test range, right before we stop the sf
+	// datacenter. We expect the test range to be enqueued into the replicate
+	// queue shortly after.
+	rangeID := repl.GetRangeID()
+	atomic.StoreInt64(&testRangeID, int64(rangeID))
+
 	// Shutdown the sf datacenter, which is going to kill the node with the lease.
 	tc.StopServer(1)
 	tc.StopServer(2)
@@ -1006,8 +1034,6 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
 		}
 	}
-	// We need to wait until 2 and 3 are considered to be dead.
-	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	wait(timeUntilNodeDead)
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {
@@ -1027,10 +1053,11 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		store := tc.GetFirstStoreFromServer(t, 0)
-		sl, _, _ := store.GetStoreConfig().StorePool.TestingGetStoreList()
-		if len(sl.TestingStores()) != 3 {
-			return errors.Errorf("expected all 3 remaining stores to be live, but only got %v",
-				sl.TestingStores())
+		sl, available, _ := store.GetStoreConfig().StorePool.TestingGetStoreList()
+		if available != 3 {
+			return errors.Errorf(
+				"expected all 3 remaining stores to be live, but only got %d, stores=%v",
+				available, sl)
 		}
 		if err := checkDead(store, 1); err != nil {
 			return err
@@ -1040,55 +1067,44 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 		return nil
 	})
-	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
-		Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 
-	require.NoError(t, enqueueError, "failed to enqueue replica for replication")
+	// Send a request to force lease acquisition on _some_ remaining live node.
+	// Note, we expect this to be n1 (server 0).
+	ba := &kvpb.BatchRequest{}
+	ba.Add(getArgs(key))
+	_, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
+	require.Nil(t, pErr)
 
-	var newLeaseHolder roachpb.ReplicationTarget
 	testutils.SucceedsSoon(t, func() error {
-		var err error
-		newLeaseHolder, err = tc.FindRangeLeaseHolder(*repl.Desc(), nil)
-		return err
-	})
-
-	srv, err := tc.FindMemberServer(newLeaseHolder.StoreID)
-	require.NoError(t, err)
-	region, ok := srv.Locality().Find("region")
-	require.True(t, ok)
-	require.Equal(t, "us", region)
-	require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
-	// Validate that we upreplicated outside of SF.
-	for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
-		serv, err := tc.FindMemberServer(replDesc.StoreID)
-		require.NoError(t, err)
-		dc, ok := serv.Locality().Find("dc")
-		require.True(t, ok)
-		require.NotEqual(t, "sf", dc)
-	}
-	history := repl.GetLeaseHistory()
-	// Make sure we see the eu node as a lease holder in the second to last
-	// leaseholder change.
-	// Since we can have expiration and epoch based leases at the tail of the
-	// history, we need to ignore them together if they originate from the same
-	// leaseholder.
-	nextNodeID := history[len(history)-1].Replica.NodeID
-	lastMove := len(history) - 2
-	for ; lastMove >= 0; lastMove-- {
-		if history[lastMove].Replica.NodeID != nextNodeID {
-			break
+    // Validate that we upreplicated outside of SF. NB: This will occur prior
+    // to the lease preference being satisfied.
+		require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
+		for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
+			serv, err := tc.FindMemberServer(replDesc.StoreID)
+			require.NoError(t, err)
+			dc, ok := serv.Locality().Find("dc")
+			require.True(t, ok)
+			if dc == "sf" {
+				return errors.Errorf(
+					"expected no replicas in dc=sf, but found replica in "+
+						"dc=%s node_id=%v desc=%v",
+					dc, replDesc.NodeID, repl.Desc())
+			}
 		}
-	}
-	lastMove++
-	var leasesMsg []string
-	for _, h := range history {
-		leasesMsg = append(leasesMsg, h.String())
-	}
-	leaseHistory := strings.Join(leasesMsg, ", ")
-	require.Greater(t, lastMove, 0,
-		"must have at least one leaseholder change in history (lease history: %s)", leaseHistory)
-	require.Equal(t, tc.Target(0).NodeID, history[lastMove-1].Replica.NodeID,
-		"node id prior to last lease move (lease history: %s)", leaseHistory)
+		// Validate that the lease also transferred to a preferred locality.
+		newLeaseHolder, err := tc.FindRangeLeaseHolder(*repl.Desc(), nil)
+		require.NoError(t, err)
+		srv, err := tc.FindMemberServer(newLeaseHolder.StoreID)
+		require.NoError(t, err)
+		region, ok := srv.Locality().Find("region")
+		require.True(t, ok)
+		if region != "us" {
+			return errors.Errorf(
+				"expected leaseholder in region=us, but found region=%s node_id=%v",
+				region, newLeaseHolder.NodeID)
+		}
+		return nil
+	})
 }
 
 // This test verifies that when a node starts flapping its liveness, all leases
