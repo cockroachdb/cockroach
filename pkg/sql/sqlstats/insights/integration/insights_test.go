@@ -523,7 +523,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	require.NoError(t, err)
 
 	// Enable detection by setting a latencyThreshold > 0.
-	latencyThreshold := 100 * time.Millisecond
+	latencyThreshold := 30 * time.Millisecond
 	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
 
 	// Create a new connection, and then in a go routine have it start a transaction, update a row,
