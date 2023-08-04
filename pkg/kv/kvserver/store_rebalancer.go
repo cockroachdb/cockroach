@@ -758,6 +758,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		candidate := sr.allocator.TransferLeaseTarget(
 			ctx,
 			sr.storePool,
+			desc,
 			conf,
 			candidates,
 			candidateReplica,
@@ -960,6 +961,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		validTargets := sr.allocator.ValidLeaseTargets(
 			ctx,
 			sr.storePool,
+			rebalanceCtx.rangeDesc,
 			rebalanceCtx.conf,
 			targetVoterRepls,
 			rebalanceCtx.candidateReplica,
