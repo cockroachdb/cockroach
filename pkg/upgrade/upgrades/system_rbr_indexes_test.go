@@ -221,5 +221,5 @@ func TestRbrMigrationDescriptors(t *testing.T) {
 	codec := keys.SystemSQLCodec
 	require.Equal(t, sqlLivenessMigration(codec).finalDescriptor, systemschema.SqllivenessTable().TableDesc())
 	require.Equal(t, sqlInstanceMigration(codec).finalDescriptor, systemschema.SQLInstancesTable().TableDesc())
-	require.Equal(t, leaseMigration(codec).finalDescriptor, systemschema.LeaseTable().TableDesc())
+	require.Equal(t, leaseMigration(codec).finalDescriptor, systemschema.V23_1_LeaseTable().TableDesc())
 }
