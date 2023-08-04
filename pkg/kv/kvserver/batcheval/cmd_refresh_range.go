@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -26,7 +27,9 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.RefreshRange, DefaultDeclareKeys, RefreshRange)
+	// Depending on the cluster version, Refresh requests  may or may not declare locks.
+	// See DeclareKeysForRefresh for details.
+	RegisterReadOnlyCommand(kvpb.RefreshRange, DeclareKeysForRefresh, RefreshRange)
 }
 
 // RefreshRange checks whether the key range specified has any values written in
@@ -56,7 +59,7 @@ func RefreshRange(
 	}
 
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	return result.Result{}, refreshRange(reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
+	return result.Result{}, refreshRange(reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID, h.WaitPolicy)
 }
 
 // refreshRange iterates over the specified key span until it discovers a value
@@ -68,7 +71,11 @@ func RefreshRange(
 // If such a conflict is found, the function returns an error. Otherwise, no
 // error is returned.
 func refreshRange(
-	reader storage.Reader, span roachpb.Span, refreshFrom, refreshTo hlc.Timestamp, txnID uuid.UUID,
+	reader storage.Reader,
+	span roachpb.Span,
+	refreshFrom, refreshTo hlc.Timestamp,
+	txnID uuid.UUID,
+	wp lock.WaitPolicy,
 ) error {
 	// Construct an incremental iterator with the desired time bounds. Incremental
 	// iterators will emit MVCC tombstones by default and will emit intents when
@@ -129,8 +136,15 @@ func refreshRange(
 				}
 				continue
 			}
-			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-				key.Key, meta.Txn.WriteTimestamp)
+			// TODO(mira): Remove after V23_2_RemoveLockTableWaiterTouchPush is deleted.
+			if wp == lock.WaitPolicy_Error {
+				// Return a WriteIntentError, which will be handled by
+				// the concurrency manager's HandleWriterIntentError.
+				return &kvpb.WriteIntentError{Intents: []roachpb.Intent{roachpb.MakeIntent(meta.Txn, key.Key)}}
+			} else {
+				return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
+					key.Key, meta.Txn.WriteTimestamp)
+			}
 		}
 
 		// If a committed value is found, return an error.
