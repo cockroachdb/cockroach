@@ -333,7 +333,6 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 				SkipJobBootstrap: true,
 			},
 		},
-		DisableSpanConfigs: true,
 	}
 
 	ctx := context.Background()
@@ -520,7 +519,6 @@ func TestBatchJobsCreation(t *testing.T) {
 							SkipJobBootstrap: true,
 						},
 					},
-					DisableSpanConfigs: true,
 				}
 
 				ctx := context.Background()

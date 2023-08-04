@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -159,17 +160,14 @@ func TestRefresh(t *testing.T) {
 	}
 	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
-			// Disable span configs to avoid measuring protected timestamp lookups
-			// performed by the AUTO SPAN CONFIG RECONCILIATION job.
-			DisableSpanConfigs: true,
-
-			// It's not possible to create secondary tenants when span
-			// configs are disabled.
-			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
-
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: st.requestFilter,
+				},
+				// Disable span configs to avoid measuring protected timestamp lookups
+				// performed by the AUTO SPAN CONFIG RECONCILIATION job.
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
 				},
 				ProtectedTS: ptsKnobs,
 			},
