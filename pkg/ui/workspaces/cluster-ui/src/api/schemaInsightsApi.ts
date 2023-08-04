@@ -175,26 +175,34 @@ const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
 const createIndexRecommendationsQuery: SchemaInsightQuery<CreateIndexRecommendationsResponse> =
   {
     name: "CreateIndex",
-    query: `SELECT
-       encode(fingerprint_id, 'hex') AS fingerprint_id,  
-       metadata ->> 'db' AS db, 
-       metadata ->> 'query' AS query, 
-       metadata ->> 'querySummary' as querySummary, 
-       metadata ->> 'implicitTxn' AS implicitTxn, 
-       index_recommendations 
-    FROM (
-      SELECT 
-        fingerprint_id, 
-        statistics -> 'statistics' ->> 'lastExecAt' as lastExecAt, 
-        metadata, 
-        index_recommendations, 
-        row_number() over(
-          PARTITION BY 
-            fingerprint_id 
-          ORDER BY statistics -> 'statistics' ->> 'lastExecAt' DESC
-        ) AS rank 
-      FROM crdb_internal.statement_statistics WHERE aggregated_ts >= now() - INTERVAL '1 week')
-      WHERE rank=1 AND array_length(index_recommendations,1) > 0;`,
+    query: `
+SELECT
+  encode(fingerprint_id, 'hex') AS fingerprint_id, 
+  metadata ->> 'db' AS db, 
+  metadata ->> 'query' AS query, 
+  metadata ->> 'querySummary' as querySummary, 
+  metadata ->> 'implicitTxn' AS implicitTxn, 
+  index_recommendations 
+FROM 
+  (
+    SELECT 
+      fingerprint_id, 
+      statistics -> 'statistics' ->> 'lastExecAt' as lastExecAt, 
+      metadata, 
+      index_recommendations, 
+      row_number() over(
+        PARTITION BY fingerprint_id 
+        ORDER BY 
+          statistics -> 'statistics' ->> 'lastExecAt' DESC
+      ) AS rank 
+    FROM 
+      crdb_internal.statement_statistics_persisted 
+    WHERE 
+      aggregated_ts >= now() - INTERVAL '1 week'
+  ) 
+WHERE 
+  rank = 1 AND array_length(index_recommendations, 1) > 0;
+`,
     toSchemaInsight: createIndexRecommendationsToSchemaInsight,
   };
 
