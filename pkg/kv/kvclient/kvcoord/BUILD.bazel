@@ -129,6 +129,7 @@ go_test(
         "helpers_test.go",
         "integration_test.go",
         "main_test.go",
+        "priority_refresh_test.go",
         "range_iter_test.go",
         "replayed_commit_test.go",
         "replica_slice_test.go",

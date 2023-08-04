@@ -15,13 +15,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.Refresh, DefaultDeclareKeys, Refresh)
+	// Depending on the cluster version, Refresh requests  may or may not declare locks.
+	// See DeclareKeysForRefresh for details.
+	RegisterReadOnlyCommand(kvpb.Refresh, DeclareKeysForRefresh, Refresh)
 }
 
 // Refresh checks whether the key has any values written in the interval
@@ -71,8 +75,15 @@ func Refresh(
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if res.Intent != nil && res.Intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-			res.Intent.Key, res.Intent.Txn.WriteTimestamp)
+		// TODO(mira): Remove after V23_2_RemoveLockTableWaiterTouchPush is deleted.
+		if h.WaitPolicy == lock.WaitPolicy_Error {
+			// Return a WriteIntentError, which will be handled by
+			// the concurrency manager's HandleWriterIntentError.
+			return result.Result{}, &kvpb.WriteIntentError{Intents: []roachpb.Intent{*res.Intent}}
+		} else {
+			return result.Result{}, kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
+				res.Intent.Key, res.Intent.Txn.WriteTimestamp)
+		}
 	}
 
 	return result.Result{}, nil
