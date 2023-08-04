@@ -1,0 +1,22 @@
+# Regression tests for #105259 and #107654. Do not type-check subqueries in UDFs
+# outside optbuilder. Doing so can cause internal errors.
+subtest regression_105259
+
+statement ok
+CREATE TYPE e105259 AS ENUM ('foo');
+
+statement error pgcode 0A000 subqueries are not allowed in casts to enums within UDFs
+CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT (SELECT 'foo')::e105259;
+  SELECT NULL;
+$$
+
+statement error pgcode 0A000 subqueries are not allowed in casts to enums within UDFs
+CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT (
+    CASE WHEN true THEN (SELECT 'foo') ELSE NULL END
+  )::e105259;
+  SELECT NULL;
+$$
+
+subtest end
