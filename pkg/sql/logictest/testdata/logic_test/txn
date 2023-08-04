@@ -142,7 +142,7 @@ x y
 statement ok
 BEGIN TRANSACTION
 
-statement error there is already a transaction in progress
+statement error pgcode 25001 there is already a transaction in progress
 BEGIN TRANSACTION
 
 statement ok
@@ -156,10 +156,10 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-statement error there is already a transaction in progress
+statement error pgcode 25001 there is already a transaction in progress
 BEGIN TRANSACTION
 
-statement error current transaction is aborted, commands ignored until end of transaction block
+statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM kv
 
 statement ok
@@ -176,15 +176,15 @@ BEGIN; END
 
 # COMMIT/ROLLBACK without a transaction are errors.
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 COMMIT TRANSACTION
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 ROLLBACK TRANSACTION
 
 # Set isolation level without a transaction is an error.
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
 statement ok
@@ -393,7 +393,7 @@ COMMIT
 
 # User priority.
 
-statement error there is no transaction in progress
+statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
 
 statement ok

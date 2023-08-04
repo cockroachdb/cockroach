@@ -12,7 +12,7 @@ go_test(
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
     ],
-    shard_count = 19,
+    shard_count = 20,
     tags = [
         "ccl_test",
         "cpu:1",
