@@ -624,7 +624,7 @@ func (p *planner) LeaseMgr() *lease.Manager {
 }
 
 func (p *planner) AuditConfig() *auditlogging.AuditConfigLock {
-	return p.execCfg.SessionInitCache.AuditConfig
+	return p.execCfg.AuditConfig
 }
 
 func (p *planner) Txn() *kv.Txn {
