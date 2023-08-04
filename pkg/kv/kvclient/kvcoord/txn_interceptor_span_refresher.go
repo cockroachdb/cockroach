@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -517,7 +518,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 }
 
 func newRetryErrorOnFailedPreemptiveRefresh(
-	txn *roachpb.Transaction, refreshErr *kvpb.Error,
+	txn *roachpb.Transaction, pErr *kvpb.Error,
 ) *kvpb.Error {
 	reason := kvpb.RETRY_SERIALIZABLE
 	if txn.WriteTooOld {
@@ -526,16 +527,19 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	var conflictingTxn *enginepb.TxnMeta
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
-	if refreshErr != nil {
-		if refreshErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
+	if pErr != nil {
+		if refreshErr, ok := pErr.GetDetail().(*kvpb.RefreshFailedError); ok {
 			if refreshErr.ConflictingTxn != nil {
 				conflictingTxn = refreshErr.ConflictingTxn
-				msg.Printf(" due to a conflict: %s on key %s with conflicting txn %s", refreshErr.FailureReason(), refreshErr.Key, refreshErr.ConflictingTxn.Short())
-			} else {
-				msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
 			}
+			msg.Printf(" due to %s", refreshErr)
+		} else if wiErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
+			if len(wiErr.Intents) > 0 {
+				conflictingTxn = &wiErr.Intents[0].Txn
+			}
+			msg.Printf(" due to %s", wiErr)
 		} else {
-			msg.Printf(" - unknown error: %s", refreshErr)
+			msg.Printf(" - unknown error: %s", pErr)
 		}
 	}
 	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString(), kvpb.WithConflictingTxn(conflictingTxn))
@@ -577,6 +581,12 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// TODO(nvanbenschoten): actually merge spans.
 	refreshSpanBa := &kvpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshToTxn
+	// WaitPolicy_Error allows a Refresh request to immediately push any
+	// conflicting transactions in the lock table wait queue without blocking. If
+	// the push fails, the request returns either a RefreshFailedError (if it
+	// encountered a committed value) or a WriteIntentError (if it encountered an
+	// intent). These errors are handled in maybeRefreshPreemptively.
+	refreshSpanBa.WaitPolicy = lock.WaitPolicy_Error
 	addRefreshes := func(refreshes *condensableSpanSet) {
 		// We're going to check writes between the previous refreshed timestamp, if
 		// any, and the timestamp we want to bump the transaction to. Note that if
