@@ -69,6 +69,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info /dev/nu
 [cluster] retrieving SQL data for system.sqlliveness... writing output: debug/system.sqlliveness.txt... done
 [cluster] retrieving SQL data for system.statement_diagnostics... writing output: debug/system.statement_diagnostics.txt... done
 [cluster] retrieving SQL data for system.statement_diagnostics_requests... writing output: debug/system.statement_diagnostics_requests.txt... done
+[cluster] retrieving SQL data for system.statement_statistics_limit_5000... writing output: debug/system.statement_statistics_limit_5000.txt... done
 [cluster] retrieving SQL data for system.table_statistics... writing output: debug/system.table_statistics.txt... done
 [cluster] retrieving SQL data for system.task_payloads... writing output: debug/system.task_payloads.txt... done
 [cluster] retrieving SQL data for system.tenant_settings... writing output: debug/system.tenant_settings.txt... done
