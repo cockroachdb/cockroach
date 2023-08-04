@@ -4282,6 +4282,154 @@ update virt_idx3
            └── b:8 + 1 [as=v:10, outer=(8), immutable]
 
 # ------------------------------------------------------------------------------
+# PruneInsertReturnCols
+# ------------------------------------------------------------------------------
+
+# Returning a single insert column can prune the others.
+norm expect=PruneInsertReturnCols
+INSERT INTO computed (a, b, c) VALUES (1, 2, 3) RETURNING a
+----
+insert computed
+ ├── columns: a:1!null
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    ├── d_comp:11 => d:4
+ │    └── x_comp:12 => x:5
+ ├── return-mapping:
+ │    └── column1:8 => a:1
+ ├── cardinality: [1 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── values
+      ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11!null x_comp:12!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(8-12)
+      └── (1, 2, 3, 4, 13)
+
+# RETURNING * does not prune columns
+norm expect-not=PruneInsertReturnCols
+INSERT INTO computed (a, b, c) SELECT a, b, c FROM computed RETURNING *
+----
+insert computed
+ ├── columns: a:1!null b:2 c:3 d:4
+ ├── insert-mapping:
+ │    ├── a:8 => a:1
+ │    ├── b:9 => b:2
+ │    ├── c:10 => c:3
+ │    ├── d_comp:15 => d:4
+ │    └── x_comp:16 => x:5
+ ├── return-mapping:
+ │    ├── a:8 => a:1
+ │    ├── b:9 => b:2
+ │    ├── c:10 => c:3
+ │    └── d_comp:15 => d:4
+ ├── volatile, mutations
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(4)
+ └── project
+      ├── columns: d_comp:15 x_comp:16 a:8!null b:9 c:10
+      ├── immutable
+      ├── key: (8)
+      ├── fd: (8)-->(9,10), (10)-->(15,16)
+      ├── scan computed
+      │    ├── columns: a:8!null b:9 c:10
+      │    ├── computed column expressions
+      │    │    └── d:11
+      │    │         └── c:10 + 1
+      │    ├── key: (8)
+      │    └── fd: (8)-->(9,10)
+      └── projections
+           ├── c:10 + 1 [as=d_comp:15, outer=(10), immutable]
+           └── c:10 + 10 [as=x_comp:16, outer=(10), immutable]
+
+# Returning a subset of insert columns can prune the others.
+norm expect=PruneInsertReturnCols
+INSERT INTO computed (a, b, c) SELECT a, b, c FROM computed RETURNING a, b, c
+----
+insert computed
+ ├── columns: a:1!null b:2 c:3
+ ├── insert-mapping:
+ │    ├── a:8 => a:1
+ │    ├── b:9 => b:2
+ │    ├── c:10 => c:3
+ │    ├── d_comp:15 => d:4
+ │    └── x_comp:16 => x:5
+ ├── return-mapping:
+ │    ├── a:8 => a:1
+ │    ├── b:9 => b:2
+ │    └── c:10 => c:3
+ ├── volatile, mutations
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── project
+      ├── columns: d_comp:15 x_comp:16 a:8!null b:9 c:10
+      ├── immutable
+      ├── key: (8)
+      ├── fd: (8)-->(9,10), (10)-->(15,16)
+      ├── scan computed
+      │    ├── columns: a:8!null b:9 c:10
+      │    ├── computed column expressions
+      │    │    └── d:11
+      │    │         └── c:10 + 1
+      │    ├── key: (8)
+      │    └── fd: (8)-->(9,10)
+      └── projections
+           ├── c:10 + 1 [as=d_comp:15, outer=(10), immutable]
+           └── c:10 + 10 [as=x_comp:16, outer=(10), immutable]
+
+# We apply the PruneInsertReturnCols rule multiple times, to get
+# the minimal set of columns. Columns c and b are pruned away.
+norm expect=PruneInsertReturnCols
+SELECT a FROM [SELECT a, b FROM [INSERT INTO computed (a, b, c) VALUES (1, 2, 3) RETURNING a, b, c]]
+----
+with &1
+ ├── columns: a:16!null
+ ├── cardinality: [1 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(16)
+ ├── insert computed
+ │    ├── columns: computed.a:1!null computed.b:2!null computed.c:3!null
+ │    ├── insert-mapping:
+ │    │    ├── column1:8 => computed.a:1
+ │    │    ├── column2:9 => computed.b:2
+ │    │    ├── column3:10 => computed.c:3
+ │    │    ├── d_comp:11 => d:4
+ │    │    └── x_comp:12 => x:5
+ │    ├── return-mapping:
+ │    │    ├── column1:8 => computed.a:1
+ │    │    ├── column2:9 => computed.b:2
+ │    │    └── column3:10 => computed.c:3
+ │    ├── cardinality: [1 - 1]
+ │    ├── volatile, mutations
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-3)
+ │    └── values
+ │         ├── columns: column1:8!null column2:9!null column3:10!null d_comp:11!null x_comp:12!null
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(8-12)
+ │         └── (1, 2, 3, 4, 13)
+ └── project
+      ├── columns: a:16!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(16)
+      ├── with-scan &1
+      │    ├── columns: a:13!null
+      │    ├── mapping:
+      │    │    └──  computed.a:1 => a:13
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(13)
+      └── projections
+           └── a:13 [as=a:16, outer=(13)]
+
+# ------------------------------------------------------------------------------
 # PruneMutationReturnCols
 # ------------------------------------------------------------------------------
 
