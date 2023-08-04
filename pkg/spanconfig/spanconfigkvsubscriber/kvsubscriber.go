@@ -222,7 +222,7 @@ func New(
 		int(bufferMemLimit/spanConfigurationsTableRowSize),
 		[]roachpb.Span{spanConfigTableSpan},
 		true, // withPrevValue
-		newSpanConfigDecoder().translateEvent,
+		NewSpanConfigDecoder().TranslateEvent,
 		s.handleUpdate,
 		rfCacheKnobs,
 	)
@@ -404,7 +404,7 @@ func (s *KVSubscriber) handleCompleteUpdate(
 ) {
 	freshStore := spanconfigstore.New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	for _, ev := range events {
-		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
+		freshStore.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
 	}
 	s.mu.Lock()
 	s.mu.internal = freshStore
@@ -431,7 +431,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 		// TODO(irfansharif): We can apply a batch of updates atomically
 		// now that the StoreWriter interface supports it; it'll let us
 		// avoid this mutex.
-		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
+		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*BufferEvent).Update)
 	}
 	s.setLastUpdatedLocked(ts)
 	handlers := s.mu.handlers
@@ -440,7 +440,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		for _, ev := range events {
-			target := ev.(*bufferEvent).Update.GetTarget()
+			target := ev.(*BufferEvent).Update.GetTarget()
 			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}
@@ -464,14 +464,14 @@ func (h *handler) invoke(ctx context.Context, update roachpb.Span) {
 	h.fn(ctx, update)
 }
 
-type bufferEvent struct {
+type BufferEvent struct {
 	spanconfig.Update
 	ts hlc.Timestamp
 }
 
 // Timestamp implements the rangefeedbuffer.Event interface.
-func (w *bufferEvent) Timestamp() hlc.Timestamp {
+func (w *BufferEvent) Timestamp() hlc.Timestamp {
 	return w.ts
 }
 
-var _ rangefeedbuffer.Event = &bufferEvent{}
+var _ rangefeedbuffer.Event = &BufferEvent{}
