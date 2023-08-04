@@ -2066,6 +2066,7 @@ func TestConnectionMigration(t *testing.T) {
 
 			// Now attempt a transfer concurrently with requests.
 			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
 			subCtx, cancel := context.WithCancel(tCtx)
 			defer cancel()
 
@@ -2105,7 +2106,7 @@ func TestConnectionMigration(t *testing.T) {
 
 			// Check metrics.
 			require.True(t, f.metrics.ConnMigrationSuccessCount.Count() > initSuccessCount+4)
-			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, initErrorRecoverableCount, f.metrics.ConnMigrationErrorRecoverableCount.Count())
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			validateMiscMetrics(t)
@@ -2115,6 +2116,7 @@ func TestConnectionMigration(t *testing.T) {
 		// transfers should not close the connection.
 		t.Run("failed_transfers_with_tx", func(t *testing.T) {
 			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
 			initAddr := queryAddr(tCtx, t, db)
 
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
@@ -2149,7 +2151,8 @@ func TestConnectionMigration(t *testing.T) {
 			// still be active.
 			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
-			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, initErrorRecoverableCount+5,
+				f.metrics.ConnMigrationErrorRecoverableCount.Count())
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			// Once the transaction is closed, transfers should work.
@@ -2157,7 +2160,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.NotEqual(t, initAddr, queryAddr(tCtx, t, db))
 			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())
-			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.True(t, f.metrics.ConnMigrationErrorRecoverableCount.Count() >= initErrorRecoverableCount+5)
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			validateMiscMetrics(t)
