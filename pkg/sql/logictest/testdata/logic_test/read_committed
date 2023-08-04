@@ -147,88 +147,257 @@ SELECT aisle
 
 subtest end
 
-subtest schema_changes
+subtest schema_changes_implicit
 
-# Schema changes are prohibited under weaker isolation levels.
+# Schema changes in implicit READ COMMITTED transactions cause the transaction
+# to be promoted to SERIALIZABLE.
+
+query T noticetrace
+ALTER TABLE supermarket ADD COLUMN age INT
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE TABLE foo(a INT)
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+DROP TABLE supermarket
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+DROP USER testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE USER testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+GRANT admin TO testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+GRANT SELECT ON foo TO testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+GRANT USAGE ON SCHEMA public TO testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE INDEX foo_idx ON foo(a)
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE FUNCTION f (x INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT x+1
+$$
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+ALTER FUNCTION f (x INT) RENAME TO g
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+GRANT EXECUTE ON FUNCTION g (x INT) TO testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE TYPE typ AS ENUM('a', 'b')
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+ALTER TYPE typ ADD VALUE 'c'
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+GRANT USAGE ON TYPE typ TO testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE DATABASE foo
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+GRANT CONNECT ON DATABASE foo TO testuser
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+ALTER DATABASE foo RENAME TO foo2
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+CREATE SCHEMA s
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+query T noticetrace
+ALTER SCHEMA s RENAME TO foo
+----
+NOTICE: setting implicit transaction isolation level to SERIALIZABLE due to schema change
+
+subtest schema_changes_explicit
+# Schema changes are prohibited under explicit transactions with weak isolation levels.
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ALTER TABLE supermarket ADD COLUMN age INT
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE TABLE foo(a INT)
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 DROP TABLE supermarket
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE USER foo
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 DROP USER testuser
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 GRANT admin TO testuser
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 GRANT SELECT ON supermarket TO testuser
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 GRANT USAGE ON SCHEMA public TO testuser
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 GRANT CONNECT ON DATABASE postgres TO testuser
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
-CREATE INDEX foo ON supermarket(ends_with, starts_with)
+statement ok
+ROLLBACK
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+CREATE INDEX foo ON supermarket(ends_with, starts_with)
+
+statement ok
+ROLLBACK
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE FUNCTION f (x INT) RETURNS INT LANGUAGE SQL AS $$
   SELECT x+1
 $$
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-CREATE FUNCTION f (x INT) RETURNS INT LANGUAGE SQL AS $$
-  SELECT x+1
-$$;
-COMMIT
+ROLLBACK
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ALTER FUNCTION f (x INT) RENAME TO g
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
-GRANT EXECUTE ON FUNCTION f (x INT) TO testuser
+statement ok
+ROLLBACK
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+GRANT EXECUTE ON FUNCTION f (x INT) TO testuser
+
+statement ok
+ROLLBACK
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE TYPE typ AS ENUM('a', 'b')
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-CREATE TYPE typ AS ENUM('a', 'b');
-COMMIT
+ROLLBACK
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ALTER TYPE typ ADD VALUE 'c'
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 GRANT USAGE ON TYPE typ TO testuser
 
+statement ok
+ROLLBACK
+
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE DATABASE foo
 
-statement error transaction involving a schema change needs to be SERIALIZABLE
-ALTER DATABASE postgres RENAME TO foo
+statement ok
+ROLLBACK
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+ALTER DATABASE postgres RENAME TO foo
+
+statement ok
+ROLLBACK
+
+statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE SCHEMA s
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-CREATE SCHEMA s;
-COMMIT
+ROLLBACK
 
 statement error transaction involving a schema change needs to be SERIALIZABLE
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ALTER SCHEMA s RENAME TO foo
+
+statement ok
+ROLLBACK
 
 subtest end
 

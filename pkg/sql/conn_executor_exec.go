@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -1966,6 +1968,21 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+	if tree.CanModifySchema(planner.stmt.AST) {
+		if planner.Txn().IsoLevel().ToleratesWriteSkew() {
+			if planner.extendedEvalCtx.TxnIsSingleStmt && planner.extendedEvalCtx.TxnImplicit {
+				if err := ex.state.setIsolationLevel(isolation.Serializable); err != nil {
+					return err
+				}
+				planner.BufferClientNotice(ctx, pgnotice.Newf("setting implicit transaction isolation level to SERIALIZABLE due to schema change"))
+			} else {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported, "explicit transaction involving a schema change needs to be SERIALIZABLE",
+				)
+			}
+		}
+	}
+
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err

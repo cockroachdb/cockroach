@@ -167,11 +167,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	var err error
 
 	if opt.IsDDLOp(e) {
-		if b.evalCtx.Txn.IsoLevel().ToleratesWriteSkew() {
-			return execPlan{}, pgerror.Newf(
-				pgcode.FeatureNotSupported, "transaction involving a schema change needs to be SERIALIZABLE",
-			)
-		}
 		// Mark the statement as containing DDL for use
 		// in the SQL executor.
 		b.IsDDL = true
