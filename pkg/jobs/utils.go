@@ -156,16 +156,24 @@ func JobExists(
 	return row != nil, nil
 }
 
-// IsJobTypeColumnDoesNotExistError returns true if the error is of the form
+// isJobTypeColumnDoesNotExistError returns true if the error is of the form
 // `column "job_type" does not exist`.
 func isJobTypeColumnDoesNotExistError(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.UndefinedColumn &&
 		strings.Contains(err.Error(), "column \"job_type\" does not exist")
 }
 
+// isJobInfoTableDoesNotExistError returns true if the error is of the form
+// `related "job_info" does not exist`.
+func isJobInfoTableDoesNotExistError(err error) bool {
+	return pgerror.GetPGCode(err) == pgcode.UndefinedTable &&
+		strings.Contains(err.Error(), "relation \"system.job_info\" does not exist")
+}
+
 // MaybeGenerateForcedRetryableError returns a
 // TransactionRetryWithProtoRefreshError that will cause the txn to be retried
-// if the error is because of an undefined job_type column.
+// if the error is because of an undefined job_type column or missing job_info
+// table.
 //
 // In https://github.com/cockroachdb/cockroach/issues/106762 we noticed that if
 // a query is executed with an AS OF SYSTEM TIME clause that picks a transaction
@@ -173,15 +181,19 @@ func isJobTypeColumnDoesNotExistError(err error) bool {
 // infrastructure will attempt to query the job_type column even though it
 // doesn't exist at the transaction's timestamp.
 //
-// As a short term fix, when we encounter an `UndefinedColumn` error we
-// generate a synthetic retryable error so that the txn is pushed to a
-// higher timestamp at which the upgrade will have completed and the
-// `job_type` column will be visible. The longer term fix is being tracked
-// in https://github.com/cockroachdb/cockroach/issues/106764.
+// As a short term fix, when we encounter an `UndefinedTable` or
+// `UndefinedColumn` error we generate a synthetic retryable error so that the
+// txn is pushed to a higher timestamp at which the upgrade will have completed
+// and the table/column will be visible. The longer term fix is being tracked in
+// https://github.com/cockroachdb/cockroach/issues/106764.
 func MaybeGenerateForcedRetryableError(ctx context.Context, txn *kv.Txn, err error) error {
 	if err != nil && isJobTypeColumnDoesNotExistError(err) {
 		return txn.GenerateForcedRetryableError(ctx, "synthetic error "+
 			"to push timestamp to after the `job_type` upgrade has run")
+	}
+	if err != nil && isJobInfoTableDoesNotExistError(err) {
+		return txn.GenerateForcedRetryableError(ctx, "synthetic error "+
+			"to push timestamp to after the `job_info` upgrade has run")
 	}
 	return err
 }
