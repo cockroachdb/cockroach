@@ -321,7 +321,7 @@ export class SessionsPage extends React.Component<
           TimestampToMoment(s.session.start),
           "seconds",
         );
-        return sessionTime >= timeValue || timeValue === "empty";
+        return timeValue === "empty" || sessionTime >= Number(timeValue);
       })
       .filter((s: SessionInfo) => {
         if (filters.username && filters.username != "All") {

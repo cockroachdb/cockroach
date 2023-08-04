@@ -100,7 +100,8 @@ export function filterStatementsData(
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
-        statement.stats.service_lat.mean >= timeValue || timeValue === "empty",
+        timeValue === "empty" ||
+        statement.stats.service_lat.mean >= Number(timeValue),
     )
     .filter(
       statement =>

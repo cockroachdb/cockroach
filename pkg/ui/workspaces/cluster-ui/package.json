@@ -155,7 +155,7 @@
     "source-map-loader": "^0.2.4",
     "style-loader": "^1.1.3",
     "ts-jest": "^27.1.3",
-    "typescript": "4.2.4",
+    "typescript": "5.1.6",
     "uplot": "^1.6.19",
     "url-loader": "^4.1.0",
     "webpack": "^4.41.5",

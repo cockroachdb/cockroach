@@ -588,11 +588,11 @@ export const partitionedStatuses = createSelector(
   nodesSummarySelector,
   summary => {
     return _.groupBy(summary.nodeStatuses, ns => {
-      switch (summary.livenessByNodeID[ns.desc.node_id]) {
-        case MembershipStatus.ACTIVE:
-        case MembershipStatus.DECOMMISSIONING:
+      switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
+        case LivenessStatus.NODE_STATUS_LIVE:
+        case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
           return "live";
-        case MembershipStatus.DECOMMISSIONED:
+        case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
           return "decommissioned";
         default:
           // TODO (koorosh): "live" has to be renamed to some partition which
