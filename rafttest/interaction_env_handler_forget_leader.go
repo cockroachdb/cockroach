@@ -22,11 +22,11 @@ import (
 
 func (env *InteractionEnv) handleForgetLeader(t *testing.T, d datadriven.TestData) error {
 	idx := firstAsNodeIdx(t, d)
-	env.ForgetLeader(t, idx)
+	env.ForgetLeader(idx)
 	return nil
 }
 
 // ForgetLeader makes the follower at the given index forget its leader.
-func (env *InteractionEnv) ForgetLeader(t *testing.T, idx int) {
+func (env *InteractionEnv) ForgetLeader(idx int) {
 	env.Nodes[idx].ForgetLeader()
 }

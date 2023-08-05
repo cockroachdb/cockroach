@@ -22,10 +22,10 @@ import (
 
 func (env *InteractionEnv) handleCampaign(t *testing.T, d datadriven.TestData) error {
 	idx := firstAsNodeIdx(t, d)
-	return env.Campaign(t, idx)
+	return env.Campaign(idx)
 }
 
 // Campaign the node at the given index.
-func (env *InteractionEnv) Campaign(t *testing.T, idx int) error {
+func (env *InteractionEnv) Campaign(idx int) error {
 	return env.Nodes[idx].Campaign()
 }
