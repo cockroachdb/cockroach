@@ -115,6 +115,7 @@ type Registry struct {
 type Request struct {
 	fingerprint         string
 	planGist            string
+	antiPlanGist        bool
 	samplingProbability float64
 	minExecutionLatency time.Duration
 	expiresAt           time.Time
@@ -231,6 +232,7 @@ func (r *Registry) addRequestInternalLocked(
 	id RequestID,
 	queryFingerprint string,
 	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAt time.Time,
@@ -245,6 +247,7 @@ func (r *Registry) addRequestInternalLocked(
 	r.mu.requestFingerprints[id] = Request{
 		fingerprint:         queryFingerprint,
 		planGist:            planGist,
+		antiPlanGist:        antiPlanGist,
 		samplingProbability: samplingProbability,
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
@@ -281,11 +284,12 @@ func (r *Registry) InsertRequest(
 	ctx context.Context,
 	stmtFingerprint string,
 	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) error {
-	_, err := r.insertRequestInternal(ctx, stmtFingerprint, planGist, samplingProbability, minExecutionLatency, expiresAfter)
+	_, err := r.insertRequestInternal(ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAfter)
 	return err
 }
 
@@ -293,6 +297,7 @@ func (r *Registry) insertRequestInternal(
 	ctx context.Context,
 	stmtFingerprint string,
 	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
@@ -342,12 +347,13 @@ func (r *Registry) insertRequestInternal(
 
 		now := timeutil.Now()
 		insertColumns := "statement_fingerprint, requested_at"
-		qargs := make([]interface{}, 2, 6)
+		qargs := make([]interface{}, 2, 7)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
 		if planGist != "" {
-			insertColumns += ", plan_gist"
-			qargs = append(qargs, planGist) // plan_gist
+			insertColumns += ", plan_gist, anti_plan_gist"
+			qargs = append(qargs, planGist)     // plan_gist
+			qargs = append(qargs, antiPlanGist) // anti_plan_gist
 		}
 		if samplingProbability != 0 {
 			insertColumns += ", sampling_probability"
@@ -393,7 +399,7 @@ func (r *Registry) insertRequestInternal(
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.mu.epoch++
-		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, planGist, samplingProbability, minExecutionLatency, expiresAt)
+		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt)
 	}()
 
 	return reqID, nil
@@ -476,11 +482,19 @@ func (r *Registry) ShouldCollectDiagnostics(
 				delete(r.mu.requestFingerprints, id)
 				return false, 0, req
 			}
-			if f.planGist == "" || f.planGist == planGist {
-				// We found non-expired request that matches the fingerprint. We
-				// then collect diagnostics on this particular execution if the
-				// request didn't specify the plan gist or the execution's plan
-				// gist matches the one from the request.
+			// We found non-expired request that matches the fingerprint.
+			if f.planGist == "" {
+				// The request didn't specify the plan gist, so this execution
+				// will do.
+				reqID = id
+				req = f
+				break
+			}
+			if (f.planGist == planGist && !f.antiPlanGist) ||
+				(planGist != "" && f.planGist != planGist && f.antiPlanGist) {
+				// The execution's plan gist matches the one from the request,
+				// or the execution's plan gist doesn't match the one from the
+				// request and "anti-match" is requested.
 				reqID = id
 				req = f
 				break
@@ -663,7 +677,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 
 		var extraColumns string
 		if isPlanGistSupported {
-			extraColumns = ", plan_gist"
+			extraColumns = ", plan_gist, anti_plan_gist"
 		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.RootUserSessionDataOverride,
@@ -704,6 +718,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		var expiresAt time.Time
 		var samplingProbability float64
 		var planGist string
+		var antiPlanGist bool
 
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
 			minExecutionLatency = time.Duration(minExecLatency.Nanos())
@@ -723,9 +738,12 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 			if gist, ok := row[5].(*tree.DString); ok {
 				planGist = string(*gist)
 			}
+			if antiGist, ok := row[6].(*tree.DBool); ok {
+				antiPlanGist = bool(*antiGist)
+			}
 		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, samplingProbability, minExecutionLatency, expiresAt)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt)
 	}
 
 	// Remove all other requests.

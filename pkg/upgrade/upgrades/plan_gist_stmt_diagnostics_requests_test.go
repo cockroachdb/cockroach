@@ -57,11 +57,12 @@ func TestStmtDiagForPlanGistMigration(t *testing.T) {
 
 	var (
 		validationStmts = []string{
-			`SELECT plan_gist FROM system.statement_diagnostics_requests LIMIT 0`,
-			`SELECT plan_gist FROM system.statement_diagnostics_requests@completed_idx_v2 LIMIT 0`,
+			`SELECT plan_gist, anti_plan_gist FROM system.statement_diagnostics_requests LIMIT 0`,
+			`SELECT plan_gist, anti_plan_gist FROM system.statement_diagnostics_requests@completed_idx_v2 LIMIT 0`,
 		}
 		validationSchemas = []upgrades.Schema{
 			{Name: "plan_gist", ValidationFn: upgrades.HasColumn},
+			{Name: "anti_plan_gist", ValidationFn: upgrades.HasColumn},
 			{Name: "primary", ValidationFn: upgrades.HasColumnFamily},
 			{Name: "completed_idx", ValidationFn: upgrades.DoesNotHaveIndex},
 			{Name: "completed_idx_v2", ValidationFn: upgrades.HasIndex},

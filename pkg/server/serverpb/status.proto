@@ -1808,6 +1808,9 @@ message CreateStatementDiagnosticsReportRequest {
   // running query is only available after the optimizer has done its part, the
   // trace will only include things after the optimizer is done.
   string plan_gist = 5;
+  // AntiPlanGist, when set, indicates that any plan not matching PlanGist will
+  // do.
+  bool anti_plan_gist = 6;
 }
 
 message CreateStatementDiagnosticsReportResponse {

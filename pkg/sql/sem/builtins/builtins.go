@@ -7744,8 +7744,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
-		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */),
-		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */),
 	),
 
 	"crdb_internal.set_compaction_concurrency": makeBuiltin(
@@ -10881,9 +10882,11 @@ func spanToDatum(span roachpb.Span) (tree.Datum, error) {
 	return result, nil
 }
 
-func makeRequestStatementBundleBuiltinOverload(withPlanGist bool) tree.Overload {
-	typs := tree.ParamTypes{
-		{Name: "stmtFingerprint", Typ: types.String},
+func makeRequestStatementBundleBuiltinOverload(
+	withPlanGist bool, withAntiPlanGist bool,
+) tree.Overload {
+	typs := tree.ParamTypes{{Name: "stmtFingerprint", Typ: types.String}}
+	lastTyps := tree.ParamTypes{
 		{Name: "samplingProbability", Typ: types.Float},
 		{Name: "minExecutionLatency", Typ: types.Interval},
 		{Name: "expiresAfter", Typ: types.Interval},
@@ -10893,17 +10896,17 @@ that has execution latency greater than the 'minExecutionLatency'. If the
 'expiresAfter' argument is empty, then the statement bundle request never
 expires until the statement bundle is collected`
 	if withPlanGist {
-		typs = tree.ParamTypes{
-			{Name: "stmtFingerprint", Typ: types.String},
-			{Name: "planGist", Typ: types.String},
-			{Name: "samplingProbability", Typ: types.Float},
-			{Name: "minExecutionLatency", Typ: types.Interval},
-			{Name: "expiresAfter", Typ: types.Interval},
-		}
+		typs = append(typs, tree.ParamType{Name: "planGist", Typ: types.String})
 		info += `. If 'planGist' argument is
 not empty, then only the execution of the statement with the matching plan
 will be used`
+		if withAntiPlanGist {
+			typs = append(typs, tree.ParamType{Name: "antiPlanGist", Typ: types.Bool})
+			info += `. If 'antiPlanGist' argument is
+true, then any plan other then the specified gist will be used`
+		}
 	}
+	typs = append(typs, lastTyps...)
 	return tree.Overload{
 		Types:      typs,
 		ReturnType: tree.FixedReturnType(types.Bool),
@@ -10941,12 +10944,19 @@ will be used`
 
 			stmtFingerprint := string(tree.MustBeDString(args[0]))
 			var planGist string
+			var antiPlanGist bool
 			spIdx, melIdx, eaIdx := 1, 2, 3
 			if withPlanGist {
 				if args[1] != tree.DNull {
 					planGist = string(tree.MustBeDString(args[1]))
 				}
 				spIdx, melIdx, eaIdx = 2, 3, 4
+				if withAntiPlanGist {
+					if args[2] != tree.DNull {
+						antiPlanGist = bool(tree.MustBeDBool(args[2]))
+					}
+					spIdx, melIdx, eaIdx = 3, 4, 5
+				}
 			}
 			var samplingProbability float64
 			if args[spIdx] != tree.DNull {
@@ -10964,6 +10974,7 @@ will be used`
 				ctx,
 				stmtFingerprint,
 				planGist,
+				antiPlanGist,
 				samplingProbability,
 				minExecutionLatency,
 				expiresAfter,

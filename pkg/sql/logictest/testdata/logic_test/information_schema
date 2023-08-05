@@ -2534,6 +2534,7 @@ system         public        statement_diagnostics            id                
 system         public        statement_diagnostics            statement                                                                                                 3
 system         public        statement_diagnostics            statement_fingerprint                                                                                     2
 system         public        statement_diagnostics            trace                                                                                                     5
+system         public        statement_diagnostics_requests   anti_plan_gist                                                                                            10
 system         public        statement_diagnostics_requests   completed                                                                                                 2
 system         public        statement_diagnostics_requests   expires_at                                                                                                7
 system         public        statement_diagnostics_requests   id                                                                                                        1

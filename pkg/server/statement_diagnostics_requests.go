@@ -28,7 +28,10 @@ type stmtDiagnosticsRequest struct {
 	ID                   int
 	StatementFingerprint string
 	// Empty plan gist indicates that any plan will do.
-	PlanGist               string
+	PlanGist string
+	// If true and PlanGist is not empty, then any plan not matching the gist
+	// will do.
+	AntiPlanGist           bool
 	Completed              bool
 	StatementDiagnosticsID int
 	RequestedAt            time.Time
@@ -89,6 +92,7 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		ctx,
 		req.StatementFingerprint,
 		req.PlanGist,
+		req.AntiPlanGist,
 		req.SamplingProbability,
 		req.MinExecutionLatency,
 		req.ExpiresAfter,
@@ -143,7 +147,8 @@ func (s *statusServer) StatementDiagnosticsRequests(
 	var extraColumns string
 	if s.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist) {
 		extraColumns = `,
-			plan_gist`
+			plan_gist,
+			anti_plan_gist`
 	}
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
@@ -198,6 +203,9 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		if extraColumns != "" {
 			if planGist, ok := row[8].(*tree.DString); ok {
 				req.PlanGist = string(*planGist)
+			}
+			if antiGist, ok := row[9].(*tree.DBool); ok {
+				req.AntiPlanGist = bool(*antiGist)
 			}
 		}
 

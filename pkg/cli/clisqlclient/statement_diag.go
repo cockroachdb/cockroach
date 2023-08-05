@@ -104,8 +104,11 @@ type StmtDiagActivationRequest struct {
 	// Statement is the SQL statement fingerprint.
 	Statement string
 	// If empty then any plan will do.
-	PlanGist    string
-	RequestedAt time.Time
+	PlanGist string
+	// If true and PlanGist is not empty, then any plan not matching the gist
+	// will do.
+	AntiPlanGist bool
+	RequestedAt  time.Time
 	// Zero value indicates that there is no sampling probability set on the
 	// request.
 	SamplingProbability float64
@@ -130,8 +133,8 @@ func StmtDiagListOutstandingRequests(
 }
 
 func isAtLeast23dot2ClusterVersion(ctx context.Context, conn Conn) (bool, error) {
-	// Check whether the upgrade to add the plan_gist column to the
-	// statement_diagnostics_requests system table has already been run.
+	// Check whether the upgrade to add the plan_gist and anti_plan_gist columns
+	// to the statement_diagnostics_requests system table has already been run.
 	row, err := conn.QueryRow(ctx, `
  SELECT
    count(*)
@@ -158,7 +161,7 @@ func stmtDiagListOutstandingRequestsInternal(
 		return nil, err
 	}
 	if atLeast23dot2 {
-		extraColumns = ", plan_gist"
+		extraColumns = ", plan_gist, anti_plan_gist"
 	}
 
 	// Converting an INTERVAL to a number of milliseconds within that interval
@@ -179,7 +182,7 @@ func stmtDiagListOutstandingRequestsInternal(
 		return nil, err
 	}
 	var result []StmtDiagActivationRequest
-	vals := make([]driver.Value, 7)
+	vals := make([]driver.Value, 8)
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
@@ -190,6 +193,7 @@ func stmtDiagListOutstandingRequestsInternal(
 		var expiresAt time.Time
 		var samplingProbability float64
 		var planGist string
+		var antiPlanGist bool
 
 		if ms, ok := vals[3].(int64); ok {
 			minExecutionLatency = time.Millisecond * time.Duration(ms)
@@ -204,11 +208,15 @@ func stmtDiagListOutstandingRequestsInternal(
 			if gist, ok := vals[6].(string); ok {
 				planGist = gist
 			}
+			if antiGist, ok := vals[7].(bool); ok {
+				antiPlanGist = antiGist
+			}
 		}
 		info := StmtDiagActivationRequest{
 			ID:                  vals[0].(int64),
 			Statement:           vals[1].(string),
 			PlanGist:            planGist,
+			AntiPlanGist:        antiPlanGist,
 			RequestedAt:         vals[2].(time.Time),
 			SamplingProbability: samplingProbability,
 			MinExecutionLatency: minExecutionLatency,

@@ -27,9 +27,13 @@ const (
 ALTER TABLE system.statement_diagnostics_requests
   ADD COLUMN plan_gist STRING NULL FAMILY "primary"`
 
+	addAntiPlanGistColToStmtDiagReqs = `
+ALTER TABLE system.statement_diagnostics_requests
+  ADD COLUMN anti_plan_gist BOOL NULL FAMILY "primary"`
+
 	createCompletedIdxV2 = `
 CREATE INDEX completed_idx_v2 ON system.statement_diagnostics_requests (completed, ID)
-  STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist)`
+  STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist)`
 
 	dropCompletedIdx = `DROP INDEX system.statement_diagnostics_requests@completed_idx`
 )
@@ -44,6 +48,12 @@ func stmtDiagForPlanGistMigration(
 			name:           "add-stmt-diag-reqs-plan-gist-column",
 			schemaList:     []string{"plan_gist"},
 			query:          addPlanGistColToStmtDiagReqs,
+			schemaExistsFn: hasColumn,
+		},
+		{
+			name:           "add-stmt-diag-reqs-anti-plan-gist-column",
+			schemaList:     []string{"anti_plan_gist"},
+			query:          addAntiPlanGistColToStmtDiagReqs,
 			schemaExistsFn: hasColumn,
 		},
 		{

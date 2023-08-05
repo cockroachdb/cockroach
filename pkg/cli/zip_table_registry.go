@@ -1233,6 +1233,7 @@ var zipSystemTables = DebugZipTableRegistry{
 			"expires_at",
 			"sampling_probability",
 			"plan_gist",
+			"anti_plan_gist",
 		},
 	},
 	"system.table_statistics": {
