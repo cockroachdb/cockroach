@@ -18,10 +18,10 @@ import (
 	pb "go.etcd.io/raft/v3/raftpb"
 )
 
-func applyToStore(ents []pb.Entry)    {}
-func sendMessages(msgs []pb.Message)  {}
-func saveStateToDisk(st pb.HardState) {}
-func saveToDisk(ents []pb.Entry)      {}
+func applyToStore(_ []pb.Entry)      {}
+func sendMessages(_ []pb.Message)    {}
+func saveStateToDisk(_ pb.HardState) {}
+func saveToDisk(_ []pb.Entry)        {}
 
 func ExampleNode() {
 	c := &Config{}
