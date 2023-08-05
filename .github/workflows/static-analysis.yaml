@@ -15,5 +15,5 @@ jobs:
       - name: protoc
         uses: arduino/setup-protoc@v1
         with:
-          version: '3.14.0'
+          version: '3.20.3'
       - run: make verify
