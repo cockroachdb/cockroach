@@ -84,7 +84,7 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// Example:
 		//
 		// log-level WARN
-		err = env.handleLogLevel(t, d)
+		err = env.handleLogLevel(d)
 	case "raft-log":
 		// Print the Raft log.
 		//

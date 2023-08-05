@@ -1090,7 +1090,7 @@ type ignoreSizeHintMemStorage struct {
 	*MemoryStorage
 }
 
-func (s *ignoreSizeHintMemStorage) Entries(lo, hi uint64, maxSize uint64) ([]raftpb.Entry, error) {
+func (s *ignoreSizeHintMemStorage) Entries(lo, hi uint64, _ uint64) ([]raftpb.Entry, error) {
 	return s.MemoryStorage.Entries(lo, hi, math.MaxUint64)
 }
 
