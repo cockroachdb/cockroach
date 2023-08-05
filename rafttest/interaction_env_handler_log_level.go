@@ -17,12 +17,11 @@ package rafttest
 import (
 	"fmt"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/datadriven"
 )
 
-func (env *InteractionEnv) handleLogLevel(t *testing.T, d datadriven.TestData) error {
+func (env *InteractionEnv) handleLogLevel(d datadriven.TestData) error {
 	return env.LogLevel(d.CmdArgs[0].Key)
 }
 

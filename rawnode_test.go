@@ -37,7 +37,7 @@ type rawNodeAdapter struct {
 var _ Node = (*rawNodeAdapter)(nil)
 
 // TransferLeadership is to test when node specifies lead, which is pointless, can just be filled in.
-func (a *rawNodeAdapter) TransferLeadership(ctx context.Context, lead, transferee uint64) {
+func (a *rawNodeAdapter) TransferLeadership(_ context.Context, _, transferee uint64) {
 	a.RawNode.TransferLeader(transferee)
 }
 
