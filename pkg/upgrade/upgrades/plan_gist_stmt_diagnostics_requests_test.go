@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -26,25 +26,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestSampledStmtDiagReqsMigration(t *testing.T) {
+func TestStmtDiagForPlanGistMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SampledStmtDiagReqs - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_2_StmtDiagForPlanGist - 1),
 				},
 			},
 		},
@@ -60,19 +57,21 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 
 	var (
 		validationStmts = []string{
-			`SELECT sampling_probability FROM system.statement_diagnostics_requests LIMIT 0`,
-			`SELECT sampling_probability FROM system.statement_diagnostics_requests@completed_idx LIMIT 0`,
+			`SELECT plan_gist, anti_plan_gist FROM system.statement_diagnostics_requests LIMIT 0`,
+			`SELECT plan_gist, anti_plan_gist FROM system.statement_diagnostics_requests@completed_idx_v2 LIMIT 0`,
 		}
 		validationSchemas = []upgrades.Schema{
-			{Name: "sampling_probability", ValidationFn: upgrades.HasColumn},
+			{Name: "plan_gist", ValidationFn: upgrades.HasColumn},
+			{Name: "anti_plan_gist", ValidationFn: upgrades.HasColumn},
 			{Name: "primary", ValidationFn: upgrades.HasColumnFamily},
-			{Name: "completed_idx_v2", ValidationFn: upgrades.DoesNotHaveIndex},
+			{Name: "completed_idx", ValidationFn: upgrades.DoesNotHaveIndex},
+			{Name: "completed_idx_v2", ValidationFn: upgrades.HasIndex},
 		}
 	)
 
 	// Inject the old copy of the descriptor.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementDiagnosticsRequestsTable,
-		getV2StmtDiagReqsDescriptor)
+		getOldStmtDiagReqsDescriptor)
 	validateSchemaExists := func(expectExists bool) {
 		upgrades.ValidateSchemaExists(
 			ctx,
@@ -93,7 +92,7 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.TODODelete_V22_2SampledStmtDiagReqs,
+		clusterversion.V23_2_StmtDiagForPlanGist,
 		nil,   /* done */
 		false, /* expectError */
 	)
@@ -101,10 +100,11 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 	validateSchemaExists(true)
 }
 
-// getV2StmtDiagReqsDescriptor returns the system.statement_diagnostics_requests
-// table descriptor that was being used before adding the sampling_probability
-// column to the current version.
-func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
+// getOldStmtDiagReqsDescriptor returns the
+// system.statement_diagnostics_requests table descriptor that was being used
+// before adding the plan_gist and anti_plan_gist columns to the current
+// version.
+func getOldStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 	uniqueRowIDString := "unique_rowid()"
 	falseBoolString := "false"
 
@@ -122,13 +122,14 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 			{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
 			{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
 			{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
+			{Name: "sampling_probability", ID: 8, Type: types.Float, Nullable: true},
 		},
-		NextColumnID: 8,
+		NextColumnID: 9,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
 				Name:        "primary",
-				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 			},
 		},
 		NextFamilyID: 1,
@@ -142,18 +143,18 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 		},
 		Indexes: []descpb.IndexDescriptor{
 			{
-				Name:                "completed_idx_v2",
+				Name:                "completed_idx",
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		},
-		NextIndexID:    3,
+		NextIndexID:    4,
 		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
 		NextMutationID: 1,
 		FormatVersion:  3,

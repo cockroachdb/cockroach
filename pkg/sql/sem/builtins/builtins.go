@@ -7744,65 +7744,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "stmtFingerprint", Typ: types.String},
-				{Name: "samplingProbability", Typ: types.Float},
-				{Name: "minExecutionLatency", Typ: types.Interval},
-				{Name: "expiresAfter", Typ: types.Interval},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
-					ctx, roleoption.VIEWACTIVITY)
-				if err != nil {
-					return nil, err
-				}
-
-				if !hasViewActivity {
-					return nil, errors.New("requesting statement bundle requires " +
-						"VIEWACTIVITY or ADMIN role option")
-				}
-
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
-					return nil, err
-				}
-
-				hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
-					ctx, roleoption.VIEWACTIVITYREDACTED)
-				if err != nil {
-					return nil, err
-				}
-
-				if !isAdmin && hasViewActivityRedacted {
-					return nil, errors.New("VIEWACTIVITYREDACTED role option cannot request " +
-						"statement bundle")
-				}
-
-				stmtFingerprint := string(tree.MustBeDString(args[0]))
-				samplingProbability := float64(tree.MustBeDFloat(args[1]))
-				minExecutionLatency := time.Duration(tree.MustBeDInterval(args[2]).Nanos())
-				expiresAfter := time.Duration(tree.MustBeDInterval(args[3]).Nanos())
-
-				if err := evalCtx.StmtDiagnosticsRequestInserter(
-					ctx,
-					stmtFingerprint,
-					samplingProbability,
-					minExecutionLatency,
-					expiresAfter,
-				); err != nil {
-					return nil, err
-				}
-
-				return tree.DBoolTrue, nil
-			},
-			Volatility: volatility.Volatile,
-			Info: `Used to request statement bundle for a given statement fingerprint
-that has execution latency greater than the 'minExecutionLatency'. If the
-'expiresAfter' argument is empty, then the statement bundle request never
-expires until the statement bundle is collected`,
-		},
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */),
 	),
 
 	"crdb_internal.set_compaction_concurrency": makeBuiltin(
@@ -10936,4 +10880,111 @@ func spanToDatum(span roachpb.Span) (tree.Datum, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func makeRequestStatementBundleBuiltinOverload(
+	withPlanGist bool, withAntiPlanGist bool,
+) tree.Overload {
+	typs := tree.ParamTypes{{Name: "stmtFingerprint", Typ: types.String}}
+	lastTyps := tree.ParamTypes{
+		{Name: "samplingProbability", Typ: types.Float},
+		{Name: "minExecutionLatency", Typ: types.Interval},
+		{Name: "expiresAfter", Typ: types.Interval},
+	}
+	info := `Used to request statement bundle for a given statement fingerprint
+that has execution latency greater than the 'minExecutionLatency'. If the
+'expiresAfter' argument is empty, then the statement bundle request never
+expires until the statement bundle is collected`
+	if withPlanGist {
+		typs = append(typs, tree.ParamType{Name: "planGist", Typ: types.String})
+		info += `. If 'planGist' argument is
+not empty, then only the execution of the statement with the matching plan
+will be used`
+		if withAntiPlanGist {
+			typs = append(typs, tree.ParamType{Name: "antiPlanGist", Typ: types.Bool})
+			info += `. If 'antiPlanGist' argument is
+true, then any plan other then the specified gist will be used`
+		}
+	}
+	typs = append(typs, lastTyps...)
+	return tree.Overload{
+		Types:      typs,
+		ReturnType: tree.FixedReturnType(types.Bool),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
+				ctx, roleoption.VIEWACTIVITY)
+			if err != nil {
+				return nil, err
+			}
+
+			if !hasViewActivity {
+				return nil, errors.New("requesting statement bundle requires " +
+					"VIEWACTIVITY or ADMIN role option")
+			}
+
+			isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
+				ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return nil, err
+			}
+
+			if !isAdmin && hasViewActivityRedacted {
+				return nil, errors.New("VIEWACTIVITYREDACTED role option cannot request " +
+					"statement bundle")
+			}
+
+			if args[0] == tree.DNull {
+				return nil, errors.New("stmtFingerprint must be non-NULL")
+			}
+
+			stmtFingerprint := string(tree.MustBeDString(args[0]))
+			var planGist string
+			var antiPlanGist bool
+			spIdx, melIdx, eaIdx := 1, 2, 3
+			if withPlanGist {
+				if args[1] != tree.DNull {
+					planGist = string(tree.MustBeDString(args[1]))
+				}
+				spIdx, melIdx, eaIdx = 2, 3, 4
+				if withAntiPlanGist {
+					if args[2] != tree.DNull {
+						antiPlanGist = bool(tree.MustBeDBool(args[2]))
+					}
+					spIdx, melIdx, eaIdx = 3, 4, 5
+				}
+			}
+			var samplingProbability float64
+			if args[spIdx] != tree.DNull {
+				samplingProbability = float64(tree.MustBeDFloat(args[spIdx]))
+			}
+			var minExecutionLatency, expiresAfter time.Duration
+			if args[melIdx] != tree.DNull {
+				minExecutionLatency = time.Duration(tree.MustBeDInterval(args[melIdx]).Nanos())
+			}
+			if args[eaIdx] != tree.DNull {
+				expiresAfter = time.Duration(tree.MustBeDInterval(args[eaIdx]).Nanos())
+			}
+
+			if err = evalCtx.StmtDiagnosticsRequestInserter(
+				ctx,
+				stmtFingerprint,
+				planGist,
+				antiPlanGist,
+				samplingProbability,
+				minExecutionLatency,
+				expiresAfter,
+			); err != nil {
+				return nil, err
+			}
+
+			return tree.DBoolTrue, nil
+		},
+		Volatility: volatility.Volatile,
+		Info:       info,
+	}
 }
