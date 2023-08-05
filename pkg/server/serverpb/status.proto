@@ -1800,6 +1800,17 @@ message CreateStatementDiagnosticsReportRequest {
   // likelihood? Or provide a hint for how long T is for the currently chosen
   // sampling probability.
   double sampling_probability = 4;
+  // PlanGist, when set, indicates a particular plan that we want collect
+  // diagnostics for. This can be useful when a single fingerprint can result in
+  // multiple plans.
+  //
+  // There is a caveat to using this filtering: since the plan gist for a
+  // running query is only available after the optimizer has done its part, the
+  // trace will only include things after the optimizer is done.
+  string plan_gist = 5;
+  // AntiPlanGist, when set, indicates that any plan not matching PlanGist will
+  // do.
+  bool anti_plan_gist = 6;
 }
 
 message CreateStatementDiagnosticsReportResponse {

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -47,19 +48,18 @@ func TestDiagnosticsRequest(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
-	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
-	require.NoError(t, err)
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, "CREATE TABLE test (x int PRIMARY KEY)")
 
 	// Disable polling interval since we're inserting requests directly into the
 	// registry manually and want precise control of updating the registry.
-	_, err = db.Exec("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '0';")
-	require.NoError(t, err)
+	runner.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '0';")
 
 	var collectUntilExpirationEnabled bool
 	isCompleted := func(reqID int64) (completed bool, diagnosticsID gosql.NullInt64) {
 		completedQuery := "SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1"
-		reqRow := db.QueryRow(completedQuery, reqID)
-		require.NoError(t, reqRow.Scan(&completed, &diagnosticsID))
+		reqRow := runner.QueryRow(t, completedQuery, reqID)
+		reqRow.Scan(&completed, &diagnosticsID)
 		if completed && !collectUntilExpirationEnabled {
 			// Ensure that if the request was completed and the continuous
 			// collection is not enabled, the local registry no longer has the
@@ -83,23 +83,25 @@ func TestDiagnosticsRequest(t *testing.T) {
 	}
 	setCollectUntilExpiration := func(v bool) {
 		collectUntilExpirationEnabled = v
-		_, err := db.Exec(
-			fmt.Sprintf("SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled = %t", v))
-		require.NoError(t, err)
+		runner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled = %t", v))
 	}
 
-	var minExecutionLatency, expiresAfter time.Duration
-	var samplingProbability float64
+	var anyPlan string
+	var noAntiMatch bool
+	var sampleAll float64
+	var noLatencyThreshold, noExpiration time.Duration
 
 	// Ask to trace a particular query.
 	t.Run("basic", func(t *testing.T) {
-		reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "INSERT INTO test VALUES (_)", anyPlan, noAntiMatch,
+			sampleAll, noLatencyThreshold, noExpiration,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
 		// Run the query.
-		_, err = db.Exec("INSERT INTO test VALUES (1)")
-		require.NoError(t, err)
+		runner.Exec(t, "INSERT INTO test VALUES (1)")
 
 		// Check that the row from statement_diagnostics_request was marked as
 		// completed.
@@ -108,55 +110,62 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	// Verify that we can handle multiple requests at the same time.
 	t.Run("multiple", func(t *testing.T) {
-		id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
+		id1, err := registry.InsertRequestInternal(
+			ctx, "INSERT INTO test VALUES (_)", anyPlan, noAntiMatch,
+			sampleAll, noLatencyThreshold, noExpiration,
+		)
 		require.NoError(t, err)
-		id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", samplingProbability, minExecutionLatency, expiresAfter)
+		id2, err := registry.InsertRequestInternal(
+			ctx, "SELECT x FROM test", anyPlan, noAntiMatch,
+			sampleAll, noLatencyThreshold, noExpiration,
+		)
 		require.NoError(t, err)
-		id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", samplingProbability, minExecutionLatency, expiresAfter)
+		id3, err := registry.InsertRequestInternal(
+			ctx, "SELECT x FROM test WHERE x > _", anyPlan, noAntiMatch,
+			sampleAll, noLatencyThreshold, noExpiration,
+		)
 		require.NoError(t, err)
 
 		// Run the queries in a different order.
-		_, err = db.Exec("SELECT x FROM test")
-		require.NoError(t, err)
+		runner.Exec(t, "SELECT x FROM test")
 		checkCompleted(id2)
 
-		_, err = db.Exec("SELECT x FROM test WHERE x > 1")
-		require.NoError(t, err)
+		runner.Exec(t, "SELECT x FROM test WHERE x > 1")
 		checkCompleted(id3)
 
-		_, err = db.Exec("INSERT INTO test VALUES (2)")
-		require.NoError(t, err)
+		runner.Exec(t, "INSERT INTO test VALUES (2)")
 		checkCompleted(id1)
 	})
 
 	// Verify that EXECUTE triggers diagnostics collection (#66048).
 	t.Run("execute", func(t *testing.T) {
-		id, err := registry.InsertRequestInternal(ctx, "SELECT x + $1 FROM test", samplingProbability, minExecutionLatency, expiresAfter)
+		id, err := registry.InsertRequestInternal(
+			ctx, "SELECT x + $1 FROM test", anyPlan, noAntiMatch,
+			sampleAll, noLatencyThreshold, noExpiration,
+		)
 		require.NoError(t, err)
-		_, err = db.Exec("PREPARE stmt AS SELECT x + $1 FROM test")
-		require.NoError(t, err)
-		_, err = db.Exec("EXECUTE stmt(1)")
-		require.NoError(t, err)
+		runner.Exec(t, "PREPARE stmt AS SELECT x + $1 FROM test")
+		runner.Exec(t, "EXECUTE stmt(1)")
 		checkCompleted(id)
 	})
 
 	// Verify that if the traced query times out, the bundle is still saved.
 	t.Run("timeout", func(t *testing.T) {
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			sampleAll, noLatencyThreshold, noExpiration,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
 		// Set the statement timeout (as well as clean it up in a defer).
-		_, err = db.Exec("SET statement_timeout = '100ms';")
-		require.NoError(t, err)
+		runner.Exec(t, "SET statement_timeout = '100ms';")
 		defer func() {
-			_, err = db.Exec("RESET statement_timeout;")
-			require.NoError(t, err)
+			runner.Exec(t, "RESET statement_timeout;")
 		}()
 
 		// Run the query that times out.
 		_, err = db.Exec("SELECT pg_sleep(999999)")
-		require.Error(t, err)
 		require.True(t, strings.Contains(err.Error(), sqlerrors.QueryTimeoutError.Error()))
 		checkCompleted(reqID)
 	})
@@ -165,35 +174,36 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// condition is satisfied.
 	t.Run("conditional", func(t *testing.T) {
 		minExecutionLatency := 100 * time.Millisecond
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			sampleAll, minExecutionLatency, noExpiration,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
 		// Run the fast query.
-		_, err = db.Exec("SELECT pg_sleep(0)")
-		require.NoError(t, err)
+		runner.Exec(t, "SELECT pg_sleep(0)")
 		checkNotCompleted(reqID)
 
 		// Run the slow query.
-		_, err = db.Exec("SELECT pg_sleep(0.2)")
-		require.NoError(t, err)
+		runner.Exec(t, "SELECT pg_sleep(0.2)")
 		checkCompleted(reqID)
 	})
 
 	// Verify that if a conditional request expired, the bundle for it is not
 	// created even if the condition is satisfied.
 	t.Run("conditional expired", func(t *testing.T) {
-		minExecutionLatency := 100 * time.Millisecond
+		minExecutionLatency, expiresAfter := 100*time.Millisecond, time.Nanosecond
 		reqID, err := registry.InsertRequestInternal(
-			ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, time.Nanosecond,
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			sampleAll, minExecutionLatency, expiresAfter,
 		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
 		// Sleep for a bit and then run the slow query.
 		time.Sleep(100 * time.Millisecond)
-		_, err = db.Exec("SELECT pg_sleep(0.2)")
-		require.NoError(t, err)
+		runner.Exec(t, "SELECT pg_sleep(0.2)")
 		// The request must have expired by now.
 		checkNotCompleted(reqID)
 	})
@@ -203,7 +213,10 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// conditional, then the bundle is collected.
 	t.Run("conditional with concurrency", func(t *testing.T) {
 		minExecutionLatency := 100 * time.Millisecond
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep($1)", samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep($1)", anyPlan, noAntiMatch,
+			sampleAll, minExecutionLatency, noExpiration,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -219,8 +232,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 				if i == numGoroutines-1 {
 					sleepDuration = "0.2"
 				}
-				_, err := db.Exec("SELECT pg_sleep($1)", sleepDuration)
-				require.NoError(t, err)
+				runner.Exec(t, "SELECT pg_sleep($1)", sleepDuration)
 			}(i)
 		}
 
@@ -249,7 +261,8 @@ func TestDiagnosticsRequest(t *testing.T) {
 				for _, expiresAfter := range []time.Duration{0, time.Second} {
 					t.Run(fmt.Sprintf("expiresAfter=%s", expiresAfter), func(t *testing.T) {
 						reqID, err := registry.InsertRequestInternal(
-							ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter,
+							ctx, fprint, anyPlan, noAntiMatch,
+							sampleAll, minExecutionLatency, expiresAfter,
 						)
 						require.NoError(t, err)
 						checkNotCompleted(reqID)
@@ -260,8 +273,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 						// Run the query that is slow enough to satisfy the
 						// conditional request.
-						_, err = db.Exec("SELECT pg_sleep(0.2)")
-						require.NoError(t, err)
+						runner.Exec(t, "SELECT pg_sleep(0.2)")
 						checkNotCompleted(reqID)
 					})
 				}
@@ -283,7 +295,8 @@ func TestDiagnosticsRequest(t *testing.T) {
 						minExecutionLatency = 100 * time.Millisecond
 					}
 					reqID, err := registry.InsertRequestInternal(
-						ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter,
+						ctx, fprint, anyPlan, noAntiMatch,
+						sampleAll, minExecutionLatency, noExpiration,
 					)
 					require.NoError(t, err)
 					checkNotCompleted(reqID)
@@ -304,8 +317,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 					// Now run the query that is slow enough to satisfy the
 					// conditional request.
 					close(waitCh)
-					_, err = db.Exec("SELECT pg_sleep(0.2)")
-					require.NoError(t, err)
+					runner.Exec(t, "SELECT pg_sleep(0.2)")
 
 					wg.Wait()
 
@@ -323,14 +335,15 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// Ask to trace a statement probabilistically.
 	t.Run("probabilistic sample", func(t *testing.T) {
 		samplingProbability, minExecutionLatency := 0.9999, time.Microsecond
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
-			samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			samplingProbability, minExecutionLatency, noExpiration,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
 		testutils.SucceedsSoon(t, func() error {
-			_, err = db.Exec("SELECT pg_sleep(0.01)") // run the query
-			require.NoError(t, err)
+			runner.Exec(t, "SELECT pg_sleep(0.01)") // run the query
 			completed, _ := isCompleted(reqID)
 			if completed {
 				return nil
@@ -341,8 +354,10 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	t.Run("sampling without latency threshold disallowed", func(t *testing.T) {
 		samplingProbability, expiresAfter := 0.5, time.Second
-		_, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
-			samplingProbability, 0 /* minExecutionLatency */, expiresAfter)
+		_, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			samplingProbability, noLatencyThreshold, expiresAfter,
+		)
 		testutils.IsError(err, "empty min exec latency")
 	})
 
@@ -353,8 +368,10 @@ func TestDiagnosticsRequest(t *testing.T) {
 		// the expiration point +1h from now (we don't mark continuous captures
 		// as completed until they've expired).
 		samplingProbability, minExecutionLatency, expiresAfter := 0.0, time.Microsecond, time.Hour
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
-			samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			samplingProbability, minExecutionLatency, expiresAfter,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -362,8 +379,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 		defer setCollectUntilExpiration(false)
 
 		testutils.SucceedsSoon(t, func() error {
-			_, err := db.Exec("SELECT pg_sleep(0.01)") // run the query
-			require.NoError(t, err)
+			runner.Exec(t, "SELECT pg_sleep(0.01)") // run the query
 			completed, _ := isCompleted(reqID)
 			if completed {
 				return nil
@@ -376,9 +392,11 @@ func TestDiagnosticsRequest(t *testing.T) {
 		// We don't mark continuous captures as completed until they've expired,
 		// so we require an explicit expiration set. See previous test case for
 		// some commentary.
-		samplingProbability, minExecutionLatency, expiresAfter := 0.999, time.Microsecond, 0*time.Hour
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
-			samplingProbability, minExecutionLatency, expiresAfter)
+		samplingProbability, minExecutionLatency := 0.999, time.Microsecond
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			samplingProbability, minExecutionLatency, noExpiration,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -386,8 +404,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 		defer setCollectUntilExpiration(false)
 
 		testutils.SucceedsSoon(t, func() error {
-			_, err := db.Exec("SELECT pg_sleep(0.01)") // run the query
-			require.NoError(t, err)
+			runner.Exec(t, "SELECT pg_sleep(0.01)") // run the query
 			completed, _ := isCompleted(reqID)
 			if completed {
 				return nil
@@ -398,8 +415,10 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	t.Run("continuous capture", func(t *testing.T) {
 		samplingProbability, minExecutionLatency, expiresAfter := 0.9999, time.Microsecond, time.Hour
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
-			samplingProbability, minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			samplingProbability, minExecutionLatency, expiresAfter,
+		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -408,8 +427,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 		var firstDiagnosticID int64
 		testutils.SucceedsSoon(t, func() error {
-			_, err := db.Exec("SELECT pg_sleep(0.01)") // run the query
-			require.NoError(t, err)
+			runner.Exec(t, "SELECT pg_sleep(0.01)") // run the query
 			completed, diagnosticID := isCompleted(reqID)
 			if !diagnosticID.Valid {
 				return errors.New("expected to capture diagnostic bundle")
@@ -430,7 +448,8 @@ func TestDiagnosticsRequest(t *testing.T) {
 	t.Run("continuous capture until expiration", func(t *testing.T) {
 		samplingProbability, minExecutionLatency, expiresAfter := 0.9999, time.Microsecond, 100*time.Millisecond
 		reqID, err := registry.InsertRequestInternal(
-			ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, expiresAfter,
+			ctx, "SELECT pg_sleep(_)", anyPlan, noAntiMatch,
+			samplingProbability, minExecutionLatency, expiresAfter,
 		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
@@ -445,12 +464,73 @@ func TestDiagnosticsRequest(t *testing.T) {
 		// registry yet (because we disabled the polling interval). When we run
 		// the query that matches the fingerprint, the expired request is
 		// removed, and the bundle is not collected.
-		_, err = db.Exec("SELECT pg_sleep(0.01)") // run the query
-		require.NoError(t, err)
+		runner.Exec(t, "SELECT pg_sleep(0.01)") // run the query
 		checkNotCompleted(reqID)
 
 		// Sanity check that the request is no longer in the registry.
 		require.False(t, registry.TestingFindRequest(reqID))
+	})
+
+	t.Run("plan-gist matching", func(t *testing.T) {
+		// Set up two tables such that the same query fingerprint would get
+		// different plans based on the placeholder values.
+		runner.Exec(t, "CREATE TABLE small (k PRIMARY KEY) AS VALUES (1), (2);")
+		runner.Exec(t, "ANALYZE small;")
+		runner.Exec(t, "CREATE TABLE large (v INT, INDEX (v));")
+		runner.Exec(t, "INSERT INTO large VALUES (1);")
+		runner.Exec(t, "INSERT INTO large SELECT 2 FROM generate_series(1, 10000);")
+		runner.Exec(t, "ANALYZE large;")
+
+		// query1 results in scan + lookup join whereas query2 does two scans +
+		// merge join.
+		const (
+			fprint = `SELECT v FROM small INNER JOIN large ON (k = v) AND (k = _)`
+			query1 = "SELECT v FROM small INNER JOIN large ON k = v AND k = 0;"
+			query2 = "SELECT v FROM small INNER JOIN large ON k = v AND k = 1;"
+		)
+		getGist := func(query string) string {
+			row := runner.QueryRow(t, "EXPLAIN (GIST) "+query)
+			var gist string
+			row.Scan(&gist)
+			return gist
+		}
+		for _, antiMatch := range []bool{false, true} {
+			t.Run(fmt.Sprintf("anti-match=%t", antiMatch), func(t *testing.T) {
+				for _, tc := range []struct {
+					target, other string
+				}{
+					{target: query1, other: query2},
+					{target: query2, other: query1},
+				} {
+					targetGist, otherGist := getGist(tc.target), getGist(tc.other)
+					// Sanity check that two queries have different plans.
+					require.NotEqual(t, targetGist, otherGist)
+					target, other := tc.target, tc.other
+					if antiMatch {
+						// Flip the queries when testing the anti-match.
+						target, other = other, target
+					}
+
+					reqID, err := registry.InsertRequestInternal(
+						ctx, fprint, targetGist, antiMatch, sampleAll, noLatencyThreshold, noExpiration,
+					)
+					require.NoError(t, err)
+					checkNotCompleted(reqID)
+
+					// Run other query several times and ensure that the bundle
+					// wasn't collected because the plan gist didn't match.
+					for i := 0; i < 3; i++ {
+						runner.Exec(t, other)
+					}
+					checkNotCompleted(reqID)
+
+					// Now run our target query and verify that the bundle is
+					// now collected.
+					runner.Exec(t, target)
+					checkCompleted(reqID)
+				}
+			})
+		}
 	})
 }
 
@@ -470,12 +550,17 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	_, err = db0.Exec("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '1ms'")
 	require.NoError(t, err)
 
-	var minExecutionLatency, expiresAfter time.Duration
-	var samplingProbability float64
+	var anyPlan string
+	var noAntiMatch bool
+	var sampleAll float64
+	var noLatencyThreshold, noExpiration time.Duration
 
 	// Ask to trace a particular query using node 0.
 	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
-	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
+	reqID, err := registry.InsertRequestInternal(
+		ctx, "INSERT INTO test VALUES (_)", anyPlan, noAntiMatch,
+		sampleAll, noLatencyThreshold, noExpiration,
+	)
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(
 		`SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests
@@ -510,11 +595,20 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
 
 	// Verify that we can handle multiple requests at the same time.
-	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
+	id1, err := registry.InsertRequestInternal(
+		ctx, "INSERT INTO test VALUES (_)", anyPlan, noAntiMatch,
+		sampleAll, noLatencyThreshold, noExpiration,
+	)
 	require.NoError(t, err)
-	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", samplingProbability, minExecutionLatency, expiresAfter)
+	id2, err := registry.InsertRequestInternal(
+		ctx, "SELECT x FROM test", anyPlan, noAntiMatch,
+		sampleAll, noLatencyThreshold, noExpiration,
+	)
 	require.NoError(t, err)
-	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", samplingProbability, minExecutionLatency, expiresAfter)
+	id3, err := registry.InsertRequestInternal(
+		ctx, "SELECT x FROM test WHERE x > _", anyPlan, noAntiMatch,
+		sampleAll, noLatencyThreshold, noExpiration,
+	)
 	require.NoError(t, err)
 
 	// Run the queries in a different order.
