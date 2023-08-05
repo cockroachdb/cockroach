@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
@@ -41,6 +42,7 @@ type externalStorageBuilder struct {
 	limiters          cloud.Limiters
 	recorder          multitenant.TenantSideExternalIORecorder
 	metrics           metric.Struct
+	pacerFactory      admission.PacerFactory
 }
 
 func (e *externalStorageBuilder) init(
@@ -54,6 +56,7 @@ func (e *externalStorageBuilder) init(
 	db isql.DB,
 	recorder multitenant.TenantSideExternalIORecorder,
 	registry *metric.Registry,
+	pacerFactory admission.PacerFactory,
 ) {
 	var blobClientFactory blobs.BlobClientFactory
 	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.BlobClientFactory != nil {
@@ -69,6 +72,7 @@ func (e *externalStorageBuilder) init(
 	e.db = db
 	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
 	e.recorder = recorder
+	e.pacerFactory = pacerFactory
 
 	// Register the metrics that track interactions with external storage
 	// providers.
@@ -83,7 +87,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(
-		ctx, dest, e.conf, e.settings, e.blobClientFactory, e.db, e.limiters, e.metrics,
+		ctx, dest, e.conf, e.settings, e.blobClientFactory, e.db, e.limiters, e.metrics, e.pacerFactory,
 		append(e.defaultOptions(), opts...)...,
 	)
 }
@@ -95,7 +99,7 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.ExternalStorageFromURI(
-		ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.db, e.limiters, e.metrics,
+		ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.db, e.limiters, e.metrics, e.pacerFactory,
 		append(e.defaultOptions(), opts...)...,
 	)
 }

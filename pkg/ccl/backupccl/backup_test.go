@@ -749,6 +749,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].InternalDB().(isql.DB),
 				nil, /* limiters */
 				cloud.NilMetrics,
+				nil, /* pacerFactory */
 			)
 			require.NoError(t, err)
 			defer store.Close()
@@ -8388,6 +8389,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
+		nil, /* pacerFactory */
 	)
 	require.NoError(t, err)
 

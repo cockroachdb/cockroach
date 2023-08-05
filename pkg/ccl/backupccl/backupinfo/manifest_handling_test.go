@@ -51,6 +51,7 @@ func TestManifestHandlingIteratorOperations(t *testing.T) {
 		tc.Server(0).InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
+		nil, /* pacerFactory */
 	)
 	require.NoError(t, err)
 
@@ -119,6 +120,7 @@ func TestManifestHandlingEmptyIterators(t *testing.T) {
 		tc.Server(0).InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
+		nil, /* pacerFactory */
 	)
 	require.NoError(t, err)
 

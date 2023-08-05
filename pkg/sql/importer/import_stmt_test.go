@@ -2806,7 +2806,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(
 			ctx, dest, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
-			username.TestUserName(), ief, nil, cloud.NilMetrics,
+			username.TestUserName(), ief, nil, cloud.NilMetrics, nil,
 		)
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
@@ -6138,6 +6138,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			tc.Server(0).InternalDB().(isql.DB),
 			nil,
 			cloud.NilMetrics,
+			nil,
 		)
 		require.NoError(t, err)
 		defer store.Close()

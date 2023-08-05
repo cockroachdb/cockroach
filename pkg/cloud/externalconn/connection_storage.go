@@ -92,7 +92,7 @@ func makeExternalConnectionStorage(
 		uri.Path = path.Join(uri.Path, cfg.Path)
 		return cloud.ExternalStorageFromURI(ctx, uri.String(), args.IOConf, args.Settings,
 			args.BlobClientFactory, username.MakeSQLUsernameFromPreNormalizedString(cfg.User),
-			args.DB, args.Limiters, args.MetricsRecorder.Metrics(), args.Options...)
+			args.DB, args.Limiters, args.MetricsRecorder.Metrics(), args.PacerFactory, args.Options...)
 	default:
 		return nil, errors.Newf("cannot connect to %T; unsupported resource for an ExternalStorage connection", d)
 	}

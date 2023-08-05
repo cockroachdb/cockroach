@@ -90,6 +90,7 @@ func TestPutS3(t *testing.T) {
 			nil, /* kvDB */
 			nil, /* limiters */
 			nil, /* metrics */
+			nil, /* pacerFactory */
 		)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,

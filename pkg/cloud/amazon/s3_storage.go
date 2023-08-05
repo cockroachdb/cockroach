@@ -34,9 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -110,8 +113,9 @@ type s3Storage struct {
 	settings *cluster.Settings
 	prefix   string
 
-	opts   s3ClientConfig
-	cached *s3Client
+	opts         s3ClientConfig
+	cached       *s3Client
+	pacerFactory admission.PacerFactory
 }
 
 var _ request.Retryer = &customRetryer{}
@@ -165,6 +169,13 @@ var usePutObject = settings.RegisterBoolSetting(
 	"cloudstorage.s3.buffer_and_put_uploads.enabled",
 	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
 	false,
+)
+
+var uploaderElasticCPUControl = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"cloudstorage.s3.uploader_elastic_control.enabled",
+	"determines whether the s3 uploader integrates with elastic CPU control",
+	true,
 )
 
 // roleProvider contains fields about the role that needs to be assumed
@@ -448,12 +459,13 @@ func MakeS3Storage(
 	}
 
 	s := &s3Storage{
-		bucket:   aws.String(conf.Bucket),
-		conf:     conf,
-		ioConf:   args.IOConf,
-		prefix:   conf.Prefix,
-		settings: args.Settings,
-		opts:     clientConfig(conf),
+		bucket:       aws.String(conf.Bucket),
+		conf:         conf,
+		ioConf:       args.IOConf,
+		prefix:       conf.Prefix,
+		settings:     args.Settings,
+		opts:         clientConfig(conf),
+		pacerFactory: args.PacerFactory,
 	}
 
 	reuse := reuseSession.Get(&args.Settings.SV)
@@ -473,7 +485,7 @@ func MakeS3Storage(
 	// other callers from making clients in the meantime, not just to avoid making
 	// duplicate clients in a race but also because making clients concurrently
 	// can fail if the AWS metadata server hits its rate limit.
-	client, _, err := newClient(ctx, s.opts, s.settings)
+	client, _, err := newClient(ctx, s.opts, s.settings, s.pacerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +516,10 @@ var awsVerboseLogging = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDeb
 // configures the client with it as well as returning it (so the caller can
 // remember it for future calls).
 func newClient(
-	ctx context.Context, conf s3ClientConfig, settings *cluster.Settings,
+	ctx context.Context,
+	conf s3ClientConfig,
+	settings *cluster.Settings,
+	pacerFactory admission.PacerFactory,
 ) (s3Client, string, error) {
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
 	if conf.region == "" || conf.auth == cloud.AuthParamImplicit {
@@ -602,15 +617,52 @@ func newClient(
 	c := s3.New(sess)
 	u := s3manager.NewUploader(sess, func(uploader *s3manager.Uploader) {
 		uploader.PartSize = cloud.WriteChunkSize.Get(&settings.SV)
+
+		var pacer *admission.Pacer = nil
+		if pacerFactory != nil {
+			// Passing a nil Pacer is effectively a noop Pacer if
+			// CPU control is disabled.
+			if uploaderElasticCPUControl.Get(&settings.SV) {
+				tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+				if !ok {
+					tenantID = roachpb.SystemTenantID
+				}
+
+				pacer = pacerFactory.NewPacer(
+					100*time.Millisecond,
+					admission.WorkInfo{
+						TenantID:        tenantID,
+						Priority:        admissionpb.BulkNormalPri,
+						CreateTime:      timeutil.Now().UnixNano(),
+						BypassAdmission: false,
+					},
+				)
+			}
+		}
+		uploader.Pacer = &s3UploadPacer{
+			ctx:   ctx,
+			pacer: pacer,
+		}
 	})
 	return s3Client{client: c, uploader: u}, region, nil
 }
+
+type s3UploadPacer struct {
+	ctx   context.Context
+	pacer *admission.Pacer
+}
+
+func (s *s3UploadPacer) Pace() {
+	_ = s.pacer.Pace(s.ctx) // TODO(irfansharif): Log periodically on err
+}
+
+var _ s3manager.Pacer = &s3UploadPacer{}
 
 func (s *s3Storage) getClient(ctx context.Context) (*s3.S3, error) {
 	if s.cached != nil {
 		return s.cached.client, nil
 	}
-	client, region, err := newClient(ctx, s.opts, s.settings)
+	client, region, err := newClient(ctx, s.opts, s.settings, s.pacerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +676,7 @@ func (s *s3Storage) getUploader(ctx context.Context) (*s3manager.Uploader, error
 	if s.cached != nil {
 		return s.cached.uploader, nil
 	}
-	client, region, err := newClient(ctx, s.opts, s.settings)
+	client, region, err := newClient(ctx, s.opts, s.settings, s.pacerFactory)
 	if err != nil {
 		return nil, err
 	}

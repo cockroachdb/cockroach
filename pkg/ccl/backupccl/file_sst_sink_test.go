@@ -866,6 +866,7 @@ func fileSSTSinkTestSetUp(
 		tc.Servers[0].InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
+		nil, /* pacerFactory */
 	)
 	require.NoError(t, err)
 

@@ -133,6 +133,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 			tc.Servers[0].InternalDB().(isql.DB),
 			nil, /* limiters */
 			cloud.NilMetrics,
+			nil, /* pacerFactory */
 		)
 		require.NoError(b, err)
 

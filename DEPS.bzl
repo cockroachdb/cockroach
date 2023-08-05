@@ -398,11 +398,10 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go",
-        sha256 = "c0c481d28af88f621fb3fdeacc1e5d32f69a1bb83d0ee959f95ce89e4e2d0494",
-        strip_prefix = "github.com/aws/aws-sdk-go@v1.40.37",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go/com_github_aws_aws_sdk_go-v1.40.37.zip",
-        ],
+        replace = "github.com/irfansharif/aws-sdk-go",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:dbDqat4W9OQgZZStsERy2phUwv3Ha2jhYz8IVL8DYQo=",
+        version = "v0.0.0-20230805031638-83130fec6570",
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2",
@@ -3050,16 +3049,6 @@ def go_deps():
         strip_prefix = "github.com/go-gl/glfw/v3.3/glfw@v0.0.0-20200222043503-6f7a984d4dc4",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-gl/glfw/v3.3/glfw/com_github_go_gl_glfw_v3_3_glfw-v0.0.0-20200222043503-6f7a984d4dc4.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_go_ini_ini",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/go-ini/ini",
-        sha256 = "2ec52de9f1c96133e9f81b8250fdc99ca0729c0d429e318d7c8836b7a6ba5f60",
-        strip_prefix = "github.com/go-ini/ini@v1.25.4",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-ini/ini/com_github_go_ini_ini-v1.25.4.zip",
         ],
     )
     go_repository(

@@ -777,6 +777,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		s.costController,
 		s.registry,
+		nil, /* pacerFactory */
 	)
 
 	// If enabled, start reporting diagnostics.

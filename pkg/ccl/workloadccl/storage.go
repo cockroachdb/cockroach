@@ -45,6 +45,7 @@ func GetStorage(ctx context.Context, cfg FixtureConfig) (cloud.ExternalStorage, 
 		nil,              /* db */
 		nil,              /* limiters */
 		cloud.NilMetrics, /* metrics */
+		nil,              /* pacerFactory */
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, storageError)

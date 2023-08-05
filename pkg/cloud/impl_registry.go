@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -153,6 +154,7 @@ func ExternalStorageFromURI(
 	db isql.DB,
 	limiters Limiters,
 	metrics metric.Struct,
+	pacerFactory admission.PacerFactory,
 	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
@@ -160,7 +162,7 @@ func ExternalStorageFromURI(
 		return nil, err
 	}
 	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory,
-		db, limiters, metrics, opts...)
+		db, limiters, metrics, pacerFactory, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -207,6 +209,7 @@ func MakeExternalStorage(
 	db isql.DB,
 	limiters Limiters,
 	metrics metric.Struct,
+	pacerFactory admission.PacerFactory,
 	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	var cloudMetrics *Metrics
@@ -222,6 +225,7 @@ func MakeExternalStorage(
 		Options:           opts,
 		Limiters:          limiters,
 		MetricsRecorder:   cloudMetrics,
+		PacerFactory:      pacerFactory,
 	}
 	if conf.DisableOutbound && dest.Provider != cloudpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")

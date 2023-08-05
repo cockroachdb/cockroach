@@ -69,7 +69,7 @@ func TestPutUserFileTable(t *testing.T) {
 
 		store, err := cloud.ExternalStorageFromURI(ctx, userfileURL.String()+"/",
 			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
-			username.RootUserName(), db, nil, cloud.NilMetrics)
+			username.RootUserName(), db, nil, cloud.NilMetrics, nil)
 		require.NoError(t, err)
 		defer store.Close()
 
@@ -118,14 +118,14 @@ func TestUserScoping(t *testing.T) {
 	// Write file as user1.
 	fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, db, nil,
-		cloud.NilMetrics)
+		cloud.NilMetrics, nil)
 	require.NoError(t, err)
 	require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte("aaa"))))
 
 	// Attempt to read/write file as user2 and expect to fail.
 	fileTableSystem2, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, db, nil,
-		cloud.NilMetrics)
+		cloud.NilMetrics, nil)
 	require.NoError(t, err)
 	_, _, err = fileTableSystem2.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	require.Error(t, err)
@@ -134,7 +134,7 @@ func TestUserScoping(t *testing.T) {
 	// Read file as root and expect to succeed.
 	fileTableSystem3, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), db,
-		nil, cloud.NilMetrics)
+		nil, cloud.NilMetrics, nil)
 	require.NoError(t, err)
 	_, _, err = fileTableSystem3.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)

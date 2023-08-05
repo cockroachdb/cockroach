@@ -443,3 +443,5 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
+
+replace github.com/aws/aws-sdk-go => github.com/irfansharif/aws-sdk-go v0.0.0-20230805031638-83130fec6570

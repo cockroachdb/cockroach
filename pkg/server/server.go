@@ -190,6 +190,8 @@ type Server struct {
 	spanConfigSubscriber spanconfig.KVSubscriber
 	spanConfigReporter   spanconfig.Reporter
 
+	admissionPacerFactory admission.PacerFactory
+
 	tenantCapabilitiesWatcher *tenantcapabilitieswatcher.Watcher
 
 	// pgL is the SQL listener for pgwire connections coming over the network.
@@ -1313,6 +1315,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		kvMemoryMonitor:           kvMemoryMonitor,
 		keyVisualizerServer:       keyVisualizerServer,
 		inspectzServer:            inspectzServer,
+		admissionPacerFactory:     gcoords.Elastic,
 	}
 
 	return lateBoundServer, err
@@ -2056,6 +2059,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		nil, /* TenantExternalIORecorder */
 		s.registry,
+		s.admissionPacerFactory,
 	)
 	if err := s.cfg.ExternalStorageAccessor.Init(
 		s.externalStorageBuilder.makeExternalStorage, s.externalStorageBuilder.makeExternalStorageFromURI,

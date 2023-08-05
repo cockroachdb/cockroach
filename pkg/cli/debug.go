@@ -1551,6 +1551,7 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 					nil, /* db */
 					nil, /* limiters */
 					cloud.NilMetrics,
+					nil, /* pacerFactory */
 				)
 				if err != nil {
 					return err

@@ -712,7 +712,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		// storage metrics on a per-store basis; see storage.Metrics.
 		sharedStorage, err = cloud.ExternalStorageFromURI(ctx, cfg.SharedStorage,
 			base.ExternalIODirConfig{}, cfg.Settings, nil, cfg.User, nil,
-			nil, cloud.NilMetrics)
+			nil, cloud.NilMetrics, nil)
 		if err != nil {
 			return nil, err
 		}

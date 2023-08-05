@@ -96,6 +96,7 @@ func checkMetadata(
 		tc.Servers[0].InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
+		nil, /* pacerFactory */
 	)
 	if err != nil {
 		t.Fatal(err)

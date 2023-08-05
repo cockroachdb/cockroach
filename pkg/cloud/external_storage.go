@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
@@ -168,6 +169,7 @@ type ExternalStorageContext struct {
 	Options           []ExternalStorageOption
 	Limiters          Limiters
 	MetricsRecorder   MetricsRecorder
+	PacerFactory      admission.PacerFactory
 }
 
 // ExternalStorageOptions holds dependencies and values that can be

@@ -179,6 +179,7 @@ func TestCloudStorageSink(t *testing.T) {
 			nil, /* db */
 			nil, /* limiters */
 			cloud.NilMetrics,
+			nil, /* pacerFactory */
 			opts...)
 	}
 
