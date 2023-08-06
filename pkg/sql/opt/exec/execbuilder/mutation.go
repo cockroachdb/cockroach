@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -144,27 +143,54 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		return execPlan{}, false, nil
 	}
 
-	//  - the input is Values with at most mutations.MaxBatchSize, and there are no
-	//    subqueries;
-	//    (note that mutations.MaxBatchSize() is a quantity of keys in the batch
-	//     that we send, not a number of rows. We use this as a guideline only,
-	//     and there is no guarantee that we won't produce a bigger batch.)
-	values, ok := ins.Input.(*memo.ValuesExpr)
-	if !ok ||
-		values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) ||
-		values.Relational().HasSubquery ||
-		values.Relational().HasUDF {
-		return execPlan{}, false, nil
-	}
-
-	// We cannot use the fast path if any uniqueness checks are needed.
-	// TODO(rytaft): try to relax this restriction (see #58047).
-	if len(ins.UniqueChecks) > 0 {
+	insInput := ins.Input
+	values, ok := insInput.(*memo.ValuesExpr)
+	// Values expressions containing subqueries or UDFs, or having a size larger
+	// than the max mutation batch size are disallowed.
+	if !ok || !memo.ValuesLegalForInsertFastPath(values) {
 		return execPlan{}, false, nil
 	}
 
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
+
+	uniqChecks := make([]exec.InsertFastPathFKUniqCheck, len(ins.UniqueChecks))
+	for i := range ins.FastPathUniqueChecks {
+		c := &ins.FastPathUniqueChecks[i]
+		if len(c.DatumsFromConstraint) == 0 {
+			// We need at least one DatumsFromConstraint in order to perform
+			// uniqueness checks during fast-path insert. Even if DatumsFromConstraint
+			// contains no Datums, that case indicates that all values to check come
+			// from the input row.
+			return execPlan{}, false, nil
+		}
+		execFastPathCheck := &uniqChecks[i]
+		// Set up the execbuilder structure from the elements built during
+		// exploration.
+		execFastPathCheck.ReferencedTable = md.Table(c.ReferencedTableID)
+		execFastPathCheck.ReferencedIndex = execFastPathCheck.ReferencedTable.Index(c.ReferencedIndexOrdinal)
+		execFastPathCheck.InsertCols = make([]exec.TableColumnOrdinal, len(c.InsertCols))
+		for j, insertCol := range c.InsertCols {
+			execFastPathCheck.InsertCols[j] = exec.TableColumnOrdinal(md.ColumnMeta(insertCol).Table.ColumnOrdinal(insertCol))
+		}
+		execFastPathCheck.MatchMethod = tree.MatchFull
+		datumsFromConstraintSpec := c.DatumsFromConstraint
+		execFastPathCheck.DatumsFromConstraint = make([]tree.Datums, len(datumsFromConstraintSpec))
+		for j, row := range datumsFromConstraintSpec {
+			execFastPathCheck.DatumsFromConstraint[j] = make(tree.Datums, tab.ColumnCount())
+			tuple := row.(*memo.TupleExpr)
+			if len(c.InsertCols) != len(tuple.Elems) {
+				panic(errors.AssertionFailedf("expected %d tuple elements in insert fast path uniqueness check, found %d", len(c.InsertCols), len(tuple.Elems)))
+			}
+			for k := 0; k < len(tuple.Elems); k++ {
+				constExpr, _ := tuple.Elems[k].(*memo.ConstExpr)
+				execFastPathCheck.DatumsFromConstraint[j][execFastPathCheck.InsertCols[k]] = constExpr.Value
+			}
+		}
+		execFastPathCheck.MkErr = func(values tree.Datums) error {
+			return mkFastPathUniqueCheckErr(md, &ins.UniqueChecks[i], values, execFastPathCheck.ReferencedIndex)
+		}
+	}
 
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
@@ -276,6 +302,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		uniqChecks,
 		b.allowAutoCommit,
 	)
 	if err != nil {
@@ -818,6 +845,40 @@ func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.D
 	)
 }
 
+// mkFastPathUniqueCheckErr is a wrapper for mkUniqueCheckErr in the insert fast
+// path flow, which reorders the keyVals row according to the ordering of the
+// key columns in index `idx`. This is needed because mkUniqueCheckErr assumes
+// the ordering of columns in `keyVals` matches the ordering of columns in
+// `cat.UniqueConstraint.ColumnOrdinal(tabMeta.Table, i)`.
+func mkFastPathUniqueCheckErr(
+	md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums, idx cat.Index,
+) error {
+
+	tabMeta := md.TableMeta(c.Table)
+	uc := tabMeta.Table.Unique(c.CheckOrdinal)
+
+	newKeyVals := make(tree.Datums, 0, uc.ColumnCount())
+
+	for i := 0; i < uc.ColumnCount(); i++ {
+		ord := uc.ColumnOrdinal(tabMeta.Table, i)
+		found := false
+		for j := 0; j < idx.ColumnCount(); j++ {
+			keyCol := idx.Column(j)
+			keyColOrd := keyCol.Column.Ordinal()
+			if ord == keyColOrd {
+				newKeyVals = append(newKeyVals, keyVals[j])
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(errors.AssertionFailedf(
+				"insert fast path failed uniqueness check, but could not find unique columns for row, %v", keyVals))
+		}
+	}
+	return mkUniqueCheckErr(md, c, newKeyVals)
+}
+
 // mkFKCheckErr generates a user-friendly error describing a foreign key
 // violation. The keyVals are the values that correspond to the
 // cat.ForeignKeyConstraint columns.
@@ -923,59 +984,6 @@ func (b *Builder) buildFKCascades(withID opt.WithID, cascades memo.FKCascades) e
 		b.cascades = append(b.cascades, cb.setupCascade(&cascades[i]))
 	}
 	return nil
-}
-
-// canAutoCommit determines if it is safe to auto commit the mutation contained
-// in the expression.
-//
-// Mutations can commit the transaction as part of the same KV request,
-// potentially taking advantage of the 1PC optimization. This is not ok to do in
-// general; a sufficient set of conditions is:
-//  1. There is a single mutation in the query.
-//  2. The mutation is the root operator, or it is directly under a Project
-//     with no side-effecting expressions. An example of why we can't allow
-//     side-effecting expressions: if the projection encounters a
-//     division-by-zero error, the mutation shouldn't have been committed.
-//
-// An extra condition relates to how the FK checks are run. If they run before
-// the mutation (via the insert fast path), auto commit is possible. If they run
-// after the mutation (the general path), auto commit is not possible. It is up
-// to the builder logic for each mutation to handle this.
-//
-// Note that there are other necessary conditions related to execution
-// (specifically, that the transaction is implicit); it is up to the exec
-// factory to take that into account as well.
-func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
-	if !rel.Relational().CanMutate {
-		// No mutations in the expression.
-		return false
-	}
-
-	switch rel.Op() {
-	case opt.InsertOp, opt.UpsertOp, opt.UpdateOp, opt.DeleteOp:
-		// Check that there aren't any more mutations in the input.
-		// TODO(radu): this can go away when all mutations are under top-level
-		// With ops.
-		return !rel.Child(0).(memo.RelExpr).Relational().CanMutate
-
-	case opt.ProjectOp:
-		// Allow Project on top, as long as the expressions are not side-effecting.
-		proj := rel.(*memo.ProjectExpr)
-		for i := 0; i < len(proj.Projections); i++ {
-			if !proj.Projections[i].ScalarProps().VolatilitySet.IsLeakproof() {
-				return false
-			}
-		}
-		return b.canAutoCommit(proj.Input)
-
-	case opt.DistributeOp:
-		// Distribute is currently a no-op, so check whether the input can
-		// auto-commit.
-		return b.canAutoCommit(rel.(*memo.DistributeExpr).Input)
-
-	default:
-		return false
-	}
 }
 
 // forUpdateLocking is the row-level locking mode used by mutations during their
