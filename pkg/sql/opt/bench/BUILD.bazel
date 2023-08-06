@@ -14,6 +14,7 @@ go_test(
     srcs = [
         "bench_test.go",
         "fk_test.go",
+        "uniq_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":bench"],
