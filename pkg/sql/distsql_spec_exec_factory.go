@@ -975,6 +975,7 @@ func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKUniqCheck,
+	uniqChecks []exec.InsertFastPathFKUniqCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert fast path")
