@@ -871,6 +871,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			)
 			e.emitLockingPolicyWithPrefix("FK check ", fk.Locking)
 		}
+		for _, uniq := range a.UniqChecks {
+			ob.Attr(
+				"uniqueness check", fmt.Sprintf("%s@%s", uniq.ReferencedTable.Name(), uniq.ReferencedIndex.Name()),
+			)
+			e.emitLockingPolicyWithPrefix("uniqueness check ", uniq.Locking)
+		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}

@@ -1408,6 +1408,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathCheck,
+	uniqChecks []exec.InsertFastPathCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1446,6 +1447,13 @@ func (ef *execFactory) ConstructInsertFastPath(
 	}
 
 	ins.run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, cols, ins.run.ti.ri.InsertColIDtoRowIndex)
+
+	if len(uniqChecks) > 0 {
+		ins.run.uniqChecks = make([]insertFastPathCheck, len(uniqChecks))
+		for i := range uniqChecks {
+			ins.run.uniqChecks[i].InsertFastPathCheck = uniqChecks[i]
+		}
+	}
 
 	if len(fkChecks) > 0 {
 		ins.run.fkChecks = make([]insertFastPathCheck, len(fkChecks))
