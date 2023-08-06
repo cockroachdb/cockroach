@@ -539,6 +539,8 @@ func (h *uniqueCheckHelper) buildInsertionCheck(
 	if foundScan && len(scanFilters) != 0 {
 		newScanScope, _ := h.buildTableScan()
 		newPossibleScan := newScanScope.expr
+		// Hash-sharded REGIONAL BY ROW tables may include a projection which can
+		// be skipped over to find the applicable Scan.
 		if skipProjectExpr, ok := newPossibleScan.(*memo.ProjectExpr); ok {
 			newPossibleScan = skipProjectExpr.Input
 		}
