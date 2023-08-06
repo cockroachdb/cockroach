@@ -16,7 +16,7 @@ CREATE TABLE t (
 
 # Fast path is not allowed when there is a UNIQUE WITHOUT INDEX with a 
 # partial index predicate.
-opt format=show-fastpathchecks
+opt format=show-fastpathchecks expect-not=InsertFastPath
 INSERT INTO t VALUES (1, 'east', 10, 100)
 ----
 insert t
@@ -68,10 +68,13 @@ CREATE TABLE t (
 )
 ----
 
-# A computed leading index column allows fast path uniqueness checks.
+# Fast path uniqueness checks may be created where there is a computed column,
+# but insert fast path might not be chosen due to lack of usable indexes.
 # Note, the best-cost fast path check relation selected may not be one
-# which would enable fast path uniqueness checks.
-opt format=show-fastpathchecks
+# which would enable fast path uniqueness checks, but logic in insert_funcs.go
+# will cycle through all expressions in the memo group to try to find one
+# which does.
+opt format=show-fastpathchecks expect-not=InsertFastPath
 INSERT INTO t (k, r, a, c) VALUES (2, 'east', 10, 20)
 ----
 insert t
@@ -212,6 +215,147 @@ CREATE TABLE t (
   k INT PRIMARY KEY,
   r STRING NOT NULL,
   a INT,
+  b INT AS (a % 9) STORED,
+  c INT,
+  INDEX (b, a),
+  INDEX (r, c),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (c),
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# This case computes computed column `b` using the value specified for the unique
+# check column `a`, so triggers insert fast path.
+opt format=show-fastpathchecks expect=InsertFastPath
+INSERT INTO t (k, r, a, c) VALUES (2, 'east', 10, 20)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => t.k:1
+ │    ├── column2:9 => t.r:2
+ │    ├── column3:10 => t.a:3
+ │    ├── b_comp:12 => t.b:4
+ │    └── column4:11 => t.c:5
+ ├── check columns: check1:13
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── values
+ │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null b_comp:12!null check1:13!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(8-13)
+ │    └── (2, 'east', 10, 20, 1, true)
+ ├── unique-checks
+ │    ├── unique-checks-item: t(a)
+ │    │    └── project
+ │    │         ├── columns: a:23!null
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         ├── fd: ()-->(23)
+ │    │         └── project
+ │    │              ├── columns: a:23!null
+ │    │              ├── cardinality: [0 - 1]
+ │    │              ├── key: ()
+ │    │              ├── fd: ()-->(23)
+ │    │              └── inner-join (cross)
+ │    │                   ├── columns: t.k:14!null t.a:16!null a:23!null
+ │    │                   ├── cardinality: [0 - 1]
+ │    │                   ├── multiplicity: left-rows(zero-or-one), right-rows(exactly-one)
+ │    │                   ├── key: ()
+ │    │                   ├── fd: ()-->(14,16,23)
+ │    │                   ├── values
+ │    │                   │    ├── columns: a:23!null
+ │    │                   │    ├── cardinality: [1 - 1]
+ │    │                   │    ├── key: ()
+ │    │                   │    ├── fd: ()-->(23)
+ │    │                   │    └── (10,)
+ │    │                   ├── scan t@t_b_a_idx
+ │    │                   │    ├── columns: t.k:14!null t.a:16!null
+ │    │                   │    ├── constraint: /17/16/14
+ │    │                   │    │    ├── [/1/10 - /1/10/1]
+ │    │                   │    │    └── [/1/10/3 - /1/10]
+ │    │                   │    ├── limit: 1
+ │    │                   │    ├── key: ()
+ │    │                   │    └── fd: ()-->(14,16)
+ │    │                   └── filters (true)
+ │    └── unique-checks-item: t(c)
+ │         └── project
+ │              ├── columns: c:44!null
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              ├── fd: ()-->(44)
+ │              └── project
+ │                   ├── columns: c:44!null
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(44)
+ │                   └── inner-join (cross)
+ │                        ├── columns: t.k:33!null t.c:37!null c:44!null
+ │                        ├── cardinality: [0 - 1]
+ │                        ├── multiplicity: left-rows(zero-or-one), right-rows(exactly-one)
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(33,37,44)
+ │                        ├── values
+ │                        │    ├── columns: c:44!null
+ │                        │    ├── cardinality: [1 - 1]
+ │                        │    ├── key: ()
+ │                        │    ├── fd: ()-->(44)
+ │                        │    └── (20,)
+ │                        ├── scan t@t_r_c_idx
+ │                        │    ├── columns: t.k:33!null t.c:37!null
+ │                        │    ├── constraint: /34/37/33
+ │                        │    │    ├── [/'east'/20 - /'east'/20/1]
+ │                        │    │    ├── [/'east'/20/3 - /'east'/20]
+ │                        │    │    ├── [/'west'/20 - /'west'/20/1]
+ │                        │    │    └── [/'west'/20/3 - /'west'/20]
+ │                        │    ├── limit: 1
+ │                        │    ├── key: ()
+ │                        │    └── fd: ()-->(33,37)
+ │                        └── filters (true)
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: &{12884901914 1 [29 28] [tuple [type=tuple{int, int}]
+      │    ├── const: 1 [type=int]
+      │    └── const: 10 [type=int]
+      │   ]}
+      │    └── index-join t
+      │         ├── columns: t.k:26!null t.r:27!null t.a:28!null t.b:29 t.c:30
+      │         ├── key: (26)
+      │         ├── fd: ()-->(28,29), (26)-->(27,30)
+      │         └── scan t@t_b_a_idx
+      │              ├── columns: t.k:26!null t.a:28!null t.b:29!null
+      │              ├── constraint: /29/28/26: [/1/10 - /1/10]
+      │              ├── key: (26)
+      │              └── fd: ()-->(28,29)
+      └── fast-path-unique-checks-item: &{21474836525 2 [46 49] [tuple [type=tuple{string, int}]
+           ├── const: 'east' [type=string]
+           └── const: 20 [type=int]
+           tuple [type=tuple{string, int}]
+           ├── const: 'west' [type=string]
+           └── const: 20 [type=int]
+          ]}
+           └── index-join t
+                ├── columns: t.k:45!null t.r:46!null t.a:47 t.b:48 t.c:49!null
+                ├── key: (45)
+                ├── fd: ()-->(49), (45)-->(46-48), (47)-->(48)
+                └── scan t@t_r_c_idx
+                     ├── columns: t.k:45!null t.r:46!null t.c:49!null
+                     ├── constraint: /46/49/45
+                     │    ├── [/'east'/20 - /'east'/20]
+                     │    └── [/'west'/20 - /'west'/20]
+                     ├── key: (45)
+                     └── fd: ()-->(49), (45)-->(46)
+
+exec-ddl
+DROP TABLE t
+----
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
   b INT AS (k % 9) STORED,
   INDEX (a),
   INDEX (r, a, b),
@@ -226,7 +370,7 @@ CREATE TABLE t (
 
 # An insert to a table with multiple unique without index checks can build
 # fast path checks for all of them.
-opt format=show-fastpathchecks
+opt format=show-fastpathchecks expect=InsertFastPath
 INSERT INTO t (k, r, a) VALUES (2, 'east', 10)
 ----
 insert t
@@ -386,7 +530,9 @@ insert t
  │                        │    └── fd: ()-->(60,62,63)
  │                        └── filters (true)
  └── fast-path-unique-checks
-      ├── fast-path-unique-checks-item: &{0 0 [] []}
+      ├── fast-path-unique-checks-item: &{12884901910 1 [24] [tuple [type=tuple{int}]
+      │    └── const: 10 [type=int]
+      │   ]}
       │    └── scan t@t_r_a_b_idx
       │         ├── columns: t.k:22!null t.r:23!null t.a:24!null t.b:25
       │         ├── constraint: /23/24/25/22
@@ -394,7 +540,9 @@ insert t
       │         │    └── [/'west'/10 - /'west'/10]
       │         ├── key: (22)
       │         └── fd: ()-->(24), (22)-->(23,25)
-      ├── fast-path-unique-checks-item: &{0 0 [] []}
+      ├── fast-path-unique-checks-item: &{21474836518 3 [41] [tuple [type=tuple{int}]
+      │    └── const: 2 [type=int]
+      │   ]}
       │    └── select
       │         ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41!null
       │         ├── key: (38)
@@ -408,13 +556,25 @@ insert t
       │         │    └── fd: (38)-->(39-41)
       │         └── filters
       │              └── t.b:41 = 2 [outer=(41), constraints=(/41: [/2 - /2]; tight), fd=()-->(41)]
-      ├── fast-path-unique-checks-item: &{0 0 [] []}
+      ├── fast-path-unique-checks-item: &{30064771126 2 [55 56 57] [tuple [type=tuple{string, int, int}]
+      │    ├── const: 'east' [type=string]
+      │    ├── const: 10 [type=int]
+      │    └── const: 2 [type=int]
+      │   ]}
       │    └── scan t@t_r_a_b_idx
       │         ├── columns: t.k:54!null t.r:55!null t.a:56!null t.b:57!null
       │         ├── constraint: /55/56/57/54: [/'east'/10/2 - /'east'/10/2]
       │         ├── key: (54)
       │         └── fd: ()-->(55-57)
-      └── fast-path-unique-checks-item: &{0 0 [] []}
+      └── fast-path-unique-checks-item: &{38654705734 2 [71 72 73] [tuple [type=tuple{string, int, int}]
+           ├── const: 'east' [type=string]
+           ├── const: 10 [type=int]
+           └── const: 2 [type=int]
+           tuple [type=tuple{string, int, int}]
+           ├── const: 'west' [type=string]
+           ├── const: 10 [type=int]
+           └── const: 2 [type=int]
+          ]}
            └── scan t@t_r_a_b_idx
                 ├── columns: t.k:70!null t.r:71!null t.a:72!null t.b:73!null
                 ├── constraint: /71/72/73/70

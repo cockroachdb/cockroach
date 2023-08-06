@@ -948,3 +948,81 @@ NULL
 NULL
 NULL
 NULL
+
+subtest multirowValuesInsertFastPath
+
+statement ok
+CREATE TABLE t1 (
+  pk int PRIMARY KEY,
+  pk2 int,
+  a int,
+  b int,
+  j JSON,
+  INDEX (a),
+  UNIQUE WITHOUT INDEX(b, a),
+  INDEX (b,a) STORING(pk2, j),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+)
+
+statement ok
+INSERT INTO t1 (pk, pk2, a, b, j) VALUES
+   (0, 0, 1, 3, '{"a": "b"}');
+
+# This uses insert fast-path. Verify it catches the duplicate value of (b,a).
+statement error pq: duplicate key value violates unique constraint "unique_b_a"\nDETAIL: Key \(a, b\)=\(1, 3\) already exists\.
+INSERT INTO t1 (pk, pk2, a, b, j) VALUES
+   (2, 2, 1, 3, '{"a": "b"}'), (4, 5, 6, 7, '{"a": "b"}');
+
+statement ok
+CREATE TABLE multiple_uniq (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  UNIQUE WITHOUT INDEX (b, c),
+  UNIQUE WITHOUT INDEX (a, b, d),
+  UNIQUE WITHOUT INDEX (a),
+  INDEX (a, b, d),
+  INDEX (b, c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+# This uses insert fast-path and should succeed.
+statement ok
+INSERT INTO multiple_uniq
+VALUES (1,2,3,4), (5,6,7,8)
+
+# A table with multiple unique without index checks is eligible for insert fast
+# path. Verify it catches the duplicate value of (a).
+statement error pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO multiple_uniq
+VALUES (1,12,13,14), (15,16,17,18)
+
+# A table with multiple unique without index checks is eligible for insert fast
+# path. Verify it catches the duplicate value of (b,c).
+statement error pq: duplicate key value violates unique constraint "unique_b_c"\nDETAIL: Key \(b, c\)=\(2, 3\) already exists\.
+INSERT INTO multiple_uniq (a,c,b,d)
+VALUES (11,3,2,14), (15,16,17,18)
+
+statement ok
+PREPARE p1 AS INSERT INTO multiple_uniq
+VALUES ($1, $1, $1, $1), ($2, $2, $2, $2)
+
+# A table with multiple unique without index checks is eligible for parameterized insert fast
+# path. Verify it catches the duplicate value of (a).
+statement error pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+EXECUTE p1(1, 2)
+
+statement ok
+ALTER TABLE multiple_uniq ADD CONSTRAINT uniq_fk FOREIGN KEY (d) REFERENCES uniq (k) ON DELETE CASCADE;
+
+# A table with multiple unique without index checks and an FK constraint is
+# eligible for insert fast path. Verify it catches the foreign key violation on
+# (d).
+statement error pq: insert on table "multiple_uniq" violates foreign key constraint "uniq_fk"\nDETAIL: Key \(d\)=\(14\) is not present in table "uniq"\.
+INSERT INTO multiple_uniq (a,b,c,d)
+VALUES (11,12,13,14), (15,16,17,18)
