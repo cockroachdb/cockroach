@@ -257,6 +257,9 @@ type InsertFastPathCheck struct {
 	ReferencedTable cat.Table
 	ReferencedIndex cat.Index
 
+	// This is the ordinal of the check in the table's unique constraints.
+	CheckOrdinal int
+
 	// InsertCols contains the table column ordinals of the referenced index key
 	// columns. The position in this slice corresponds with the ordinal of the
 	// referenced index column (its position in the index key).

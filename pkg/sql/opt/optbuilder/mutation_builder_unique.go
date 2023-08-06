@@ -396,12 +396,19 @@ func (h *uniqueCheckHelper) buildFiltersForFastPathCheck(
 			// This is currently not supported.
 			return nil
 		}
-		scanFilters = append(scanFilters, f.ConstructFiltersItem(
+		var filtersItem memo.FiltersItem
+		filtersItem = f.ConstructFiltersItem(
 			f.ConstructEq(
 				f.ConstructVariable(h.scanScope.cols[i].id),
 				tupleScalarExpression,
 			),
-		))
+		)
+		// Volatile expressions may return a different value on each evaluation,
+		// so must be disabled for this check as the actual insert value may differ.
+		if filtersItem.ScalarProps().VolatilitySet.HasVolatile() {
+			return nil
+		}
+		scanFilters = append(scanFilters, filtersItem)
 	}
 	return scanFilters
 }
@@ -539,6 +546,8 @@ func (h *uniqueCheckHelper) buildInsertionCheck(
 	if foundScan && len(scanFilters) != 0 {
 		newScanScope, _ := h.buildTableScan()
 		newPossibleScan := newScanScope.expr
+		// Hash-sharded REGIONAL BY ROW tables may include a projection which can
+		// be skipped over to find the applicable Scan.
 		if skipProjectExpr, ok := newPossibleScan.(*memo.ProjectExpr); ok {
 			newPossibleScan = skipProjectExpr.Input
 		}
