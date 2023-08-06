@@ -1,0 +1,33 @@
+# =============================================================================
+# insert.opt contains exploration rules for the Insert operator.
+# =============================================================================
+
+# InsertFastPath checks if an insert statement may qualify for executing fast
+# path uniqueness checks, typically for unique indexes which internally use
+# UNIQUE WITHOUT INDEX constraints to enforce uniqueness. A prime example of
+# this is REGIONAL BY ROW tables, whose index keys are always prefixed by a
+# `crdb_region` column, and so must check in all regions for duplicates when the
+# `crdb_region` column is not explicitly included as a unique index key column.
+# When `CanUseUniqueChecksForInsertFastPath` returns true, it also builds
+# complete fast path uniqueness checks in $newFastPathUnique, which the
+# execbuilder uses to build the actual insert fast path operation. This rewrite
+# only applies to an insert of values, and not other forms like INSERT SELECT.
+# If fast path information has already been built, this rule will not try to
+# rewrite the insert a second time.
+[InsertFastPath, Explore]
+(Insert
+    $insInput:*
+    $unique:*
+    * &
+        (Let
+            (
+                $newFastPathUnique
+                $ok
+            ):(CanUseUniqueChecksForInsertFastPath (Root))
+            $ok
+        )
+    $fk:*
+    $mutations:*
+)
+=>
+(Insert $insInput $unique $newFastPathUnique $fk $mutations)

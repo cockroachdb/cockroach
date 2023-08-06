@@ -338,54 +338,18 @@ EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle
 distribution: local
 vectorized: true
 ·
-• root
-│ columns: ()
-│
-├── • insert
-│   │ columns: ()
-│   │ estimated row count: 0 (missing stats)
-│   │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, part)
-│   │
-│   └── • values
-│         columns: (crdb_internal_id_shard_16_comp, column1, column2, check1, check2)
-│         size: 5 columns, 1 row
-│         row 0, expr 0: 4321
-│         row 0, expr 1: 'seattle'
-│         row 0, expr 2: 11
-│         row 0, expr 3: true
-│         row 0, expr 4: true
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │ columns: ()
-        │
-        └── • project
-            │ columns: (id)
-            │
-            └── • cross join (inner)
-                │ columns: (id, crdb_internal_id_shard_16, id, part)
-                │ estimated row count: 1 (missing stats)
-                │
-                ├── • values
-                │     columns: (id)
-                │     size: 1 column, 1 row
-                │     row 0, expr 0: 4321
-                │
-                └── • limit
-                    │ columns: (crdb_internal_id_shard_16, id, part)
-                    │ count: 1
-                    │
-                    └── • filter
-                        │ columns: (crdb_internal_id_shard_16, id, part)
-                        │ estimated row count: 6 (missing stats)
-                        │ filter: (crdb_internal_id_shard_16 != 11) OR (part != 'seattle')
-                        │
-                        └── • scan
-                              columns: (crdb_internal_id_shard_16, id, part)
-                              estimated row count: 0 (missing stats)
-                              table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                              spans: /"new york"/11/4321/0 /"seattle"/11/4321/0
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_unique_hash_pk(crdb_internal_id_shard_16, id, part)
+  auto commit
+  uniqueness check: t_unique_hash_pk@t_unique_hash_pk_pkey
+  size: 5 columns, 1 row
+  row 0, expr 0: 11
+  row 0, expr 1: 4321
+  row 0, expr 2: 'seattle'
+  row 0, expr 3: true
+  row 0, expr 4: true
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle') ON CONFLICT DO NOTHING;
@@ -946,79 +910,20 @@ EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (43
 distribution: local
 vectorized: true
 ·
-• root
-│ columns: ()
-│
-├── • insert
-│   │ columns: ()
-│   │ estimated row count: 0 (missing stats)
-│   │ into: t_unique_hash_sec_key(id, email, part, crdb_internal_email_shard_16)
-│   │
-│   └── • values
-│         columns: (column1, column2, column3, crdb_internal_email_shard_16_comp, check1, check2)
-│         size: 6 columns, 1 row
-│         row 0, expr 0: 4321
-│         row 0, expr 1: 'some_email'
-│         row 0, expr 2: 'seattle'
-│         row 0, expr 3: 1
-│         row 0, expr 4: true
-│         row 0, expr 5: true
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │ columns: ()
-│       │
-│       └── • project
-│           │ columns: (id)
-│           │
-│           └── • cross join (inner)
-│               │ columns: (id, id, part)
-│               │ estimated row count: 1 (missing stats)
-│               │
-│               ├── • values
-│               │     columns: (id)
-│               │     size: 1 column, 1 row
-│               │     row 0, expr 0: 4321
-│               │
-│               └── • scan
-│                     columns: (id, part)
-│                     estimated row count: 1 (missing stats)
-│                     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-│                     spans: /"new york"/4321/0
-│                     limit: 1
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │ columns: ()
-        │
-        └── • project
-            │ columns: (email)
-            │
-            └── • cross join (inner)
-                │ columns: (email, id, email, part)
-                │ estimated row count: 1 (missing stats)
-                │
-                ├── • values
-                │     columns: (email)
-                │     size: 1 column, 1 row
-                │     row 0, expr 0: 'some_email'
-                │
-                └── • limit
-                    │ columns: (id, email, part)
-                    │ count: 1
-                    │
-                    └── • filter
-                        │ columns: (id, email, part)
-                        │ estimated row count: 6 (missing stats)
-                        │ filter: (id != 4321) OR (part != 'seattle')
-                        │
-                        └── • scan
-                              columns: (id, email, part)
-                              estimated row count: 0 (missing stats)
-                              table: t_unique_hash_sec_key@idx_uniq_hash_email
-                              spans: /"new york"/1/"some_email"/0 /"seattle"/1/"some_email"/0
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_unique_hash_sec_key(id, email, part, crdb_internal_email_shard_16)
+  auto commit
+  uniqueness check: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+  uniqueness check: t_unique_hash_sec_key@idx_uniq_hash_email
+  size: 6 columns, 1 row
+  row 0, expr 0: 4321
+  row 0, expr 1: 'some_email'
+  row 0, expr 2: 'seattle'
+  row 0, expr 3: 1
+  row 0, expr 4: true
+  row 0, expr 5: true
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle') ON CONFLICT DO NOTHING;
